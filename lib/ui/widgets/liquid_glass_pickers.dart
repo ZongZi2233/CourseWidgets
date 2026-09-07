@@ -63,8 +63,8 @@ class _LiquidGlassDatePickerState extends State<LiquidGlassDatePicker> {
           shape: LiquidRoundedSuperellipse(borderRadius: 24),
           settings: LiquidGlassSettings(
             glassColor: Colors.black.withValues(alpha: 0.3),
-            blur: 20,
-            thickness: 15,
+            blur: 2.0,
+            thickness: 18.0,
           ),
           child: Container(
             height: maxHeight,
@@ -205,8 +205,8 @@ class LiquidGlassWeekdayPicker extends StatelessWidget {
           shape: LiquidRoundedSuperellipse(borderRadius: 24),
           settings: LiquidGlassSettings(
             glassColor: Colors.black.withValues(alpha: 0.3),
-            blur: 20,
-            thickness: 15,
+            blur: 2.0,
+            thickness: 18.0,
           ),
           child: Container(
             height: maxHeight,
@@ -473,8 +473,8 @@ class _LiquidGlassCalendarPickerState extends State<LiquidGlassCalendarPicker> {
       shape: LiquidRoundedSuperellipse(borderRadius: 24),
       settings: LiquidGlassSettings(
         glassColor: Colors.black.withValues(alpha: 0.3),
-        blur: 20,
-        thickness: 15,
+        blur: 2.0,
+        thickness: 18.0,
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),

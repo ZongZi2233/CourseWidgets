@@ -117,8 +117,11 @@ class TabletSideBar extends StatelessWidget {
             glassColor: isSelected
                 ? AppThemeColors.babyPink.withValues(alpha: 0.4)
                 : Colors.white.withValues(alpha: 0.05),
-            blur: 15,
-            thickness: 20.0,
+            blur: 1.5,
+            thickness: 18.0,
+            ambientRim: 0.06,
+            fresnelStrength: 0.15,
+            edgeAbsorption: 0.15,
           ),
           shape: const LiquidRoundedSuperellipse(borderRadius: 16),
           child: Icon(

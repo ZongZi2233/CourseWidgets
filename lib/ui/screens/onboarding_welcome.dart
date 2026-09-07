@@ -119,8 +119,11 @@ class _OnboardingWelcomeState extends State<OnboardingWelcome>
       shape: const LiquidRoundedSuperellipse(borderRadius: 48),
       settings: LiquidGlassSettings(
         glassColor: Colors.white.withValues(alpha: 0.15),
-        blur: 20,
-        thickness: 15,
+        blur: 1.5,
+        thickness: 18,
+        ambientRim: 0.06,
+        fresnelStrength: 0.15,
+        edgeAbsorption: 0.15,
       ),
       quality: GlassQuality.standard,
       child: Padding(
@@ -141,15 +144,22 @@ class _OnboardingWelcomeState extends State<OnboardingWelcome>
             const Text(
               'CourseWidgets',
               style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w900,
+                fontSize: 24, // 从 28 缩小到 24 避免换行
+                fontWeight: FontWeight.bold,
                 color: Colors.white,
-                letterSpacing: 0.5,
+                letterSpacing: 1.0,
               ),
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.visible, // [v2.3.2修复] 允许溢出但不换行
-              softWrap: false,
+            ),
+            const SizedBox(height: 4),
+
+            // Slogan
+            Text(
+              '新一代全平台液态玻璃课程表',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.white.withValues(alpha: 0.6),
+                letterSpacing: 1.5,
+              ),
             ),
           ],
         ),
@@ -158,64 +168,52 @@ class _OnboardingWelcomeState extends State<OnboardingWelcome>
   }
 
   Widget _buildGlassifyText() {
-    // [v2.2.9] 使用 Glassify 为文字添加玻璃效果
-    // Windows 端降级为普通 Container (性能优化)
-    // 参考: https://pub.dev/documentation/liquid_glass_renderer/latest/experimental/Glassify-class.html
-
-    final isWindows = !kIsWeb && Platform.isWindows;
-
-    if (isWindows) {
-      // Windows 降级版本 - 使用简单的渐变背景
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              Colors.white.withValues(alpha: 0.25),
-              Colors.white.withValues(alpha: 0.15),
-            ],
-          ),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: Colors.white.withValues(alpha: 0.3),
-            width: 1.5,
-          ),
-        ),
-        child: const Text(
-          '欢迎使用',
-          style: TextStyle(
-            fontSize: 72,
-            fontWeight: FontWeight.w900,
-            color: Colors.white,
-            letterSpacing: 8.0,
-            shadows: [
-              Shadow(
-                color: Colors.black26,
-                offset: Offset(0, 2),
-                blurRadius: 4,
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    // Android/iOS - 使用 Glassify 效果
-    return Glassify(
+    // [v2.7.9] 真正的跨平台液态玻璃字体：透镜基底 + 高光折射文字 ShaderMask，解除 Windows 降级
+    return GlassContainer(
+      useOwnLayer: true,
+      shape: const LiquidRoundedSuperellipse(borderRadius: 24),
       settings: const LiquidGlassSettings(
-        thickness: 8, // 保持在 20px 以下以获得最佳效果
-        glassColor: Color(0x44FFFFFF), // 半透明白色
+        thickness: 16.0,
+        blur: 1.5, // 官方推荐低模糊高帧率
+        glassColor: Color(0x18FFFFFF),
+        refractiveIndex: 1.25,
+        lightIntensity: 0.70,
+        ambientStrength: 0.35,
+        edgeAbsorption: 0.15,
+        ambientRim: 0.06,
+        fresnelStrength: 0.15,
       ),
-      child: const Text(
-        '欢迎使用',
-        style: TextStyle(
-          fontSize: 72, // 大字体以展示玻璃效果
-          fontWeight: FontWeight.w900,
-          color: Colors.white,
-          letterSpacing: 8.0,
-          shadows: [
-            Shadow(color: Colors.black26, offset: Offset(0, 2), blurRadius: 1),
-          ],
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
+        child: ShaderMask(
+          blendMode: BlendMode.srcIn,
+          shaderCallback: (bounds) => LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Colors.white,
+              Colors.white.withValues(alpha: 0.85),
+              AppThemeColors.babyPink.withValues(alpha: 0.85),
+              Colors.white.withValues(alpha: 0.95),
+            ],
+            stops: const [0.0, 0.45, 0.75, 1.0],
+          ).createShader(bounds),
+          child: const Text(
+            '欢迎使用',
+            style: TextStyle(
+              fontSize: 64,
+              fontWeight: FontWeight.w900,
+              color: Colors.white,
+              letterSpacing: 6.0,
+              shadows: [
+                Shadow(
+                  color: Colors.black26,
+                  offset: Offset(0, 3),
+                  blurRadius: 6,
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -231,9 +229,12 @@ class _OnboardingWelcomeState extends State<OnboardingWelcome>
       height: 60,
       style: GlassButtonStyle.filled,
       settings: LiquidGlassSettings(
-        glassColor: AppThemeColors.babyPink.withValues(alpha: 0.2),
-        blur: 15, // 添加模糊
-        thickness: 20, // 添加厚度
+        glassColor: AppThemeColors.babyPink.withValues(alpha: 0.25),
+        blur: 1.5,
+        thickness: 18,
+        ambientRim: 0.06,
+        fresnelStrength: 0.15,
+        edgeAbsorption: 0.15,
       ),
       shape: const LiquidRoundedSuperellipse(borderRadius: 24),
       child: const Center(

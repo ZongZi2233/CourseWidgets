@@ -50,136 +50,122 @@ class _SettingsAboutScreenState extends State<SettingsAboutScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.transparent,
-      // [v2.4.8] LiquidGlassLayer 预热 shader，消除 Touch Me 白闪
-      body: LiquidGlassLayer(
-        settings: LiquidGlassSettings(
-          thickness: 20,
-          blur: 8.0,
-          lightIntensity: 0.6,
-          saturation: 1.8,
-        ),
-        child: Column(
-          children: [
-            // Header
-            SafeArea(
-              bottom: false,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-                child: Row(
-                  children: [
-                    const liquid.LiquidBackButton(),
-                    const SizedBox(width: 12),
-                    const Text(
-                      '关于软件',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
+      body: Column(
+        children: [
+          // Header
+          SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 12,
+              ),
+              child: Row(
+                children: [
+                  const liquid.LiquidBackButton(),
+                  const SizedBox(width: 12),
+                  const Text(
+                    '关于软件',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
+          ),
 
-            // Content
-            Expanded(
-              child: FadeTransition(
-                opacity: _fadeAnimation,
-                child: SlideTransition(
-                  position: _slideAnimation,
-                  child: ListView(
-                    padding: const EdgeInsets.all(20),
-                    // [v2.6.3] 全平台禁止滚动，自适应布局
-                    physics: const NeverScrollableScrollPhysics(),
-                    children: [
-                      // App Icon & Name Card
-                      liquid.LiquidCard(
-                        borderRadius: 32,
-                        padding: 32,
-                        glassColor: Colors.white.withValues(alpha: 0.03),
-                        quality: GlassQuality.standard,
-                        child: Column(
-                          children: [
-                            // App Icon with glow effect
-                            Container(
-                              width: 120,
-                              height: 120,
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(32),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: AppThemeColors.babyPink.withValues(
-                                      alpha: 0.3,
-                                    ),
-                                    blurRadius: 30,
-                                    spreadRadius: 5,
+          // Content
+          Expanded(
+            child: FadeTransition(
+              opacity: _fadeAnimation,
+              child: SlideTransition(
+                position: _slideAnimation,
+                child: ListView(
+                  padding: const EdgeInsets.all(20),
+                  // [v2.6.3] 全平台禁止滚动，自适应布局
+                  physics: const NeverScrollableScrollPhysics(),
+                  children: [
+                    // App Icon & Name Card
+                    liquid.LiquidCard(
+                      borderRadius: 32,
+                      padding: 32,
+                      glassColor: Colors.white.withValues(alpha: 0.03),
+                      quality: GlassQuality.standard,
+                      child: Column(
+                        children: [
+                          // App Icon with glow effect
+                          Container(
+                            width: 120,
+                            height: 120,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(32),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppThemeColors.babyPink.withValues(
+                                    alpha: 0.3,
                                   ),
-                                ],
-                              ),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(32),
-                                child: Image.asset(
-                                  'assets/icon.png',
-                                  fit: BoxFit.cover,
+                                  blurRadius: 30,
+                                  spreadRadius: 5,
                                 ),
+                              ],
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(32),
+                              child: Image.asset(
+                                'assets/icon.png',
+                                fit: BoxFit.cover,
                               ),
                             ),
-                            const SizedBox(height: 24),
+                          ),
+                          const SizedBox(height: 24),
 
-                            // App Name
-                            const Text(
-                              'CourseWidgets',
-                              style: TextStyle(
-                                fontSize: 32,
-                                fontWeight: FontWeight.w900,
+                          // App Name
+                          const Text(
+                            'CourseWidgets',
+                            style: TextStyle(
+                              fontSize: 32,
+                              fontWeight: FontWeight.w900,
+                              color: Colors.white,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+
+                          // Version Badge (轻量胶囊，杜绝卡片内嵌套玻璃卡片)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: AppThemeColors.babyPink.withValues(alpha: 0.25),
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: Text(
+                              'v$appVersion',
+                              style: const TextStyle(
+                                fontSize: 14,
                                 color: Colors.white,
-                                letterSpacing: 0.5,
+                                fontWeight: FontWeight.bold,
                               ),
                             ),
-                            const SizedBox(height: 8),
-
-                            // Version Badge
-                            liquid.LiquidCard(
-                              borderRadius: 16,
-                              padding: 8,
-                              styleType: liquid.LiquidStyleType.micro,
-                              glassColor: AppThemeColors.babyPink.withValues(
-                                alpha: 0.2,
-                              ),
-                              quality: GlassQuality.standard,
-                              child: Text(
-                                'v$appVersion',
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
+                    ),
 
-                      const SizedBox(height: 20),
+                    const SizedBox(height: 20),
 
-                      if (!Platform.isWindows) _buildPremiumGlassDemo(),
+                    _buildUpdateCheckButton(),
 
-                      const SizedBox(height: 20),
+                    const SizedBox(height: 20),
 
-                      _buildUpdateCheckButton(),
-
-                      const SizedBox(height: 20),
-
-                      // Copyright Card
-                      liquid.LiquidCard(
-                        borderRadius: 28,
-                        padding: 20,
-                        glassColor: Colors.white.withValues(alpha: 0.01),
-                        quality: GlassQuality.standard,
+                    // Copyright Card
+                    liquid.LiquidCard(
+                      borderRadius: 28,
+                      padding: 20,
+                      glassColor: Colors.white.withValues(alpha: 0.01),
+                      quality: GlassQuality.standard,
                         child: Column(
                           children: [
                             Icon(
@@ -233,77 +219,7 @@ class _SettingsAboutScreenState extends State<SettingsAboutScreen>
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildPremiumGlassDemo() {
-    // [v2.4.8] 使用 GlassButton.custom 获得完整的拉伸/按压/高光互动效果
-    // 按 API 文档：GlassQuality.premium 用于静态布局，提供最高视觉质量
-    // useOwnLayer: true 让 Touch Me 有自己的完整玻璃图层
-    return GestureDetector(
-      onTapDown: (_) {
-        // [v2.5.6修复] 在最外层拦截 onTapDown，强制触发系统级别的触觉震动反馈，确保 Android 侧点按时有物理反馈
-        HapticFeedback.lightImpact();
-      },
-      child: GlassButton.custom(
-        onTap: () {
-          HapticFeedback.heavyImpact();
-        },
-        width: double.infinity,
-        height: 120,
-        style: GlassButtonStyle.filled,
-        // [v2.5.0修复] 关闭独立图层。使用 useOwnLayer=true 虽然能做shader预渲染，
-        // 但在部分 Android 设备上初次绘制会白屏闪烁。关闭它即可解决闪烁。
-        useOwnLayer: false,
-        quality: GlassQuality.premium, // 最高质量 — 包括纹理捕获和色散
-        // [v2.5.8] TouchMe：Windows 彻底关闭形变降级渲染，Android 开启无敌狂暴果冻拉伸
-        stretch: Platform.isWindows ? 0.0 : 5.0, // Android极度拉伸形变
-        resistance: Platform.isWindows ? 0.0 : 0.005, // Android保持极低阻力感
-        interactionScale: Platform.isWindows
-            ? 1.0
-            : 0.6, // Android强烈的按压回缩比例 (0.6)
-        settings: LiquidGlassSettings(
-          glassColor: Colors.transparent, // 完全无色透明
-          blur: 1.0, // 仅保留边缘的一点点模糊，展现清晰的折射扭曲
-          thickness: 500, // 极度夸张的厚度，让背后内容严重折射错位
-          refractiveIndex: 2.5, // 极高折射率（钻石级别）
-          lightIntensity: 1.5,
-          chromaticAberration: 0.2, // 明显的色差
-        ),
-        shape: const LiquidRoundedSuperellipse(borderRadius: 28),
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(
-                CupertinoIcons.hand_point_right_fill,
-                color: Colors.white,
-                size: 32,
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'Touch me',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                  letterSpacing: 1.0,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Premium Liquid Glass Demo',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: Colors.white.withValues(alpha: 0.8),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+      );
   }
 
   bool _isCheckingUpdate = false;
@@ -510,38 +426,35 @@ class _SettingsAboutScreenState extends State<SettingsAboutScreen>
   }
 
   Widget _buildUpdateCheckButton() {
-    return liquid.LiquidCard(
-      borderRadius: 24,
-      padding: 4,
-      glassColor: Colors.white.withValues(alpha: 0.05),
-      quality: GlassQuality.standard,
-      child: GlassButton.custom(
-        onTap: _isCheckingUpdate ? () {} : _checkForUpdates,
-        width: double.infinity,
-        height: 56,
-        style: GlassButtonStyle.filled,
-        settings: const LiquidGlassSettings(
-          glassColor: Colors.transparent,
-          blur: 0,
-          thickness: 0,
-        ),
-        shape: const LiquidRoundedSuperellipse(borderRadius: 20),
-        child: Center(
-          child: _isCheckingUpdate
-              ? const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Text(
-                  '检查更新',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
+    return GlassButton.custom(
+      onTap: _isCheckingUpdate ? () {} : _checkForUpdates,
+      width: double.infinity,
+      height: 52,
+      style: GlassButtonStyle.filled,
+      settings: LiquidGlassSettings(
+        glassColor: AppThemeColors.babyPink.withValues(alpha: 0.22),
+        blur: 1.5,
+        thickness: 18,
+        refractiveIndex: 1.25,
+        lightIntensity: 0.70,
+        specularSharpness: GlassSpecularSharpness.sharp,
+      ),
+      shape: const LiquidRoundedSuperellipse(borderRadius: 20),
+      child: Center(
+        child: _isCheckingUpdate
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+              )
+            : const Text(
+                '检查更新',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
                 ),
-        ),
+              ),
       ),
     );
   }

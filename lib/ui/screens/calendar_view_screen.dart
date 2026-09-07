@@ -89,10 +89,14 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
                     child: GlassPanel(
                       shape: const LiquidRoundedSuperellipse(borderRadius: 32),
                       padding: const EdgeInsets.all(16),
-                      settings: LiquidGlassSettings(
-                        glassColor: Colors.white.withValues(alpha: 0.05),
-                        blur: 15,
-                        thickness: 0.8,
+                      settings: const LiquidGlassSettings(
+                        glassColor: Color(0x10FFFFFF),
+                        blur: 1.5,
+                        thickness: 16.0,
+                        refractiveIndex: 1.25,
+                        ambientRim: 0.06,
+                        fresnelStrength: 0.15,
+                        edgeAbsorption: 0.15,
                       ),
                       child: _buildCalendarGrid(provider),
                     ),
@@ -120,10 +124,14 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
         GlassPanel(
           shape: const LiquidRoundedSuperellipse(borderRadius: 32),
           padding: const EdgeInsets.all(16),
-          settings: LiquidGlassSettings(
-            glassColor: Colors.white.withValues(alpha: 0.05),
-            blur: 15,
-            thickness: 0.8,
+          settings: const LiquidGlassSettings(
+            glassColor: Color(0x10FFFFFF),
+            blur: 1.5,
+            thickness: 16.0,
+            refractiveIndex: 1.25,
+            ambientRim: 0.06,
+            fresnelStrength: 0.15,
+            edgeAbsorption: 0.15,
           ),
           child: _buildCalendarGrid(provider),
         ),

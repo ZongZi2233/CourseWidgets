@@ -169,14 +169,9 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                 duration: const Duration(milliseconds: 250),
                 switchInCurve: Curves.easeOut,
                 switchOutCurve: Curves.easeIn,
-                child: IndexedStack(
-                  key: ValueKey(_currentIndex),
-                  index: _currentIndex,
-                  children: [
-                    _buildTabletSchedulePage(),
-                    const CalendarViewScreen(),
-                    const SettingsMainScreen(),
-                  ],
+                child: KeyedSubtree(
+                  key: ValueKey('tablet_page_$_currentIndex'),
+                  child: _buildCurrentTabletPage(),
                 ),
               ),
             ),
@@ -188,78 +183,100 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
 
   /// 手机布局
   Widget _buildPhoneLayout(BuildContext context) {
-    return AdaptiveLiquidGlassLayer(
-      quality: GlassQuality.standard,
-      settings: const LiquidGlassSettings(
-        blur: 10.0,
-        thickness: 15.0,
-        glassColor: Color.fromRGBO(255, 255, 255, 0.08),
-        lightAngle: 135,
-        lightIntensity: 0.70,
-        ambientStrength: 0.40,
-        saturation: 1.25,
-        refractiveIndex: 1.25,
-      ),
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        extendBody: true,
-        body: RepaintBoundary(
-          key: TransparentMaterialPageRoute.contentBoundaryKey,
-          child: IndexedStack(
-            index: _currentIndex,
-            children: [
-              _buildSchedulePage(),
-              _buildPageWithHeader(1, const CalendarViewScreen(), '日历视图'),
-              _buildPageWithHeader(2, const SettingsMainScreen(), '设置'),
-            ],
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      extendBody: true,
+      body: RepaintBoundary(
+        key: TransparentMaterialPageRoute.contentBoundaryKey,
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 200),
+          child: KeyedSubtree(
+            key: ValueKey('phone_page_$_currentIndex'),
+            child: _buildCurrentPhonePage(),
           ),
         ),
-        // 导航栏放回 bottomNavigationBar，置于全局 AdaptiveLiquidGlassLayer 下共享着色器上下文
-        bottomNavigationBar: AnimatedSlide(
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOutCubic,
-          offset: _isBottomNavVisible ? Offset.zero : const Offset(0, 1.2),
-          child: RepaintBoundary(
-            child: GlassBottomBar(
-              selectedIndex: _currentIndex,
-              onTabSelected: (index) {
-                HapticFeedback.selectionClick();
-                setState(() => _currentIndex = index);
-              },
-              quality: GlassQuality.standard,
-              barBorderRadius: 28.0,
-              glassSettings: const LiquidGlassSettings(
-                blur: 12.0,
-                thickness: 18.0,
-                refractiveIndex: 1.35,
-                lightIntensity: 0.70,
-                ambientStrength: 0.45,
-                saturation: 1.35,
-                glassColor: Color.fromRGBO(255, 255, 255, 0.08),
-              ),
-              indicatorColor: AppThemeColors.babyPink.withValues(alpha: 0.35),
-              tabs: const [
-                GlassBottomBarTab(
-                  icon: CupertinoIcons.square_grid_2x2,
-                  selectedIcon: CupertinoIcons.square_grid_2x2_fill,
-                  label: '课程',
-                ),
-                GlassBottomBarTab(
-                  icon: CupertinoIcons.calendar,
-                  selectedIcon: CupertinoIcons.calendar_today,
-                  label: '日历',
-                ),
-                GlassBottomBarTab(
-                  icon: CupertinoIcons.gear_alt,
-                  selectedIcon: CupertinoIcons.gear_alt_fill,
-                  label: '设置',
-                ),
-              ],
+      ),
+      // 官方标准 iOS 26 液态玻璃底部导航栏
+      bottomNavigationBar: AnimatedSlide(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOutCubic,
+        offset: _isBottomNavVisible ? Offset.zero : const Offset(0, 1.2),
+        child: RepaintBoundary(
+          child: GlassTabBar.bottom(
+            selectedIndex: _currentIndex,
+            onTabSelected: (index) {
+              HapticFeedback.selectionClick();
+              setState(() => _currentIndex = index);
+            },
+            quality: GlassQuality.standard,
+            barBorderRadius: 28.0,
+            settings: const LiquidGlassSettings(
+              blur: 1.5,
+              thickness: 18.0,
+              refractiveIndex: 1.25,
+              lightIntensity: 0.70,
+              ambientStrength: 0.35,
+              saturation: 1.25,
+              glassColor: Color.fromRGBO(255, 255, 255, 0.08),
             ),
+            indicatorSettings: const LiquidGlassSettings(
+              blur: 1.5,
+              thickness: 20.0,
+              refractiveIndex: 1.28,
+              lightIntensity: 0.85,
+              ambientStrength: 0.40,
+              glassColor: Color.fromRGBO(255, 255, 255, 0.12),
+            ),
+            indicatorColor: AppThemeColors.babyPink.withValues(alpha: 0.35),
+            tabs: const [
+              GlassTab(
+                icon: Icon(CupertinoIcons.square_grid_2x2),
+                activeIcon: Icon(CupertinoIcons.square_grid_2x2_fill),
+                label: '课程',
+              ),
+              GlassTab(
+                icon: Icon(CupertinoIcons.calendar),
+                activeIcon: Icon(CupertinoIcons.calendar_today),
+                label: '日历',
+              ),
+              GlassTab(
+                icon: Icon(CupertinoIcons.gear_alt),
+                activeIcon: Icon(CupertinoIcons.gear_alt_fill),
+                label: '设置',
+              ),
+            ],
           ),
         ),
       ),
     );
+  }
+
+  /// 手机端单页面动态渲染，彻底杜绝多页面在 GPU 着色器中叠加
+  Widget _buildCurrentPhonePage() {
+    switch (_currentIndex) {
+      case 0:
+        return _buildSchedulePage();
+      case 1:
+        return _buildPageWithHeader(1, const CalendarViewScreen(), '日历视图');
+      case 2:
+        return _buildPageWithHeader(2, const SettingsMainScreen(), '设置');
+      default:
+        return _buildSchedulePage();
+    }
+  }
+
+  /// 平板端单页面动态渲染
+  Widget _buildCurrentTabletPage() {
+    switch (_currentIndex) {
+      case 0:
+        return _buildTabletSchedulePage();
+      case 1:
+        return const CalendarViewScreen();
+      case 2:
+        return const SettingsMainScreen();
+      default:
+        return _buildTabletSchedulePage();
+    }
   }
 
   /// 平板模式的课程页面（本周网格视图）
@@ -302,12 +319,13 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                   ],
                 ),
                 child: GlassContainer(
+                  useOwnLayer: true,
                   shape: const LiquidRoundedSuperellipse(borderRadius: 20),
                   settings: const LiquidGlassSettings(
                     glassColor: Color.fromRGBO(255, 255, 255, 0.10),
-                    blur: 10.0,
-                    thickness: 15.0,
-                    refractiveIndex: 1.30,
+                    blur: 1.5,
+                    thickness: 16.0,
+                    refractiveIndex: 1.25,
                     lightIntensity: 0.68,
                     ambientStrength: 0.35,
                     saturation: 1.25,
@@ -354,56 +372,69 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
 
   /// [v2.6.0] 重构手机端主课表页面：顶部轻量化折射标题 + 紧凑日历胶囊，解放全屏纵向空间
   Widget _buildSchedulePage() {
-    return Consumer<ScheduleProvider>(
-      builder: (context, provider, _) {
-        final courses = provider.getCurrentDayCourses();
+    return AdaptiveLiquidGlassLayer(
+      quality: GlassQuality.standard,
+      settings: const LiquidGlassSettings(
+        blur: 1.5,
+        thickness: 18.0,
+        glassColor: Color.fromRGBO(255, 255, 255, 0.08),
+        lightAngle: 135,
+        lightIntensity: 0.70,
+        ambientStrength: 0.35,
+        saturation: 1.25,
+        refractiveIndex: 1.25,
+      ),
+      child: Consumer<ScheduleProvider>(
+        builder: (context, provider, _) {
+          final courses = provider.getCurrentDayCourses();
 
-        return Stack(
-          children: [
-            // 课程滑动列表
-            Positioned.fill(
-              child: ListView.builder(
-                key: ValueKey('schedule_${provider.currentWeek}_${provider.currentDay}'),
-                padding: const EdgeInsets.fromLTRB(16, 172, 16, 96),
-                physics: const BouncingScrollPhysics(
-                  parent: AlwaysScrollableScrollPhysics(),
+          return Stack(
+            children: [
+              // 课程滑动列表
+              Positioned.fill(
+                child: ListView.builder(
+                  key: ValueKey('schedule_${provider.currentWeek}_${provider.currentDay}'),
+                  padding: const EdgeInsets.fromLTRB(16, 172, 16, 96),
+                  physics: const BouncingScrollPhysics(
+                    parent: AlwaysScrollableScrollPhysics(),
+                  ),
+                  itemCount: courses.isEmpty ? 1 : courses.length,
+                  itemBuilder: (context, index) {
+                    if (courses.isEmpty) {
+                      return _buildEmptyCourseView();
+                    }
+                    final course = courses[index];
+                    return _buildModernCourseCard(course, provider.currentConfig);
+                  },
                 ),
-                itemCount: courses.isEmpty ? 1 : courses.length,
-                itemBuilder: (context, index) {
-                  if (courses.isEmpty) {
-                    return _buildEmptyCourseView();
-                  }
-                  final course = courses[index];
-                  return _buildModernCourseCard(course, provider.currentConfig);
-                },
               ),
-            ),
 
-            // 顶部悬浮栏组（标题栏 + 星期选择器）：随列表内容产生液态玻璃真实折射
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              child: SafeArea(
-                bottom: false,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // 1. 顶部晶透 App Bar
-                      _buildModernTopBar(provider),
-                      const SizedBox(height: 8),
-                      // 2. 紧凑型星期日历胶囊栏
-                      _buildModernDaySelector(provider),
-                    ],
+              // 顶部悬浮栏组（标题栏 + 星期选择器）：随列表内容产生液态玻璃真实折射
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: SafeArea(
+                  bottom: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // 1. 顶部晶透 App Bar
+                        _buildModernTopBar(provider),
+                        const SizedBox(height: 8),
+                        // 2. 紧凑型星期日历胶囊栏
+                        _buildModernDaySelector(provider),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
-          ],
-        );
-      },
+            ],
+          );
+        },
+      ),
     );
   }
 
@@ -424,9 +455,9 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
         shape: const LiquidRoundedSuperellipse(borderRadius: 20),
         settings: const LiquidGlassSettings(
           glassColor: Color.fromRGBO(255, 255, 255, 0.10),
-          blur: 10.0,
-          thickness: 15.0,
-          refractiveIndex: 1.30,
+          blur: 1.5,
+          thickness: 16.0,
+          refractiveIndex: 1.25,
           lightIntensity: 0.68,
           ambientStrength: 0.35,
           saturation: 1.25,
@@ -584,8 +615,8 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
         shape: const LiquidRoundedSuperellipse(borderRadius: 18),
         settings: const LiquidGlassSettings(
           glassColor: Color.fromRGBO(255, 255, 255, 0.08),
-          blur: 8.0,
-          thickness: 13.0,
+          blur: 1.5,
+          thickness: 15.0,
           refractiveIndex: 1.25,
           lightIntensity: 0.65,
           ambientStrength: 0.35,
@@ -743,11 +774,11 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
             shape: const LiquidRoundedSuperellipse(borderRadius: 22),
             quality: GlassQuality.standard,
             settings: const LiquidGlassSettings(
-              thickness: 15.0, // [v2.7.6] 显著增大透镜折射物理厚度，凸显边界立体感
-              blur: 8.0, // 遵循官方推荐标准卡片模糊度，通透不浑浊
+              thickness: 18.0, // 增大透镜折射物理厚度，凸显真实折射边界立体感
+              blur: 1.5, // 官方推荐低模糊，通透清澈不掉帧
               glassColor: Color.fromRGBO(255, 255, 255, 0.08),
-              refractiveIndex: 1.30, // [v2.7.6] 提升光学折射率，使透镜边缘分界线清晰突出
-              lightIntensity: 0.65, // 晶莹高质感的边缘折射反光微质感
+              refractiveIndex: 1.25, // 优雅自然光学折射率
+              lightIntensity: 0.65,
               ambientStrength: 0.35,
               saturation: 1.25,
             ),
@@ -1022,8 +1053,8 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
         return GlassSheet(
           settings: LiquidGlassSettings(
             glassColor: Colors.black.withValues(alpha: 0.45),
-            blur: 16.0,
-            thickness: 16.0,
+            blur: 2.0,
+            thickness: 18.0,
           ),
           child: SafeArea(
             child: Padding(

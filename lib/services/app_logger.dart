@@ -78,6 +78,9 @@ class AppLogger {
   static Directory? _internalLogDir;
   static File? _currentLogFile;
   static IOSink? _fileSink;
+  static Directory? _publicLogDir;
+  static File? _publicLogFile;
+  static IOSink? _publicFileSink;
   static bool _isInitialized = false;
 
   /// 实时日志流，可用于调试浮窗或实时分析
@@ -111,6 +114,18 @@ class AppLogger {
       }
 
       _fileSink = _currentLogFile!.openWrite(mode: FileMode.append);
+
+      // [即时生成] 启动时立即解析并创建公共 Downloads 目录下的 CourseWidgets/logs
+      try {
+        _publicLogDir = await resolvePublicDownloadsDirectory();
+        if (_publicLogDir != null) {
+          _publicLogFile = File('${_publicLogDir!.path}/coursewidgets_runtime.log');
+          _publicFileSink = _publicLogFile!.openWrite(mode: FileMode.append);
+        }
+      } catch (pe) {
+        debugPrint('[AppLogger] Public Downloads log mirror init warning: $pe');
+      }
+
       _isInitialized = true;
 
       // 写入环境元数据头
@@ -163,12 +178,14 @@ class AppLogger {
       _logStreamController.add(entry);
     }
 
-    // 4. 持久化到沙盒文件
+    // 4. 持久化到沙盒文件与公共下载目录
     final logStr = '${entry.toLogcatString()}\n';
     try {
       _fileSink?.write(logStr);
+      _publicFileSink?.write(logStr);
       if (level.priority >= LogLevel.error.priority) {
         _fileSink?.flush();
+        _publicFileSink?.flush();
       }
     } catch (_) {}
 
@@ -358,6 +375,8 @@ class AppLogger {
     try {
       await _fileSink?.flush();
       await _fileSink?.close();
+      await _publicFileSink?.flush();
+      await _publicFileSink?.close();
       await _logStreamController.close();
     } catch (_) {}
   }

@@ -26,9 +26,9 @@ class GlassSettingsHelper {
 
     return LiquidGlassSettings(
       glassColor: glassColor,
-      blur: blur ?? 8.0, // [v2.7.6] 遵循官方推荐标准，柔和透镜折射
-      thickness: thickness ?? 15.0, // [v2.7.6] 物理厚度 15.0 增大折射区域与凸显透镜边缘立体感
-      refractiveIndex: 1.30,
+      blur: blur ?? 1.5, // 极低模糊，极致高帧率，通透清澈
+      thickness: thickness ?? 18.0, // 增大物理厚度，增强光学真实折射边界
+      refractiveIndex: 1.25,
       lightIntensity: 0.65,
       ambientStrength: 0.35,
       saturation: 1.25,
@@ -37,16 +37,16 @@ class GlassSettingsHelper {
 
   /// 获取卡片玻璃设置
   static LiquidGlassSettings getCardSettings({double? alpha}) {
-    // [v2.7.6] 极其通透清澈的 Apple iOS 26/27 液态玻璃微质感
+    // 极其通透清澈的 Apple iOS 26/27 液态玻璃微质感
     final glassColor = globalUseDarkMode
         ? Colors.black.withValues(alpha: alpha ?? 0.18)
         : Colors.white.withValues(alpha: alpha ?? 0.08);
 
     return LiquidGlassSettings(
       glassColor: glassColor,
-      blur: 8.0, // 适度模糊配合透镜折射
-      thickness: 15.0, // 物理厚度驱动边缘透镜折射
-      refractiveIndex: 1.30,
+      blur: 1.5, // 极低模糊，杜绝多次高斯模糊采样丢帧
+      thickness: 18.0, // 物理厚度驱动边缘透镜折射
+      refractiveIndex: 1.25,
       lightIntensity: 0.65,
       ambientStrength: 0.35,
       saturation: 1.25,

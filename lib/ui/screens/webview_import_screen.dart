@@ -784,6 +784,16 @@ class _WebviewImportScreenState extends State<WebviewImportScreen> {
             _mobileController?.runJavaScript(_kDesktopSpoofJs);
           }
         },
+        onNavigationRequest: (wf.NavigationRequest request) {
+          // [v2.7.9] 拦截并自动将百度等搜索引擎重定向链接从 http:// 强制升级为 https://
+          if (request.url.startsWith('http://') && request.url.contains('baidu.com')) {
+            final secureUrl = request.url.replaceFirst('http://', 'https://');
+            _recordConsoleLog('[NAV_UPGRADE_HTTPS] 升级百度链接至HTTPS: $secureUrl');
+            _mobileController?.loadRequest(Uri.parse(secureUrl));
+            return wf.NavigationDecision.prevent;
+          }
+          return wf.NavigationDecision.navigate;
+        },
         onWebResourceError: (wf.WebResourceError error) {
           _recordConsoleLog('[RESOURCE_ERR] code: ${error.errorCode}, desc: ${error.description}, url: ${error.url}');
           if (mounted) {

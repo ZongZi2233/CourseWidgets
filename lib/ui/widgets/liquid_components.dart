@@ -73,7 +73,7 @@ class LiquidCard extends StatelessWidget {
     this.styleType = LiquidStyleType.standard,
     this.isPanel = false,
     this.stretch,
-    this.quality = GlassQuality.premium,
+    this.quality = GlassQuality.standard,
     bool? useFakeGlass,
     bool? isDisabled,
   });
@@ -83,30 +83,30 @@ class LiquidCard extends StatelessWidget {
     // [v2.7.8] 智能检测是否位于父级玻璃图层中，实现共享图层与独立渲染自适应
     final inLayer = context.dependOnInheritedWidgetOfExactType<InheritedLiquidGlass>() != null;
 
-    // [v2.7.8] 1.4.0 全新渲染引擎特性：Beer-Lambert 边缘吸收、GlassBodyMode、双高光微观 Meniscus
+    // [v2.7.9] 纯净光学折射：Beer-Lambert 边缘吸收增强、微弱 Fresnel 消除假白边、低模糊高帧率
     final settings = glassColor != null
         ? LiquidGlassSettings(
-            thickness: styleType == LiquidStyleType.micro ? 10.0 : 16.0,
-            blur: (styleType == LiquidStyleType.micro || isPanel) ? 4.0 : 8.0,
+            thickness: styleType == LiquidStyleType.micro ? 12.0 : 18.0,
+            blur: (styleType == LiquidStyleType.micro) ? 0.0 : 1.5,
             glassColor: glassColor!,
-            refractiveIndex: 1.30,
+            refractiveIndex: 1.25,
             lightIntensity: 0.68,
             ambientStrength: 0.35,
             saturation: 1.25,
             bodyMode: GlassBodyMode.adaptive,
-            edgeAbsorption: 0.12,
-            ambientRim: 0.22,
-            fresnelStrength: 0.85,
-            specularSharpness: GlassSpecularSharpness.sharp,
+            edgeAbsorption: 0.18,
+            ambientRim: 0.06,
+            fresnelStrength: 0.15,
+            specularSharpness: GlassSpecularSharpness.medium,
           )
         : (isPanel
             ? GlassSettingsHelper.panelSettings
             : GlassSettingsHelper.defaultSettings).copyWith(
                 bodyMode: GlassBodyMode.adaptive,
-                edgeAbsorption: 0.12,
-                ambientRim: 0.22,
-                fresnelStrength: 0.85,
-                specularSharpness: GlassSpecularSharpness.sharp,
+                edgeAbsorption: 0.18,
+                ambientRim: 0.06,
+                fresnelStrength: 0.15,
+                specularSharpness: GlassSpecularSharpness.medium,
               );
 
     final effectiveColor = settings.glassColor;
@@ -184,10 +184,10 @@ class LiquidButton extends StatelessWidget {
         blur: 0,
         lightIntensity: 0.65,
         bodyMode: GlassBodyMode.adaptive,
-        edgeAbsorption: 0.10,
-        ambientRim: 0.22,
-        fresnelStrength: 0.80,
-        specularSharpness: GlassSpecularSharpness.sharp,
+        edgeAbsorption: 0.15,
+        ambientRim: 0.06,
+        fresnelStrength: 0.15,
+        specularSharpness: GlassSpecularSharpness.medium,
       ),
       shape: LiquidRoundedSuperellipse(borderRadius: 16),
       child: Center(

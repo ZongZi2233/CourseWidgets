@@ -147,8 +147,11 @@ class _LiquidToastWidgetState extends State<_LiquidToastWidget>
               shape: LiquidRoundedSuperellipse(borderRadius: 16),
               settings: LiquidGlassSettings(
                 glassColor: _getColor().withValues(alpha: 0.2),
-                blur: 20,
-                thickness: 15,
+                blur: 1.5,
+                thickness: 18.0,
+                ambientRim: 0.06,
+                fresnelStrength: 0.15,
+                edgeAbsorption: 0.15,
               ),
               quality: GlassQuality.standard,
               child: Padding(

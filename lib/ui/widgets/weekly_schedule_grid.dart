@@ -84,8 +84,8 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
       builder: (context) => GlassSheet(
         settings: LiquidGlassSettings(
           glassColor: Colors.black.withValues(alpha: 0.4),
-          blur: 20,
-          thickness: 15,
+          blur: 2.0,
+          thickness: 18.0,
         ),
         child: SafeArea(
           child: Column(

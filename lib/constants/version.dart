@@ -2,8 +2,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 /// 当前版本：[v2.7.7] 官方正式版 - EAMS网页课表DOM物理自愈填色渲染、全景电脑端视口、Liquid Glass Widgets 1.4.0五大核心着色器合并与引擎升级
-const String appVersion = '2.7.8';
-const int buildNumber = 10008042;
+const String appVersion = '2.7.9';
+const int buildNumber = 10008043;
 const String copyright = '© 2025-2026 CourseWidgets. All rights reserved.';
 
 // 全局状态
