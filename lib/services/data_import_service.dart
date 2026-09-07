@@ -1,0 +1,672 @@
+import 'dart:io';
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
+import 'package:file_selector/file_selector.dart';
+import 'package:path/path.dart';
+import 'ics_parser.dart';
+import 'database_helper.dart';
+import 'html_to_ics_converter.dart';
+import '../models/course_event.dart';
+import '../models/schedule_config.dart';
+import 'storage_service.dart';
+
+/// 数据导入服务 - 支持ICS和HTML格式
+class DataImportService {
+  /// 选择ICS文件并导入
+  Future<List<CourseEvent>?> importFromIcsFile() async {
+    try {
+      const typeGroup = XTypeGroup(label: 'ics', extensions: ['ics']);
+
+      final file = await openFile(acceptedTypeGroups: [typeGroup]);
+
+      if (file == null) {
+        return null;
+      }
+
+      String icsContent;
+
+      if (kIsWeb) {
+        // Web平台需要特殊处理
+        final bytes = await file.readAsBytes();
+        icsContent = String.fromCharCodes(bytes);
+      } else {
+        icsContent = await File(file.path).readAsString();
+      }
+
+      // 解析ICS内容
+      final courses = IcsParser.parse(icsContent);
+
+      // [v2.7.0] 自动推断并全局保存最新配置
+      final config = IcsParser.deduceConfigFromCourses(courses, icsContent);
+      if (config != null) {
+        final storage = StorageService();
+        await storage.setString('schedule_config', jsonEncode(config.toJson()));
+        debugPrint('✅ 自动应用了推断的课时配置与开学日期');
+      }
+
+      // 保存到数据库
+      await DatabaseHelper.instance.insertCourses(courses);
+
+      // 保存到历史记录
+      await _saveToHistory(
+        name: 'ICS导入_${DateTime.now().toString().substring(0, 16)}',
+        sourceType: 'ics',
+        sourceData: icsContent,
+        courses: courses,
+        semester: '2025-2026学年',
+      );
+
+      return courses;
+    } catch (e) {
+      debugPrint('ICS导入失败: $e');
+      return null;
+    }
+  }
+
+  /// 选择HTML文件并导入
+  Future<List<CourseEvent>?> importFromHtmlFile() async {
+    try {
+      const typeGroup = XTypeGroup(label: 'html', extensions: ['html', 'json']);
+
+      final file = await openFile(acceptedTypeGroups: [typeGroup]);
+
+      if (file == null) {
+        return null;
+      }
+
+      String htmlContent;
+
+      if (kIsWeb) {
+        // Web平台需要特殊处理
+        final bytes = await file.readAsBytes();
+        htmlContent = String.fromCharCodes(bytes);
+      } else {
+        htmlContent = await File(file.path).readAsString();
+      }
+
+      // 使用HTML转换器转换为ICS
+      String? icsContent = await HtmlImportService.convertHtmlToIcs(
+        htmlContent,
+      );
+
+      if (icsContent == null) {
+        debugPrint('HTML转换ICS失败');
+        return null;
+      }
+
+      // 解析ICS内容
+      final courses = IcsParser.parse(icsContent);
+
+      // [v2.7.0] 自动推断并全局保存最新配置
+      final config = IcsParser.deduceConfigFromCourses(courses, icsContent);
+      if (config != null) {
+        final storage = StorageService();
+        await storage.setString('schedule_config', jsonEncode(config.toJson()));
+      }
+
+      // 保存到数据库
+      await DatabaseHelper.instance.insertCourses(courses);
+
+      // 保存到历史记录
+      await _saveToHistory(
+        name: 'HTML导入_${DateTime.now().toString().substring(0, 16)}',
+        sourceType: 'html',
+        sourceData: htmlContent,
+        courses: courses,
+        semester: '2025-2026学年',
+      );
+
+      return courses;
+    } catch (e) {
+      debugPrint('HTML导入失败: $e');
+      return null;
+    }
+  }
+
+  /// [v2.7.0] 强大的周次格式规范化解析器
+  /// 支持: 纯位串 "111111110000", 人读文本 "1-16周", "1-8周(单)", "2-16周(双)", "1-9,11-17周", "1,3,5,7" 等
+  static List<int> parseWeekString(String weeksStr) {
+    final clean = weeksStr.trim();
+    if (clean.isEmpty) return List.generate(20, (i) => i + 1);
+
+    // 1. 如果是纯 0/1 位串 (例如 "1111111100000000" 或 "010101010101")
+    if (RegExp(r'^[01]{6,}$').hasMatch(clean)) {
+      final list = <int>[];
+      for (int i = 0; i < clean.length; i++) {
+        if (clean[i] == '1') list.add(i + 1);
+      }
+      return list.isNotEmpty ? list : List.generate(20, (i) => i + 1);
+    }
+
+    // 2. 如果是人读文本格式，如 "1-16周", "1-8周(单)", "2-16周(双)", "1-8,10-17周", "1,3,5,7"
+    final result = <int>{};
+    final segments = clean.split(RegExp(r'[,，、;；\s]+'));
+    for (var seg in segments) {
+      final s = seg.trim();
+      if (s.isEmpty) continue;
+
+      final match = RegExp(r'(\d+)(?:[-~至到](\d+))?(?:周)?(?:\(([单双全])\)|（([单双全])）)?').firstMatch(s);
+      if (match != null) {
+        final start = int.tryParse(match.group(1) ?? '') ?? 1;
+        final endStr = match.group(2);
+        final end = endStr != null ? (int.tryParse(endStr) ?? start) : start;
+        final flag = match.group(3) ?? match.group(4);
+
+        for (int w = start; w <= end; w++) {
+          if (flag == '单' && w % 2 == 0) continue;
+          if (flag == '双' && w % 2 != 0) continue;
+          result.add(w);
+        }
+      } else {
+        for (final m in RegExp(r'\d+').allMatches(s)) {
+          final w = int.tryParse(m.group(0) ?? '');
+          if (w != null && w > 0 && w <= 30) result.add(w);
+        }
+      }
+    }
+
+    if (result.isEmpty) {
+      return List.generate(20, (i) => i + 1);
+    }
+    final sorted = result.toList()..sort();
+    return sorted;
+  }
+
+  /// [v2.5.9] 从 HTML 字符串直接导入（用于 WebView 抓取）
+  /// [v2.7.0] 兼容 JSON 包装与底层 HTML 自动降级
+  Future<List<CourseEvent>?> importFromHtmlString(
+    String htmlContent, {
+    ScheduleConfigModel? config,
+  }) async {
+    try {
+      final trimmed = htmlContent.trim();
+      // 1. 如果传入的是 JSON 字符串直接导流至 JSON 解析
+      if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+        try {
+          final decoded = jsonDecode(trimmed);
+          if (decoded is List) {
+            return await importFromJsonData(decoded, config: config);
+          } else if (decoded is Map<String, dynamic>) {
+            if (decoded['data'] is List) {
+              return await importFromJsonData(decoded['data'] as List, config: config);
+            }
+            if (decoded['activities'] is List) {
+              final courses = HtmlDataParser.parseFromHtml(trimmed);
+              if (courses.isNotEmpty) {
+                final fakeConfig = ScheduleConfig(config);
+                final icsStr = IcsGenerator.generate(courses, fakeConfig);
+                final parsedCourses = IcsParser.parse(icsStr);
+                if (parsedCourses.isNotEmpty) {
+                  await DatabaseHelper.instance.insertCourses(parsedCourses);
+                  return parsedCourses;
+                }
+              }
+            }
+          }
+        } catch (_) {}
+      }
+
+      // 2. 如果是 HTML 源码，使用内置 HTML 转 ICS 服务
+      String? icsContent = await HtmlImportService.convertHtmlToIcs(
+        htmlContent,
+      );
+      if (icsContent == null) {
+        debugPrint('HTML字符串转换ICS失败');
+        return null;
+      }
+      final courses = IcsParser.parse(icsContent);
+      if (courses.isEmpty) return null;
+
+      await DatabaseHelper.instance.insertCourses(courses);
+      await _saveToHistory(
+        name: '教务导入_${DateTime.now().toString().substring(0, 16)}',
+        sourceType: 'webview_html',
+        sourceData: htmlContent.length > 10000
+            ? htmlContent.substring(0, 10000)
+            : htmlContent,
+        courses: courses,
+        semester: '2025-2026学年',
+      );
+      return courses;
+    } catch (e) {
+      debugPrint('HTML字符串导入失败: $e');
+      return null;
+    }
+  }
+
+  /// [v2.6.0] 专门接收 Webview WebView Javascript `courses` 原生解析数组
+  /// [v2.6.5] 接受用户配置来计算正确的时间戳
+  /// [v2.7.0] 支持跨节连续课程合并与多周次自动分组排课
+  Future<List<CourseEvent>?> importFromJsonData(
+    List<dynamic> jsonList, {
+    ScheduleConfigModel? config,
+  }) async {
+    try {
+      // [v2.6.5] 使用用户配置而非默认配置，确保时间戳与用户的学期日期匹配
+      final configModel = config ?? ScheduleConfigModel.defaultConfig();
+
+      // 步骤1: 解析所有条目，按(name, teacher, location, dayOfWeek, weeks)分组
+      // 同组内合并连续 section
+      final Map<String, _CourseGroup> groups = {};
+
+      for (var item in jsonList) {
+        if (item is! Map<String, dynamic>) continue;
+        final name = (item['name'] ?? '')
+            .toString()
+            .replaceAll('\r', ' ')
+            .replaceAll('\n', ' ')
+            .replaceAll(RegExp(r'\s+'), ' ')
+            .trim();
+        if (name.isEmpty) continue;
+
+        final teacher = (item['teacher'] ?? '')
+            .toString()
+            .replaceAll('\r', ' ')
+            .replaceAll('\n', ' ')
+            .trim();
+        final location = (item['location'] ?? '')
+            .toString()
+            .replaceAll('\r', ' ')
+            .replaceAll('\n', ' ')
+            .trim();
+        final dayOfWeekRaw = item['dayOfWeek'] ?? 1;
+        final int dayOfWeek = dayOfWeekRaw is num
+            ? dayOfWeekRaw.toInt()
+            : (int.tryParse(dayOfWeekRaw.toString()) ?? 1);
+        final sectionRaw = item['section'] ?? 1;
+        final int section = sectionRaw is num
+            ? sectionRaw.toInt()
+            : (int.tryParse(sectionRaw.toString()) ?? 1);
+        final endSectionRaw = item['endSection'];
+        final int? endSection = endSectionRaw != null
+            ? (endSectionRaw is num ? endSectionRaw.toInt() : int.tryParse(endSectionRaw.toString()))
+            : null;
+
+        final String weeksStr = (item['weeks'] ?? '').toString();
+        // [v2.7.0] 统一使用智能周次解析器
+        final List<int> weeksList = parseWeekString(weeksStr);
+
+        final key = '$name|$teacher|$location|$dayOfWeek|${weeksList.join(',')}';
+        groups.putIfAbsent(
+          key,
+          () => _CourseGroup(
+            name: name,
+            teacher: teacher,
+            location: location,
+            dayOfWeek: dayOfWeek,
+            weeks: weeksList,
+          ),
+        );
+
+        if (endSection != null && endSection >= section) {
+          for (int s = section; s <= endSection; s++) {
+            groups[key]!.sections.add(s);
+          }
+        } else {
+          groups[key]!.sections.add(section);
+        }
+      }
+
+      if (groups.isEmpty) return null;
+
+      // 步骤2: 合并连续节次 → 生成 CourseEvent
+      List<CourseEvent> courses = [];
+      final Set<String> seenEvents = {};
+
+      for (var group in groups.values) {
+        // 排序 sections 并合并连续的
+        final sortedSections = group.sections.toList()..sort();
+        List<List<int>> mergedRanges = [];
+        List<int> current = [sortedSections.first];
+
+        for (int i = 1; i < sortedSections.length; i++) {
+          if (sortedSections[i] == current.last + 1) {
+            current.add(sortedSections[i]);
+          } else {
+            mergedRanges.add(current);
+            current = [sortedSections[i]];
+          }
+        }
+        mergedRanges.add(current);
+
+        // 对每个合并后的节次范围 × 每个周次 → 生成一个 CourseEvent
+        for (var range in mergedRanges) {
+          final startSection = range.first;
+          final endSection = range.last;
+
+          for (var week in group.weeks) {
+            final startTime = configModel.getStartTime(
+              week,
+              group.dayOfWeek,
+              startSection,
+            );
+            final endTime = configModel.getEndTimeWithDuration(
+              week,
+              group.dayOfWeek,
+              startSection,
+              endSection,
+            );
+
+            final eventKey = '${group.name}|$week|${group.dayOfWeek}|$startSection|$endSection|${group.location}';
+            if (seenEvents.contains(eventKey)) continue;
+            seenEvents.add(eventKey);
+
+            courses.add(
+              CourseEvent(
+                name: group.name,
+                location: group.location,
+                teacher: group.teacher,
+                startTime: startTime.millisecondsSinceEpoch,
+                endTime: endTime.millisecondsSinceEpoch,
+              ),
+            );
+          }
+        }
+      }
+
+      if (courses.isEmpty) return null;
+
+      // 按时间排序
+      courses.sort((a, b) => a.startTime.compareTo(b.startTime));
+
+      await DatabaseHelper.instance.insertCourses(courses);
+      await _saveToHistory(
+        name: '教务极速捕获_${DateTime.now().toString().substring(0, 16)}',
+        sourceType: 'webview_json',
+        sourceData: jsonEncode(jsonList),
+        courses: courses,
+        semester: '2025-2026学年',
+      );
+      return courses;
+    } catch (e) {
+      debugPrint('JSON原生导入失败: $e');
+      return null;
+    }
+  }
+
+  /// 从assets导入（用于测试）
+  Future<List<CourseEvent>?> importFromAssets() async {
+    try {
+      // 注意：需要在pubspec.yaml中声明assets
+      final icsContent = await File('assets/calendar.ics').readAsString();
+      final courses = IcsParser.parse(icsContent);
+
+      // 保存到数据库
+      await DatabaseHelper.instance.insertCourses(courses);
+
+      // 保存到历史记录
+      await _saveToHistory(
+        name: 'Assets导入_${DateTime.now().toString().substring(0, 16)}',
+        sourceType: 'ics',
+        sourceData: icsContent,
+        courses: courses,
+        semester: '2025-2026学年',
+      );
+
+      return courses;
+    } catch (e) {
+      debugPrint('从assets导入失败: $e');
+      return null;
+    }
+  }
+
+  /// 保存到历史记录
+  Future<void> _saveToHistory({
+    required String name,
+    required String sourceType,
+    required String sourceData,
+    required List<CourseEvent> courses,
+    required String semester,
+  }) async {
+    try {
+      // 将课程转换为JSON数据
+      final courseData = courses.map((e) => e.toMap()).toList();
+      final courseDataJson = jsonEncode(courseData);
+
+      final storage = StorageService();
+      final currentConfigStr = storage.getString('schedule_config');
+
+      await DatabaseHelper.instance.saveScheduleHistory(
+        name: name,
+        sourceType: sourceType,
+        sourceData: sourceData,
+        courseData: courseDataJson,
+        semester: semester,
+        configData: currentConfigStr, // 保存当时的配置
+      );
+
+      // 清理旧的历史记录
+      await DatabaseHelper.instance.cleanupOldHistory();
+
+      debugPrint('已保存到历史记录: $name');
+    } catch (e) {
+      debugPrint('保存历史记录失败: $e');
+    }
+  }
+
+  /// 获取所有历史记录
+  Future<List<Map<String, dynamic>>> getAllHistory() async {
+    return await DatabaseHelper.instance.getAllScheduleHistory();
+  }
+
+  /// 获取当前激活的课程表
+  Future<Map<String, dynamic>?> getActiveSchedule() async {
+    return await DatabaseHelper.instance.getActiveSchedule();
+  }
+
+  /// 切换到指定的历史记录
+  Future<bool> switchToHistory(int id) async {
+    final success = await DatabaseHelper.instance.switchToSchedule(id);
+    if (success) {
+      // 重新加载该历史记录的课程数据
+      final db = await DatabaseHelper.instance.database;
+      final historyResult = await db.query(
+        'schedule_history',
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+
+      if (historyResult.isNotEmpty) {
+        final sourceType = historyResult.first['source_type'] as String;
+        final courseDataStr = historyResult.first['course_data'] as String;
+        final courseDataRaw = jsonDecode(courseDataStr) as List;
+        final courseDataList = courseDataRaw.cast<Map<String, dynamic>>();
+
+        List<CourseEvent> courses = [];
+        if (sourceType == 'html') {
+          // [v2.6.5修复] HTML导入通过 ICS 转换器生成完整的 CourseEvent（带时间戳）
+          final htmlCourses = HtmlImportService.restoreCourseData(
+            courseDataList,
+          );
+          // 使用应用当前的排课配置对象而不是固定时间
+          final fakeConfig = ScheduleConfig();
+          final icsStr = IcsGenerator.generate(htmlCourses, fakeConfig);
+          courses = IcsParser.parse(icsStr);
+        } else {
+          // webview_json 或常规完整 ICS 导入，直接带有完整 toMap 结构
+          courses = courseDataList.map((e) => CourseEvent.fromMap(e)).toList();
+        }
+
+        // 恢复配置数据（如果存在并且有效）
+        final configDataStr = historyResult.first['config_data'] as String?;
+        if (configDataStr != null && configDataStr.isNotEmpty) {
+          final storage = StorageService();
+          await storage.setString('schedule_config', configDataStr);
+          debugPrint('✅ 已恢复历史记录的课时配置');
+        }
+
+        // [v2.7.0修复] 只清空课程主表，绝对不能调用 clearAll()，否则会删掉所有历史记录和 Config 表
+        await db.delete('courses');
+        await DatabaseHelper.instance.insertCourses(courses);
+      }
+    }
+    return success;
+  }
+
+  /// 删除历史记录
+  Future<bool> deleteHistory(int id) async {
+    return await DatabaseHelper.instance.deleteScheduleHistory(id);
+  }
+
+  /// 导出指定历史记录为ICS文件，返回文件路径
+  Future<String?> exportHistoryToIcs(int id) async {
+    try {
+      final icsContent = await DatabaseHelper.instance.exportScheduleToIcs(id);
+      if (icsContent == null) return null;
+
+      // 保存文件 - 使用Documents目录作为导出路径
+      String exportDir;
+      try {
+        if (Platform.isWindows) {
+          // 使用用户文档目录
+          final appData = Platform.environment['USERPROFILE'] ?? '.';
+          exportDir = join(appData, 'Documents', 'ScheduleExports');
+        } else if (Platform.isAndroid) {
+          // Android使用外部存储目录
+          exportDir = '/storage/emulated/0/Download';
+        } else {
+          exportDir = '.';
+        }
+
+        // 确保目录存在
+        final dir = Directory(exportDir);
+        if (!await dir.exists()) {
+          await dir.create(recursive: true);
+        }
+      } catch (e) {
+        // 如果失败，使用当前工作目录
+        exportDir = '.';
+      }
+
+      final fileName =
+          'schedule_export_${DateTime.now().millisecondsSinceEpoch}.ics';
+      final filePath = join(exportDir, fileName);
+
+      await File(filePath).writeAsString(icsContent);
+
+      debugPrint('ICS文件已导出到: $filePath');
+      return filePath;
+    } catch (e) {
+      debugPrint('导出ICS失败: $e');
+      return null;
+    }
+  }
+
+  /// 导出当前数据为JSON文件
+  Future<bool> exportData() async {
+    try {
+      final courses = await DatabaseHelper.instance.getAllCourses();
+      if (courses.isEmpty) return false;
+
+      // 使用Documents目录作为导出路径
+      String exportDir;
+      try {
+        if (Platform.isWindows) {
+          // 使用用户文档目录
+          final appData = Platform.environment['USERPROFILE'] ?? '.';
+          exportDir = join(appData, 'Documents', 'ScheduleExports');
+        } else if (Platform.isAndroid) {
+          // Android使用外部存储目录
+          exportDir = '/storage/emulated/0/Download';
+        } else {
+          exportDir = '.';
+        }
+
+        // 确保目录存在
+        final dir = Directory(exportDir);
+        if (!await dir.exists()) {
+          await dir.create(recursive: true);
+        }
+      } catch (e) {
+        // 如果失败，使用当前工作目录
+        exportDir = '.';
+      }
+
+      final fileName =
+          'schedule_export_${DateTime.now().millisecondsSinceEpoch}.json';
+      final filePath = join(exportDir, fileName);
+
+      // 转换为可序列化的格式
+      final jsonData = courses.map((e) => e.toMap()).toList();
+      final jsonString = jsonEncode(jsonData);
+
+      await File(filePath).writeAsString(jsonString);
+
+      debugPrint('数据已导出到: $filePath');
+      return true;
+    } catch (e) {
+      debugPrint('导出数据失败: $e');
+      return false;
+    }
+  }
+
+  /// 清除所有数据
+  Future<void> clearAllData() async {
+    await DatabaseHelper.instance.clearAll();
+  }
+
+  /// 获取所有课程
+  Future<List<CourseEvent>> getAllCourses() async {
+    return await DatabaseHelper.instance.getAllCourses();
+  }
+
+  /// 获取指定日期的课程
+  Future<List<CourseEvent>> getCoursesByDate(DateTime date) async {
+    return await DatabaseHelper.instance.getCoursesByDate(date);
+  }
+
+  /// 获取指定周次的课程
+  Future<List<CourseEvent>> getCoursesByWeek(
+    int week,
+    DateTime startDate,
+  ) async {
+    return await DatabaseHelper.instance.getCoursesByWeek(week, startDate);
+  }
+
+  /// 获取所有可用周次
+  Future<List<int>> getAvailableWeeks(DateTime startDate) async {
+    return await DatabaseHelper.instance.getAvailableWeeks(startDate);
+  }
+
+  /// [v2.2.9] 删除单节课程
+  Future<bool> deleteCourse(CourseEvent course) async {
+    try {
+      await DatabaseHelper.instance.deleteCourse(course.startTime);
+      debugPrint('已删除课程: ${course.name}');
+      return true;
+    } catch (e) {
+      debugPrint('删除课程失败: $e');
+      return false;
+    }
+  }
+
+  /// [v2.2.9] 删除所有同名课程
+  Future<bool> deleteAllCoursesWithName(String courseName) async {
+    try {
+      await DatabaseHelper.instance.deleteAllCoursesWithName(courseName);
+      debugPrint('已删除所有课程: $courseName');
+      return true;
+    } catch (e) {
+      debugPrint('删除所有课程失败: $e');
+      return false;
+    }
+  }
+}
+
+/// 课程分组辅助类
+class _CourseGroup {
+  final String name;
+  final String teacher;
+  final String location;
+  final int dayOfWeek;
+  final List<int> weeks;
+  final Set<int> sections = {};
+
+  _CourseGroup({
+    required this.name,
+    required this.teacher,
+    required this.location,
+    required this.dayOfWeek,
+    required this.weeks,
+  });
+}

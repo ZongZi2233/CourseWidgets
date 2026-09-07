@@ -1,0 +1,717 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/services.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
+import 'package:file_selector/file_selector.dart';
+import 'dart:io';
+import '../../constants/theme_constants.dart';
+import '../../services/storage_service.dart';
+import '../../services/theme_service.dart' as theme;
+import '../../utils/glass_settings_helper.dart';
+import '../../utils/glass_opacity_manager.dart'; // [v2.3.0] 玻璃透明度管理器
+import '../../main.dart';
+import '../widgets/liquid_components.dart' as liquid;
+import 'package:smooth_scroll_multiplatform/smooth_scroll_multiplatform.dart';
+
+class SettingsGeneralScreen extends StatefulWidget {
+  const SettingsGeneralScreen({super.key});
+  @override
+  State<SettingsGeneralScreen> createState() => _SettingsGeneralScreenState();
+}
+
+class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
+  final StorageService _storage = StorageService();
+  final theme.ThemeService _themeService = theme.ThemeService();
+
+  bool _adaptiveDarkMode = false;
+  theme.ThemeMode _currentThemeMode = theme.ThemeMode.defaultMode;
+
+  bool get _isDarkMode => _themeService.isDarkMode;
+
+  Color get _textColor => _isDarkMode ? Colors.white : Colors.black87;
+  Color get _textSecondaryColor =>
+      _isDarkMode ? Colors.white60 : Colors.black54;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSettings();
+  }
+
+  Future<void> _loadSettings() async {
+    final darkMode = _storage.getBool(StorageService.keyDarkMode) ?? false;
+    final adaptiveMode =
+        _storage.getBool(StorageService.keyAdaptiveDarkMode) ?? false;
+
+    setState(() {
+      globalUseDarkMode = darkMode;
+      _adaptiveDarkMode = adaptiveMode;
+      _currentThemeMode = _themeService.themeMode;
+    });
+  }
+
+  void _toggleDarkMode(bool value) async {
+    setState(() {
+      globalUseDarkMode = value;
+      if (value) _adaptiveDarkMode = false;
+    });
+    await _storage.setBool(StorageService.keyDarkMode, value);
+    if (value) {
+      await _storage.setBool(StorageService.keyAdaptiveDarkMode, false);
+    }
+    // [v2.3.0] 同步更新玻璃透明度管理器
+    GlassOpacityManager().setDarkMode(value);
+  }
+
+  void _toggleAdaptiveMode(bool value) async {
+    setState(() {
+      _adaptiveDarkMode = value;
+      if (value) {
+        // 自适应模式：跟随系统
+        final brightness = MediaQuery.of(context).platformBrightness;
+        globalUseDarkMode = brightness == Brightness.dark;
+        GlassOpacityManager().setDarkMode(brightness == Brightness.dark);
+      } else {
+        globalUseDarkMode = false;
+        GlassOpacityManager().setDarkMode(false);
+      }
+    });
+    await _storage.setBool(StorageService.keyAdaptiveDarkMode, value);
+    if (value) {
+      await _storage.setBool(StorageService.keyDarkMode, false);
+    }
+  }
+
+  Future<void> _pickBackgroundImage() async {
+    try {
+      if (Platform.isAndroid) {
+        // Android 14+ Photo Picker（不需要权限）
+        const platform = MethodChannel('com.zongzi.schedule/image_picker');
+        final String? imagePath = await platform.invokeMethod('pickImage');
+
+        if (imagePath != null) {
+          globalBackgroundPath.value = imagePath;
+          await _storage.setString(StorageService.keyBackgroundPath, imagePath);
+
+          // 如果是莫奈取色模式，立即提取颜色
+          if (_currentThemeMode == theme.ThemeMode.monet) {
+            await _themeService.extractColorsFromImage(imagePath);
+            setState(() {});
+          }
+
+          if (mounted) _showToast('背景设置成功');
+        }
+      } else if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
+        // Windows/macOS/Linux 使用 file_selector
+        final XFile? file = await openFile(
+          acceptedTypeGroups: [
+            const XTypeGroup(
+              label: '图片',
+              extensions: ['jpg', 'jpeg', 'png', 'bmp', 'webp'],
+            ),
+          ],
+        );
+
+        if (file != null) {
+          globalBackgroundPath.value = file.path;
+          await _storage.setString(StorageService.keyBackgroundPath, file.path);
+
+          // 如果是莫奈取色模式，立即提取颜色
+          if (_currentThemeMode == theme.ThemeMode.monet) {
+            await _themeService.extractColorsFromImage(file.path);
+            setState(() {});
+          }
+
+          if (mounted) _showToast('背景设置成功');
+        }
+      } else {
+        _showToast('当前平台不支持');
+      }
+    } on PlatformException catch (e) {
+      if (e.code == 'UNSUPPORTED') {
+        if (mounted) _showToast('需要 Android 14+');
+      } else if (e.code == 'CANCELLED') {
+        // 用户取消，不显示错误
+      } else {
+        if (mounted) _showToast('选择图片失败: ${e.message}');
+      }
+    } catch (e) {
+      if (mounted) _showToast('选择图片失败: $e');
+    }
+  }
+
+  void _showThemeModeBottomSheet() {
+    // [v2.5.2] 从 CupertinoModalPopup 迁移到 showModalBottomSheet 支持下滑关闭与小圆条拖拽
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      enableDrag: true,
+      showDragHandle: false,
+      isScrollControlled: true,
+      // [v2.5.2] 增加 RepaintBoundary 防止底部表单内高斯模糊拖降全局帧率
+      builder: (BuildContext context) => RepaintBoundary(
+        child: GlassSheet(
+          settings: GlassSettingsHelper.getDialogSettings(),
+          child: SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // 标题
+                Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Text(
+                    '主题色设置',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: _textColor,
+                    ),
+                  ),
+                ),
+
+                // 选项列表
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Column(
+                    children: [
+                      _buildThemeModeOption(
+                        theme.ThemeMode.defaultMode,
+                        '默认主题',
+                        '使用应用默认的嫩粉色主题',
+                        CupertinoIcons.paintbrush,
+                      ),
+                      const SizedBox(height: 12),
+                      if (Platform.isAndroid || Platform.isWindows) ...[
+                        _buildThemeModeOption(
+                          theme.ThemeMode.system,
+                          '系统主题',
+                          Platform.isWindows
+                              ? '跟随 Windows 系统强调色'
+                              : 'Android 12+ Material You 动态颜色',
+                          Platform.isWindows
+                              ? CupertinoIcons.desktopcomputer
+                              : CupertinoIcons.device_phone_portrait,
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                      _buildThemeModeOption(
+                        theme.ThemeMode.monet,
+                        '莫奈取色',
+                        '从背景图片提取主题色',
+                        CupertinoIcons.photo,
+                      ),
+                      const SizedBox(height: 12),
+                      _buildThemeModeOption(
+                        theme.ThemeMode.custom,
+                        '自定义主题色',
+                        '选择你喜欢的任意颜色',
+                        CupertinoIcons.color_filter,
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 20),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildThemeModeOption(
+    theme.ThemeMode mode,
+    String title,
+    String subtitle,
+    IconData icon,
+  ) {
+    final isSelected = _currentThemeMode == mode;
+
+    return GestureDetector(
+      onTap: () async {
+        HapticFeedback.selectionClick();
+
+        // [v2.3.0] 自定义主题色需要打开颜色选择器
+        if (mode == theme.ThemeMode.custom) {
+          Navigator.pop(context); // 先关闭底部表单
+          await _showColorPicker();
+          return;
+        }
+
+        // [v2.5.2修复] 莫奈取色：如果当前无背景，直接唤起相册，并且在选择后自动切换为莫奈模式
+        if (mode == theme.ThemeMode.monet &&
+            globalBackgroundPath.value == null) {
+          Navigator.pop(context);
+          await _pickBackgroundImage();
+
+          if (globalBackgroundPath.value != null) {
+            setState(() => _currentThemeMode = theme.ThemeMode.monet);
+            await _themeService.setThemeMode(theme.ThemeMode.monet);
+            await _themeService.extractColorsFromImage(
+              globalBackgroundPath.value!,
+            );
+            if (mounted) setState(() {});
+            _showToast('已应用背景并切换为莫奈取色');
+          }
+          return;
+        }
+
+        setState(() => _currentThemeMode = mode);
+        await _themeService.setThemeMode(mode);
+
+        if (mode == theme.ThemeMode.system && Platform.isAndroid && mounted) {
+          await _themeService.applySystemTheme(context);
+        } else if (mode == theme.ThemeMode.monet &&
+            globalBackgroundPath.value != null) {
+          await _themeService.extractColorsFromImage(
+            globalBackgroundPath.value!,
+          );
+        }
+
+        setState(() {});
+        if (mounted) Navigator.pop(context);
+        _showToast('主题已切换');
+      },
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: isSelected
+              ? LinearGradient(
+                  colors: [
+                    AppThemeColors.babyPink.withValues(alpha: 0.3),
+                    AppThemeColors.softCoral.withValues(alpha: 0.3),
+                  ],
+                )
+              : null,
+          color: isSelected
+              ? null
+              : GlassSettingsHelper.getCardSettings().glassColor,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isSelected
+                ? AppThemeColors.babyPink.withValues(alpha: 0.5)
+                : _textColor.withValues(alpha: 0.1),
+            width: isSelected ? 2 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                gradient: isSelected
+                    ? LinearGradient(
+                        colors: [
+                          AppThemeColors.babyPink.withValues(alpha: 0.3),
+                          AppThemeColors.softCoral.withValues(alpha: 0.3),
+                        ],
+                      )
+                    : null,
+                color: isSelected ? null : _textColor.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: _textColor, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: _textColor,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: TextStyle(fontSize: 12, color: _textSecondaryColor),
+                  ),
+                ],
+              ),
+            ),
+            if (isSelected)
+              Icon(
+                CupertinoIcons.check_mark_circled_solid,
+                color: AppThemeColors.babyPink,
+                size: 24,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showToast(String msg) {
+    if (mounted) liquid.showLiquidToast(context, msg);
+  }
+
+  void _showAlert(String title, String content) {
+    liquid.showLiquidDialog(
+      context: context,
+      builder: liquid.LiquidGlassDialog(title: title, content: Text(content)),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        title: Text(
+          '通用设置',
+          style: TextStyle(color: _textColor, fontWeight: FontWeight.bold),
+        ),
+        // [v2.3.0修复] 恢复返回按钮，使用统一样式
+        leading: const Padding(
+          padding: EdgeInsets.only(left: 8.0, top: 4.0, bottom: 4.0),
+          child: liquid.LiquidBackButton(),
+        ),
+      ),
+      body: LiquidGlassLayer(
+        settings: LiquidGlassSettings(
+          thickness: 0.8,
+          blur: 15.0, // Let the background glass be stronger
+          glassColor: GlassSettingsHelper.getStandardSettings().glassColor,
+        ),
+        child: DynMouseScroll(
+          durationMS: 250,
+          scrollSpeed: 1.2,
+          builder: (context, controller, physics) => SingleChildScrollView(
+            controller: controller,
+            physics: physics,
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildSection('外观'),
+                // [v2.9.0] Windows 端未适配深色模式，隐藏相关设置
+                if (!Platform.isWindows) ...[
+                  _buildSwitchCard(
+                    '自适应深色模式',
+                    '跟随系统设置',
+                    _adaptiveDarkMode,
+                    _toggleAdaptiveMode,
+                  ),
+                  const SizedBox(height: 12),
+
+                  IgnorePointer(
+                    ignoring: _adaptiveDarkMode,
+                    child: _buildSwitchCard(
+                      '强制深色模式',
+                      '手动覆盖系统设置',
+                      globalUseDarkMode,
+                      _toggleDarkMode,
+                      disabled: _adaptiveDarkMode,
+                    ),
+                  ),
+                ],
+
+                const SizedBox(height: 20),
+                _buildSection('主题色'),
+                _buildActionCard(
+                  '主题色设置',
+                  CupertinoIcons.color_filter,
+                  _showThemeModeBottomSheet,
+                  subtitle: _getThemeModeText(),
+                ),
+
+                const SizedBox(height: 20),
+                _buildSection('个性化'),
+                _buildActionCard(
+                  '更换背景图片',
+                  CupertinoIcons.photo,
+                  _pickBackgroundImage,
+                ),
+                const SizedBox(height: 10),
+                _buildActionCard(
+                  '恢复默认背景',
+                  CupertinoIcons.arrow_counterclockwise,
+                  () async {
+                    globalBackgroundPath.value = null;
+                    await _storage.remove(StorageService.keyBackgroundPath);
+                    _showAlert('已恢复', '背景已恢复默认渐变');
+                  },
+                ),
+
+                const SizedBox(height: 20),
+                _buildSection('性能'),
+                _buildActionCard(
+                  '着色器质量',
+                  CupertinoIcons.speedometer,
+                  _toggleShaderQuality,
+                  subtitle: GlassEffect.useHighPerformanceShader
+                      ? '当前：高性能模式（切换后需重启）'
+                      : '当前：高质量模式（切换后需重启）',
+                ),
+
+                const SizedBox(height: 50),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _getThemeModeText() {
+    switch (_currentThemeMode) {
+      case theme.ThemeMode.defaultMode:
+        return '默认主题';
+      case theme.ThemeMode.system:
+        return '系统主题';
+      case theme.ThemeMode.monet:
+        return '莫奈取色';
+      case theme.ThemeMode.custom:
+        return '自定义主题色';
+    }
+  }
+
+  /// [v2.3.0] 显示颜色选择器
+  Future<void> _showColorPicker() async {
+    // 预设颜色
+    final presetColors = [
+      AppThemeColors.babyPink, // 默认粉色
+      const Color(0xFFFF6B6B), // 珊瑚红
+      const Color(0xFFFFB347), // 柑橘橙
+      const Color(0xFFFFD93D), // 奶酪黄
+      const Color(0xFF6BCB77), // 薄荷绿
+      const Color(0xFF4D96FF), // 晴空蓝
+      const Color(0xFF9D84B7), // 丁香紫
+      const Color(0xFFFF85A2), // 桃金粉
+      // [v2.5.2 扩编] 增加更多现代美学色彩
+      const Color(0xFF00C9A7), // 翡翠绿
+      const Color(0xFF845EC2), // 皇家紫
+      const Color(0xFFFF9671), // 蜜桃红
+      const Color(0xFF0081C9), // 海洋蓝
+      const Color(0xFFB0A8B9), // 莫兰迪雾灰
+      const Color(0xFFC34A36), // 砖红琥珀
+      const Color(0xFF537188), // 钢青蓝
+      const Color(0xFFE2B714), // 芥末黄
+    ];
+
+    Color? selectedColor;
+
+    await liquid.showLiquidDialog(
+      context: context,
+      builder: liquid.LiquidGlassDialog(
+        title: '选择主题色',
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: presetColors.map((color) {
+              return GestureDetector(
+                onTap: () {
+                  selectedColor = color;
+                  Navigator.pop(context);
+                },
+                child: Container(
+                  width: 60,
+                  height: 60,
+                  decoration: BoxDecoration(
+                    color: color,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.3),
+                      width: 2,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: color.withValues(alpha: 0.3),
+                        blurRadius: 10,
+                        spreadRadius: 2,
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+        actions: [
+          GlassDialogAction(
+            label: '取消',
+            onPressed: () => Navigator.pop(context),
+          ),
+        ],
+      ),
+    );
+
+    if (selectedColor != null) {
+      setState(() => _currentThemeMode = theme.ThemeMode.custom);
+      await _themeService.setThemeMode(theme.ThemeMode.custom);
+      await _themeService.setCustomColor(selectedColor!);
+      if (mounted) {
+        setState(() {});
+        _showToast('主题色已更新');
+      }
+    }
+  }
+
+  Widget _buildSection(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10, left: 4),
+      child: Text(
+        title,
+        style: TextStyle(
+          color: _textSecondaryColor,
+          fontSize: 14,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSwitchCard(
+    String title,
+    String subtitle,
+    bool value,
+    ValueChanged<bool> onChanged, {
+    bool disabled = false,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: liquid.LiquidCard(
+        onTap: () => onChanged(!value),
+        glassColor: GlassSettingsHelper.getCardSettings().glassColor,
+        padding: 16,
+        borderRadius: 20,
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      color: _textColor.withValues(alpha: disabled ? 0.5 : 1.0),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      color: _textSecondaryColor.withValues(
+                        alpha: disabled ? 0.5 : 1.0,
+                      ),
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            liquid.LiquidSwitch(
+              value: value,
+              onChanged: disabled ? (v) {} : onChanged,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionCard(
+    String title,
+    IconData icon,
+    VoidCallback onTap, {
+    String? subtitle,
+  }) {
+    // [v2.4.8] Material + InkWell 包裹确保整个卡片区域可点击（Windows 兼容）
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: liquid.LiquidCard(
+          glassColor: GlassSettingsHelper.getCardSettings().glassColor,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Icon(icon, color: AppThemeColors.babyPink),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          color: _textColor,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      if (subtitle != null) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          subtitle,
+                          style: TextStyle(
+                            color: _textSecondaryColor,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const Icon(CupertinoIcons.right_chevron, color: Colors.grey),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// [v2.7.0] 着色器质量切换
+  void _toggleShaderQuality() {
+    final newValue = !GlassEffect.useHighPerformanceShader;
+    _storage.setBool('high_performance_shader', newValue);
+    GlassEffect.useHighPerformanceShader = newValue;
+    GlassEffect.invalidateShader();
+
+    liquid.showLiquidDialog(
+      context: context,
+      builder: liquid.LiquidGlassDialog(
+        title: '着色器已切换',
+        content: Text(
+          '已切换到${newValue ? "高性能" : "高质量"}模式。\n请重启应用以生效。',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          GlassDialogAction(
+            label: '稍后重启',
+            onPressed: () => Navigator.pop(context),
+          ),
+          GlassDialogAction(
+            label: '立即退出',
+            isPrimary: true,
+            onPressed: () {
+              Navigator.pop(context);
+              if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
+                exit(0);
+              } else {
+                SystemNavigator.pop();
+              }
+            },
+          ),
+        ],
+      ),
+    );
+
+    setState(() {});
+  }
+}

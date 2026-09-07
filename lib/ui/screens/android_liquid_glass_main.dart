@@ -1,0 +1,1131 @@
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
+import '../../providers/schedule_provider.dart';
+import '../../constants/version.dart';
+import '../../constants/theme_constants.dart';
+import '../../services/live_notification_service_v2.dart';
+import '../../services/data_import_service.dart';
+import '../../models/course_event.dart';
+import '../../models/schedule_config.dart';
+
+import '../../utils/responsive_utils.dart';
+import '../../main.dart' hide globalUseDarkMode; // [v2.6.0] 引用全局 routeObserver
+import 'course_edit_screen.dart';
+import 'calendar_view_screen.dart';
+import 'settings_main_screen.dart';
+import '../widgets/liquid_components.dart' as liquid;
+import '../transitions/smooth_slide_transitions.dart';
+import '../widgets/glass_context_menu.dart';
+import '../widgets/tablet_sidebar.dart';
+import '../widgets/weekly_schedule_grid.dart';
+
+class AndroidLiquidGlassMain extends StatefulWidget {
+  const AndroidLiquidGlassMain({super.key});
+  @override
+  State<AndroidLiquidGlassMain> createState() => _AndroidLiquidGlassMainState();
+}
+
+class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
+    with SingleTickerProviderStateMixin, RouteAware {
+  int _currentIndex = 0;
+  bool _isLoading = true; // 添加加载状态
+  bool _isBottomNavVisible = true; // [v2.6.0] 底部导航栏可见性状态
+  final DataImportService _importService = DataImportService();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // 注册路由监听
+    routeObserver.subscribe(this, ModalRoute.of(context) as PageRoute);
+  }
+
+  // [v2.6.0] 被其他页面覆盖时，隐藏导航栏
+  @override
+  void didPushNext() {
+    if (mounted) {
+      setState(() {
+        _isBottomNavVisible = false;
+      });
+    }
+  }
+
+  // [v2.6.0] 上一层页面弹出，回到当前页面时，显示导航栏
+  @override
+  void didPopNext() {
+    if (mounted) {
+      setState(() {
+        _isBottomNavVisible = true;
+      });
+    }
+  }
+
+  Future<void> _loadData() async {
+    try {
+      final provider = context.read<ScheduleProvider>();
+      await provider.loadSavedData();
+
+      // 初始化 Android 16 Live Updates 通知服务
+      final liveService = LiveNotificationServiceV2();
+      await liveService.initialize();
+
+      // 设置通知点击回调 - 跳转到课程详情
+      liveService.setOnNotificationTapCallback((course) {
+        // 切换到课程页面
+        if (mounted) {
+          setState(() => _currentIndex = 0);
+        }
+      });
+
+      // 获取下一节课并启动实时通知
+      final nextCourse = provider.getNextCourse();
+      await liveService.startLiveUpdate(nextCourse);
+
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    } catch (e) {
+      debugPrint('❌ 加载数据失败: $e');
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    routeObserver.unsubscribe(this); // [v2.6.0] 卸载路由监听
+    // 停止通知服务
+    LiveNotificationServiceV2().dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // [v2.2.8修复] 显示加载状态
+    if (_isLoading) {
+      return const Scaffold(
+        backgroundColor: Colors.transparent,
+        body: Center(child: CircularProgressIndicator(color: Colors.white)),
+      );
+    }
+
+    final isTablet = ResponsiveUtils.isTabletMode(context);
+
+    if (isTablet) {
+      // 平板模式：左侧导航栏 + 右侧内容
+      return _buildTabletLayout(context);
+    } else {
+      // 手机模式：底部导航栏
+      return _buildPhoneLayout(context);
+    }
+  }
+
+  /// 平板布局
+  Widget _buildTabletLayout(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: Row(
+        children: [
+          // 左侧导航栏
+          TabletSideBar(
+            selectedIndex: _currentIndex,
+            onTabSelected: (index) {
+              HapticFeedback.selectionClick();
+              setState(() => _currentIndex = index);
+            },
+            items: const [
+              TabletSideBarItem(
+                icon: CupertinoIcons.square_grid_2x2,
+                selectedIcon: CupertinoIcons.square_grid_2x2_fill,
+                label: '课程',
+              ),
+              TabletSideBarItem(
+                icon: CupertinoIcons.calendar,
+                selectedIcon: CupertinoIcons.calendar_today,
+                label: '日历',
+              ),
+              TabletSideBarItem(
+                icon: CupertinoIcons.gear_alt,
+                selectedIcon: CupertinoIcons.gear_alt_fill,
+                label: '设置',
+              ),
+            ],
+          ),
+
+          // 右侧内容区
+          Expanded(
+            child: RepaintBoundary(
+              key: TransparentMaterialPageRoute.contentBoundaryKey,
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 250),
+                switchInCurve: Curves.easeOut,
+                switchOutCurve: Curves.easeIn,
+                child: IndexedStack(
+                  key: ValueKey(_currentIndex),
+                  index: _currentIndex,
+                  children: [
+                    _buildTabletSchedulePage(),
+                    const CalendarViewScreen(),
+                    const SettingsMainScreen(),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 手机布局
+  Widget _buildPhoneLayout(BuildContext context) {
+    return AdaptiveLiquidGlassLayer(
+      quality: GlassQuality.standard,
+      settings: const LiquidGlassSettings(
+        blur: 10.0,
+        thickness: 15.0,
+        glassColor: Color.fromRGBO(255, 255, 255, 0.08),
+        lightAngle: 135,
+        lightIntensity: 0.70,
+        ambientStrength: 0.40,
+        saturation: 1.25,
+        refractiveIndex: 1.25,
+      ),
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        extendBody: true,
+        body: RepaintBoundary(
+          key: TransparentMaterialPageRoute.contentBoundaryKey,
+          child: IndexedStack(
+            index: _currentIndex,
+            children: [
+              _buildSchedulePage(),
+              _buildPageWithHeader(1, const CalendarViewScreen(), '日历视图'),
+              _buildPageWithHeader(2, const SettingsMainScreen(), '设置'),
+            ],
+          ),
+        ),
+        // 导航栏放回 bottomNavigationBar，置于全局 AdaptiveLiquidGlassLayer 下共享着色器上下文
+        bottomNavigationBar: AnimatedSlide(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOutCubic,
+          offset: _isBottomNavVisible ? Offset.zero : const Offset(0, 1.2),
+          child: RepaintBoundary(
+            child: GlassBottomBar(
+              selectedIndex: _currentIndex,
+              onTabSelected: (index) {
+                HapticFeedback.selectionClick();
+                setState(() => _currentIndex = index);
+              },
+              quality: GlassQuality.standard,
+              barBorderRadius: 28.0,
+              glassSettings: const LiquidGlassSettings(
+                blur: 12.0,
+                thickness: 18.0,
+                refractiveIndex: 1.35,
+                lightIntensity: 0.70,
+                ambientStrength: 0.45,
+                saturation: 1.35,
+                glassColor: Color.fromRGBO(255, 255, 255, 0.08),
+              ),
+              indicatorColor: AppThemeColors.babyPink.withValues(alpha: 0.35),
+              tabs: const [
+                GlassBottomBarTab(
+                  icon: CupertinoIcons.square_grid_2x2,
+                  selectedIcon: CupertinoIcons.square_grid_2x2_fill,
+                  label: '课程',
+                ),
+                GlassBottomBarTab(
+                  icon: CupertinoIcons.calendar,
+                  selectedIcon: CupertinoIcons.calendar_today,
+                  label: '日历',
+                ),
+                GlassBottomBarTab(
+                  icon: CupertinoIcons.gear_alt,
+                  selectedIcon: CupertinoIcons.gear_alt_fill,
+                  label: '设置',
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 平板模式的课程页面（本周网格视图）
+  Widget _buildTabletSchedulePage() {
+    return const SafeArea(
+      child: Padding(
+        padding: EdgeInsets.all(20),
+        child: WeeklyScheduleGrid(),
+      ),
+    );
+  }
+
+  /// 优雅的次级页面顶部包裹栏（日历、设置）
+  Widget _buildPageWithHeader(int index, Widget child, String title) {
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: Padding(
+            padding: const EdgeInsets.only(top: 88),
+            child: child,
+          ),
+        ),
+        Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          child: SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.08),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: GlassContainer(
+                  shape: const LiquidRoundedSuperellipse(borderRadius: 20),
+                  settings: const LiquidGlassSettings(
+                    glassColor: Color.fromRGBO(255, 255, 255, 0.10),
+                    blur: 10.0,
+                    thickness: 15.0,
+                    refractiveIndex: 1.30,
+                    lightIntensity: 0.68,
+                    ambientStrength: 0.35,
+                    saturation: 1.25,
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                    child: Row(
+                      children: [
+                        Text(
+                          title,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                        const Spacer(),
+                        liquid.LiquidCard(
+                          borderRadius: 10,
+                          padding: 5,
+                          styleType: liquid.LiquidStyleType.micro,
+                          quality: GlassQuality.standard,
+                          child: Text(
+                            'v$appVersion',
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// [v2.6.0] 重构手机端主课表页面：顶部轻量化折射标题 + 紧凑日历胶囊，解放全屏纵向空间
+  Widget _buildSchedulePage() {
+    return Consumer<ScheduleProvider>(
+      builder: (context, provider, _) {
+        final courses = provider.getCurrentDayCourses();
+
+        return Stack(
+          children: [
+            // 课程滑动列表
+            Positioned.fill(
+              child: ListView.builder(
+                key: ValueKey('schedule_${provider.currentWeek}_${provider.currentDay}'),
+                padding: const EdgeInsets.fromLTRB(16, 172, 16, 96),
+                physics: const BouncingScrollPhysics(
+                  parent: AlwaysScrollableScrollPhysics(),
+                ),
+                itemCount: courses.isEmpty ? 1 : courses.length,
+                itemBuilder: (context, index) {
+                  if (courses.isEmpty) {
+                    return _buildEmptyCourseView();
+                  }
+                  final course = courses[index];
+                  return _buildModernCourseCard(course, provider.currentConfig);
+                },
+              ),
+            ),
+
+            // 顶部悬浮栏组（标题栏 + 星期选择器）：随列表内容产生液态玻璃真实折射
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // 1. 顶部晶透 App Bar
+                      _buildModernTopBar(provider),
+                      const SizedBox(height: 8),
+                      // 2. 紧凑型星期日历胶囊栏
+                      _buildModernDaySelector(provider),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// 现代晶透 App Bar：包含标题、周次切换胶囊与快捷微调
+  Widget _buildModernTopBar(ScheduleProvider provider) {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: GlassContainer(
+        shape: const LiquidRoundedSuperellipse(borderRadius: 20),
+        settings: const LiquidGlassSettings(
+          glassColor: Color.fromRGBO(255, 255, 255, 0.10),
+          blur: 10.0,
+          thickness: 15.0,
+          refractiveIndex: 1.30,
+          lightIntensity: 0.68,
+          ambientStrength: 0.35,
+          saturation: 1.25,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          child: Row(
+            children: [
+              Icon(
+                CupertinoIcons.book_fill,
+                color: AppThemeColors.babyPink,
+                size: 22,
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                "CourseWidgets",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.3,
+                ),
+              ),
+              const Spacer(),
+              // 周次切换胶囊组合
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  GestureDetector(
+                    onTap: () {
+                      final weeks = provider.availableWeeks;
+                      if (weeks.isNotEmpty && provider.currentWeek > weeks.first) {
+                        HapticFeedback.selectionClick();
+                        provider.setCurrentWeek(provider.currentWeek - 1);
+                      }
+                    },
+                    behavior: HitTestBehavior.opaque,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                      child: Icon(
+                        CupertinoIcons.chevron_left,
+                        size: 14,
+                        color: Colors.white.withValues(alpha: 0.7),
+                      ),
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () => _showWeekPickerSheet(context, provider),
+                    behavior: HitTestBehavior.opaque,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppThemeColors.babyPink.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: AppThemeColors.babyPink.withValues(alpha: 0.35),
+                          width: 0.8,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '第${provider.currentWeek}周',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(width: 3),
+                          const Icon(
+                            CupertinoIcons.chevron_down,
+                            size: 10,
+                            color: Colors.white70,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () {
+                      final weeks = provider.availableWeeks;
+                      if (weeks.isNotEmpty && provider.currentWeek < weeks.last) {
+                        HapticFeedback.selectionClick();
+                        provider.setCurrentWeek(provider.currentWeek + 1);
+                      }
+                    },
+                    behavior: HitTestBehavior.opaque,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                      child: Icon(
+                        CupertinoIcons.chevron_right,
+                        size: 14,
+                        color: Colors.white.withValues(alpha: 0.7),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    TransparentMaterialPageRoute(
+                      builder: (_) => const CourseEditScreen(),
+                    ),
+                  );
+                },
+                behavior: HitTestBehavior.opaque,
+                child: Container(
+                  padding: const EdgeInsets.all(5),
+                  decoration: BoxDecoration(
+                    color: AppThemeColors.babyPink.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: AppThemeColors.babyPink.withValues(alpha: 0.35),
+                      width: 0.8,
+                    ),
+                  ),
+                  child: const Icon(
+                    CupertinoIcons.add,
+                    size: 14,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 现代紧凑星期日历选择器（顶部胶囊式）
+  Widget _buildModernDaySelector(ScheduleProvider provider) {
+    final daysCount = provider.currentConfig.showWeekends ? 7 : 5;
+    final weekdayNames = ['一', '二', '三', '四', '五', '六', '日'];
+    final semesterStart = provider.semesterStartDate;
+    final weekOffset = (provider.currentWeek - 1) * 7;
+
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.07),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: GlassContainer(
+        shape: const LiquidRoundedSuperellipse(borderRadius: 18),
+        settings: const LiquidGlassSettings(
+          glassColor: Color.fromRGBO(255, 255, 255, 0.08),
+          blur: 8.0,
+          thickness: 13.0,
+          refractiveIndex: 1.25,
+          lightIntensity: 0.65,
+          ambientStrength: 0.35,
+          saturation: 1.20,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: List.generate(daysCount, (index) {
+              final day = index + 1;
+              final isSelected = day == provider.currentDay;
+              final dayDate = semesterStart.add(Duration(days: weekOffset + day - 1));
+              final dateLabel = '${dayDate.month}/${dayDate.day}';
+
+              return Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                  child: GestureDetector(
+                    onTap: () {
+                      HapticFeedback.selectionClick();
+                      provider.setCurrentDay(day);
+                    },
+                    behavior: HitTestBehavior.opaque,
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 220),
+                      curve: Curves.easeOutCubic,
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? AppThemeColors.babyPink.withValues(alpha: 0.35)
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: isSelected
+                              ? Colors.white.withValues(alpha: 0.4)
+                              : Colors.transparent,
+                          width: 0.8,
+                        ),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            weekdayNames[index],
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                              color: isSelected ? Colors.white : Colors.white70,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            dateLabel,
+                            style: TextStyle(
+                              fontSize: 9,
+                              fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                              color: isSelected
+                                  ? Colors.white.withValues(alpha: 0.85)
+                                  : Colors.white38,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// [v2.7.6] 安全解析节次文本，兼容 CourseEvent 时间戳与 ScheduleConfigModel
+  String _getCourseSectionText(dynamic course, dynamic config) {
+    try {
+      if (course is CourseEvent) {
+        final startDt = DateTime.fromMillisecondsSinceEpoch(course.startTime);
+        final endDt = DateTime.fromMillisecondsSinceEpoch(course.endTime);
+        final startMinutes = startDt.hour * 60 + startDt.minute;
+        final endMinutes = endDt.hour * 60 + endDt.minute;
+
+        int? startSec;
+        int? endSec;
+
+        if (config is ScheduleConfigModel) {
+          final Map<int, int> startTimes = Map<int, int>.from(config.sectionStartTimes);
+          final Map<int, int> durations = Map<int, int>.from(config.sectionDurations);
+          final int defaultDur = config.defaultDuration;
+
+          for (final entry in startTimes.entries) {
+            if ((entry.value - startMinutes).abs() <= 15) {
+              startSec = entry.key;
+              break;
+            }
+          }
+
+          if (startSec != null) {
+            for (final entry in startTimes.entries) {
+              final dur = durations[entry.key] ?? defaultDur;
+              final secEnd = entry.value + dur;
+              if ((secEnd - endMinutes).abs() <= 15) {
+                endSec = entry.key;
+                break;
+              }
+            }
+            endSec ??= startSec;
+            return startSec == endSec ? '第$startSec节' : '$startSec-$endSec节';
+          }
+        }
+      } else {
+        final dynamic c = course;
+        if (c.startSection != null) {
+          final int start = c.startSection;
+          final int step = (c.step != null && c.step > 0) ? c.step : 1;
+          return '$start-${start + step - 1}节';
+        }
+      }
+    } catch (_) {}
+
+    final timeStr = course.timeStr?.toString() ?? '';
+    final parts = timeStr.split('-');
+    return parts.isNotEmpty ? parts[0].trim() : '课程';
+  }
+
+  /// [v2.7.6] 极具 Apple iOS 26/27 现代液态玻璃微质感的高性能课程卡片（增大折射边界，安全健壮解析）
+  Widget _buildModernCourseCard(dynamic course, [dynamic config]) {
+    final timeStr = course.timeStr?.toString() ?? '';
+    final timeStart = timeStr.contains('-')
+        ? timeStr.split('-')[0].trim()
+        : timeStr;
+    final timeEnd = timeStr.contains('-')
+        ? timeStr.split('-')[1].trim()
+        : '';
+    final sectionText = _getCourseSectionText(course, config);
+
+    return RepaintBoundary(
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(22),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.08),
+                blurRadius: 8,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: GlassContainer(
+            useOwnLayer: false, // 共享渲染层，消除多重独立 BackdropFilter 造成的 120Hz 丢帧卡顿
+            shape: const LiquidRoundedSuperellipse(borderRadius: 22),
+            quality: GlassQuality.standard,
+            settings: const LiquidGlassSettings(
+              thickness: 15.0, // [v2.7.6] 显著增大透镜折射物理厚度，凸显边界立体感
+              blur: 8.0, // 遵循官方推荐标准卡片模糊度，通透不浑浊
+              glassColor: Color.fromRGBO(255, 255, 255, 0.08),
+              refractiveIndex: 1.30, // [v2.7.6] 提升光学折射率，使透镜边缘分界线清晰突出
+              lightIntensity: 0.65, // 晶莹高质感的边缘折射反光微质感
+              ambientStrength: 0.35,
+              saturation: 1.25,
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  // 左侧时间胶囊条
+                  Container(
+                    width: 58,
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          AppThemeColors.babyPink.withValues(alpha: 0.35),
+                          AppThemeColors.softCoral.withValues(alpha: 0.22),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          timeStart,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        if (timeEnd.isNotEmpty) ...[
+                          const SizedBox(height: 1),
+                          Text(
+                            timeEnd,
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.6),
+                              fontSize: 10,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 3),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                          decoration: BoxDecoration(
+                            color: AppThemeColors.babyPink.withValues(alpha: 0.35),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            sectionText,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(width: 14),
+
+                  // 中间课程详情
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          course.name,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 16,
+                            color: Colors.white,
+                            letterSpacing: 0.2,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            if (course.location.isNotEmpty)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      CupertinoIcons.location_solid,
+                                      size: 11,
+                                      color: AppThemeColors.babyPink,
+                                    ),
+                                    const SizedBox(width: 3),
+                                    Text(
+                                      course.location,
+                                      style: TextStyle(
+                                        color: Colors.white.withValues(alpha: 0.85),
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            if (course.location.isNotEmpty && course.teacher.isNotEmpty)
+                              const SizedBox(width: 8),
+                            if (course.teacher.isNotEmpty)
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    CupertinoIcons.person_fill,
+                                    size: 11,
+                                    color: Colors.white.withValues(alpha: 0.5),
+                                  ),
+                                  const SizedBox(width: 3),
+                                  Text(
+                                    course.teacher,
+                                    style: TextStyle(
+                                      color: Colors.white.withValues(alpha: 0.65),
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w400,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // 右侧操作菜单
+                  GlassContextMenu(
+                    items: [
+                      GlassContextMenuItem(
+                        title: '编辑课程',
+                        icon: CupertinoIcons.pencil,
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            TransparentMaterialPageRoute(
+                              builder: (_) => CourseEditScreen(course: course),
+                            ),
+                          );
+                        },
+                      ),
+                      GlassContextMenuItem(
+                        title: '删除本节课程',
+                        icon: CupertinoIcons.delete,
+                        isDestructive: true,
+                        onTap: () async {
+                          final provider = Provider.of<ScheduleProvider>(
+                            context,
+                            listen: false,
+                          );
+                          await _importService.deleteCourse(course);
+                          await provider.loadSavedData();
+                          if (mounted) {
+                            liquid.showLiquidToast(context, '已删除本节课程');
+                          }
+                        },
+                      ),
+                      GlassContextMenuItem(
+                        title: '删除所有本课程',
+                        icon: CupertinoIcons.trash,
+                        isDestructive: true,
+                        onTap: () async {
+                          final provider = Provider.of<ScheduleProvider>(
+                            context,
+                            listen: false,
+                          );
+                          await _importService.deleteAllCoursesWithName(course.name);
+                          await provider.loadSavedData();
+                          if (mounted) {
+                            liquid.showLiquidToast(context, '已删除所有${course.name}课程');
+                          }
+                        },
+                      ),
+                    ],
+                    trigger: Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(
+                        CupertinoIcons.ellipsis,
+                        color: Colors.white70,
+                        size: 16,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 优雅的无课程占位视图
+  Widget _buildEmptyCourseView() {
+    return SizedBox(
+      height: MediaQuery.of(context).size.height * 0.45,
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.12),
+                  width: 0.8,
+                ),
+              ),
+              child: Icon(
+                CupertinoIcons.sparkles,
+                size: 30,
+                color: AppThemeColors.babyPink.withValues(alpha: 0.8),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              '今天没有课',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.8),
+                fontSize: 17,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '享受自由时光，好好休息吧~',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.45),
+                fontSize: 13,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 优雅的周次选择浮层
+  void _showWeekPickerSheet(BuildContext context, ScheduleProvider provider) {
+    final weeks = provider.availableWeeks;
+    if (weeks.isEmpty) return;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) {
+        return GlassSheet(
+          settings: LiquidGlassSettings(
+            glassColor: Colors.black.withValues(alpha: 0.45),
+            blur: 16.0,
+            thickness: 16.0,
+          ),
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Text(
+                        '选择学期周次',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const Spacer(),
+                      GestureDetector(
+                        onTap: () => Navigator.pop(ctx),
+                        child: Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.1),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            CupertinoIcons.xmark,
+                            size: 14,
+                            color: Colors.white70,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxHeight: MediaQuery.of(context).size.height * 0.4,
+                    ),
+                    child: GridView.builder(
+                      shrinkWrap: true,
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 4,
+                        mainAxisSpacing: 10,
+                        crossAxisSpacing: 10,
+                        childAspectRatio: 1.8,
+                      ),
+                      itemCount: weeks.length,
+                      itemBuilder: (context, idx) {
+                        final week = weeks[idx];
+                        final isCur = week == provider.currentWeek;
+                        return GestureDetector(
+                          onTap: () {
+                            HapticFeedback.selectionClick();
+                            provider.setCurrentWeek(week);
+                            Navigator.pop(ctx);
+                          },
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 150),
+                            decoration: BoxDecoration(
+                              gradient: isCur
+                                  ? LinearGradient(
+                                      colors: [
+                                        AppThemeColors.babyPink.withValues(alpha: 0.5),
+                                        AppThemeColors.softCoral.withValues(alpha: 0.4),
+                                      ],
+                                    )
+                                  : null,
+                              color: isCur
+                                  ? null
+                                  : Colors.white.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: isCur
+                                    ? Colors.white.withValues(alpha: 0.6)
+                                    : Colors.white.withValues(alpha: 0.1),
+                                width: 0.8,
+                              ),
+                            ),
+                            alignment: Alignment.center,
+                            child: Text(
+                              '第$week周',
+                              style: TextStyle(
+                                color: isCur ? Colors.white : Colors.white70,
+                                fontSize: 13,
+                                fontWeight: isCur ? FontWeight.w700 : FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+

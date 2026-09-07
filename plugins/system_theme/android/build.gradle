@@ -1,0 +1,33 @@
+group 'com.bruno.system_theme'
+version '1.0-SNAPSHOT'
+
+// buildscript removed because Flutter handles kotlin classpath in root project.
+
+rootProject.allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+apply plugin: 'com.android.library'
+
+android {
+    namespace 'com.bruno.system_theme'
+    compileSdkVersion 36
+    
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_21
+        targetCompatibility = JavaVersion.VERSION_21
+    }
+    sourceSets {
+        main.java.srcDirs += 'src/main/kotlin'
+    }
+    defaultConfig {
+        minSdkVersion 34
+    }
+}
+
+dependencies {
+    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7"
+}
