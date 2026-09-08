@@ -280,21 +280,17 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
           gradient: isSelected
               ? LinearGradient(
                   colors: [
-                    AppThemeColors.babyPink.withValues(alpha: 0.3),
-                    AppThemeColors.softCoral.withValues(alpha: 0.3),
+                    AppThemeColors.babyPink.withValues(alpha: 0.35),
+                    AppThemeColors.softCoral.withValues(alpha: 0.35),
                   ],
                 )
               : null,
           color: isSelected
               ? null
-              : GlassSettingsHelper.getCardSettings().glassColor,
+              : (_isDarkMode
+                  ? Colors.white.withValues(alpha: 0.06)
+                  : Colors.white.withValues(alpha: 0.85)),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isSelected
-                ? AppThemeColors.babyPink.withValues(alpha: 0.5)
-                : _textColor.withValues(alpha: 0.1),
-            width: isSelected ? 2 : 1,
-          ),
         ),
         child: Row(
           children: [
@@ -376,11 +372,18 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
           child: liquid.LiquidBackButton(),
         ),
       ),
-      body: LiquidGlassLayer(
-        settings: LiquidGlassSettings(
-          thickness: 0.8,
-          blur: 15.0, // Let the background glass be stronger
-          glassColor: GlassSettingsHelper.getStandardSettings().glassColor,
+      body: AdaptiveLiquidGlassLayer(
+        quality: GlassQuality.premium,
+        settings: const LiquidGlassSettings(
+          blur: 4.0,
+          thickness: 16.0,
+          glassColor: Color(0x15FFFFFF),
+          lightIntensity: 0.75,
+          ambientStrength: 0.50,
+          ambientRim: 0.18,
+          fresnelStrength: 0.85,
+          saturation: 1.20,
+          refractiveIndex: 1.38,
         ),
         child: DynMouseScroll(
           durationMS: 250,
@@ -581,11 +584,11 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: liquid.LiquidCard(
-        onTap: () => onChanged(!value),
-        glassColor: GlassSettingsHelper.getCardSettings().glassColor,
-        padding: 16,
-        borderRadius: 20,
+      child: GlassCard(
+        shape: const LiquidRoundedSuperellipse(borderRadius: 20),
+        quality: GlassQuality.premium,
+        useOwnLayer: false,
+        padding: const EdgeInsets.all(16),
         child: Row(
           children: [
             Expanded(
@@ -629,46 +632,55 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
     VoidCallback onTap, {
     String? subtitle,
   }) {
-    // [v2.4.8] Material + InkWell 包裹确保整个卡片区域可点击（Windows 兼容）
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
-        child: liquid.LiquidCard(
-          glassColor: GlassSettingsHelper.getCardSettings().glassColor,
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Icon(icon, color: AppThemeColors.babyPink),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: TextStyle(
-                          color: _textColor,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      if (subtitle != null) ...[
-                        const SizedBox(height: 2),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: GlassCard(
+        shape: const LiquidRoundedSuperellipse(borderRadius: 20),
+        quality: GlassQuality.premium,
+        useOwnLayer: false,
+        padding: EdgeInsets.zero,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(20),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Icon(icon, color: AppThemeColors.babyPink),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                         Text(
-                          subtitle,
+                          title,
                           style: TextStyle(
-                            color: _textSecondaryColor,
-                            fontSize: 12,
+                            color: _textColor,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
+                        if (subtitle != null) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            subtitle,
+                            style: TextStyle(
+                              color: _textSecondaryColor,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
-                ),
-                const Icon(CupertinoIcons.right_chevron, color: Colors.grey),
-              ],
+                  Icon(
+                    CupertinoIcons.right_chevron,
+                    color: _textSecondaryColor.withValues(alpha: 0.5),
+                    size: 16,
+                  ),
+                ],
+              ),
             ),
           ),
         ),

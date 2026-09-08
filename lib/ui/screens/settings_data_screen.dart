@@ -26,12 +26,18 @@ class SettingsDataScreen extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: LiquidGlassLayer(
-        settings: LiquidGlassSettings(
-          thickness: 0.8,
-          blur: 15.0, // 设置页背景模糊稍微高一点
-          glassColor:
-              GlassSettingsHelper.getStandardSettings().glassColor, // 极淡的底色
+      body: AdaptiveLiquidGlassLayer(
+        quality: GlassQuality.premium,
+        settings: const LiquidGlassSettings(
+          blur: 4.0,
+          thickness: 16.0,
+          glassColor: Color(0x15FFFFFF),
+          lightIntensity: 0.75,
+          ambientStrength: 0.50,
+          ambientRim: 0.18,
+          fresnelStrength: 0.85,
+          saturation: 1.20,
+          refractiveIndex: 1.38,
         ),
         child: Column(
           children: [
@@ -67,11 +73,11 @@ class SettingsDataScreen extends StatelessWidget {
                   padding: const EdgeInsets.all(16),
                   physics: physics,
                   children: [
-                    liquid.LiquidCard(
-                      padding: 20,
-                      // [v2.5.3] 统一玻璃样式，去除发白遮罩
-                      glassColor:
-                          GlassSettingsHelper.getCardSettings().glassColor,
+                    GlassCard(
+                      shape: const LiquidRoundedSuperellipse(borderRadius: 24),
+                      quality: GlassQuality.premium,
+                      useOwnLayer: false,
+                      padding: const EdgeInsets.all(20),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -380,10 +386,11 @@ class SettingsDataScreen extends StatelessWidget {
       child: GestureDetector(
         onTap: onTap,
         behavior: HitTestBehavior.opaque,
-        child: liquid.LiquidCard(
-          padding: 16,
-          // [v2.5.3] 统一列表项卡片的玻璃质感
-          glassColor: GlassSettingsHelper.getCardSettings().glassColor,
+        child: GlassCard(
+          shape: const LiquidRoundedSuperellipse(borderRadius: 18),
+          quality: GlassQuality.premium,
+          useOwnLayer: false,
+          padding: const EdgeInsets.all(16),
           child: Row(
             children: [
               Container(

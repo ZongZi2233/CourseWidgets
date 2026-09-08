@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:local_notifier/local_notifier.dart';
@@ -469,6 +470,37 @@ class LiveNotificationServiceV2 {
         }
       };
       await windowToast.show();
+    } else if (Platform.isAndroid && useLiveUpdate) {
+      // [v2.8.4] Android 16+ 原生提权通道：注入 android.requestPromotedOngoing 并调用 setRequestPromotedOngoing(true)
+      bool nativeSucceeded = false;
+      try {
+        const MethodChannel liveChannel = MethodChannel('com.zongzi.schedule/live_update');
+        await liveChannel.invokeMethod('postPromotedLiveUpdate', {
+          'id': _liveNotificationId,
+          'title': '$emoji $title',
+          'body': body,
+          'subLocation': showProgress ? '$subLocation · $progressPercent%' : subLocation,
+          'progress': progressPercent,
+          'maxProgress': 100,
+          'showProgress': showProgress,
+          'isCountingDown': isCountingDown,
+          'whenTime': eventTime?.millisecondsSinceEpoch,
+          'usesChronometer': eventTime != null,
+        });
+        nativeSucceeded = true;
+      } catch (e) {
+        debugPrint('⚠️ 原生 Promoted Live Update 通道调用失败，降级回退到 flutter_local_notifications: $e');
+      }
+
+      if (!nativeSucceeded) {
+        await _notificationsPlugin.show(
+          id: _liveNotificationId,
+          title: '$emoji $title',
+          body: body,
+          notificationDetails: details,
+          payload: _currentCourse != null ? 'course_${_currentCourse!.startTime}' : 'course_general',
+        );
+      }
     } else {
       await _notificationsPlugin.show(
         id: _liveNotificationId,
@@ -488,6 +520,12 @@ class LiveNotificationServiceV2 {
     _reminderCheckTimer = null;
     _currentCourse = null;
     _hasShownReminder = false;
+    if (Platform.isAndroid) {
+      try {
+        const MethodChannel liveChannel = MethodChannel('com.zongzi.schedule/live_update');
+        await liveChannel.invokeMethod('cancelLiveUpdate', {'id': _liveNotificationId});
+      } catch (_) {}
+    }
     await _notificationsPlugin.cancel(id: _liveNotificationId);
     await _notificationsPlugin.cancel(id: _reminderNotificationId);
     debugPrint('🛑 Live Updates 通知已取消');

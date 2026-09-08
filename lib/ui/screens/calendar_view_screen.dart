@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import '../../providers/schedule_provider.dart';
 import '../../models/course_event.dart';
 import '../../constants/theme_constants.dart';
@@ -12,12 +13,11 @@ import '../widgets/unified_backdrop_panel.dart';
 import '../transitions/smooth_slide_transitions.dart';
 import 'course_edit_screen.dart';
 
-/// [v2.8.3] 日历视图 — 现代 iOS 18 风格视觉重构与 120Hz 极速性能优化
+/// [v2.8.4] 日历视图 — 官方高端液态玻璃重构与 120Hz 极速性能优化
 ///
-/// 1. 彻底根除在 ListView 滚动列表中嵌套 BackdropFilter 导致的 GPU 离屏渲染卡顿与掉帧
-/// 2. 采用纯净高性能晶透材质（微透度、精细边框、环境阴影），保证 120Hz 满帧丝滑滚动
-/// 3. 重构月视图/周视图紧凑布局、选中水滴渐变高光、今日胶囊、课程圆点指示
-/// 4. 优化课程卡片层级，排版清爽现代，支持编辑、删除与快捷日程操作
+/// 1. 采用官方 AdaptiveLiquidGlassLayer 共享 Impeller 片段着色器
+/// 2. 所有卡片与顶栏全面迁移官方 GlassCard (premium)，消灭暗角黑色阴影，呈现 3D 白色透镜高光折射
+/// 3. 与手机状态栏与导航栏完全解耦，提供优雅独立的年月指示与折叠周次
 class CalendarViewScreen extends StatefulWidget {
   const CalendarViewScreen({super.key});
 
@@ -86,11 +86,25 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
     final provider = Provider.of<ScheduleProvider>(context);
     final isTablet = ResponsiveUtils.isTabletMode(context);
 
-    if (isTablet) {
-      return _buildTabletLayout(provider);
-    } else {
-      return _buildPhoneLayout(provider);
-    }
+    final Widget content = isTablet
+        ? _buildTabletLayout(provider)
+        : _buildPhoneLayout(provider);
+
+    return AdaptiveLiquidGlassLayer(
+      quality: GlassQuality.premium,
+      settings: const LiquidGlassSettings(
+        blur: 4.0,
+        thickness: 16.0,
+        glassColor: Color(0x15FFFFFF),
+        lightIntensity: 0.75,
+        ambientStrength: 0.50,
+        ambientRim: 0.18,
+        fresnelStrength: 0.85,
+        saturation: 1.20,
+        refractiveIndex: 1.38,
+      ),
+      child: content,
+    );
   }
 
   /// 平板模式：左右双栏分屏
@@ -108,8 +122,10 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
                 children: [
                   _buildHeader(),
                   const SizedBox(height: 12),
-                  UnifiedBackdropPanel(
-                    borderRadius: 24,
+                  GlassCard(
+                    shape: const LiquidRoundedSuperellipse(borderRadius: 24),
+                    quality: GlassQuality.premium,
+                    useOwnLayer: false,
                     padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
                     child: _buildCalendarGrid(provider),
                   ),
@@ -128,23 +144,29 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
     );
   }
 
-  /// 手机模式：上下垂直结构
+  /// 手机模式：上下垂直结构，内置 SafeArea 与顶部独立间距，彻底消除与系统顶栏重叠
   Widget _buildPhoneLayout(ScheduleProvider provider) {
-    return Column(
-      children: [
-        _buildHeader(),
-        const SizedBox(height: 10),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: UnifiedBackdropPanel(
-            borderRadius: 24,
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-            child: _buildCalendarGrid(provider),
+    return SafeArea(
+      bottom: false,
+      child: Column(
+        children: [
+          const SizedBox(height: 8),
+          _buildHeader(),
+          const SizedBox(height: 10),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: GlassCard(
+              shape: const LiquidRoundedSuperellipse(borderRadius: 24),
+              quality: GlassQuality.premium,
+              useOwnLayer: false,
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+              child: _buildCalendarGrid(provider),
+            ),
           ),
-        ),
-        const SizedBox(height: 12),
-        Expanded(child: _buildSelectedDateCourses(provider)),
-      ],
+          const SizedBox(height: 12),
+          Expanded(child: _buildSelectedDateCourses(provider)),
+        ],
+      ),
     );
   }
 
@@ -158,26 +180,11 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.08)
-              : Colors.white.withValues(alpha: 0.70),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.12)
-                : Colors.black.withValues(alpha: 0.05),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.03),
-              blurRadius: 10,
-              offset: const Offset(0, 3),
-            ),
-          ],
-        ),
+      child: GlassCard(
+        shape: const LiquidRoundedSuperellipse(borderRadius: 20),
+        quality: GlassQuality.premium,
+        useOwnLayer: false,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         child: Row(
           children: [
             // 上个月
@@ -606,26 +613,11 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
-      child: Container(
+      child: GlassCard(
+        shape: const LiquidRoundedSuperellipse(borderRadius: 18),
+        quality: GlassQuality.premium,
+        useOwnLayer: false,
         padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.07)
-              : Colors.white.withValues(alpha: 0.85),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.12)
-                : Colors.black.withValues(alpha: 0.05),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: isDark ? 0.14 : 0.03),
-              blurRadius: 10,
-              offset: const Offset(0, 3),
-            ),
-          ],
-        ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
@@ -822,19 +814,11 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
       child: Center(
-        child: Container(
+        child: GlassCard(
+          shape: const LiquidRoundedSuperellipse(borderRadius: 24),
+          quality: GlassQuality.premium,
+          useOwnLayer: false,
           padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 36),
-          decoration: BoxDecoration(
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.05)
-                : Colors.white.withValues(alpha: 0.65),
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(
-              color: isDark
-                  ? Colors.white.withValues(alpha: 0.08)
-                  : Colors.black.withValues(alpha: 0.04),
-            ),
-          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [

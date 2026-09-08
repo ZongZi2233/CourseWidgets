@@ -180,13 +180,9 @@ class _AndroidScheduleConfigScreenState
     }
     setState(() {});
     _saveConfigQuietly();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('✨ 已智能推算并保存所有节次时间（第1节从 ${_formatMinutes(firstStartMin)} 开始）'),
-        backgroundColor: AppThemeColors.babyPink,
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 2),
-      ),
+    liquid.showLiquidToast(
+      context,
+      '✨ 已智能推算并保存所有节次时间（第1节从 ${_formatMinutes(firstStartMin)} 开始）',
     );
   }
 
@@ -236,26 +232,12 @@ class _AndroidScheduleConfigScreenState
       }
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('配置已保存并智能重算课表', style: TextStyle(color: Colors.white)),
-            backgroundColor: AppThemeColors.babyPink,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-        );
+        liquid.showLiquidToast(context, '配置已保存并智能重算课表');
         Navigator.pop(context);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('保存失败: $e', style: const TextStyle(color: Colors.white)),
-            backgroundColor: Colors.red,
-          ),
-        );
+        liquid.showLiquidToast(context, '保存失败: $e');
       }
     }
   }
@@ -527,12 +509,9 @@ class _AndroidScheduleConfigScreenState
                                     onTap: () async {
                                       await provider.alignScheduleToStartDate(targetMonday);
                                       if (context.mounted) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(
-                                            content: Text('已成功将课表对齐至 ${targetMonday.month}月${targetMonday.day}日 第 1 周！'),
-                                            backgroundColor: const Color(0xFF4FACFE),
-                                            behavior: SnackBarBehavior.floating,
-                                          ),
+                                        liquid.showLiquidToast(
+                                          context,
+                                          '已成功将课表对齐至 ${targetMonday.month}月${targetMonday.day}日 第 1 周！',
                                         );
                                       }
                                     },

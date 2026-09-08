@@ -46,7 +46,20 @@ class _SettingsNotificationScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: Column(
+      body: AdaptiveLiquidGlassLayer(
+        quality: GlassQuality.premium,
+        settings: const LiquidGlassSettings(
+          blur: 4.0,
+          thickness: 16.0,
+          glassColor: Color(0x15FFFFFF),
+          lightIntensity: 0.75,
+          ambientStrength: 0.50,
+          ambientRim: 0.18,
+          fresnelStrength: 0.85,
+          saturation: 1.20,
+          refractiveIndex: 1.38,
+        ),
+        child: Column(
         children: [
           // Header
           SafeArea(
@@ -140,8 +153,9 @@ class _SettingsNotificationScreenState
           ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildSwitchCard({
     required String title,
@@ -150,10 +164,11 @@ class _SettingsNotificationScreenState
     required bool value,
     required ValueChanged<bool> onChanged,
   }) {
-    return liquid.LiquidCard(
-      borderRadius: 24,
-      padding: 20,
-      glassColor: GlassSettingsHelper.getCardSettings().glassColor,
+    return GlassCard(
+      shape: const LiquidRoundedSuperellipse(borderRadius: 24),
+      quality: GlassQuality.premium,
+      useOwnLayer: false,
+      padding: const EdgeInsets.all(20),
       child: Row(
         children: [
           Container(
@@ -206,10 +221,11 @@ class _SettingsNotificationScreenState
   }
 
   Widget _buildAdvanceTimeCard() {
-    return liquid.LiquidCard(
-      borderRadius: 24,
-      padding: 20,
-      glassColor: GlassSettingsHelper.getCardSettings().glassColor,
+    return GlassCard(
+      shape: const LiquidRoundedSuperellipse(borderRadius: 24),
+      quality: GlassQuality.premium,
+      useOwnLayer: false,
+      padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -299,10 +315,11 @@ class _SettingsNotificationScreenState
   }
 
   Widget _buildInfoCard() {
-    return liquid.LiquidCard(
-      borderRadius: 24,
-      padding: 20,
-      glassColor: Colors.blue.withValues(alpha: 0.1),
+    return GlassCard(
+      shape: const LiquidRoundedSuperellipse(borderRadius: 24),
+      quality: GlassQuality.premium,
+      useOwnLayer: false,
+      padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

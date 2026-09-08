@@ -4,8 +4,8 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 
-/// [v2.8.0] 传感器光照与姿态运动服务
-/// 用于捕获设备陀螺仪与加速度，转换为动态光照角度弧度流，供 GlassMotionScope 使用
+/// [v2.8.4] 传感器物理重力倾角与姿态运动服务
+/// 基于加速度计物理重力矢量计算屏幕倾斜角，以 30Hz 节流 + 死区滤波驱动 GlassMotionScope
 class SensorMotionService {
   static final SensorMotionService _instance = SensorMotionService._internal();
   factory SensorMotionService() => _instance;
@@ -18,72 +18,79 @@ class SensorMotionService {
 
   Stream<double> get angleStream => _angleController.stream;
 
-  StreamSubscription<GyroscopeEvent>? _gyroSubscription;
+  StreamSubscription<AccelerometerEvent>? _accelSubscription;
   Timer? _fallbackTimer;
 
-  // 默认光照角度 (π/4 = 45度)
-  double _currentAngle = math.pi / 4;
-  double _filteredVx = 0.0;
-  double _filteredVy = 0.0;
-  bool _hasReceivedGyroData = false;
+  // 默认基准光照角度 (45度 = π/4)
+  double _lastEmittedAngle = math.pi / 4;
+  double _filteredAx = 0.0;
+  double _filteredAy = 9.8;
+  int _lastEmitTimestamp = 0;
+  bool _hasReceivedSensorData = false;
 
   void _initialize() {
     if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
-      _startGyroscope();
+      _startAccelerometer();
     } else {
       _startAmbientDrift();
     }
   }
 
-  void _startGyroscope() {
+  void _startAccelerometer() {
     try {
-      _gyroSubscription = gyroscopeEventStream().listen(
-        (GyroscopeEvent event) {
-          _hasReceivedGyroData = true;
+      _accelSubscription = accelerometerEventStream().listen(
+        (AccelerometerEvent event) {
+          _hasReceivedSensorData = true;
 
-          // 低通滤波减少手震抖动
-          _filteredVx = _filteredVx * 0.80 + event.x * 0.20;
-          _filteredVy = _filteredVy * 0.80 + event.y * 0.20;
+          // 低通一阶滤波，抹除人手微弱生理震颤
+          _filteredAx = _filteredAx * 0.85 + event.x * 0.15;
+          _filteredAy = _filteredAy * 0.85 + event.y * 0.15;
 
-          // 依据设备角速度计算微小倾角偏移
-          // 基础光角 45° (约 0.785 弧度)
-          final double delta = math.atan2(_filteredVy, _filteredVx);
-          final double speed = math.sqrt(_filteredVx * _filteredVx + _filteredVy * _filteredVy);
+          final now = DateTime.now().millisecondsSinceEpoch;
+          // 节流至最高 30Hz (最小间隔 33ms)
+          if (now - _lastEmitTimestamp < 33) return;
 
-          if (speed > 0.05) {
-            _currentAngle = (math.pi / 4) + (delta * 0.35);
-          }
+          // 根据物理重力矢量在屏幕平面的投影计算设备绝对物理倾角
+          // 手机直立时 (x=0, y=9.8) 倾角为 0，叠加 45度 (π/4) 基础光照
+          final double tilt = math.atan2(-_filteredAx, _filteredAy);
+          final double targetAngle = (math.pi / 4) + tilt;
 
-          if (!_angleController.isClosed) {
-            _angleController.add(_currentAngle);
+          // 死区检测：角度变化大于 0.025 弧度（约 1.5 度）时才广播刷新，静止时 0 绘制
+          if ((targetAngle - _lastEmittedAngle).abs() > 0.025) {
+            _lastEmittedAngle = targetAngle;
+            _lastEmitTimestamp = now;
+
+            if (!_angleController.isClosed) {
+              _angleController.add(_lastEmittedAngle);
+            }
           }
         },
         onError: (err) {
-          debugPrint('陀螺仪传感器不可用: $err，切换到环境光漂移模式');
+          debugPrint('加速度传感器不可用: $err，切换到平滑环境光漂移');
           _startAmbientDrift();
         },
       );
 
-      // 若 2 秒内未收到任何陀螺仪数据（如模拟器），启动平滑环境流
+      // 若 2 秒内未收到传感器数据（如模拟器），平滑启动环境流
       Future.delayed(const Duration(seconds: 2), () {
-        if (!_hasReceivedGyroData && _fallbackTimer == null) {
+        if (!_hasReceivedSensorData && _fallbackTimer == null) {
           _startAmbientDrift();
         }
       });
     } catch (e) {
-      debugPrint('启动陀螺仪监听异常: $e');
+      debugPrint('启动加速度传感器监听异常: $e');
       _startAmbientDrift();
     }
   }
 
-  /// 桌面端与无传感器设备的环境柔光微动
+  /// 桌面端与无传感器环境的极微量正弦呼吸柔光
   void _startAmbientDrift() {
     if (_fallbackTimer != null) return;
     int tick = 0;
-    _fallbackTimer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
+    _fallbackTimer = Timer.periodic(const Duration(milliseconds: 120), (timer) {
       tick++;
-      // 微弱正弦呼吸漂移 (45° ± 15°)
-      final angle = (math.pi / 4) + 0.25 * math.sin(tick * 0.05);
+      // 微弱正弦呼吸漂移 (45° ± 10°)
+      final angle = (math.pi / 4) + 0.18 * math.sin(tick * 0.04);
       if (!_angleController.isClosed) {
         _angleController.add(angle);
       }
@@ -91,7 +98,7 @@ class SensorMotionService {
   }
 
   void dispose() {
-    _gyroSubscription?.cancel();
+    _accelSubscription?.cancel();
     _fallbackTimer?.cancel();
     _angleController.close();
   }

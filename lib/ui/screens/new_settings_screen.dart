@@ -25,11 +25,18 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: LiquidGlassLayer(
-        settings: LiquidGlassSettings(
-          thickness: 0.8,
-          blur: 12.0,
-          glassColor: Colors.white.withOpacity(0.1),
+      body: AdaptiveLiquidGlassLayer(
+        quality: GlassQuality.premium,
+        settings: const LiquidGlassSettings(
+          blur: 4.0,
+          thickness: 16.0,
+          glassColor: Color(0x15FFFFFF),
+          lightIntensity: 0.75,
+          ambientStrength: 0.50,
+          ambientRim: 0.18,
+          fresnelStrength: 0.85,
+          saturation: 1.20,
+          refractiveIndex: 1.38,
         ),
         child: Column(
           children: [
@@ -148,59 +155,56 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: liquid.LiquidCard(
-        onTap: onTap,
-        borderRadius: 20,
-        padding: 16,
-        glassColor: Colors.white.withOpacity(0.05),
-        child: Row(
-          children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [color, color.withOpacity(0.6)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+      child: GlassCard(
+        shape: const LiquidRoundedSuperellipse(borderRadius: 20),
+        quality: GlassQuality.premium,
+        useOwnLayer: false,
+        padding: const EdgeInsets.all(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: onTap,
+          child: Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [color, color.withOpacity(0.6)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(14),
                 ),
-                borderRadius: BorderRadius.circular(14),
-                boxShadow: [
-                  BoxShadow(
-                    color: color.withOpacity(0.3),
-                    blurRadius: 8,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
+                child: Icon(icon, color: Colors.white, size: 24),
               ),
-              child: Icon(icon, color: Colors.white, size: 24),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: _textColor,
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: _textColor,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle,
-                    style: TextStyle(fontSize: 12, color: _textSecondaryColor),
-                  ),
-                ],
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: TextStyle(fontSize: 12, color: _textSecondaryColor),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            Icon(
-              CupertinoIcons.right_chevron,
-              color: _textSecondaryColor.withOpacity(0.5),
-            ),
-          ],
+              Icon(
+                CupertinoIcons.right_chevron,
+                color: _textSecondaryColor.withOpacity(0.5),
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -50,51 +50,64 @@ class _SettingsAboutScreenState extends State<SettingsAboutScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: Column(
-        children: [
-          // Header
-          SafeArea(
-            bottom: false,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 12,
-              ),
-              child: Row(
-                children: [
-                  const liquid.LiquidBackButton(),
-                  const SizedBox(width: 12),
-                  const Text(
-                    '关于软件',
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
+      body: AdaptiveLiquidGlassLayer(
+        quality: GlassQuality.premium,
+        settings: const LiquidGlassSettings(
+          blur: 4.0,
+          thickness: 16.0,
+          glassColor: Color(0x15FFFFFF),
+          lightIntensity: 0.75,
+          ambientStrength: 0.50,
+          ambientRim: 0.18,
+          fresnelStrength: 0.85,
+          saturation: 1.20,
+          refractiveIndex: 1.38,
+        ),
+        child: Column(
+          children: [
+            // Header
+            SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+                child: Row(
+                  children: [
+                    const liquid.LiquidBackButton(),
+                    const SizedBox(width: 12),
+                    const Text(
+                      '关于软件',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
 
-          // Content
-          Expanded(
-            child: FadeTransition(
-              opacity: _fadeAnimation,
-              child: SlideTransition(
-                position: _slideAnimation,
-                child: ListView(
-                  padding: const EdgeInsets.all(20),
-                  // [v2.6.3] 全平台禁止滚动，自适应布局
-                  physics: const NeverScrollableScrollPhysics(),
-                  children: [
-                    // App Icon & Name Card
-                    liquid.LiquidCard(
-                      borderRadius: 32,
-                      padding: 32,
-                      glassColor: Colors.white.withValues(alpha: 0.03),
-                      quality: GlassQuality.standard,
-                      child: Column(
+            // Content
+            Expanded(
+              child: FadeTransition(
+                opacity: _fadeAnimation,
+                child: SlideTransition(
+                  position: _slideAnimation,
+                  child: ListView(
+                    padding: const EdgeInsets.all(20),
+                    // [v2.6.3] 全平台禁止滚动，自适应布局
+                    physics: const NeverScrollableScrollPhysics(),
+                    children: [
+                      // App Icon & Name Card
+                      GlassCard(
+                        shape: const LiquidRoundedSuperellipse(borderRadius: 32),
+                        quality: GlassQuality.premium,
+                        useOwnLayer: false,
+                        padding: const EdgeInsets.all(32),
+                        child: Column(
                         children: [
                           // App Icon with glow effect
                           Container(
@@ -161,65 +174,66 @@ class _SettingsAboutScreenState extends State<SettingsAboutScreen>
                     const SizedBox(height: 20),
 
                     // Copyright Card
-                    liquid.LiquidCard(
-                      borderRadius: 28,
-                      padding: 20,
-                      glassColor: Colors.white.withValues(alpha: 0.01),
-                      quality: GlassQuality.standard,
-                        child: Column(
-                          children: [
-                            Icon(
-                              CupertinoIcons.heart_fill,
-                              color: AppThemeColors.babyPink.withValues(
-                                alpha: 0.6,
-                              ),
-                              size: 32,
+                    GlassCard(
+                      shape: const LiquidRoundedSuperellipse(borderRadius: 28),
+                      quality: GlassQuality.premium,
+                      useOwnLayer: false,
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        children: [
+                          Icon(
+                            CupertinoIcons.heart_fill,
+                            color: AppThemeColors.babyPink.withValues(
+                              alpha: 0.6,
                             ),
-                            const SizedBox(height: 12),
-                            // [v2.1.8修复5] 修改copyright为开发者名称
-                            const Text(
-                              'Copyright © 2025-2026 ZongZi',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.white70,
-                                height: 1.5,
-                              ),
+                            size: 32,
+                          ),
+                          const SizedBox(height: 12),
+                          // [v2.1.8修复5] 修改copyright为开发者名称
+                          const Text(
+                            'Copyright © 2025-2026 ZongZi',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.white70,
+                              height: 1.5,
                             ),
-                            const SizedBox(height: 8),
-                            // [v2.2.1] 修改为 Apache 2.0 License
-                            const Text(
-                              'Open Source under Apache 2.0 License',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: Colors.white54,
-                              ),
+                          ),
+                          const SizedBox(height: 8),
+                          // [v2.2.1] 修改为 Apache 2.0 License
+                          const Text(
+                            'Open Source under Apache 2.0 License',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.white54,
                             ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Made with Flutter & Liquid Glass',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: Colors.white.withValues(alpha: 0.4),
-                              ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Made with Flutter & Liquid Glass',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.white.withValues(alpha: 0.4),
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
+                    ),
 
-                      const SizedBox(
-                        height: 100,
-                      ), // Bottom padding for navigation bar
-                    ],
-                  ),
+                    const SizedBox(
+                      height: 100,
+                    ), // Bottom padding for navigation bar
+                  ],
                 ),
               ),
             ),
-          ],
-        ),
-      );
+          ),
+        ],
+      ),
+    ),
+  );
   }
 
   bool _isCheckingUpdate = false;
@@ -293,11 +307,11 @@ class _SettingsAboutScreenState extends State<SettingsAboutScreen>
       context: context,
       builder: (ctx) => Dialog(
         backgroundColor: Colors.transparent,
-        child: liquid.LiquidCard(
-          borderRadius: 28,
-          padding: 0,
-          glassColor: Colors.white.withValues(alpha: 0.08),
+        child: GlassCard(
+          shape: const LiquidRoundedSuperellipse(borderRadius: 28),
           quality: GlassQuality.premium,
+          useOwnLayer: true,
+          padding: EdgeInsets.zero,
           child: Padding(
             padding: const EdgeInsets.all(24),
             child: Column(

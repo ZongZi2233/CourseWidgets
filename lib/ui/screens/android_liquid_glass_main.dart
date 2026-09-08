@@ -33,8 +33,9 @@ class AndroidLiquidGlassMain extends StatefulWidget {
 class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
     with SingleTickerProviderStateMixin, RouteAware {
   int _currentIndex = 0;
-  bool _isLoading = true; // 添加加载状态
-  bool _isBottomNavVisible = true; // [v2.6.0] 底部导航栏可见性状态
+  bool _isLoading = true;
+  bool _isBottomNavVisible = true;
+  bool _isCoveredBySubPage = false; // [v2.8.4] 二级页面覆盖状态，用于彻底离屏冻结前级页面 Ticker 与着色管线
   final DataImportService _importService = DataImportService();
 
   @override
@@ -50,22 +51,24 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
     routeObserver.subscribe(this, ModalRoute.of(context) as PageRoute);
   }
 
-  // [v2.6.0] 被其他页面覆盖时，隐藏导航栏
+  // [v2.6.0/v2.8.4] 被其他页面覆盖时，隐藏导航栏并离屏冻结前级渲染管线
   @override
   void didPushNext() {
     if (mounted) {
       setState(() {
         _isBottomNavVisible = false;
+        _isCoveredBySubPage = true;
       });
     }
   }
 
-  // [v2.6.0] 上一层页面弹出，回到当前页面时，显示导航栏
+  // [v2.6.0/v2.8.4] 上一层页面弹出，回到当前页面时，显示导航栏并唤醒底层渲染
   @override
   void didPopNext() {
     if (mounted) {
       setState(() {
         _isBottomNavVisible = true;
+        _isCoveredBySubPage = false;
       });
     }
   }
@@ -167,13 +170,31 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
           Expanded(
             child: RepaintBoundary(
               key: TransparentMaterialPageRoute.contentBoundaryKey,
-              child: IndexedStack(
-                index: _currentIndex,
-                children: [
-                  _buildTabletSchedulePage(),
-                  const CalendarViewScreen(),
-                  const SettingsMainScreen(),
-                ],
+              child: TickerMode(
+                enabled: !_isCoveredBySubPage,
+                child: IndexedStack(
+                  index: _currentIndex,
+                  children: [
+                    TickerMode(
+                      enabled: _currentIndex == 0 && !_isCoveredBySubPage,
+                      child: RepaintBoundary(
+                        child: _buildTabletSchedulePage(),
+                      ),
+                    ),
+                    TickerMode(
+                      enabled: _currentIndex == 1 && !_isCoveredBySubPage,
+                      child: const RepaintBoundary(
+                        child: CalendarViewScreen(),
+                      ),
+                    ),
+                    TickerMode(
+                      enabled: _currentIndex == 2 && !_isCoveredBySubPage,
+                      child: const RepaintBoundary(
+                        child: SettingsMainScreen(),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -191,13 +212,31 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
         body: GlassContentAwareContent(
           child: RepaintBoundary(
             key: TransparentMaterialPageRoute.contentBoundaryKey,
-            child: IndexedStack(
-              index: _currentIndex,
-              children: [
-                _buildSchedulePage(),
-                _buildPageWithHeader(1, const CalendarViewScreen(), '日历视图'),
-                _buildPageWithHeader(2, const SettingsMainScreen(), '设置'),
-              ],
+            child: TickerMode(
+              enabled: !_isCoveredBySubPage,
+              child: IndexedStack(
+                index: _currentIndex,
+                children: [
+                  TickerMode(
+                    enabled: _currentIndex == 0 && !_isCoveredBySubPage,
+                    child: RepaintBoundary(
+                      child: _buildSchedulePage(),
+                    ),
+                  ),
+                  TickerMode(
+                    enabled: _currentIndex == 1 && !_isCoveredBySubPage,
+                    child: const RepaintBoundary(
+                      child: CalendarViewScreen(),
+                    ),
+                  ),
+                  TickerMode(
+                    enabled: _currentIndex == 2 && !_isCoveredBySubPage,
+                    child: RepaintBoundary(
+                      child: _buildPageWithHeader(2, const SettingsMainScreen(), '设置'),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -238,15 +277,8 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                   fresnelStrength: 0.80,
                   glassColor: Color(0x20FFFFFF),
                 ),
-                indicatorSettings: const LiquidGlassSettings(
-                  thickness: 12,
-                  blur: 2.0,
-                  chromaticAberration: 0.05,
-                  refractiveIndex: 1.35,
-                  ambientRim: 0.20,
-                  fresnelStrength: 0.85,
-                  glassColor: Color(0x18FFFFFF),
-                ),
+                // [v2.8.4] 遵循官方演示：采用 100% 纯澈透光的物理凸透镜滑块（blur: 0，无任何高斯模糊浑浊感）
+                indicatorSettings: AnimatedGlassIndicator.baseIndicatorSettings,
                 tabs: const [
                   GlassTab(
                     icon: Icon(CupertinoIcons.square_grid_2x2),
@@ -278,7 +310,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
       case 0:
         return _buildSchedulePage();
       case 1:
-        return _buildPageWithHeader(1, const CalendarViewScreen(), '日历视图');
+        return const CalendarViewScreen();
       case 2:
         return _buildPageWithHeader(2, const SettingsMainScreen(), '设置');
       default:
@@ -402,7 +434,6 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
         blur: 4.0,
         thickness: 16.0,
         glassColor: Color(0x18FFFFFF),
-        lightAngle: 135,
         lightIntensity: 0.75,
         ambientStrength: 0.50,
         ambientRim: 0.15,
@@ -435,7 +466,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                 ),
               ),
 
-              // 顶部悬浮栏组（标题栏 + 星期选择器）：随列表内容产生液态玻璃真实折射
+              // 顶部悬浮栏组（标题栏 + 星期选择器）：独立 RepaintBoundary 缓存，滑动时 0 重绘
               Positioned(
                 top: 0,
                 left: 0,
@@ -444,15 +475,17 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                   bottom: false,
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // 1. 顶部晶透 App Bar
-                        _buildModernTopBar(provider),
-                        const SizedBox(height: 8),
-                        // 2. 紧凑型星期日历胶囊栏
-                        _buildModernDaySelector(provider),
-                      ],
+                    child: RepaintBoundary(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // 1. 顶部晶透 App Bar
+                          _buildModernTopBar(provider),
+                          const SizedBox(height: 8),
+                          // 2. 紧凑型星期日历胶囊栏
+                          _buildModernDaySelector(provider),
+                        ],
+                      ),
                     ),
                   ),
                 ),

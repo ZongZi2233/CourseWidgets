@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import '../../constants/theme_constants.dart';
 import '../../services/theme_service.dart';
 import '../../utils/glass_settings_helper.dart'; // Added import
@@ -12,7 +13,7 @@ import 'settings_notification_screen.dart';
 import '../widgets/liquid_components.dart' as liquid;
 import '../transitions/smooth_slide_transitions.dart';
 
-/// [v2.2.8] 设置主界面 - 添加通知设置
+/// [v2.8.4] 设置主界面 - 全面迁移官方 GlassCard 与 AdaptiveLiquidGlassLayer
 class SettingsMainScreen extends StatefulWidget {
   const SettingsMainScreen({super.key});
   @override
@@ -30,18 +31,29 @@ class _SettingsMainScreenState extends State<SettingsMainScreen> {
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      // [v2.5.1反馈] extendBody属性让沉浸式全屏生效，内容可以滑到导航栏下
       extendBody: true,
-      body: CustomScrollView(
-        // [v2.5.1反馈] 恢复原生弹性滚动物理，消除掉帧
-        physics: const BouncingScrollPhysics(
-          parent: AlwaysScrollableScrollPhysics(),
+      body: AdaptiveLiquidGlassLayer(
+        quality: GlassQuality.premium,
+        settings: const LiquidGlassSettings(
+          blur: 4.0,
+          thickness: 16.0,
+          glassColor: Color(0x15FFFFFF),
+          lightIntensity: 0.75,
+          ambientStrength: 0.50,
+          ambientRim: 0.18,
+          fresnelStrength: 0.85,
+          saturation: 1.20,
+          refractiveIndex: 1.38,
         ),
-        slivers: [
-          SliverSafeArea(
-            bottom: false, // 底部不留安全区，让内容可以被玻璃底栏遮盖再滑出
-            sliver: SliverPadding(
-              padding: EdgeInsets.fromLTRB(16, topPadding, 16, 120),
+        child: CustomScrollView(
+          physics: const BouncingScrollPhysics(
+            parent: AlwaysScrollableScrollPhysics(),
+          ),
+          slivers: [
+            SliverSafeArea(
+              bottom: false,
+              sliver: SliverPadding(
+                padding: EdgeInsets.fromLTRB(16, topPadding, 16, 120),
               sliver: SliverList(
                 delegate: SliverChildListDelegate([
                   _buildSettingsEntry(
@@ -95,8 +107,9 @@ class _SettingsMainScreenState extends State<SettingsMainScreen> {
           ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildSettingsEntry({
     required String title,
@@ -106,12 +119,12 @@ class _SettingsMainScreenState extends State<SettingsMainScreen> {
     required VoidCallback onTap,
     required bool isDark,
   }) {
-    // [v2.4.0] 使用 Material + InkWell 实现水波纹和触控反馈
-    return liquid.LiquidCard(
-      borderRadius: 24,
-      padding: 0, // 移除内边距，由内部的一级容器控制，以便水波纹填满
-      // [v2.5.3] 统一使用纯净高对比度玻璃
-      glassColor: GlassSettingsHelper.getCardSettings().glassColor,
+    // [v2.8.4] 迁移官方 GlassCard，享受共享着色器与高光折射，零生硬白边与黑阴影
+    return GlassCard(
+      shape: const LiquidRoundedSuperellipse(borderRadius: 24),
+      quality: GlassQuality.premium,
+      useOwnLayer: false,
+      padding: EdgeInsets.zero,
       child: Material(
         color: Colors.transparent,
         child: InkWell(

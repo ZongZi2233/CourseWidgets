@@ -1,27 +1,27 @@
 {
-  "version": "2.8.3",
-  "buildNumber": 10008047,
-  "collectedAt": "2026-09-08T18:24:56.534347",
+  "version": "2.8.4",
+  "buildNumber": 10008048,
+  "collectedAt": "2026-09-08T19:00:41.916930",
   "artifacts": [
     {
       "platform": "Android",
-      "filename": "CourseWidgets-v2.8.3-android-arm64-v8a.apk",
+      "filename": "CourseWidgets-v2.8.4-android-arm64-v8a.apk",
       "source": "app-arm64-v8a-release.apk",
-      "path": "D:\\VSCODE\\Schedule\\schedule_app\\release\\CourseWidgets-v2.8.3-android-arm64-v8a.apk",
-      "size": 50074964,
-      "size_formatted": "47.76 MB",
-      "sha256": "ed46a6faf45d7c1b700f797daa43792d220564873560a7f0fd477fe3c6c6ade1",
-      "updated_at": "2026-09-08 18:24:54"
+      "path": "D:\\VSCODE\\Schedule\\schedule_app\\release\\CourseWidgets-v2.8.4-android-arm64-v8a.apk",
+      "size": 50091348,
+      "size_formatted": "47.77 MB",
+      "sha256": "1518cb17711cb68d0e7a0e9bc05870153c4e88163f9c70366052285be6780619",
+      "updated_at": "2026-09-08 19:00:40"
     },
     {
       "platform": "Windows",
-      "filename": "CourseWidgets-v2.8.3-windows-x64.zip",
+      "filename": "CourseWidgets-v2.8.4-windows-x64.zip",
       "source": "build/windows/x64/runner/Release",
-      "path": "D:\\VSCODE\\Schedule\\schedule_app\\release\\CourseWidgets-v2.8.3-windows-x64.zip",
-      "size": 45719786,
-      "size_formatted": "43.60 MB",
-      "sha256": "9a4655ae752921dee85ac9fc2b3f87a15906a2e80f22aa73a0eabe477cf88d60",
-      "updated_at": "2026-09-08 18:24:56"
+      "path": "D:\\VSCODE\\Schedule\\schedule_app\\release\\CourseWidgets-v2.8.4-windows-x64.zip",
+      "size": 45705698,
+      "size_formatted": "43.59 MB",
+      "sha256": "d6ddd8c92f13d5c912dde14ebc17585cd62d2b2128b666c7347daebe53834039",
+      "updated_at": "2026-09-08 19:00:41"
     }
   ]
 }

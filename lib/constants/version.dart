@@ -1,9 +1,9 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 
-/// 当前版本：[v2.8.3] 官方正式版 - Android 16 Live Updates实况通知与状态栏胶囊、全应用120Hz满帧降噪与零模糊列表、0ms无闪黑切页、现代iOS 18日历重构、8.30多格式课时稳固保存
-const String appVersion = '2.8.3';
-const int buildNumber = 10008047;
+/// 当前版本：[v2.8.4] 官方正式版 - Android 16 Promoted Live Update原生提权、全场景120Hz静态隔离渲染与前级冻结、纯粹晶莹液态玻璃滑块、日历与全设置页官方GlassCard重构与零暗角折射、动态陀螺仪光照
+const String appVersion = '2.8.4';
+const int buildNumber = 10008048;
 const String copyright = '© 2025-2026 CourseWidgets. All rights reserved.';
 
 // 全局状态
