@@ -7,6 +7,7 @@ import '../../providers/schedule_provider.dart';
 import '../../constants/theme_constants.dart';
 import '../widgets/liquid_components.dart' as liquid;
 import '../widgets/liquid_glass_pickers.dart';
+import '../widgets/unified_backdrop_panel.dart';
 
 class AndroidScheduleConfigScreen extends StatefulWidget {
   /// [v2.3.0] 是否显示导航元素（返回按钮、保存按钮）
@@ -234,56 +235,50 @@ class _AndroidScheduleConfigScreenState
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: LiquidGlassLayer(
-        settings: LiquidGlassSettings(
-          thickness: 0.8,
-          blur: 12.0,
-          glassColor: Colors.white.withValues(alpha: 0.1),
-        ),
-        child: Column(
-          children: [
-            // Custom Header - [v2.3.0] 根据 showNavigation 参数决定是否显示
-            if (widget.showNavigation)
-              SafeArea(
-                bottom: false,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  child: Row(
-                    children: [
-                      const liquid.LiquidBackButton(),
-                      const SizedBox(width: 12),
-                      Text(
-                        '课时配置',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: textColor,
-                        ),
+      body: Column(
+        children: [
+          // Custom Header - [v2.3.0] 根据 showNavigation 参数决定是否显示
+          if (widget.showNavigation)
+            SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                child: Row(
+                  children: [
+                    const liquid.LiquidBackButton(),
+                    const SizedBox(width: 12),
+                    Text(
+                      '课时配置',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: textColor,
                       ),
-                      const Spacer(),
-                      liquid.LiquidButton(
-                        text: '保存',
-                        onTap: _saveConfig,
-                        color: AppThemeColors.babyPink,
-                      ),
-                    ],
-                  ),
+                    ),
+                    const Spacer(),
+                    liquid.LiquidButton(
+                      text: '保存',
+                      onTap: _saveConfig,
+                      color: AppThemeColors.babyPink,
+                    ),
+                  ],
                 ),
               ),
+            ),
 
-            // Content - 使用ListView优化滚动
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.all(16),
-                physics: const BouncingScrollPhysics(),
-                children: [
-                  // 基础设置
-                  liquid.LiquidCard(
-                    borderRadius: 24,
-                    padding: 20,
+          // Content - 使用ListView优化滚动
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.all(16),
+              physics: const BouncingScrollPhysics(),
+              children: [
+                // 基础设置
+                UnifiedBackdropPanel(
+                  borderRadius: 24,
+                  padding: const EdgeInsets.all(20),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -386,9 +381,9 @@ class _AndroidScheduleConfigScreenState
                   const SizedBox(height: 16),
 
                   // 课时设置
-                  liquid.LiquidCard(
+                  UnifiedBackdropPanel(
                     borderRadius: 24,
-                    padding: 20,
+                    padding: const EdgeInsets.all(20),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -453,7 +448,6 @@ class _AndroidScheduleConfigScreenState
             ),
           ],
         ),
-      ),
     );
   }
 

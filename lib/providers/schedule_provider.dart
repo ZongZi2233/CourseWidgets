@@ -448,16 +448,18 @@ class ScheduleProvider with ChangeNotifier {
     for (final course in _courses) {
       final startDt = DateTime.fromMillisecondsSinceEpoch(course.startTime);
 
-      // 反推 week 和 dayOfWeek
-      final daysSinceStart = startDt.difference(oldStartDate).inDays;
-      final week = (daysSinceStart ~/ 7) + 1;
+      // 反推 week 和 dayOfWeek (按年月日纯日期计算，防时差与夏令时)
+      final startDayOnly = DateTime(startDt.year, startDt.month, startDt.day);
+      final oldStartDayOnly = DateTime(oldStartDate.year, oldStartDate.month, oldStartDate.day);
+      final daysSinceStart = startDayOnly.difference(oldStartDayOnly).inDays;
+      final week = (daysSinceStart >= 0) ? ((daysSinceStart ~/ 7) + 1) : 1;
       final dayOfWeek = startDt.weekday; // 1=Monday..7=Sunday
 
-      // 反推 section：找到最接近的课节
+      // 反推 section：找到最接近的课节 (覆盖1~12全部节次)
       final timeMinutes = startDt.hour * 60 + startDt.minute;
       int section = 1;
       int minDiff = 9999;
-      for (int s = 1; s <= 11; s++) {
+      for (int s = 1; s <= 12; s++) {
         final sTime = oldConfig.sectionStartTimes[s] ?? (480 + (s - 1) * 60);
         final diff = (timeMinutes - sTime).abs();
         if (diff < minDiff) {
@@ -466,11 +468,11 @@ class ScheduleProvider with ChangeNotifier {
         }
       }
 
-      // 反推 endSection
+      // 反推 endSection (覆盖1~12全部节次)
       final endDt = DateTime.fromMillisecondsSinceEpoch(course.endTime);
       final endMinutes = endDt.hour * 60 + endDt.minute;
       int endSection = section;
-      for (int s = section; s <= 11; s++) {
+      for (int s = section; s <= 12; s++) {
         final sEnd =
             (newConfig.sectionStartTimes[s] ?? (480 + (s - 1) * 60)) +
             (newConfig.sectionDurations[s] ?? 50);

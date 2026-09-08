@@ -18,6 +18,13 @@ class MainActivity : FlutterActivity() {
     private var pendingResult: MethodChannel.Result? = null
     private val PICK_IMAGE_REQUEST = 1001
 
+    override fun getFlutterShellArgs(): io.flutter.embedding.engine.FlutterShellArgs {
+        val args = super.getFlutterShellArgs()
+        args.add("--enable-impeller=true")
+        args.add("--impeller-backend=vulkan")
+        return args
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         

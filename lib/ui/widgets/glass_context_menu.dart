@@ -1,103 +1,52 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
-import '../../utils/glass_settings_helper.dart';
-
-/// 自定义玻璃上下文菜单
-/// 点击触发器显示菜单，点击空白关闭
+/// [v2.8.0] 全面迁移至官方 Liquid Morph Engine 的液态变形上下文菜单
+/// 从触发按钮平滑形变成玻璃菜单，支持拖拽选择、弹簧阻尼与抛物线展开
 class GlassContextMenu extends StatelessWidget {
   final List<GlassContextMenuItem> items;
   final Widget trigger;
+  final double menuWidth;
+  final GlassMenuAlignment? menuAlignment;
 
   const GlassContextMenu({
     super.key,
     required this.items,
     required this.trigger,
+    this.menuWidth = 200.0,
+    this.menuAlignment,
   });
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(onTap: () => _showMenu(context), child: trigger);
-  }
-
-  void _showMenu(BuildContext context) {
-    showCupertinoModalPopup(
-      context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.3),
-      builder: (BuildContext context) => _GlassContextMenuContent(items: items),
-    );
-  }
-}
-
-class _GlassContextMenuContent extends StatelessWidget {
-  final List<GlassContextMenuItem> items;
-
-  const _GlassContextMenuContent({required this.items});
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            GlassContainer(
-              shape: const LiquidRoundedSuperellipse(borderRadius: 20),
-              settings: GlassSettingsHelper.getDialogSettings(),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: items.asMap().entries.map((entry) {
-                  final index = entry.key;
-                  final item = entry.value;
-                  return Column(
-                    children: [
-                      if (index > 0)
-                        Divider(
-                          height: 1,
-                          color: Colors.white.withValues(alpha: 0.1),
-                        ),
-                      _buildMenuItem(context, item),
-                    ],
-                  );
-                }).toList(),
-              ),
-            ),
-          ],
-        ),
+    return GlassMenu(
+      trigger: trigger,
+      menuWidth: menuWidth,
+      menuBorderRadius: 24.0,
+      itemBorderRadius: 16.0,
+      autoAdjustToScreen: true,
+      menuAlignment: menuAlignment ?? GlassMenuAlignment.none,
+      settings: const LiquidGlassSettings(
+        blur: 1.5,
+        thickness: 18.0,
+        refractiveIndex: 1.25,
+        ambientRim: 0.05,
+        fresnelStrength: 0.12,
+        edgeAbsorption: 0.15,
+        glassColor: Color.fromRGBO(255, 255, 255, 0.10),
       ),
-    );
-  }
-
-  Widget _buildMenuItem(BuildContext context, GlassContextMenuItem item) {
-    return CupertinoButton(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      onPressed: () {
-        Navigator.pop(context);
-        item.onTap();
-      },
-      child: Row(
-        children: [
-          Icon(
+      items: items.map((item) {
+        return GlassMenuItem(
+          title: item.title,
+          icon: Icon(
             item.icon,
-            color: item.isDestructive ? Colors.red : Colors.white,
-            size: 22,
+            size: 20,
+            color: item.isDestructive ? Colors.redAccent : Colors.white,
           ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Text(
-              item.title,
-              style: TextStyle(
-                color: item.isDestructive ? Colors.red : Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                decoration: TextDecoration.none,
-              ),
-            ),
-          ),
-        ],
-      ),
+          isDestructive: item.isDestructive,
+          onTap: item.onTap,
+        );
+      }).toList(),
     );
   }
 }

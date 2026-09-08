@@ -132,8 +132,13 @@ class DataImportService {
     // 1. 如果是纯 0/1 位串 (例如 "1111111100000000" 或 "010101010101")
     if (RegExp(r'^[01]{6,}$').hasMatch(clean)) {
       final list = <int>[];
+      // EAMS 53位标准位串索引0为占位符'0'，索引1为第1周；
+      // 若首位为'0'且长度>=20则为1-based，否则为0-based
+      final isOneBased = (clean.startsWith('0') && clean.length >= 20);
       for (int i = 0; i < clean.length; i++) {
-        if (clean[i] == '1') list.add(i + 1);
+        if (clean[i] == '1') {
+          list.add(isOneBased ? i : i + 1);
+        }
       }
       return list.isNotEmpty ? list : List.generate(20, (i) => i + 1);
     }
@@ -244,6 +249,52 @@ class DataImportService {
     try {
       // [v2.6.5] 使用用户配置而非默认配置，确保时间戳与用户的学期日期匹配
       final configModel = config ?? ScheduleConfigModel.defaultConfig();
+
+      // 步骤0: 检查是否为带有显式 startTime 和 endTime 的标准课程事件导出/备份
+      final explicitTimestampCourses = <CourseEvent>[];
+      bool allHaveTimestamps = true;
+      for (var item in jsonList) {
+        if (item is Map<String, dynamic> &&
+            item.containsKey('name') &&
+            item.containsKey('startTime') &&
+            item.containsKey('endTime') &&
+            item['startTime'] != null &&
+            item['endTime'] != null) {
+          final sTime = item['startTime'] is num
+              ? (item['startTime'] as num).toInt()
+              : int.tryParse(item['startTime'].toString());
+          final eTime = item['endTime'] is num
+              ? (item['endTime'] as num).toInt()
+              : int.tryParse(item['endTime'].toString());
+          if (sTime != null && eTime != null && sTime > 0 && eTime > sTime) {
+            explicitTimestampCourses.add(
+              CourseEvent(
+                id: item['id'] is int ? item['id'] : null,
+                name: (item['name'] ?? '').toString().trim(),
+                location: (item['location'] ?? '').toString().trim(),
+                teacher: (item['teacher'] ?? '').toString().trim(),
+                startTime: sTime,
+                endTime: eTime,
+              ),
+            );
+            continue;
+          }
+        }
+        allHaveTimestamps = false;
+      }
+
+      if (explicitTimestampCourses.isNotEmpty && allHaveTimestamps) {
+        explicitTimestampCourses.sort((a, b) => a.startTime.compareTo(b.startTime));
+        await DatabaseHelper.instance.insertCourses(explicitTimestampCourses);
+        await _saveToHistory(
+          name: '课表还原_${DateTime.now().toString().substring(0, 16)}',
+          sourceType: 'json_backup',
+          sourceData: jsonEncode(jsonList),
+          courses: explicitTimestampCourses,
+          semester: '2025-2026学年',
+        );
+        return explicitTimestampCourses;
+      }
 
       // 步骤1: 解析所有条目，按(name, teacher, location, dayOfWeek, weeks)分组
       // 同组内合并连续 section

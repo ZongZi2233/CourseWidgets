@@ -1053,8 +1053,13 @@ class _WebviewImportScreenState extends State<WebviewImportScreen> {
             wStr = String(wStr).trim();
             if (/^[01]{6,}$/.test(wStr)) {
               var weeks = [];
+              // EAMS 53位标准位串索引0为占位符'0'，索引1为第1周；
+              // 若首位为'0'且长度>=20则为1-based，否则为0-based
+              var isOneBased = (wStr[0] === '0' && wStr.length >= 20);
               for (var wi = 0; wi < wStr.length; wi++) {
-                if (wStr[wi] === '1') weeks.push(wi + 1);
+                if (wStr[wi] === '1') {
+                  weeks.push(isOneBased ? wi : (wi + 1));
+                }
               }
               if (weeks.length === 0) return '';
               var ranges = [];

@@ -10,7 +10,7 @@ import '../../services/live_notification_service_v2.dart';
 import '../../services/data_import_service.dart';
 import '../../models/course_event.dart';
 import '../../models/schedule_config.dart';
-
+import '../../services/sensor_motion_service.dart';
 import '../../utils/responsive_utils.dart';
 import '../../main.dart' hide globalUseDarkMode; // [v2.6.0] 引用全局 routeObserver
 import 'course_edit_screen.dart';
@@ -119,14 +119,14 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
     }
 
     final isTablet = ResponsiveUtils.isTabletMode(context);
+    final Widget rootLayout = isTablet
+        ? _buildTabletLayout(context)
+        : _buildPhoneLayout(context);
 
-    if (isTablet) {
-      // 平板模式：左侧导航栏 + 右侧内容
-      return _buildTabletLayout(context);
-    } else {
-      // 手机模式：底部导航栏
-      return _buildPhoneLayout(context);
-    }
+    return GlassMotionScope(
+      lightAngle: SensorMotionService().angleStream,
+      child: rootLayout,
+    );
   }
 
   /// 平板布局
@@ -209,13 +209,20 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
               setState(() => _currentIndex = index);
             },
             quality: GlassQuality.standard,
-            barBorderRadius: 28.0,
+            barBorderRadius: 999.0,
+            indicatorBorderRadius: 999.0,
+            adaptiveBrightness: true,
+            magnification: 1.12,
+            interactionBehavior: GlassInteractionBehavior.full,
             settings: const LiquidGlassSettings(
               blur: 1.5,
               thickness: 18.0,
               refractiveIndex: 1.25,
               lightIntensity: 0.70,
               ambientStrength: 0.35,
+              ambientRim: 0.05,
+              fresnelStrength: 0.12,
+              edgeAbsorption: 0.15,
               saturation: 1.25,
               glassColor: Color.fromRGBO(255, 255, 255, 0.08),
             ),
@@ -225,7 +232,10 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
               refractiveIndex: 1.28,
               lightIntensity: 0.85,
               ambientStrength: 0.40,
-              glassColor: Color.fromRGBO(255, 255, 255, 0.12),
+              ambientRim: 0.06,
+              fresnelStrength: 0.15,
+              edgeAbsorption: 0.15,
+              glassColor: Color.fromRGBO(255, 255, 255, 0.14),
             ),
             indicatorColor: AppThemeColors.babyPink.withValues(alpha: 0.35),
             tabs: const [

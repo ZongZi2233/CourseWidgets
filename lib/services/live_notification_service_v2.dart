@@ -41,7 +41,7 @@ class LiveNotificationServiceV2 {
   // 通知 ID
   static const int _liveNotificationId = 1000;
   static const int _reminderNotificationId = 1001; // [v2.2.9] 提前提醒通知
-  static const String _channelId = 'live_course_updates';
+  static const String _channelId = 'live_course_updates_v3';
   static const String _channelName = '课程实时提醒';
   static const String _channelDesc = 'Android 16 Live Updates 课程倒计时';
   static const String _reminderChannelId = 'course_reminders'; // [v2.2.9] 提醒通道
@@ -345,8 +345,8 @@ class LiveNotificationServiceV2 {
         _channelId,
         _channelName,
         channelDescription: _channelDesc,
-        importance: Importance.defaultImportance,
-        priority: Priority.defaultPriority,
+        importance: Importance.high,
+        priority: Priority.high,
         ongoing: true, // Live Updates 必须是 ongoing
         autoCancel: false,
         onlyAlertOnce: true, // 只在第一次提醒

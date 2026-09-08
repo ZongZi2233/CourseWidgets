@@ -8,6 +8,7 @@ import '../../services/data_import_service.dart';
 import '../../utils/responsive_utils.dart';
 import '../widgets/liquid_components.dart' as liquid;
 import '../widgets/glass_context_menu.dart';
+import '../widgets/unified_backdrop_panel.dart';
 import '../transitions/smooth_slide_transitions.dart';
 import 'course_edit_screen.dart';
 import 'package:flutter/cupertino.dart';
@@ -86,18 +87,9 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
                   _buildHeader(),
                   const SizedBox(height: 12),
                   Expanded(
-                    child: GlassPanel(
-                      shape: const LiquidRoundedSuperellipse(borderRadius: 32),
+                    child: UnifiedBackdropPanel(
+                      borderRadius: 32,
                       padding: const EdgeInsets.all(16),
-                      settings: const LiquidGlassSettings(
-                        glassColor: Color(0x10FFFFFF),
-                        blur: 1.5,
-                        thickness: 16.0,
-                        refractiveIndex: 1.25,
-                        ambientRim: 0.06,
-                        fresnelStrength: 0.15,
-                        edgeAbsorption: 0.15,
-                      ),
                       child: _buildCalendarGrid(provider),
                     ),
                   ),
@@ -121,18 +113,9 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
       children: [
         _buildHeader(),
         const SizedBox(height: 12),
-        GlassPanel(
-          shape: const LiquidRoundedSuperellipse(borderRadius: 32),
+        UnifiedBackdropPanel(
+          borderRadius: 32,
           padding: const EdgeInsets.all(16),
-          settings: const LiquidGlassSettings(
-            glassColor: Color(0x10FFFFFF),
-            blur: 1.5,
-            thickness: 16.0,
-            refractiveIndex: 1.25,
-            ambientRim: 0.06,
-            fresnelStrength: 0.15,
-            edgeAbsorption: 0.15,
-          ),
           child: _buildCalendarGrid(provider),
         ),
         const SizedBox(height: 20),
