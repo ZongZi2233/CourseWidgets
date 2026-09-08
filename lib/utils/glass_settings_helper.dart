@@ -20,19 +20,19 @@ class GlassSettingsHelper {
   }) {
     // 深色模式：黑色玻璃，中等透明度
     // 浅色模式：白色玻璃，低透明度
-    final glassColor = globalUseDarkMode
+    final glassColor = globalDarkModeNotifier.value
         ? Colors.black.withValues(alpha: 0.32)
         : Colors.white.withValues(alpha: 0.08);
 
     return LiquidGlassSettings(
       glassColor: glassColor,
-      blur: blur ?? 4.0, // [v2.8.3] 降低大面积模糊，释放 120Hz 高刷
-      thickness: thickness ?? 16.0,
-      refractiveIndex: 1.38,
+      blur: blur ?? 3.0,
+      thickness: thickness ?? 24.0, // [v2.8.5] 加大物理厚度与景深透镜曲率
+      refractiveIndex: 1.46, // [v2.8.5] 大曲率物理透镜折射
       lightIntensity: 0.70,
-      ambientStrength: 0.50,
-      ambientRim: 0.15,
-      fresnelStrength: 0.85,
+      ambientStrength: 0.45,
+      ambientRim: 0.0, // [v2.8.5 彻底消除人造白边]
+      fresnelStrength: 0.05, // [v2.8.5 消除掠射角强白光边缘]
       saturation: 1.20,
     );
   }
@@ -40,19 +40,19 @@ class GlassSettingsHelper {
   /// 获取卡片玻璃设置
   static LiquidGlassSettings getCardSettings({double? alpha}) {
     // 极其通透清澈的 Apple iOS 26/27 液态玻璃质感
-    final glassColor = globalUseDarkMode
+    final glassColor = globalDarkModeNotifier.value
         ? Colors.black.withValues(alpha: alpha ?? 0.20)
-        : Colors.white.withValues(alpha: alpha ?? 0.10);
+        : Colors.white.withValues(alpha: alpha ?? 0.08);
 
     return LiquidGlassSettings(
       glassColor: glassColor,
-      blur: 3.0, // [v2.8.3] 清透低模糊
-      thickness: 14.0,
-      refractiveIndex: 1.38,
+      blur: 2.5,
+      thickness: 22.0,
+      refractiveIndex: 1.45,
       lightIntensity: 0.70,
-      ambientStrength: 0.50,
-      ambientRim: 0.15,
-      fresnelStrength: 0.85,
+      ambientStrength: 0.45,
+      ambientRim: 0.0, // [v2.8.5 消除白边]
+      fresnelStrength: 0.05,
       saturation: 1.20,
     );
   }
@@ -67,43 +67,43 @@ class GlassSettingsHelper {
     if (isSelected) {
       // 选中状态：使用主题色
       final baseColor = selectedColor ?? Colors.blue;
-      glassColor = globalUseDarkMode
+      glassColor = globalDarkModeNotifier.value
           ? baseColor.withValues(alpha: 0.45)
           : baseColor.withValues(alpha: 0.3);
     } else {
       // 未选中状态
-      glassColor = globalUseDarkMode
+      glassColor = globalDarkModeNotifier.value
           ? Colors.white.withValues(alpha: 0.1)
           : Colors.white.withValues(alpha: 0.05);
     }
 
     return LiquidGlassSettings(
       glassColor: glassColor,
-      blur: 2.0, // [v2.8.3] 超轻量按钮折射
-      thickness: 12.0,
-      refractiveIndex: 1.35,
+      blur: 2.0,
+      thickness: 16.0,
+      refractiveIndex: 1.40,
       lightIntensity: 0.65,
       ambientStrength: 0.35,
-      ambientRim: 0.12,
-      fresnelStrength: 0.75,
+      ambientRim: 0.0, // [v2.8.5 消除白边]
+      fresnelStrength: 0.05,
     );
   }
 
   /// 获取对话框玻璃设置
   static LiquidGlassSettings getDialogSettings() {
-    final glassColor = globalUseDarkMode
+    final glassColor = globalDarkModeNotifier.value
         ? Colors.black.withValues(alpha: 0.45)
-        : Colors.white.withValues(alpha: 0.12);
+        : Colors.white.withValues(alpha: 0.10);
 
     return LiquidGlassSettings(
       glassColor: glassColor,
-      blur: 5.0, // [v2.8.3] 对话框微透
-      thickness: 18.0,
-      refractiveIndex: 1.38,
+      blur: 4.0,
+      thickness: 24.0,
+      refractiveIndex: 1.45,
       lightIntensity: 0.70,
       ambientStrength: 0.45,
-      ambientRim: 0.15,
-      fresnelStrength: 0.85,
+      ambientRim: 0.0, // [v2.8.5 消除白边]
+      fresnelStrength: 0.05,
     );
   }
 

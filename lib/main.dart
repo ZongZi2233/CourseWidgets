@@ -32,6 +32,7 @@ import 'package:flutter_phoenix/flutter_phoenix.dart';
 import 'services/app_logger.dart';
 
 bool globalUseDarkMode = false;
+final ValueNotifier<bool> globalDarkModeNotifier = ValueNotifier<bool>(false);
 final ValueNotifier<String?> globalBackgroundPath = ValueNotifier<String?>(
   null,
 );
@@ -279,30 +280,30 @@ class _MyAppState extends State<MyApp> {
   }
 
   Future<void> _checkOnboarding() async {
-    await Future.delayed(const Duration(milliseconds: 100));
-
-    // [v2.3.0] 初始化玻璃透明度管理器
+    // [v2.8.5] 消除人造 100ms 延迟，即时加载本地偏好
     final storage = StorageService();
     final darkMode = storage.getBool(StorageService.keyDarkMode) ?? false;
     final adaptiveMode =
         storage.getBool(StorageService.keyAdaptiveDarkMode) ?? false;
 
+    bool isDark = false;
     if (adaptiveMode) {
-      // 自适应模式：跟随系统
       final brightness =
           WidgetsBinding.instance.platformDispatcher.platformBrightness;
-      GlassOpacityManager().setDarkMode(brightness == Brightness.dark);
-      globalUseDarkMode = brightness == Brightness.dark;
+      isDark = brightness == Brightness.dark;
     } else {
-      // 手动模式
-      GlassOpacityManager().setDarkMode(darkMode);
-      globalUseDarkMode = darkMode;
+      isDark = darkMode;
     }
+    GlassOpacityManager().setDarkMode(isDark);
+    globalUseDarkMode = isDark;
+    globalDarkModeNotifier.value = isDark;
 
-    setState(() {
-      _showOnboarding = _onboardingService.shouldShowOnboarding;
-      _isChecking = false;
-    });
+    if (mounted) {
+      setState(() {
+        _showOnboarding = _onboardingService.shouldShowOnboarding;
+        _isChecking = false;
+      });
+    }
   }
 
   void _completeOnboarding() {
@@ -320,35 +321,40 @@ class _MyAppState extends State<MyApp> {
   @override
   Widget build(BuildContext context) {
     if (_isChecking) {
-      // 加载中
+      // [v2.8.5 彻底消灭启动黑屏] 使用自然柔和渐变作为首帧过渡，坚决杜绝纯黑黑屏与卡顿感
       return material.MaterialApp(
         debugShowCheckedModeBanner: false,
         home: material.Scaffold(
-          backgroundColor: Colors.black,
-          body: const Center(
-            child: material.CircularProgressIndicator(color: Colors.white),
+          backgroundColor: Colors.transparent,
+          body: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFFE0C3FC), Color(0xFF8EC5FC)],
+              ),
+            ),
           ),
         ),
       );
     }
 
-    return ValueListenableBuilder<String?>(
-      valueListenable: globalBackgroundPath,
-      builder: (context, backgroundPath, _) {
-        // [v2.2.8] 添加调试信息
-        debugPrint('🎨 当前背景路径: $backgroundPath, 深色模式: $globalUseDarkMode');
+    return ValueListenableBuilder<bool>(
+      valueListenable: globalDarkModeNotifier,
+      builder: (context, isDarkMode, _) {
+        return ValueListenableBuilder<String?>(
+          valueListenable: globalBackgroundPath,
+          builder: (context, backgroundPath, _) {
+            debugPrint('🎨 当前背景路径: $backgroundPath, 深色模式: $isDarkMode');
 
-        return Consumer<ThemeService>(
-          builder: (context, themeService, child) {
-            return material.MaterialApp(
-              // [v2.6.0] 移除了强制的 key: ValueKey(themeService.primaryColor.value)
-              // 该属性会导致每次修改主题色都会全部重建APP，丢失 OnboardingScreen 的页面进度，回退到第一页。
-              // 去掉后，Flutter可直接执行 ThemeData 的平滑过渡动画而完美保留局部 State 页面！
-              debugShowCheckedModeBanner: false,
-              navigatorObservers: [routeObserver], // [v2.6.0] 注册全局路由监听器
-              themeMode: globalUseDarkMode
-                  ? material.ThemeMode.dark
-                  : material.ThemeMode.light,
+            return Consumer<ThemeService>(
+              builder: (context, themeService, child) {
+                return material.MaterialApp(
+                  debugShowCheckedModeBanner: false,
+                  navigatorObservers: [routeObserver],
+                  themeMode: isDarkMode
+                      ? material.ThemeMode.dark
+                      : material.ThemeMode.light,
               theme: material.ThemeData(
                 useMaterial3: true,
                 brightness: material.Brightness.light,
@@ -419,7 +425,7 @@ class _MyAppState extends State<MyApp> {
                 Widget backgroundWidget;
 
                 // [v2.6.2] 修复反馈: 浅色模式不再强制对背景进行变暗处理
-                final darkenAlpha = globalUseDarkMode ? 0.6 : 0.0;
+                final darkenAlpha = isDarkMode ? 0.6 : 0.0;
 
                 if (backgroundPath != null && backgroundPath.isNotEmpty) {
                   // 检查是否是 asset 路径
@@ -467,7 +473,7 @@ class _MyAppState extends State<MyApp> {
                       gradient: LinearGradient(
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
-                        colors: globalUseDarkMode
+                        colors: isDarkMode
                             ? [const Color(0xFF1A1A2E), const Color(0xFF16213E)]
                             : [
                                 const Color(0xFFE0C3FC),
@@ -574,12 +580,14 @@ class _MyAppState extends State<MyApp> {
               home: _showOnboarding
                   ? OnboardingScreen(onComplete: _completeOnboarding)
                   : _getHomeParams(),
-            );
-          },
-        );
-      },
-    );
-  }
+              );
+            },
+          );
+        },
+      );
+    },
+  );
+}
 
   Widget _getHomeParams() {
     if (Platform.isWindows) return const WindowsCustomWindow();

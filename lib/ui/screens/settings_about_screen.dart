@@ -53,15 +53,15 @@ class _SettingsAboutScreenState extends State<SettingsAboutScreen>
       body: AdaptiveLiquidGlassLayer(
         quality: GlassQuality.premium,
         settings: const LiquidGlassSettings(
-          blur: 4.0,
-          thickness: 16.0,
-          glassColor: Color(0x15FFFFFF),
-          lightIntensity: 0.75,
-          ambientStrength: 0.50,
-          ambientRim: 0.18,
-          fresnelStrength: 0.85,
+          blur: 3.0,
+          thickness: 24.0,
+          glassColor: Color(0x0EFFFFFF),
+          lightIntensity: 0.70,
+          ambientStrength: 0.45,
+          ambientRim: 0.0,
+          fresnelStrength: 0.05,
           saturation: 1.20,
-          refractiveIndex: 1.38,
+          refractiveIndex: 1.46,
         ),
         child: Column(
           children: [
@@ -101,11 +101,7 @@ class _SettingsAboutScreenState extends State<SettingsAboutScreen>
                     // [v2.6.3] 全平台禁止滚动，自适应布局
                     physics: const NeverScrollableScrollPhysics(),
                     children: [
-                      // App Icon & Name Card
-                      GlassCard(
-                        shape: const LiquidRoundedSuperellipse(borderRadius: 32),
-                        quality: GlassQuality.premium,
-                        useOwnLayer: false,
+                      liquid.HyperOSCard(
                         padding: const EdgeInsets.all(32),
                         child: Column(
                         children: [
@@ -174,10 +170,7 @@ class _SettingsAboutScreenState extends State<SettingsAboutScreen>
                     const SizedBox(height: 20),
 
                     // Copyright Card
-                    GlassCard(
-                      shape: const LiquidRoundedSuperellipse(borderRadius: 28),
-                      quality: GlassQuality.premium,
-                      useOwnLayer: false,
+                    liquid.HyperOSCard(
                       padding: const EdgeInsets.all(20),
                       child: Column(
                         children: [

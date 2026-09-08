@@ -8,7 +8,6 @@ import '../../constants/theme_constants.dart';
 import '../../services/storage_service.dart';
 import '../../services/theme_service.dart' as theme;
 import '../../utils/glass_settings_helper.dart';
-import '../../utils/glass_opacity_manager.dart'; // [v2.3.0] 玻璃透明度管理器
 import '../../main.dart';
 import '../widgets/liquid_components.dart' as liquid;
 import 'package:smooth_scroll_multiplatform/smooth_scroll_multiplatform.dart';
@@ -52,30 +51,25 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
 
   void _toggleDarkMode(bool value) async {
     setState(() {
-      globalUseDarkMode = value;
       if (value) _adaptiveDarkMode = false;
     });
+    _themeService.setDarkMode(value);
     await _storage.setBool(StorageService.keyDarkMode, value);
     if (value) {
       await _storage.setBool(StorageService.keyAdaptiveDarkMode, false);
     }
-    // [v2.3.0] 同步更新玻璃透明度管理器
-    GlassOpacityManager().setDarkMode(value);
   }
 
   void _toggleAdaptiveMode(bool value) async {
     setState(() {
       _adaptiveDarkMode = value;
-      if (value) {
-        // 自适应模式：跟随系统
-        final brightness = MediaQuery.of(context).platformBrightness;
-        globalUseDarkMode = brightness == Brightness.dark;
-        GlassOpacityManager().setDarkMode(brightness == Brightness.dark);
-      } else {
-        globalUseDarkMode = false;
-        GlassOpacityManager().setDarkMode(false);
-      }
     });
+    if (value) {
+      final brightness = MediaQuery.of(context).platformBrightness;
+      _themeService.setDarkMode(brightness == Brightness.dark);
+    } else {
+      _themeService.setDarkMode(false);
+    }
     await _storage.setBool(StorageService.keyAdaptiveDarkMode, value);
     if (value) {
       await _storage.setBool(StorageService.keyDarkMode, false);
@@ -375,15 +369,15 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
       body: AdaptiveLiquidGlassLayer(
         quality: GlassQuality.premium,
         settings: const LiquidGlassSettings(
-          blur: 4.0,
-          thickness: 16.0,
-          glassColor: Color(0x15FFFFFF),
-          lightIntensity: 0.75,
-          ambientStrength: 0.50,
-          ambientRim: 0.18,
-          fresnelStrength: 0.85,
+          blur: 3.0,
+          thickness: 24.0,
+          glassColor: Color(0x0EFFFFFF),
+          lightIntensity: 0.70,
+          ambientStrength: 0.45,
+          ambientRim: 0.0,
+          fresnelStrength: 0.05,
           saturation: 1.20,
-          refractiveIndex: 1.38,
+          refractiveIndex: 1.46,
         ),
         child: DynMouseScroll(
           durationMS: 250,
@@ -584,10 +578,7 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: GlassCard(
-        shape: const LiquidRoundedSuperellipse(borderRadius: 20),
-        quality: GlassQuality.premium,
-        useOwnLayer: false,
+      child: liquid.HyperOSCard(
         padding: const EdgeInsets.all(16),
         child: Row(
           children: [
@@ -634,55 +625,43 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: GlassCard(
-        shape: const LiquidRoundedSuperellipse(borderRadius: 20),
-        quality: GlassQuality.premium,
-        useOwnLayer: false,
-        padding: EdgeInsets.zero,
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(20),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
+      child: liquid.HyperOSCard(
+        onTap: onTap,
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Icon(icon, color: AppThemeColors.babyPink),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(icon, color: AppThemeColors.babyPink),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          title,
-                          style: TextStyle(
-                            color: _textColor,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        if (subtitle != null) ...[
-                          const SizedBox(height: 2),
-                          Text(
-                            subtitle,
-                            style: TextStyle(
-                              color: _textSecondaryColor,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ],
+                  Text(
+                    title,
+                    style: TextStyle(
+                      color: _textColor,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
-                  Icon(
-                    CupertinoIcons.right_chevron,
-                    color: _textSecondaryColor.withValues(alpha: 0.5),
-                    size: 16,
-                  ),
+                  if (subtitle != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        color: _textSecondaryColor,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
-          ),
+            Icon(
+              CupertinoIcons.right_chevron,
+              color: _textSecondaryColor.withValues(alpha: 0.5),
+              size: 16,
+            ),
+          ],
         ),
       ),
     );

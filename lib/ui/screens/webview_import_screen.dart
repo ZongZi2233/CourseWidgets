@@ -14,8 +14,10 @@ import '../../constants/version.dart';
 import '../../providers/schedule_provider.dart';
 import '../widgets/liquid_toast.dart';
 import '../widgets/liquid_components.dart' as liquid;
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import '../../services/educational_portal_registry.dart';
 import '../../services/app_logger.dart';
+import '../../services/html_to_ics_converter.dart';
 
 class WebviewImportScreen extends StatefulWidget {
   const WebviewImportScreen({super.key});
@@ -991,8 +993,14 @@ class _WebviewImportScreenState extends State<WebviewImportScreen> {
         function sendBridgeResult(resultObj) {
           var str = JSON.stringify(resultObj);
           try {
-            if (typeof window !== 'undefined' && window.CourseWidgetsBridge && typeof window.CourseWidgetsBridge.postMessage === 'function') {
-              window.CourseWidgetsBridge.postMessage(str);
+            if (typeof window !== 'undefined') {
+              window.__cw_last_result = str;
+              if (window.CourseWidgetsBridge && typeof window.CourseWidgetsBridge.postMessage === 'function') {
+                window.CourseWidgetsBridge.postMessage(str);
+              }
+              if (window.chrome && window.chrome.webview && typeof window.chrome.webview.postMessage === 'function') {
+                window.chrome.webview.postMessage(str);
+              }
             }
           } catch(e) {}
           return str;
@@ -1939,6 +1947,13 @@ class _WebviewImportScreenState extends State<WebviewImportScreen> {
       if (Platform.isWindows || Platform.isMacOS) {
         final result = await _desktopController.executeScript(jsCode);
         resultStr = result?.toString() ?? '';
+        // [v2.8.5] Windows WebView2 executeScript 遇到异步 IIFE 会返回 "{}"，从全局桥接缓存中同步回读真实数据
+        if (resultStr.isEmpty || resultStr == '{}' || resultStr == '""') {
+          final savedRes = await _desktopController.executeScript('window.__cw_last_result || ""');
+          if (savedRes != null && savedRes.toString().isNotEmpty && savedRes.toString() != '""') {
+            resultStr = savedRes.toString();
+          }
+        }
       } else {
         try {
           _bridgeCompleter = Completer<String>();
@@ -1958,31 +1973,50 @@ class _WebviewImportScreenState extends State<WebviewImportScreen> {
       }
 
       if (!mounted) return;
-      if (resultStr.isEmpty || resultStr == 'null') {
-        debugPrint('⚠️ JS 执行或桥接返回空，尝试 fallback HTML 抓取...');
+      if (resultStr.isEmpty || resultStr == 'null' || resultStr == '{}' || resultStr == '""') {
+        debugPrint('⚠️ JS 执行或桥接返回空，立即启用原生 Dart EamsHtmlParser 深度解析...');
         final fallbackHtml = await _getFallbackHtml();
-        if (fallbackHtml.isNotEmpty && mounted) {
-          _showHtmlExtractionResult(
-            fallbackHtml,
-            errorMsg: 'JS 异步执行未返回数据，已通过原生通道获取页面源码供分析',
-          );
+        if (fallbackHtml.isNotEmpty) {
+          final dartCourses = EamsHtmlParser.parseFromHtml(fallbackHtml);
+          if (dartCourses.isNotEmpty && mounted) {
+            _showExtractionResult(dartCourses.length, jsonEncode({
+              'type': 'courses',
+              'data': dartCourses,
+            }));
+            return;
+          }
+          if (mounted) {
+            _showHtmlExtractionResult(
+              fallbackHtml,
+              errorMsg: 'JS 异步执行未返回数据，已通过原生通道获取页面源码供分析',
+            );
+          }
         } else if (mounted) {
           _showError('网页数据尚未加载完毕，请确保页面完全显示后再点击提取按钮');
-          setState(() => _isExtracting = false);
         }
         return;
       }
 
-      Map<String, dynamic> extracted;
+      Map<String, dynamic> extracted = {};
       try {
         dynamic decoded = jsonDecode(resultStr);
         if (decoded is String) {
           decoded = jsonDecode(decoded);
         }
-        extracted = decoded as Map<String, dynamic>;
+        extracted = decoded is Map<String, dynamic> ? decoded : {};
       } catch (parseErr) {
         debugPrint('⚠️ JSON解析失败: $parseErr, 原始数据: $resultStr');
         final fallbackHtml = await _getFallbackHtml();
+        if (fallbackHtml.isNotEmpty) {
+          final dartCourses = EamsHtmlParser.parseFromHtml(fallbackHtml);
+          if (dartCourses.isNotEmpty && mounted) {
+            _showExtractionResult(dartCourses.length, jsonEncode({
+              'type': 'courses',
+              'data': dartCourses,
+            }));
+            return;
+          }
+        }
         if (mounted) {
           _showHtmlExtractionResult(fallbackHtml, errorMsg: '数据解析异常: $parseErr');
         }
@@ -2034,8 +2068,18 @@ class _WebviewImportScreenState extends State<WebviewImportScreen> {
       }
 
       if (type == 'error') {
+        final fallbackHtml = await _getFallbackHtml();
+        if (fallbackHtml.isNotEmpty) {
+          final dartCourses = EamsHtmlParser.parseFromHtml(fallbackHtml);
+          if (dartCourses.isNotEmpty && mounted) {
+            _showExtractionResult(dartCourses.length, jsonEncode({
+              'type': 'courses',
+              'data': dartCourses,
+            }));
+            return;
+          }
+        }
         if (mounted) {
-          final fallbackHtml = await _getFallbackHtml();
           if (fallbackHtml.isNotEmpty) {
             _showHtmlExtractionResult(
               fallbackHtml,
@@ -2051,8 +2095,18 @@ class _WebviewImportScreenState extends State<WebviewImportScreen> {
       if (type == 'courses') {
         final List courses = (extracted['data'] as List?) ?? [];
         if (courses.isEmpty) {
+          final fallbackHtml = await _getFallbackHtml();
+          if (fallbackHtml.isNotEmpty) {
+            final dartCourses = EamsHtmlParser.parseFromHtml(fallbackHtml);
+            if (dartCourses.isNotEmpty && mounted) {
+              _showExtractionResult(dartCourses.length, jsonEncode({
+                'type': 'courses',
+                'data': dartCourses,
+              }));
+              return;
+            }
+          }
           if (mounted) {
-            final fallbackHtml = await _getFallbackHtml();
             if (fallbackHtml.isNotEmpty) {
               _showHtmlExtractionResult(fallbackHtml, errorMsg: '未在页面中找到课程数据');
             } else {
@@ -2069,6 +2123,25 @@ class _WebviewImportScreenState extends State<WebviewImportScreen> {
         } catch (_) {}
         if (mounted) {
           _showHtmlExtractionResult(htmlCode);
+        }
+      } else {
+        // [v2.8.5 彻底杜绝点击提取无响应] 未知 type 时兜底解析
+        final fallbackHtml = await _getFallbackHtml();
+        if (fallbackHtml.isNotEmpty) {
+          final dartCourses = EamsHtmlParser.parseFromHtml(fallbackHtml);
+          if (dartCourses.isNotEmpty && mounted) {
+            _showExtractionResult(dartCourses.length, jsonEncode({
+              'type': 'courses',
+              'data': dartCourses,
+            }));
+            return;
+          }
+        }
+        if (mounted) {
+          _showHtmlExtractionResult(
+            fallbackHtml,
+            errorMsg: extracted['data']?.toString() ?? '未能自动提取，已为您调出页面源码',
+          );
         }
       }
     } catch (e) {
@@ -2153,29 +2226,22 @@ class _WebviewImportScreenState extends State<WebviewImportScreen> {
 
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF2C2C2C),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(
-          isEamsHome
-              ? '当前位于教务首页'
-              : (errorMsg != null ? '提取异常，但已获取源码' : 'HTML 提取成功'),
-          style: const TextStyle(color: Colors.white),
-        ),
+      builder: (ctx) => liquid.LiquidGlassDialog(
+        title: isEamsHome
+            ? '当前位于教务首页'
+            : (errorMsg != null ? '提取异常，但已获取源码' : 'HTML 提取成功'),
         content: Text(
           isEamsHome
               ? '系统检测到您已成功登录树维教务系统，但当前停留在首页门户，页面内尚未载入课表数据。\n\n请点击下方【前往课表页面】，系统将为您自动跳转至【我的课表】。'
               : (errorMsg != null
                   ? '提取过程出错：$errorMsg\n\n已获取教务系统底层源码与WebView控制台日志，您可以尝试强行解析，或点击【复制源码与日志】发送给开发者适配。'
                   : '已获取教务系统课程表底层源码，是否自动解析并导入？'),
-          style: const TextStyle(color: Colors.white70),
+          style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.4),
         ),
         actions: [
           if (isEamsHome)
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppThemeColors.babyPink,
-              ),
+            GlassDialogAction(
+              isPrimary: true,
               onPressed: () {
                 Navigator.pop(ctx);
                 final uri = Uri.tryParse(_currentUrl);
@@ -2185,28 +2251,23 @@ class _WebviewImportScreenState extends State<WebviewImportScreen> {
                   _navigateTo(target);
                 }
               },
-              child: const Text('前往课表页面', style: TextStyle(color: Colors.white)),
+              label: '前往课表页面',
             ),
-          TextButton(
+          GlassDialogAction(
             onPressed: () {
               final fullReport = _generateDiagnosticText(htmlData, errorMsg: errorMsg);
               Clipboard.setData(ClipboardData(text: fullReport));
               LiquidToast.success(context, '包含控制台日志与源码的完整诊断报告已复制！');
             },
-            child: const Text(
-              '复制源码与日志',
-              style: TextStyle(color: Colors.blueAccent),
-            ),
+            label: '复制源码与日志',
           ),
-          TextButton(
+          GlassDialogAction(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消', style: TextStyle(color: Colors.white54)),
+            label: '取消',
           ),
           if (!isEamsHome)
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppThemeColors.babyPink,
-              ),
+            GlassDialogAction(
+              isPrimary: true,
               onPressed: () async {
                 Navigator.pop(ctx);
                 final provider = context.read<ScheduleProvider>();
@@ -2219,7 +2280,7 @@ class _WebviewImportScreenState extends State<WebviewImportScreen> {
                   LiquidToast.error(context, '解析 HTML 失败，可能是不支持的教务系统格式');
                 }
               },
-              child: const Text('确定导入', style: TextStyle(color: Colors.white)),
+              label: '确定导入',
             ),
         ],
       ),
@@ -2229,23 +2290,19 @@ class _WebviewImportScreenState extends State<WebviewImportScreen> {
   void _showExtractionResult(int courseCount, String rawData) {
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF2C2C2C),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('提取成功', style: TextStyle(color: Colors.white)),
+      builder: (ctx) => liquid.LiquidGlassDialog(
+        title: '提取成功',
         content: Text(
-          '在课表页面中发现了 $courseCount 条课程记录。\\n确认导入？',
-          style: const TextStyle(color: Colors.white70),
+          '在课表页面中发现了 $courseCount 条课程记录。\n确认导入？',
+          style: const TextStyle(color: Colors.white70, fontSize: 14),
         ),
         actions: [
-          TextButton(
+          GlassDialogAction(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
+            label: '取消',
           ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppThemeColors.babyPink,
-            ),
+          GlassDialogAction(
+            isPrimary: true,
             onPressed: () async {
               Navigator.pop(ctx);
               try {
@@ -2266,14 +2323,16 @@ class _WebviewImportScreenState extends State<WebviewImportScreen> {
                   });
                 } else {
                   if (mounted) {
-                    LiquidToast.error(context, '解析失败: 导入被拒绝或数据空');
+                    LiquidToast.error(context, '导入课程失败，请重试');
                   }
                 }
               } catch (e) {
-                if (mounted) LiquidToast.error(context, '导入失败: $e');
+                if (mounted) {
+                  LiquidToast.error(context, '导入失败: $e');
+                }
               }
             },
-            child: const Text('确定导入'),
+            label: '确认导入',
           ),
         ],
       ),

@@ -28,15 +28,15 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
       body: AdaptiveLiquidGlassLayer(
         quality: GlassQuality.premium,
         settings: const LiquidGlassSettings(
-          blur: 4.0,
-          thickness: 16.0,
-          glassColor: Color(0x15FFFFFF),
-          lightIntensity: 0.75,
-          ambientStrength: 0.50,
-          ambientRim: 0.18,
-          fresnelStrength: 0.85,
+          blur: 3.0,
+          thickness: 24.0,
+          glassColor: Color(0x0EFFFFFF),
+          lightIntensity: 0.70,
+          ambientStrength: 0.45,
+          ambientRim: 0.0,
+          fresnelStrength: 0.05,
           saturation: 1.20,
-          refractiveIndex: 1.38,
+          refractiveIndex: 1.46,
         ),
         child: Column(
           children: [
@@ -155,56 +155,50 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: GlassCard(
-        shape: const LiquidRoundedSuperellipse(borderRadius: 20),
-        quality: GlassQuality.premium,
-        useOwnLayer: false,
+      child: liquid.HyperOSCard(
+        onTap: onTap,
         padding: const EdgeInsets.all(16),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(20),
-          onTap: onTap,
-          child: Row(
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [color, color.withOpacity(0.6)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
+        child: Row(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [color, color.withValues(alpha: 0.6)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Icon(icon, color: Colors.white, size: 24),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: _textColor,
+                    ),
                   ),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Icon(icon, color: Colors.white, size: 24),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: TextStyle(fontSize: 12, color: _textSecondaryColor),
+                  ),
+                ],
               ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: _textColor,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      subtitle,
-                      style: TextStyle(fontSize: 12, color: _textSecondaryColor),
-                    ),
-                  ],
-                ),
-              ),
-              Icon(
-                CupertinoIcons.right_chevron,
-                color: _textSecondaryColor.withOpacity(0.5),
-              ),
-            ],
-          ),
+            ),
+            Icon(
+              CupertinoIcons.right_chevron,
+              color: _textSecondaryColor.withValues(alpha: 0.5),
+            ),
+          ],
         ),
       ),
     );

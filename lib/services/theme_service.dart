@@ -5,6 +5,7 @@ import 'package:material_color_utilities/material_color_utilities.dart';
 import 'package:system_theme/system_theme.dart';
 import 'storage_service.dart';
 import '../main.dart'; // For globalUseDarkMode
+import '../utils/glass_opacity_manager.dart';
 
 /// 主题模式
 enum ThemeMode {
@@ -36,8 +37,16 @@ class ThemeService extends ChangeNotifier {
   Color get secondaryColor => _secondaryColor;
   ThemeMode get themeMode => _themeMode;
 
-  // [v2.5.0] 快捷获取深色模式状态 (从 main.dart 的全局变量获取)
-  bool get isDarkMode => globalUseDarkMode;
+  // [v2.5.0/v2.8.5] 快捷获取深色模式状态
+  bool get isDarkMode => globalDarkModeNotifier.value;
+
+  // [v2.8.5] 响应式切换深色模式，实时通知整个应用重新渲染
+  void setDarkMode(bool dark) {
+    globalDarkModeNotifier.value = dark;
+    globalUseDarkMode = dark;
+    GlassOpacityManager().setDarkMode(dark);
+    notifyListeners();
+  }
 
   /// 初始化主题服务
   Future<void> initialize() async {

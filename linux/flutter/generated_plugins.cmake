@@ -4,6 +4,7 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   desktop_webview_window
+  dynamic_color
   file_selector_linux
   local_notifier
   mmkv_linux

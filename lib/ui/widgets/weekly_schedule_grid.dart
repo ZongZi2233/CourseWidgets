@@ -200,35 +200,37 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
           // 当前周次 - 点击打开选择器
           GestureDetector(
             onTap: () => _showWeekPicker(context, provider), // [v2.2.1] 点击打开选择器
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    AppThemeColors.babyPink.withValues(alpha: 0.3),
-                    AppThemeColors.softCoral.withValues(alpha: 0.3),
+            child: GlassContainer(
+              shape: const LiquidRoundedSuperellipse(borderRadius: 14),
+              settings: LiquidGlassSettings(
+                glassColor: Colors.white.withValues(alpha: 0.10),
+                blur: 2.0,
+                thickness: 16.0,
+                refractiveIndex: 1.40,
+                ambientRim: 0.0,
+                fresnelStrength: 0.05,
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '第 ${provider.currentWeek} 周',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Icon(
+                      CupertinoIcons.chevron_down,
+                      color: Colors.white.withValues(alpha: 0.7),
+                      size: 14,
+                    ),
                   ],
                 ),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    '第 ${provider.currentWeek} 周',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  Icon(
-                    CupertinoIcons.chevron_down,
-                    color: Colors.white.withValues(alpha: 0.7),
-                    size: 14,
-                  ),
-                ],
               ),
             ),
           ),
@@ -460,107 +462,79 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
 
   /// 课程卡片
   Widget _buildCourseCard(BuildContext context, CourseEvent course) {
-    // [v2.2.8修复] 使用 RepaintBoundary 隔离重绘，防止滚动时玻璃效果消失
+    // [v2.8.5] 迁移为 HyperOSCard：去除主题色染色、白色硬边框与阴影，实现 120Hz 极速满帧
     return RepaintBoundary(
-      child: GestureDetector(
+      child: liquid.HyperOSCard(
+        cornerRadius: 14,
+        padding: const EdgeInsets.all(10),
         onTap: () => _showCourseDetail(context, course),
-        child: Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                AppThemeColors.babyPink.withValues(alpha: 0.32),
-                AppThemeColors.softCoral.withValues(alpha: 0.20),
-              ],
-            ),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.25),
-              width: 0.9,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.12),
-                blurRadius: 8,
-                offset: const Offset(0, 3),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 节次
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(6),
               ),
-              BoxShadow(
-                color: Colors.white.withValues(alpha: 0.08),
-                blurRadius: 1,
-                offset: const Offset(0, 0.8),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 节次
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: AppThemeColors.babyPink.withValues(alpha: 0.3),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  course.timeStr.split('-')[0],
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 6),
-
-              // 课程名
-              Text(
-                course.name,
+              child: Text(
+                course.timeStr.split('-')[0],
                 style: const TextStyle(
                   color: Colors.white,
-                  fontSize: 13,
+                  fontSize: 10,
                   fontWeight: FontWeight.bold,
                 ),
-                maxLines: 4,
-                overflow: TextOverflow.visible, // [v2.7.0修复] 允许自动提行包裹
               ),
-              const SizedBox(height: 4),
+            ),
+            const SizedBox(height: 6),
 
-              // 地点与教师并排显示 (解决两行显示奇怪的问题)
-              if (course.location.isNotEmpty || course.teacher.isNotEmpty) ...[
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Icon(
-                        CupertinoIcons.placemark_fill,
+            // 课程名
+            Text(
+              course.name,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+              ),
+              maxLines: 4,
+              overflow: TextOverflow.visible, // [v2.7.0修复] 允许自动提行包裹
+            ),
+            const SizedBox(height: 4),
+
+            // 地点与教师并排显示 (解决两行显示奇怪的问题)
+            if (course.location.isNotEmpty || course.teacher.isNotEmpty) ...[
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Icon(
+                      CupertinoIcons.placemark_fill,
+                      color: Colors.white.withValues(alpha: 0.6),
+                      size: 10,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      [
+                        if (course.location.isNotEmpty) course.location,
+                        if (course.teacher.isNotEmpty) course.teacher,
+                      ].join('  ·  '),
+                      style: TextStyle(
                         color: Colors.white.withValues(alpha: 0.6),
-                        size: 10,
+                        fontSize: 11,
+                        height: 1.2,
                       ),
+                      maxLines: 4,
+                      overflow: TextOverflow.clip,
                     ),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        [
-                          if (course.location.isNotEmpty) course.location,
-                          if (course.teacher.isNotEmpty) course.teacher,
-                        ].join('  ·  '),
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.6),
-                          fontSize: 11,
-                          height: 1.2,
-                        ),
-                        maxLines: 4,
-                        overflow: TextOverflow.clip,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+                  ),
+                ],
+              ),
             ],
-          ),
+          ],
         ),
       ),
     );

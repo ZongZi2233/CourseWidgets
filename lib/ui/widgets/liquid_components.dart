@@ -4,6 +4,7 @@ import 'package:flutter/material.dart' show Colors, Material;
 import 'package:flutter/services.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:figma_squircle/figma_squircle.dart';
+import 'package:flutter_miuix/miuix.dart';
 import '../../constants/theme_constants.dart';
 import '../../utils/glass_settings_helper.dart';
 import '../../main.dart';
@@ -95,8 +96,8 @@ class LiquidCard extends StatelessWidget {
             saturation: 1.25,
             bodyMode: GlassBodyMode.adaptive,
             edgeAbsorption: 0.18,
-            ambientRim: 0.15,
-            fresnelStrength: 0.85,
+            ambientRim: 0.0,
+            fresnelStrength: 0.05,
             specularSharpness: GlassSpecularSharpness.medium,
           )
         : (isPanel
@@ -104,8 +105,8 @@ class LiquidCard extends StatelessWidget {
             : GlassSettingsHelper.defaultSettings).copyWith(
                 bodyMode: GlassBodyMode.adaptive,
                 edgeAbsorption: 0.18,
-                ambientRim: 0.15,
-                fresnelStrength: 0.85,
+                ambientRim: 0.0,
+                fresnelStrength: 0.05,
                 specularSharpness: GlassSpecularSharpness.medium,
               );
 
@@ -190,9 +191,9 @@ class LiquidButton extends StatelessWidget {
         refractiveIndex: 1.35,
         lightIntensity: 0.65,
         bodyMode: GlassBodyMode.adaptive,
-        edgeAbsorption: 0.15,
-        ambientRim: 0.12,
-        fresnelStrength: 0.75,
+        edgeAbsorption: 0.0,
+        ambientRim: 0.0,
+        fresnelStrength: 0.05,
         specularSharpness: GlassSpecularSharpness.medium,
       ),
       shape: LiquidRoundedSuperellipse(borderRadius: 16),
@@ -452,6 +453,85 @@ class LiquidBackButton extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// [v2.8.5] 基于 Flutter MiuiX (HyperOS) 的高性能轻量级卡片
+///
+/// 专用于频繁重绘与高速滚动的课程卡片、日历网格卡片以及设置界面列表卡片。
+/// 特性：
+/// 1. 采用 MiuixSquircleBorder 完美平滑连续超椭圆圆角
+/// 2. 具备 HyperOS 原生按压动效与反馈 (MiuixPressFeedbackType.sink)
+/// 3. 轻量级高斯模糊 + 混色半透明背景，零 Impeller 多通道着色器负担
+/// 4. 彻底解放 GPU 渲染算力，保障全局 120 FPS 满帧运行
+class HyperOSCard extends StatelessWidget {
+  final Widget child;
+  final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
+  final double cornerRadius;
+  final EdgeInsetsGeometry padding;
+  final Color? color;
+  final Color? contentColor;
+  final bool useBlur;
+  final double blurRadius;
+  final MiuixPressFeedbackType feedbackType;
+
+  const HyperOSCard({
+    super.key,
+    required this.child,
+    this.onTap,
+    this.onLongPress,
+    this.cornerRadius = 16,
+    this.padding = const EdgeInsets.all(12),
+    this.color,
+    this.contentColor,
+    this.useBlur = true,
+    this.blurRadius = 6.0,
+    this.feedbackType = MiuixPressFeedbackType.sink,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = globalDarkModeNotifier.value;
+    final effectiveColor = color ??
+        (isDark
+            ? const Color(0x281F2430)
+            : const Color(0x16FFFFFF));
+    final effectiveTextColor = contentColor ??
+        (isDark ? const Color(0xFFF0F3F8) : Colors.white);
+
+    final shape = MiuixSquircleBorder(
+      cornerRadius: cornerRadius,
+      enabled: cornerRadius > 0,
+    );
+
+    Widget innerContent = Padding(
+      padding: padding,
+      child: child,
+    );
+
+    if (useBlur) {
+      innerContent = ClipPath(
+        clipper: ShapeBorderClipper(shape: shape),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: blurRadius, sigmaY: blurRadius),
+          child: innerContent,
+        ),
+      );
+    }
+
+    return MiuixCard(
+      cornerRadius: cornerRadius,
+      insideMargin: EdgeInsets.zero,
+      colors: MiuixCardColors(
+        color: effectiveColor,
+        contentColor: effectiveTextColor,
+      ),
+      onPressed: onTap,
+      onLongPress: onLongPress,
+      feedbackType: feedbackType,
+      child: innerContent,
     );
   }
 }

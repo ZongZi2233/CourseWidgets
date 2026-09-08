@@ -7,7 +7,6 @@ import '../../providers/schedule_provider.dart';
 import '../../services/data_import_service.dart';
 import '../../constants/theme_constants.dart';
 import '../../services/theme_service.dart'; // Added this import
-import '../../utils/glass_settings_helper.dart';
 import '../widgets/liquid_components.dart' as liquid;
 import '../widgets/liquid_toast.dart';
 import 'package:flutter_phoenix/flutter_phoenix.dart';
@@ -29,15 +28,15 @@ class SettingsDataScreen extends StatelessWidget {
       body: AdaptiveLiquidGlassLayer(
         quality: GlassQuality.premium,
         settings: const LiquidGlassSettings(
-          blur: 4.0,
-          thickness: 16.0,
-          glassColor: Color(0x15FFFFFF),
-          lightIntensity: 0.75,
-          ambientStrength: 0.50,
-          ambientRim: 0.18,
-          fresnelStrength: 0.85,
+          blur: 3.0,
+          thickness: 24.0,
+          glassColor: Color(0x0EFFFFFF),
+          lightIntensity: 0.70,
+          ambientStrength: 0.45,
+          ambientRim: 0.0,
+          fresnelStrength: 0.05,
           saturation: 1.20,
-          refractiveIndex: 1.38,
+          refractiveIndex: 1.46,
         ),
         child: Column(
           children: [
@@ -73,10 +72,7 @@ class SettingsDataScreen extends StatelessWidget {
                   padding: const EdgeInsets.all(16),
                   physics: physics,
                   children: [
-                    GlassCard(
-                      shape: const LiquidRoundedSuperellipse(borderRadius: 24),
-                      quality: GlassQuality.premium,
-                      useOwnLayer: false,
+                    liquid.HyperOSCard(
                       padding: const EdgeInsets.all(20),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -383,42 +379,36 @@ class SettingsDataScreen extends StatelessWidget {
     final isDark = ThemeService().isDarkMode;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: GestureDetector(
+      child: liquid.HyperOSCard(
         onTap: onTap,
-        behavior: HitTestBehavior.opaque,
-        child: GlassCard(
-          shape: const LiquidRoundedSuperellipse(borderRadius: 18),
-          quality: GlassQuality.premium,
-          useOwnLayer: false,
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: color.withValues(alpha: 0.3)),
-                ),
-                child: Icon(icon, color: color, size: 24),
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: color.withValues(alpha: 0.3)),
               ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: isDark ? Colors.white : Colors.black87,
-                  ),
+              child: Icon(icon, color: color, size: 24),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                title,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.white : Colors.black87,
                 ),
               ),
-              Icon(
-                Icons.chevron_right,
-                color: isDark ? Colors.white54 : Colors.black54,
-              ),
-            ],
-          ),
+            ),
+            Icon(
+              Icons.chevron_right,
+              color: isDark ? Colors.white54 : Colors.black54,
+            ),
+          ],
         ),
       ),
     );

@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 2.8.4+10008048
+version: 2.8.5+10008049
 
 environment:
   sdk: ^3.12.0
@@ -95,6 +95,8 @@ dependencies:
   # [v2.5.9] 深度自定义的玻璃组件库，源码已剥离到 plugins 文件夹
   liquid_glass_widgets:
     path: plugins/liquid_glass_widgets
+  flutter_miuix:
+    path: plugins/flutter_miuix
   local_notifier: ^0.1.6
   flutter_phoenix: ^1.1.1
   system_theme:

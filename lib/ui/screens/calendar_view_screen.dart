@@ -93,15 +93,15 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
     return AdaptiveLiquidGlassLayer(
       quality: GlassQuality.premium,
       settings: const LiquidGlassSettings(
-        blur: 4.0,
-        thickness: 16.0,
-        glassColor: Color(0x15FFFFFF),
-        lightIntensity: 0.75,
-        ambientStrength: 0.50,
-        ambientRim: 0.18,
-        fresnelStrength: 0.85,
+        blur: 3.0,
+        thickness: 24.0,
+        glassColor: Color(0x0EFFFFFF),
+        lightIntensity: 0.70,
+        ambientStrength: 0.45,
+        ambientRim: 0.0,
+        fresnelStrength: 0.05,
         saturation: 1.20,
-        refractiveIndex: 1.38,
+        refractiveIndex: 1.46,
       ),
       child: content,
     );
@@ -122,10 +122,7 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
                 children: [
                   _buildHeader(),
                   const SizedBox(height: 12),
-                  GlassCard(
-                    shape: const LiquidRoundedSuperellipse(borderRadius: 24),
-                    quality: GlassQuality.premium,
-                    useOwnLayer: false,
+                  liquid.HyperOSCard(
                     padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
                     child: _buildCalendarGrid(provider),
                   ),
@@ -150,15 +147,12 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
       bottom: false,
       child: Column(
         children: [
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           _buildHeader(),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: GlassCard(
-              shape: const LiquidRoundedSuperellipse(borderRadius: 24),
-              quality: GlassQuality.premium,
-              useOwnLayer: false,
+            child: liquid.HyperOSCard(
               padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
               child: _buildCalendarGrid(provider),
             ),
@@ -613,10 +607,8 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
-      child: GlassCard(
-        shape: const LiquidRoundedSuperellipse(borderRadius: 18),
-        quality: GlassQuality.premium,
-        useOwnLayer: false,
+      child: liquid.HyperOSCard(
+        cornerRadius: 18,
         padding: const EdgeInsets.all(14),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
@@ -626,22 +618,10 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
               width: 58,
               padding: const EdgeInsets.symmetric(vertical: 8),
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    AppThemeColors.babyPink,
-                    AppThemeColors.softCoral,
-                  ],
-                ),
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.08)
+                    : Colors.white.withValues(alpha: 0.16),
                 borderRadius: BorderRadius.circular(14),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppThemeColors.babyPink.withValues(alpha: 0.25),
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
               ),
               alignment: Alignment.center,
               child: Column(
@@ -814,10 +794,8 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
       child: Center(
-        child: GlassCard(
-          shape: const LiquidRoundedSuperellipse(borderRadius: 24),
-          quality: GlassQuality.premium,
-          useOwnLayer: false,
+        child: liquid.HyperOSCard(
+          cornerRadius: 24,
           padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 36),
           child: Column(
             mainAxisSize: MainAxisSize.min,

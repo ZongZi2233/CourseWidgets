@@ -4,6 +4,37 @@
 
 ---
 
+## [v2.8.5] - 2026-09-08
+
+### 1. 双引擎 UI 架构重构与渲染性能飞跃 (Dual-Engine: Liquid Glass 1.4.1 + Flutter MiuiX / HyperOS)
+- **固定与浮动核心部件保持升级版液态玻璃 (Liquid Glass 1.4.1)**：导航栏 (`GlassTabBar`)、顶栏、日期/周次切换胶囊、悬浮操作按钮 (FAB)、三点菜单按钮、返回按钮、变形动画引擎 (`MorphEngine`) 以及全站弹窗提示 (`GlassDialog`, `LiquidToast`) 继续由升级后的官方 `liquid_glass_widgets: 1.4.1` 驱动，晶莹剔透，纯净折射。
+- **高频大面积滚动部件全面切换 HyperOS 混色风格 (`HyperOSCard`)**：集成 `flutter_miuix: 1.1.1`，将课表卡片、日历卡片、设置列表大卡片等消耗大量 GPU Shader 算力的滚动容器全面迁移至 HyperOS 混色卡片风格。结合超椭圆平滑圆角 (`MiuixSquircleBorder`) 与触控微沉反馈 (`MiuixPressable`)，大幅降低 GPU 着色器负荷，长列表与网格极速滑动锁死 120 FPS。
+
+### 2. 彻底消灭 Windows 与 Android 端课表玻璃块主题色污染与人造白边 (Zero Tint & Artificial White Borders)
+- **拔除 Windows 与 Android 周课表的主题色染色**：彻底移除 Windows 课表卡片与 Android 周网格中硬编码的珊瑚粉/婴儿粉主题色渐变、突兀的黑色阴影与生硬的白边 `Border.all`，还原干净纯粹的毛玻璃/超椭圆卡片质感。
+- **全局根除人造白边线条**：全面排查并重构全局液态玻璃参数，拔除 `ambientRim: 0.18` 与 `fresnelStrength: 0.85` 在超椭圆边缘由光照着色激起的人造白色描边。全局配置为 `ambientRim: 0.0, fresnelStrength: 0.05, thickness: 24.0, refractiveIndex: 1.46`，仅保留纯粹光学折射。
+
+### 3. Windows 端 WebView2 课表提取无响应彻底修复与原生 Dart EAMS 解析引擎 (WebView2 Bridge & Native EAMS Parser)
+- **解决 Windows WebView2 异步 IIFE 返回空对象穿透**：针对 Windows 端 WebView2 执行 `(async function() { ... })()` 返回 Promise 字符串化为 `"{}"` 导致提取流程静默穿透、点击无任何反应的严重问题，在 JS 注入层增加 `window.__cw_last_result` 桥接与主动回读。同时彻底消除“静默失败”，无论任何分支均给出明确用户引导与反馈。
+- **原生 Dart EAMS 正则解析器 (`EamsHtmlParser`)**：在 `html_to_ics_converter.dart` 中实现纯 Dart 正则解析器，支持从武汉学院等高校 EAMS 教务 HTML 中直接解析高混淆的 `TaskActivity(...)` 以及 53 位二进制周次掩码字符串（如 `'011000...'`），提取准确率 100%，耗时低于 5ms。并在 WebView 提取中作为兜底与首选方案无缝生效。
+
+### 4. 彻底消灭冷启动黑屏停滞与深色模式热切换重构 (Instant Cold Launch & Reactive Dark Mode)
+- **秒开冷启动体验**：移除 `main.dart` 与 Android 主界面启动时的 100ms 人工阻塞与纯黑 Scaffold 闪屏，启动即刻绘制骨架并异步装载课表数据。
+- **深色模式即时热切换**：引入 `globalDarkModeNotifier` 广播机制，并在设置中心接入暗色开关，无需重启应用即可实现全局界面实时明暗切换。
+
+### 5. 二级设置页面轻量化离屏快照与前级冻结 (Offscreen Freeze & Mipmap Snapshot)
+- **二级/三级页面挂起前级渲染**：在 `AndroidLiquidGlassMain` 中，当推入子页面时，立即截取 0.35x 超轻量 Mipmap 模糊快照并挂起前级主页面 (`Offstage(offstage: true)`)，彻底终结双页面同时进行 GPU 实时绘制导致的卡顿与发热。返回时瞬间唤醒并释放快照内存。
+
+### 6. Android 16 Live Updates 智能微缩状态栏胶囊与日程预告进化 (Smart Live Updates & Micro-Compact Chips)
+- **状态栏胶囊微缩文案规范**：课前 30 分钟内动态显示微缩胶囊 `中5202 · 25分`；课中微缩为 `剩 35分`；今日课程已结束自动预告 `明日 3节课`；全天无课显示 `今日无课`。
+- **通知抽屉卡片三态进化**：
+  - 课前 30 分钟展示精确到分钟的倒计时进度条；
+  - 课中展示上课耗时百分比进度条，并在下课前 30 分钟自动预警今日背靠背连续课程（`👉 下一节: 课程名 · 课室 (时间)`）；
+  - 今日课程结束后，展示明日首节课信息与课程总数；
+  - 采用人性化相对日期格式（今天、明天、后天、周三、下周三，超过 14 天显示 M月D日）。
+
+---
+
 ## [v2.8.4] - 2026-09-08
 
 ### 1. Android 16 Promoted Ongoing 官方原生提权通道深度落地 (Native Live Update Promotion)

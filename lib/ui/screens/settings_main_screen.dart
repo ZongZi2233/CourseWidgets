@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import '../../constants/theme_constants.dart';
 import '../../services/theme_service.dart';
-import '../../utils/glass_settings_helper.dart'; // Added import
 import '../../utils/responsive_utils.dart';
 import 'new_settings_screen.dart';
 import 'settings_general_screen.dart';
@@ -35,15 +34,15 @@ class _SettingsMainScreenState extends State<SettingsMainScreen> {
       body: AdaptiveLiquidGlassLayer(
         quality: GlassQuality.premium,
         settings: const LiquidGlassSettings(
-          blur: 4.0,
-          thickness: 16.0,
-          glassColor: Color(0x15FFFFFF),
-          lightIntensity: 0.75,
-          ambientStrength: 0.50,
-          ambientRim: 0.18,
-          fresnelStrength: 0.85,
+          blur: 3.0,
+          thickness: 24.0,
+          glassColor: Color(0x0EFFFFFF),
+          lightIntensity: 0.70,
+          ambientStrength: 0.45,
+          ambientRim: 0.0,
+          fresnelStrength: 0.05,
           saturation: 1.20,
-          refractiveIndex: 1.38,
+          refractiveIndex: 1.46,
         ),
         child: CustomScrollView(
           physics: const BouncingScrollPhysics(
@@ -119,68 +118,61 @@ class _SettingsMainScreenState extends State<SettingsMainScreen> {
     required VoidCallback onTap,
     required bool isDark,
   }) {
-    // [v2.8.4] 迁移官方 GlassCard，享受共享着色器与高光折射，零生硬白边与黑阴影
-    return GlassCard(
-      shape: const LiquidRoundedSuperellipse(borderRadius: 24),
-      quality: GlassQuality.premium,
-      useOwnLayer: false,
-      padding: EdgeInsets.zero,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(24),
-          onTap: () {
-            HapticFeedback.lightImpact(); // [v2.4.0] 添加触控震动
-            onTap();
-          },
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Row(
+    // [v2.8.5] 迁移至 HyperOSCard：超椭圆平滑曲率与轻量高斯模糊，带来极低重绘开销与 120Hz 满帧
+    return liquid.HyperOSCard(
+      cornerRadius: 22,
+      padding: const EdgeInsets.all(18),
+      onTap: () {
+        HapticFeedback.lightImpact(); // [v2.4.0] 添加触控震动
+        onTap();
+      },
+      child: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  color.withValues(alpha: 0.8),
+                  color.withValues(alpha: 0.4),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(15),
+            ),
+            child: Icon(icon, color: Colors.white, size: 24),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 50,
-                  height: 50,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        color.withValues(alpha: 0.8),
-                        color.withValues(alpha: 0.4),
-                      ],
-                    ),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Icon(icon, color: Colors.white, size: 26),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w800,
-                          color: isDark ? Colors.white : Colors.black87,
-                        ),
-                      ),
-                      Text(
-                        subtitle,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: isDark ? Colors.white60 : Colors.black54,
-                        ),
-                      ),
-                    ],
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: isDark ? Colors.white : const Color(0xFF1A1A2E),
                   ),
                 ),
-                const Icon(Icons.chevron_right_rounded, color: Colors.white30),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isDark ? Colors.white60 : Colors.black54,
+                  ),
+                ),
               ],
             ),
           ),
-        ),
+          Icon(
+            Icons.chevron_right_rounded,
+            color: isDark ? Colors.white30 : Colors.black26,
+          ),
+        ],
       ),
     );
   }

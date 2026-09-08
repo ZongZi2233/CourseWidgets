@@ -49,15 +49,15 @@ class _SettingsNotificationScreenState
       body: AdaptiveLiquidGlassLayer(
         quality: GlassQuality.premium,
         settings: const LiquidGlassSettings(
-          blur: 4.0,
-          thickness: 16.0,
-          glassColor: Color(0x15FFFFFF),
-          lightIntensity: 0.75,
-          ambientStrength: 0.50,
-          ambientRim: 0.18,
-          fresnelStrength: 0.85,
+          blur: 3.0,
+          thickness: 24.0,
+          glassColor: Color(0x0EFFFFFF),
+          lightIntensity: 0.70,
+          ambientStrength: 0.45,
+          ambientRim: 0.0,
+          fresnelStrength: 0.05,
           saturation: 1.20,
-          refractiveIndex: 1.38,
+          refractiveIndex: 1.46,
         ),
         child: Column(
         children: [
@@ -164,10 +164,7 @@ class _SettingsNotificationScreenState
     required bool value,
     required ValueChanged<bool> onChanged,
   }) {
-    return GlassCard(
-      shape: const LiquidRoundedSuperellipse(borderRadius: 24),
-      quality: GlassQuality.premium,
-      useOwnLayer: false,
+    return liquid.HyperOSCard(
       padding: const EdgeInsets.all(20),
       child: Row(
         children: [
@@ -221,10 +218,7 @@ class _SettingsNotificationScreenState
   }
 
   Widget _buildAdvanceTimeCard() {
-    return GlassCard(
-      shape: const LiquidRoundedSuperellipse(borderRadius: 24),
-      quality: GlassQuality.premium,
-      useOwnLayer: false,
+    return liquid.HyperOSCard(
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -315,10 +309,7 @@ class _SettingsNotificationScreenState
   }
 
   Widget _buildInfoCard() {
-    return GlassCard(
-      shape: const LiquidRoundedSuperellipse(borderRadius: 24),
-      quality: GlassQuality.premium,
-      useOwnLayer: false,
+    return liquid.HyperOSCard(
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

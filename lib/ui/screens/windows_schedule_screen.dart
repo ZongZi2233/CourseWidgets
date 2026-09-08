@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/gestures.dart';
 import 'package:provider/provider.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:smooth_scroll_multiplatform/smooth_scroll_multiplatform.dart';
@@ -475,88 +474,60 @@ class _WindowsScheduleScreenState extends State<WindowsScheduleScreen> {
     final showTeacher =
         course.teacher.isNotEmpty &&
         !course.name.contains(course.teacher.split(' ')[0].trim());
+    // [v2.8.5] 迁移至 HyperOSCard：彻底移除软珊瑚主题色染色、黑色投影与白边，回归纯澈透明
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.25),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: GlassContainer(
-          useOwnLayer: true,
-          settings: LiquidGlassSettings(
-            glassColor: AppThemeColors.softCoral.withValues(alpha: 0.6),
-            blur: 8,
-            thickness: 16,
-            refractiveIndex: 1.35,
-            ambientRim: 0.12,
-            fresnelStrength: 0.75,
-          ),
-          shape: const LiquidRoundedSuperellipse(borderRadius: 12),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: () => _showCourseDetail(course),
-              borderRadius: BorderRadius.circular(12),
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      course.name,
-                      maxLines: 3,
-                      overflow: TextOverflow.clip, // [v2.8.0] 允许自动提行
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        height: 1.2,
-                      ),
-                    ),
-                    if (showLocation) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        course.location,
-                        maxLines: 3, // [v2.8.0] 教室允许自动提行
-                        overflow: TextOverflow.clip,
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.white.withValues(alpha: 0.9),
-                        ),
-                      ),
-                    ],
-                    if (showTeacher) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        course.teacher,
-                        maxLines: 3, // [v2.8.0] 老师允许自动提行
-                        overflow: TextOverflow.clip,
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: Colors.white.withValues(alpha: 0.7),
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 2),
-                    Text(
-                      course.timeStr,
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: Colors.white.withValues(alpha: 0.7),
-                      ),
-                    ),
-                  ],
-                ),
+      child: liquid.HyperOSCard(
+        cornerRadius: 12,
+        padding: const EdgeInsets.all(12),
+        onTap: () => _showCourseDetail(course),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              course.name,
+              maxLines: 3,
+              overflow: TextOverflow.clip, // [v2.8.0] 允许自动提行
+              style: const TextStyle(
+                fontSize: 13,
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                height: 1.2,
               ),
             ),
-          ),
+            if (showLocation) ...[
+              const SizedBox(height: 4),
+              Text(
+                course.location,
+                maxLines: 3, // [v2.8.0] 教室允许自动提行
+                overflow: TextOverflow.clip,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Colors.white.withValues(alpha: 0.9),
+                ),
+              ),
+            ],
+            if (showTeacher) ...[
+              const SizedBox(height: 2),
+              Text(
+                course.teacher,
+                maxLines: 3, // [v2.8.0] 老师允许自动提行
+                overflow: TextOverflow.clip,
+                style: TextStyle(
+                  fontSize: 10,
+                  color: Colors.white.withValues(alpha: 0.7),
+                ),
+              ),
+            ],
+            const SizedBox(height: 2),
+            Text(
+              course.timeStr,
+              style: TextStyle(
+                fontSize: 10,
+                color: Colors.white.withValues(alpha: 0.7),
+              ),
+            ),
+          ],
         ),
       ),
     );

@@ -23,6 +23,7 @@ import '../transitions/smooth_slide_transitions.dart';
 import '../widgets/glass_context_menu.dart';
 import '../widgets/tablet_sidebar.dart';
 import '../widgets/weekly_schedule_grid.dart';
+import '../transitions/page_blur_controller.dart';
 
 class AndroidLiquidGlassMain extends StatefulWidget {
   const AndroidLiquidGlassMain({super.key});
@@ -51,10 +52,11 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
     routeObserver.subscribe(this, ModalRoute.of(context) as PageRoute);
   }
 
-  // [v2.6.0/v2.8.4] 被其他页面覆盖时，隐藏导航栏并离屏冻结前级渲染管线
+  // [v2.6.0/v2.8.5] 被其他页面覆盖时，隐藏导航栏并在进入前抓取轻量离屏 mipmap 快照，彻底离屏冻结前级渲染管线
   @override
   void didPushNext() {
     if (mounted) {
+      PageBlurController.instance.capture(TransparentMaterialPageRoute.contentBoundaryKey);
       setState(() {
         _isBottomNavVisible = false;
         _isCoveredBySubPage = true;
@@ -62,7 +64,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
     }
   }
 
-  // [v2.6.0/v2.8.4] 上一层页面弹出，回到当前页面时，显示导航栏并唤醒底层渲染
+  // [v2.6.0/v2.8.5] 上一层页面弹出，回到当前页面时，显示导航栏并唤醒底层渲染，释放离屏快照
   @override
   void didPopNext() {
     if (mounted) {
@@ -70,13 +72,24 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
         _isBottomNavVisible = true;
         _isCoveredBySubPage = false;
       });
+      PageBlurController.instance.clear();
     }
+  }
+
+  ScheduleProvider? _scheduleProvider;
+
+  void _onScheduleChanged() {
+    if (!mounted || _scheduleProvider == null) return;
+    final nextCourse = _scheduleProvider!.getCurrentOrNextCourse();
+    LiveNotificationServiceV2().updateCourses(_scheduleProvider!.courses, nextCourse: nextCourse);
   }
 
   Future<void> _loadData() async {
     try {
-      final provider = context.read<ScheduleProvider>();
-      await provider.loadSavedData();
+      _scheduleProvider = context.read<ScheduleProvider>();
+      _scheduleProvider?.removeListener(_onScheduleChanged);
+      _scheduleProvider?.addListener(_onScheduleChanged);
+      await _scheduleProvider!.loadSavedData();
 
       // 初始化 Android 16 Live Updates 通知服务
       final liveService = LiveNotificationServiceV2();
@@ -90,9 +103,9 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
         }
       });
 
-      // [v2.8.0] 获取当前或下一节课并启动全天候实时常驻通知
-      final nextCourse = provider.getCurrentOrNextCourse();
-      await liveService.startLiveUpdate(nextCourse);
+      // [v2.8.5] 获取当前或下一节课并启动全天候实时常驻通知（智能日程计算与微缩胶囊）
+      final nextCourse = _scheduleProvider!.getCurrentOrNextCourse();
+      await liveService.startLiveUpdate(nextCourse, allCourses: _scheduleProvider!.courses);
 
       if (mounted) {
         setState(() => _isLoading = false);
@@ -108,6 +121,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
   @override
   void dispose() {
     routeObserver.unsubscribe(this); // [v2.6.0] 卸载路由监听
+    _scheduleProvider?.removeListener(_onScheduleChanged);
     // 停止通知服务
     LiveNotificationServiceV2().dispose();
     super.dispose();
@@ -115,13 +129,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
 
   @override
   Widget build(BuildContext context) {
-    // [v2.2.8修复] 显示加载状态
-    if (_isLoading) {
-      return const Scaffold(
-        backgroundColor: Colors.transparent,
-        body: Center(child: CircularProgressIndicator(color: Colors.white)),
-      );
-    }
+    // [v2.8.5 彻底消灭启动黑屏与白屏停滞] 立即绘制主界面布局，数据异步装载完毕后自动驱动刷新
 
     final isTablet = ResponsiveUtils.isTabletMode(context);
     final Widget rootLayout = isTablet
@@ -170,31 +178,56 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
           Expanded(
             child: RepaintBoundary(
               key: TransparentMaterialPageRoute.contentBoundaryKey,
-              child: TickerMode(
-                enabled: !_isCoveredBySubPage,
-                child: IndexedStack(
-                  index: _currentIndex,
-                  children: [
-                    TickerMode(
-                      enabled: _currentIndex == 0 && !_isCoveredBySubPage,
-                      child: RepaintBoundary(
-                        child: _buildTabletSchedulePage(),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Offstage(
+                    offstage: _isCoveredBySubPage,
+                    child: TickerMode(
+                      enabled: !_isCoveredBySubPage,
+                      child: IndexedStack(
+                        index: _currentIndex,
+                        children: [
+                          TickerMode(
+                            enabled: _currentIndex == 0 && !_isCoveredBySubPage,
+                            child: RepaintBoundary(
+                              child: _buildTabletSchedulePage(),
+                            ),
+                          ),
+                          TickerMode(
+                            enabled: _currentIndex == 1 && !_isCoveredBySubPage,
+                            child: const RepaintBoundary(
+                              child: CalendarViewScreen(),
+                            ),
+                          ),
+                          TickerMode(
+                            enabled: _currentIndex == 2 && !_isCoveredBySubPage,
+                            child: const RepaintBoundary(
+                              child: SettingsMainScreen(),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    TickerMode(
-                      enabled: _currentIndex == 1 && !_isCoveredBySubPage,
-                      child: const RepaintBoundary(
-                        child: CalendarViewScreen(),
+                  ),
+                  if (_isCoveredBySubPage)
+                    Positioned.fill(
+                      child: ListenableBuilder(
+                        listenable: PageBlurController.instance,
+                        builder: (context, _) {
+                          final img = PageBlurController.instance.capturedImage;
+                          if (img != null) {
+                            return RawImage(
+                              image: img,
+                              fit: BoxFit.cover,
+                              filterQuality: FilterQuality.low,
+                            );
+                          }
+                          return const SizedBox.shrink();
+                        },
                       ),
                     ),
-                    TickerMode(
-                      enabled: _currentIndex == 2 && !_isCoveredBySubPage,
-                      child: const RepaintBoundary(
-                        child: SettingsMainScreen(),
-                      ),
-                    ),
-                  ],
-                ),
+                ],
               ),
             ),
           ),
@@ -212,31 +245,56 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
         body: GlassContentAwareContent(
           child: RepaintBoundary(
             key: TransparentMaterialPageRoute.contentBoundaryKey,
-            child: TickerMode(
-              enabled: !_isCoveredBySubPage,
-              child: IndexedStack(
-                index: _currentIndex,
-                children: [
-                  TickerMode(
-                    enabled: _currentIndex == 0 && !_isCoveredBySubPage,
-                    child: RepaintBoundary(
-                      child: _buildSchedulePage(),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Offstage(
+                  offstage: _isCoveredBySubPage,
+                  child: TickerMode(
+                    enabled: !_isCoveredBySubPage,
+                    child: IndexedStack(
+                      index: _currentIndex,
+                      children: [
+                        TickerMode(
+                          enabled: _currentIndex == 0 && !_isCoveredBySubPage,
+                          child: RepaintBoundary(
+                            child: _buildSchedulePage(),
+                          ),
+                        ),
+                        TickerMode(
+                          enabled: _currentIndex == 1 && !_isCoveredBySubPage,
+                          child: const RepaintBoundary(
+                            child: CalendarViewScreen(),
+                          ),
+                        ),
+                        TickerMode(
+                          enabled: _currentIndex == 2 && !_isCoveredBySubPage,
+                          child: RepaintBoundary(
+                            child: _buildPageWithHeader(2, const SettingsMainScreen(), '设置'),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  TickerMode(
-                    enabled: _currentIndex == 1 && !_isCoveredBySubPage,
-                    child: const RepaintBoundary(
-                      child: CalendarViewScreen(),
+                ),
+                if (_isCoveredBySubPage)
+                  Positioned.fill(
+                    child: ListenableBuilder(
+                      listenable: PageBlurController.instance,
+                      builder: (context, _) {
+                        final img = PageBlurController.instance.capturedImage;
+                        if (img != null) {
+                          return RawImage(
+                            image: img,
+                            fit: BoxFit.cover,
+                            filterQuality: FilterQuality.low,
+                          );
+                        }
+                        return const SizedBox.shrink();
+                      },
                     ),
                   ),
-                  TickerMode(
-                    enabled: _currentIndex == 2 && !_isCoveredBySubPage,
-                    child: RepaintBoundary(
-                      child: _buildPageWithHeader(2, const SettingsMainScreen(), '设置'),
-                    ),
-                  ),
-                ],
-              ),
+              ],
             ),
           ),
         ),
@@ -266,16 +324,16 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                 magnification: 1.12,
                 interactionBehavior: GlassInteractionBehavior.full,
                 settings: const LiquidGlassSettings(
-                  thickness: 20,
-                  blur: 6.0,
+                  thickness: 24.0,
+                  blur: 4.0,
                   chromaticAberration: 0.15,
                   lightIntensity: 0.70,
-                  refractiveIndex: 1.40,
+                  refractiveIndex: 1.46,
                   saturation: 1.20,
-                  ambientStrength: 0.50,
-                  ambientRim: 0.15,
-                  fresnelStrength: 0.80,
-                  glassColor: Color(0x20FFFFFF),
+                  ambientStrength: 0.45,
+                  ambientRim: 0.0,
+                  fresnelStrength: 0.05,
+                  glassColor: Color(0x18FFFFFF),
                 ),
                 // [v2.8.4] 遵循官方演示：采用 100% 纯澈透光的物理凸透镜滑块（blur: 0，无任何高斯模糊浑浊感）
                 indicatorSettings: AnimatedGlassIndicator.baseIndicatorSettings,
@@ -376,14 +434,14 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                   quality: GlassQuality.premium,
                   shape: const LiquidRoundedSuperellipse(borderRadius: 20),
                   settings: const LiquidGlassSettings(
-                    glassColor: Color(0x18FFFFFF),
-                    blur: 3.0,
-                    thickness: 14.0,
-                    refractiveIndex: 1.35,
+                    glassColor: Color(0x12FFFFFF),
+                    blur: 2.5,
+                    thickness: 20.0,
+                    refractiveIndex: 1.45,
                     lightIntensity: 0.70,
-                    ambientStrength: 0.50,
-                    ambientRim: 0.15,
-                    fresnelStrength: 0.85,
+                    ambientStrength: 0.45,
+                    ambientRim: 0.0,
+                    fresnelStrength: 0.05,
                     saturation: 1.20,
                   ),
                   child: Padding(
@@ -431,15 +489,15 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
     return AdaptiveLiquidGlassLayer(
       quality: GlassQuality.premium,
       settings: const LiquidGlassSettings(
-        blur: 4.0,
-        thickness: 16.0,
-        glassColor: Color(0x18FFFFFF),
-        lightIntensity: 0.75,
-        ambientStrength: 0.50,
-        ambientRim: 0.15,
-        fresnelStrength: 0.85,
+        blur: 3.0,
+        thickness: 24.0,
+        glassColor: Color(0x0EFFFFFF),
+        lightIntensity: 0.70,
+        ambientStrength: 0.45,
+        ambientRim: 0.0,
+        fresnelStrength: 0.05,
         saturation: 1.20,
-        refractiveIndex: 1.38,
+        refractiveIndex: 1.46,
       ),
       child: Consumer<ScheduleProvider>(
         builder: (context, provider, _) {
@@ -515,14 +573,14 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
         quality: GlassQuality.premium,
         shape: const LiquidRoundedSuperellipse(borderRadius: 20),
         settings: const LiquidGlassSettings(
-          glassColor: Color(0x18FFFFFF),
-          blur: 3.0,
-          thickness: 14.0,
-          refractiveIndex: 1.38,
+          glassColor: Color(0x12FFFFFF),
+          blur: 2.5,
+          thickness: 20.0,
+          refractiveIndex: 1.45,
           lightIntensity: 0.70,
-          ambientStrength: 0.50,
-          ambientRim: 0.15,
-          fresnelStrength: 0.85,
+          ambientStrength: 0.45,
+          ambientRim: 0.0,
+          fresnelStrength: 0.05,
           saturation: 1.20,
         ),
         child: Padding(
@@ -756,14 +814,14 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
         quality: GlassQuality.premium,
         shape: const LiquidRoundedSuperellipse(borderRadius: 18),
         settings: const LiquidGlassSettings(
-          glassColor: Color(0x18FFFFFF),
-          blur: 3.0,
-          thickness: 14.0,
-          refractiveIndex: 1.38,
+          glassColor: Color(0x12FFFFFF),
+          blur: 2.5,
+          thickness: 18.0,
+          refractiveIndex: 1.45,
           lightIntensity: 0.70,
-          ambientStrength: 0.50,
-          ambientRim: 0.15,
-          fresnelStrength: 0.85,
+          ambientStrength: 0.45,
+          ambientRim: 0.0,
+          fresnelStrength: 0.05,
           saturation: 1.20,
         ),
         child: Padding(
@@ -907,8 +965,8 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
     return RepaintBoundary(
       child: Padding(
         padding: const EdgeInsets.only(bottom: 12),
-        child: GlassCard(
-          shape: const LiquidRoundedSuperellipse(borderRadius: 22),
+        child: liquid.HyperOSCard(
+          cornerRadius: 20,
           padding: const EdgeInsets.all(16),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
@@ -918,25 +976,9 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                   width: 58,
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: isDark
-                          ? [
-                              AppThemeColors.babyPink.withValues(alpha: 0.35),
-                              AppThemeColors.softCoral.withValues(alpha: 0.22),
-                            ]
-                          : [
-                              AppThemeColors.babyPink.withValues(alpha: 0.20),
-                              AppThemeColors.softCoral.withValues(alpha: 0.12),
-                            ],
-                    ),
-                    border: Border.all(
-                      color: isDark
-                          ? Colors.white.withValues(alpha: 0.12)
-                          : AppThemeColors.babyPink.withValues(alpha: 0.35),
-                      width: 0.8,
-                    ),
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.08)
+                        : Colors.white.withValues(alpha: 0.16),
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: Column(
@@ -1205,10 +1247,10 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
           settings: LiquidGlassSettings(
             glassColor: Colors.black.withValues(alpha: 0.40),
             blur: 4.0,
-            thickness: 16.0,
-            refractiveIndex: 1.38,
-            ambientRim: 0.15,
-            fresnelStrength: 0.85,
+            thickness: 22.0,
+            refractiveIndex: 1.45,
+            ambientRim: 0.0,
+            fresnelStrength: 0.05,
           ),
           child: SafeArea(
             child: Padding(
