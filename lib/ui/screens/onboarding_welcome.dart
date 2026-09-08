@@ -112,20 +112,23 @@ class _OnboardingWelcomeState extends State<OnboardingWelcome>
   }
 
   Widget _buildLogoGlass() {
-    // [v2.3.0修复] 使用 GlassContainer 获得真正的玻璃效果
+    // [v2.8.6] 升级至 Liquid Glass 1.4.1 Premium 纯净光学折射，消除暗角吸光与边缘泛白
     return GlassContainer(
       width: 280, // [v2.3.2修复] 增加宽度防止文字换行
       height: 240,
       shape: const LiquidRoundedSuperellipse(borderRadius: 48),
       settings: LiquidGlassSettings(
-        glassColor: Colors.white.withValues(alpha: 0.15),
-        blur: 1.5,
-        thickness: 18,
-        ambientRim: 0.06,
-        fresnelStrength: 0.15,
-        edgeAbsorption: 0.15,
+        glassColor: Colors.white.withValues(alpha: 0.16),
+        blur: 2.0,
+        thickness: 20,
+        refractiveIndex: 1.40,
+        lightIntensity: 0.70,
+        ambientStrength: 0.45,
+        ambientRim: 0.0, // [v2.8.6] 彻底消除人造白边
+        edgeAbsorption: 0.0, // [v2.8.6] 彻底消除边缘暗角吸光
+        fresnelStrength: 0.05,
       ),
-      quality: GlassQuality.standard,
+      quality: GlassQuality.premium,
       child: Padding(
         padding: const EdgeInsets.all(40),
         child: Column(

@@ -14,8 +14,13 @@ class AndroidScheduleConfigScreen extends StatefulWidget {
   /// [v2.3.0] 是否显示导航元素（返回按钮、保存按钮）
   /// 在引导页面中嵌入时设为 false，独立使用时设为 true
   final bool showNavigation;
+  final EdgeInsetsGeometry? contentPadding;
 
-  const AndroidScheduleConfigScreen({super.key, this.showNavigation = true});
+  const AndroidScheduleConfigScreen({
+    super.key,
+    this.showNavigation = true,
+    this.contentPadding,
+  });
 
   @override
   State<AndroidScheduleConfigScreen> createState() =>
@@ -151,38 +156,59 @@ class _AndroidScheduleConfigScreenState
 
   void _smartCascadeSectionTimes() {
     final firstStartStr = _startControllers[0].text;
-    final firstStartMin = _parseTime(firstStartStr) ?? 510; // 默认 8:30 (510分钟)
-    final duration = int.tryParse(_durationControllers[0].text) ?? 45;
-    final breakTime = int.tryParse(_breakTimeController.text) ?? 10;
+    final firstStartMin = _parseTime(firstStartStr) ?? (8 * 60); // 默认 8:00 (480分钟)
+    const duration = 45; // 45分钟一节
+    const smallBreak = 5; // 小课间5分钟
+    const bigBreak = 15; // 大课间15分钟
 
     int currentMin = firstStartMin;
     for (int i = 0; i < 12; i++) {
       if (i == 0) {
         currentMin = firstStartMin;
+      } else if (i == 1) {
+        // 第2节：与第1节同门课，中途小课间5分钟
+        currentMin += duration + smallBreak;
       } else if (i == 2) {
-        // 上午大课间 (默认20分钟)
-        currentMin += duration + math.max(breakTime, 20);
+        // 第3节：第2节与第3节之间大课间15分钟
+        currentMin += duration + bigBreak;
+      } else if (i == 3) {
+        // 第4节：与第3节同门课，中途小课间5分钟
+        currentMin += duration + smallBreak;
       } else if (i == 4) {
-        // 下午第一节（第5节），保证午休后开始（如13:30或14:00）
-        currentMin = math.max(currentMin + duration + 90, 13 * 60 + 30);
+        // 第5节：下午第一节，保证14:00起课（或根据上午结束自动顺延）
+        currentMin = math.max(currentMin + duration + 120, 14 * 60);
+      } else if (i == 5) {
+        // 第6节：与第5节同门课，中途小课间5分钟
+        currentMin += duration + smallBreak;
       } else if (i == 6) {
-        // 下午大课间
-        currentMin += duration + math.max(breakTime, 20);
+        // 第7节：第6节与第7节之间下午大课间15分钟
+        currentMin += duration + bigBreak;
+      } else if (i == 7) {
+        // 第8节：与第7节同门课，中途小课间5分钟
+        currentMin += duration + smallBreak;
       } else if (i == 8) {
-        // 晚自习第一节（第9节），保证晚饭后开始（如18:30）
-        currentMin = math.max(currentMin + duration + 70, 18 * 60 + 30);
-      } else {
-        currentMin += duration + breakTime;
+        // 第9节：晚自习第一节，保证18:30起课（或根据下午结束自动顺延）
+        currentMin = math.max(currentMin + duration + 60, 18 * 60 + 30);
+      } else if (i == 9) {
+        // 第10节：与第9节同门课，中途小课间5分钟
+        currentMin += duration + smallBreak;
+      } else if (i == 10) {
+        // 第11节：第10节与第11节之间晚上大课间15分钟
+        currentMin += duration + bigBreak;
+      } else if (i == 11) {
+        // 第12节：与第11节同门课，中途小课间5分钟
+        currentMin += duration + smallBreak;
       }
 
       _startControllers[i].text = _formatMinutes(currentMin);
       _durationControllers[i].text = duration.toString();
     }
+    _breakTimeController.text = smallBreak.toString();
     setState(() {});
     _saveConfigQuietly();
     liquid.showLiquidToast(
       context,
-      '✨ 已智能推算并保存所有节次时间（第1节从 ${_formatMinutes(firstStartMin)} 开始）',
+      '✨ 已推算大学大小课间：45m课时+5m小课间+15m大课间 (下午14:00/晚间18:30)',
     );
   }
 
@@ -346,7 +372,7 @@ class _AndroidScheduleConfigScreenState
           // Content - 使用ListView优化滚动
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.all(16),
+              padding: widget.contentPadding ?? const EdgeInsets.all(16),
               physics: const BouncingScrollPhysics(),
               children: [
                 // 基础设置
@@ -451,6 +477,9 @@ class _AndroidScheduleConfigScreenState
                       ],
                     ),
                   ),
+
+                  // [v2.8.6] 保证无论是否导入课表，基础设置与课时设置均有优雅间距
+                  const SizedBox(height: 16),
 
                   // [v2.8.0] 课表首周智能对齐卡片
                   Consumer<ScheduleProvider>(

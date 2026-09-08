@@ -37,6 +37,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
   bool _isLoading = true;
   bool _isBottomNavVisible = true;
   bool _isCoveredBySubPage = false; // [v2.8.4] 二级页面覆盖状态，用于彻底离屏冻结前级页面 Ticker 与着色管线
+  bool _isWeekPickerActive = false; // [v2.8.6] 周次选择器打开状态，用于挂起背景重绘保障 120 FPS
   final DataImportService _importService = DataImportService();
 
   @override
@@ -52,14 +53,19 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
     routeObserver.subscribe(this, ModalRoute.of(context) as PageRoute);
   }
 
-  // [v2.6.0/v2.8.5] 被其他页面覆盖时，隐藏导航栏并在进入前抓取轻量离屏 mipmap 快照，彻底离屏冻结前级渲染管线
+  // [v2.6.0/v2.8.6] 被其他页面覆盖时，隐藏导航栏并在截图捕获完成后再激活离屏冻结，消除瞬间黑屏闪烁
   @override
   void didPushNext() {
     if (mounted) {
-      PageBlurController.instance.capture(TransparentMaterialPageRoute.contentBoundaryKey);
       setState(() {
         _isBottomNavVisible = false;
-        _isCoveredBySubPage = true;
+      });
+      PageBlurController.instance.capture(TransparentMaterialPageRoute.contentBoundaryKey).then((success) {
+        if (mounted && success) {
+          setState(() {
+            _isCoveredBySubPage = true;
+          });
+        }
       });
     }
   }
@@ -145,6 +151,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
   /// 平板布局
   Widget _buildTabletLayout(BuildContext context) {
     return Scaffold(
+      resizeToAvoidBottomInset: false, // [v2.8.6] 软键盘弹出时防止底层背景与冻结快照被压缩或上移漂移
       backgroundColor: Colors.transparent,
       body: Row(
         children: [
@@ -189,7 +196,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                         index: _currentIndex,
                         children: [
                           TickerMode(
-                            enabled: _currentIndex == 0 && !_isCoveredBySubPage,
+                            enabled: _currentIndex == 0 && !_isCoveredBySubPage && !_isWeekPickerActive,
                             child: RepaintBoundary(
                               child: _buildTabletSchedulePage(),
                             ),
@@ -212,19 +219,26 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                   ),
                   if (_isCoveredBySubPage)
                     Positioned.fill(
-                      child: ListenableBuilder(
-                        listenable: PageBlurController.instance,
-                        builder: (context, _) {
-                          final img = PageBlurController.instance.capturedImage;
-                          if (img != null) {
-                            return RawImage(
-                              image: img,
-                              fit: BoxFit.cover,
-                              filterQuality: FilterQuality.low,
-                            );
-                          }
-                          return const SizedBox.shrink();
-                        },
+                      child: MediaQuery.removeViewInsets(
+                        removeBottom: true,
+                        removeTop: true,
+                        removeLeft: true,
+                        removeRight: true,
+                        context: context,
+                        child: ListenableBuilder(
+                          listenable: PageBlurController.instance,
+                          builder: (context, _) {
+                            final img = PageBlurController.instance.capturedImage;
+                            if (img != null) {
+                              return RawImage(
+                                image: img,
+                                fit: BoxFit.cover,
+                                filterQuality: FilterQuality.medium,
+                              );
+                            }
+                            return const SizedBox.shrink();
+                          },
+                        ),
                       ),
                     ),
                 ],
@@ -240,6 +254,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
   Widget _buildPhoneLayout(BuildContext context) {
     return GlassContentAwareScope(
       child: Scaffold(
+        resizeToAvoidBottomInset: false, // [v2.8.6] 软键盘弹出时防止底层背景与冻结快照被压缩或上移漂移
         backgroundColor: Colors.transparent,
         extendBody: true,
         body: GlassContentAwareContent(
@@ -256,7 +271,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                       index: _currentIndex,
                       children: [
                         TickerMode(
-                          enabled: _currentIndex == 0 && !_isCoveredBySubPage,
+                          enabled: _currentIndex == 0 && !_isCoveredBySubPage && !_isWeekPickerActive,
                           child: RepaintBoundary(
                             child: _buildSchedulePage(),
                           ),
@@ -279,19 +294,26 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                 ),
                 if (_isCoveredBySubPage)
                   Positioned.fill(
-                    child: ListenableBuilder(
-                      listenable: PageBlurController.instance,
-                      builder: (context, _) {
-                        final img = PageBlurController.instance.capturedImage;
-                        if (img != null) {
-                          return RawImage(
-                            image: img,
-                            fit: BoxFit.cover,
-                            filterQuality: FilterQuality.low,
-                          );
-                        }
-                        return const SizedBox.shrink();
-                      },
+                    child: MediaQuery.removeViewInsets(
+                      removeBottom: true,
+                      removeTop: true,
+                      removeLeft: true,
+                      removeRight: true,
+                      context: context,
+                      child: ListenableBuilder(
+                        listenable: PageBlurController.instance,
+                        builder: (context, _) {
+                          final img = PageBlurController.instance.capturedImage;
+                          if (img != null) {
+                            return RawImage(
+                              image: img,
+                              fit: BoxFit.cover,
+                              filterQuality: FilterQuality.medium,
+                            );
+                          }
+                          return const SizedBox.shrink();
+                        },
+                      ),
                     ),
                   ),
               ],
@@ -1237,6 +1259,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
     final weeks = provider.availableWeeks;
     if (weeks.isEmpty) return;
 
+    setState(() => _isWeekPickerActive = true);
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -1352,7 +1375,11 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
           ),
         );
       },
-    );
+    ).whenComplete(() {
+      if (mounted) {
+        setState(() => _isWeekPickerActive = false);
+      }
+    });
   }
 }
 

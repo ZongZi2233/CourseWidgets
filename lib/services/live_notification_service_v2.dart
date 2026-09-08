@@ -252,7 +252,7 @@ class LiveNotificationServiceV2 {
       icon: '@mipmap/ic_launcher',
       styleInformation: BigTextStyleInformation(
         '${_currentCourse!.location}\n${start.hour}:${start.minute.toString().padLeft(2, '0')} 开始',
-        contentTitle: '⏰ 10 分钟后上课',
+        contentTitle: '10 分钟后上课',
         summaryText: _currentCourse!.name,
       ),
     );
@@ -263,8 +263,8 @@ class LiveNotificationServiceV2 {
 
     if (Platform.isWindows) {
       final windowToast = LocalNotification(
-        title: '⏰ 10 分钟后上课',
-        body: '${_currentCourse!.name} · ${_currentCourse!.location}',
+        title: '10 分钟后上课',
+        body: '${_currentCourse!.name} ${_currentCourse!.location}',
       );
       windowToast.onClick = () {
         if (_onNotificationTapCallback != null && _currentCourse != null) {
@@ -275,8 +275,8 @@ class LiveNotificationServiceV2 {
     } else {
       await _notificationsPlugin.show(
         id: _reminderNotificationId,
-        title: '⏰ 10 分钟后上课',
-        body: '${_currentCourse!.name} · ${_currentCourse!.location}',
+        title: '10 分钟后上课',
+        body: '${_currentCourse!.name} ${_currentCourse!.location}',
         notificationDetails: details,
         payload: 'reminder_${_currentCourse!.startTime}',
       );
@@ -353,7 +353,6 @@ class LiveNotificationServiceV2 {
 
     String title;
     String body;
-    String emoji = '📚';
     DateTime? eventTime;
     bool isCountingDown = false;
     String subLocation = '课表助手';
@@ -367,13 +366,11 @@ class LiveNotificationServiceV2 {
         final first = tomorrowCourses.first;
         final startDt = DateTime.fromMillisecondsSinceEpoch(first.startTime);
         final startStr = '${startDt.hour}:${startDt.minute.toString().padLeft(2, '0')}';
-        emoji = '🌙';
         title = '今日课程已结束';
-        body = '明日共 ${tomorrowCourses.length} 节课 · 首节 ${first.name} ($startStr · ${first.location})';
-        subLocation = '明日 ${tomorrowCourses.length}节课';
+        body = '明日共${tomorrowCourses.length}节课 首节 ${first.name} ($startStr ${first.location})';
+        subLocation = '明日${tomorrowCourses.length}节课';
       } else {
-        emoji = '☕';
-        title = '今日无课 · 享受悠闲时光';
+        title = '今日无课 享受悠闲时光';
         body = '课程表全天候同步中，点击查看完整课表';
         subLocation = '今日无课';
       }
@@ -389,10 +386,9 @@ class LiveNotificationServiceV2 {
         final remainingMinutes = ((end.millisecondsSinceEpoch - nowMs) / 60000).ceil();
 
         if (remainingMinutes > 0) {
-          emoji = '📚';
-          title = '正在上课 · 剩 $remainingMinutes 分钟';
-          body = '${_currentCourse!.name} · ${_currentCourse!.location}';
-          subLocation = '剩 ${remainingMinutes}分';
+          title = '正在上课 剩$remainingMinutes分钟';
+          body = '${_currentCourse!.name} ${_currentCourse!.location}';
+          subLocation = '剩${remainingMinutes}分';
 
           if (totalMs > 0) {
             progressPercent = ((elapsedMs / totalMs) * 100).clamp(0, 100).toInt();
@@ -406,12 +402,11 @@ class LiveNotificationServiceV2 {
           if (nextCourseToday != null) {
             final nextStart = DateTime.fromMillisecondsSinceEpoch(nextCourseToday.startTime);
             final nextStartStr = '${nextStart.hour}:${nextStart.minute.toString().padLeft(2, '0')}';
-            body += '\n👉 下一节: ${nextCourseToday.name} · ${nextCourseToday.location} ($nextStartStr)';
+            body += '\n下一节: ${nextCourseToday.name} ${nextCourseToday.location} ($nextStartStr)';
           }
         } else {
           // 刚刚下课过渡
-          emoji = '☕';
-          title = '已下课 · 休息中';
+          title = '已下课 休息中';
           body = '${_currentCourse!.name} 刚刚结束';
           subLocation = '课间休息';
         }
@@ -423,34 +418,30 @@ class LiveNotificationServiceV2 {
 
         if (isToday) {
           if (minutesUntil <= 30) {
-            // 课前30分钟内：微缩胶囊 "中5202 · 25分"，并展示倒计时进度条
-            subLocation = '${_currentCourse!.location} · ${minutesUntil}分';
+            // 课前30分钟内：微缩胶囊 "中5202 25分"，极简无emoji
+            subLocation = '${_currentCourse!.location} ${minutesUntil}分';
             progressPercent = (((30 - minutesUntil) / 30) * 100).clamp(0, 100).toInt();
             showProgress = true;
 
             if (minutesUntil <= 10) {
-              emoji = '🔔';
               title = '马上开始 ($minutesUntil分钟后)';
             } else {
-              emoji = '⏰';
               title = '即将上课 ($minutesUntil分钟后)';
             }
-            body = '${_currentCourse!.name} · ${_currentCourse!.location} · $startStr 开始';
+            body = '${_currentCourse!.name} ${_currentCourse!.location} $startStr 开始';
           } else {
             // 课前30分钟以上
-            emoji = '⏰';
             title = '下节课 ($startStr)';
-            body = '${_currentCourse!.name} · ${_currentCourse!.location}';
-            subLocation = '${_currentCourse!.location} · $startStr';
+            body = '${_currentCourse!.name} ${_currentCourse!.location}';
+            subLocation = '${_currentCourse!.location} $startStr';
             showProgress = false;
           }
         } else {
           // 非今日课程（明日、后天或下周预告）
           final relDay = _formatRelativeDate(start, now);
-          emoji = '📅';
-          title = '课程预告 · $relDay';
-          body = '${_currentCourse!.name} · $startStr · ${_currentCourse!.location}';
-          subLocation = '$relDay $startStr';
+          title = '$relDay课程';
+          body = '${_currentCourse!.name} $startStr ${_currentCourse!.location}';
+          subLocation = '$relDay$startStr';
           showProgress = false;
         }
 
@@ -488,8 +479,8 @@ class LiveNotificationServiceV2 {
         subText: subLocation,
         styleInformation: BigTextStyleInformation(
           body,
-          contentTitle: '$emoji $title',
-          summaryText: '实时活动 · Live Update',
+          contentTitle: title,
+          summaryText: '实时活动',
         ),
         // 操作按钮
         actions: <AndroidNotificationAction>[
@@ -524,7 +515,7 @@ class LiveNotificationServiceV2 {
         subText: subLocation,
         styleInformation: BigTextStyleInformation(
           body,
-          contentTitle: '$emoji $title',
+          contentTitle: title,
           summaryText: '课程提醒',
         ),
         actions: <AndroidNotificationAction>[
@@ -548,7 +539,7 @@ class LiveNotificationServiceV2 {
     }
 
     if (Platform.isWindows) {
-      final windowToast = LocalNotification(title: '$emoji $title', body: body);
+      final windowToast = LocalNotification(title: title, body: body);
       windowToast.onClick = () {
         if (_onNotificationTapCallback != null && _currentCourse != null) {
           _onNotificationTapCallback!(_currentCourse!);
@@ -562,7 +553,7 @@ class LiveNotificationServiceV2 {
         const MethodChannel liveChannel = MethodChannel('com.zongzi.schedule/live_update');
         await liveChannel.invokeMethod('postPromotedLiveUpdate', {
           'id': _liveNotificationId,
-          'title': '$emoji $title',
+          'title': title,
           'body': body,
           'subLocation': subLocation,
           'progress': progressPercent,
@@ -580,7 +571,7 @@ class LiveNotificationServiceV2 {
       if (!nativeSucceeded) {
         await _notificationsPlugin.show(
           id: _liveNotificationId,
-          title: '$emoji $title',
+          title: title,
           body: body,
           notificationDetails: details,
           payload: _currentCourse != null ? 'course_${_currentCourse!.startTime}' : 'course_general',
@@ -589,7 +580,7 @@ class LiveNotificationServiceV2 {
     } else {
       await _notificationsPlugin.show(
         id: _liveNotificationId,
-        title: '$emoji $title',
+        title: title,
         body: body,
         notificationDetails: details,
         payload: _currentCourse != null ? 'course_${_currentCourse!.startTime}' : 'course_general',

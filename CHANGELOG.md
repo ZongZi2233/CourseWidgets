@@ -4,6 +4,38 @@
 
 ---
 
+## [v2.8.6] - 2026-09-08
+
+### 1. Android 16 实况胶囊与常驻通知深度净化 (Live Updates Ultra-Clean Text)
+- **严格拔除所有 Emoji 表情**：从常驻通知标题、正文、SubText 微缩胶囊中全面剔除 `🌙`、`☕`、`📚`、`⏰`、`🔔`、`📅` 等所有表情符号，杜绝花哨杂乱，呈现纯粹极简排版。
+- **消灭冗余前缀与点号**：移除 `课程预告 · ` 等多余字样，状态栏胶囊采用超清简练文案（如 `明日3节课`、`今日无课`、`中5202 25分`、`剩35分`），支持超长文字自然走马灯平滑滚动。
+- **优化通知摘要与交互**：课程结束自动预告明日首节，下课课间平稳展示休息状态，保持通知系统轻盈内敛。
+
+### 2. 二级页面转场与输入法软键盘 Mipmap 畸变彻底根除 (Stationary Snapshot & High-Res 0.65x Sampling)
+- **消灭输入法顶起背景快照漂移 Bug**：修复在“添加/编辑课程”等二级页面弹出软键盘时，底层 Scaffold 避让键盘导致离屏 mipmap 背景快照被强行压缩上移的严重视觉错位问题。通过 `resizeToAvoidBottomInset: false` 与 `MediaQuery.removeViewInsets(removeBottom: true)` 将底层冻结纹理完全锚定在屏幕物理绝对原点，输入框正常滚动避让而背景纹丝不动。
+- **升级转场快照采样比率至 0.65x**：将 `PageBlurController` 采样比率由 0.35 提升至 0.65，彻底消灭二次模糊带来的像素噪点与颗粒感，保持离屏质感如水晶般通透。
+- **杜绝转场瞬间黑屏闪烁 (Zero-Flash)**：优化离屏路由挂起时序，确保在 RepaintBoundary 截图就绪后再行激活 Offstage 挂起，切入二级页面时零闪烁无缝衔接。
+
+### 3. 添加/编辑课程页面全面重构 (HyperOSCard Course Edit Page)
+- **迁移至 HyperOSCard 超椭圆混色架构**：将 `course_edit_screen.dart` 的基础信息与时间信息表单卡片从旧版 `LiquidCard` 重构为 `HyperOSCard`，采用 MiuixSquircleBorder 连续平滑超椭圆边缘与下沉按压微动效反馈。
+- **GPU 算力大幅解放**：卡片默认关闭高耗能的 BackdropFilter 多通道模糊，采用混色半透明底色，解除 Impeller 着色器多层管线阻塞，全速维持 120 FPS 高刷交互。
+
+### 4. 引导流程 (Onboarding) 全景穿透流式布局与视觉净化
+- **全景穿透流式布局 (Full-Bleed Stack)**：彻底重构 `onboarding_theme.dart` 与 `onboarding_config.dart`，摒弃原 `Column -> Expanded` 导致的滚动区域被标题与底栏硬性截断的问题；采用 Stack 叠层布局，滑动列表可自下而上完整穿过半透明液态玻璃 Header 与 Footer，折射与景深感大幅提升。
+- **主题与实况卡片全面升级 HyperOSCard**：将个性化页面的主题色选项、实况通知与灵动岛开关、壁纸选择等模块重构为 `HyperOSCard`，提升层次感与触感。
+- **消除引导页玻璃暗角与边缘白边**：全面升级欢迎页 Logo 玻璃配置，`ambientRim: 0.0, edgeAbsorption: 0.0, refractiveIndex: 1.40`，彻底清除四周暗角与杂色吸光。
+
+### 5. 课时配置页“大小课间智能推算”与间距修复 (University Irregular Break Cascade)
+- **大学标准大小课间一键智能推算**：在 `android_schedule_config_screen.dart` 中新增大小课间智能推算引擎，精确匹配大学 45 分钟一节课、同门课两节连上中途休息 5 分钟（小课间）、两门课之间休息 15 分钟（大课间）、下午 14:00 起课、晚上 18:30 起课的标准作息，一键级联排布全天 12 节课。
+- **修复配置卡片零间距贴合**：为基础设置与课时设置卡片注入独立 `SizedBox(height: 16)` 弹性间距，修复在未导入课表（`earliestMonday == null`）时两卡片紧贴粘连的问题。
+
+### 6. 统一液态玻璃弹窗超椭圆圆角与 Windows 窗口动效优化
+- **消灭弹窗双重裁剪**：`LiquidGlassDialog` 统一使用官方 `GlassDialog` 与 `LiquidRoundedSuperellipse(borderRadius: 24)`，移除外层冗余的 `ClipSmoothRect`，消除形变与黑边。
+- **Windows 最大化彻底消除黑屏闪烁**：移除 Windows 自定义窗体最大化/还原时硬编码的不透明度归零 (`_opacityAnim: 0.0`) 动画，交由 Windows DWM 原生极速处理；优化最小化动效为 160ms 轻量级 0.96 缩放与柔和淡出。
+- **优化二级/三级页面转场曲线**：微调 `SmoothSlideTransitionsBuilder`，加入 0.85→1.0 细腻淡入过渡，消除画面突兀截断。
+
+---
+
 ## [v2.8.5] - 2026-09-08
 
 ### 1. 双引擎 UI 架构重构与渲染性能飞跃 (Dual-Engine: Liquid Glass 1.4.1 + Flutter MiuiX / HyperOS)

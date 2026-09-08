@@ -145,12 +145,12 @@ class _WindowsCustomWindowState extends State<WindowsCustomWindow>
     super.initState();
     windowManager.addListener(this);
 
-    // [v2.5.1] 初始化窗口动画
+    // [v2.8.6] 初始化轻量级窗口最小化动画 (0.96微缩与柔和淡出，160ms极速响应)
     _windowAnimController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 250),
+      duration: const Duration(milliseconds: 160),
     );
-    _scaleAnim = Tween<double>(begin: 1.0, end: 0.85).animate(
+    _scaleAnim = Tween<double>(begin: 1.0, end: 0.96).animate(
       CurvedAnimation(
         parent: _windowAnimController,
         curve: Curves.easeOutCubic,
@@ -277,35 +277,34 @@ class _WindowsCustomWindowState extends State<WindowsCustomWindow>
     debugPrint('🌙 窗口已最小化到托盘，进程继续运行');
   }
 
-  // [v2.5.9修复] 恢复手动实现的最小化动画
+  // [v2.8.6] 最小化动画后重置控制器，方便后续恢复
   void _handleMinimize() async {
     await _windowAnimController.forward();
     await windowManager.minimize();
+    _windowAnimController.reset();
   }
 
-  // [v2.5.3] 监听窗口从托盘或任务栏恢复
+  // [v2.5.3/v2.8.6] 监听窗口从托盘或任务栏恢复
   @override
   void onWindowRestore() async {
     setState(() {});
-    await _windowAnimController.reverse();
+    _windowAnimController.reset();
     debugPrint('🌟 窗口已恢复(DWM原生重绘)');
   }
 
   @override
   void onWindowFocus() {
     setState(() {});
-    _windowAnimController.reverse();
+    _windowAnimController.reset();
   }
 
-  // [v2.5.9修复] 恢复手动实现的最大化过渡动画
+  // [v2.8.6] 最大化由 Windows DWM 原生渲染引擎接管，严禁透明度归零，彻底根除瞬间黑屏闪烁
   void _handleMaximize() async {
-    await _windowAnimController.forward();
     if (_isMaximized) {
       await windowManager.unmaximize();
     } else {
       await windowManager.maximize();
     }
-    await _windowAnimController.reverse();
   }
 
   @override

@@ -1,20 +1,20 @@
-# CourseWidgets v2.8.5 (Build 10008049) Release 产物发布归档
+# CourseWidgets v2.8.6 (Build 10008050) Release 产物发布归档
 
-> **生成时间**: 2026-09-08 20:22:59  
-> **版本号**: `2.8.5` (`10008049`)  
+> **生成时间**: 2026-09-08 20:51:55  
+> **版本号**: `2.8.6` (`10008050`)  
 
 ## 产物下载与校验列表
 
 | 平台 | 文件名 | 体积 | SHA256 校验和 |
 | :--- | :--- | :--- | :--- |
-| Android | `CourseWidgets-v2.8.5-android-arm64-v8a.apk` | 49.25 MB | `25dd0c275334be65...cd93dd27` |
-| Android | `CourseWidgets-v2.8.5-android-universal.apk` | 51.34 MB | `0691a51450fd6283...4b1cd013` |
-| Windows | `CourseWidgets-v2.8.5-windows-x64.zip` | 42.95 MB | `a0909135be3d5ebe...b27bc324` |
+| Android | `CourseWidgets-v2.8.6-android-arm64-v8a.apk` | 49.19 MB | `5247a7bc0e521b75...670d53b7` |
+| Android | `CourseWidgets-v2.8.6-android-universal.apk` | 51.34 MB | `0691a51450fd6283...4b1cd013` |
+| Windows | `CourseWidgets-v2.8.6-windows-x64.zip` | 42.95 MB | `1cd0e0fa789514c7...d4d4d369` |
 
 ## 完整校验和 (SHA-256)
 
 ```text
-25dd0c275334be6558998fe8eddbd23dc080fce96730bae27d0cb86dcd93dd27  CourseWidgets-v2.8.5-android-arm64-v8a.apk
-0691a51450fd62837cb401bfad86f845fbdde7c5464fa91b8a2bced24b1cd013  CourseWidgets-v2.8.5-android-universal.apk
-a0909135be3d5ebece9ee41c8d0a4f075affc9d209c55667fd1cd7edb27bc324  CourseWidgets-v2.8.5-windows-x64.zip
+5247a7bc0e521b757eae0dfe0caa2787797383b648714fc99668a7e5670d53b7  CourseWidgets-v2.8.6-android-arm64-v8a.apk
+0691a51450fd62837cb401bfad86f845fbdde7c5464fa91b8a2bced24b1cd013  CourseWidgets-v2.8.6-android-universal.apk
+1cd0e0fa789514c7ad530d11075c1ac1e92646f7c8a3e3c3be65e2e0d4d4d369  CourseWidgets-v2.8.6-windows-x64.zip
 ```

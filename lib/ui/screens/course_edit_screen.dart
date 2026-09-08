@@ -69,6 +69,7 @@ class _CourseEditScreenState extends State<CourseEditScreen> {
 
     return Scaffold(
       backgroundColor: Colors.transparent, // 必须透明
+      resizeToAvoidBottomInset: true, // 允许自身表单根据输入法滚动避让
       body: LiquidGlassLayer(
         settings: LiquidGlassSettings(
           thickness: 0.8,
@@ -119,13 +120,9 @@ class _CourseEditScreenState extends State<CourseEditScreen> {
                           children: [
                             _buildSectionTitle('基本信息', textColor),
                             const SizedBox(height: 12),
-                            LiquidCard(
-                              borderRadius: 24,
-                              padding: 20,
-                              useFakeGlass: true,
-                              glassColor: isDark
-                                  ? Colors.white.withValues(alpha: 0.02)
-                                  : Colors.black.withValues(alpha: 0.02),
+                            HyperOSCard(
+                              cornerRadius: 24,
+                              padding: const EdgeInsets.all(20),
                               child: Column(
                                 children: [
                                   LiquidInput(
@@ -155,13 +152,9 @@ class _CourseEditScreenState extends State<CourseEditScreen> {
                             const SizedBox(height: 24),
                             _buildSectionTitle('时间信息', textColor),
                             const SizedBox(height: 12),
-                            LiquidCard(
-                              borderRadius: 24,
-                              padding: 20,
-                              useFakeGlass: true,
-                              glassColor: isDark
-                                  ? Colors.white.withValues(alpha: 0.02)
-                                  : Colors.black.withValues(alpha: 0.02),
+                            HyperOSCard(
+                              cornerRadius: 24,
+                              padding: const EdgeInsets.all(20),
                               child: Column(
                                 children: [
                                   Row(

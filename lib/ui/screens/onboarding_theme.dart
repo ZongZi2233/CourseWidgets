@@ -50,62 +50,23 @@ class _OnboardingThemeState extends State<OnboardingTheme> {
       body: Material(
         // [v2.3.2修复] 添加 Material 包裹，消除黄色双下划线
         type: MaterialType.transparency,
-        child: Column(
+        child: Stack(
           children: [
-            // Header
-            SafeArea(
-              bottom: false,
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Center(
-                  // 居中标题
-                  child: liquid.LiquidCard(
-                    borderRadius: 24,
-                    padding: 20,
-                    glassColor:
-                        GlassSettingsHelper.getCardSettings().glassColor,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.center, // 居中对齐
-                      children: [
-                        Text(
-                          '个性化',
-                          style: TextStyle(
-                            fontSize: 32,
-                            fontWeight: FontWeight.w900,
-                            color: GlassSettingsHelper.getTextColor(),
-                            decoration: TextDecoration.none, // 强制无下划线
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          '选择你喜欢的主题色和背景',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: GlassSettingsHelper.getSecondaryTextColor(),
-                            decoration: TextDecoration.none,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-
-            // Content
-            Expanded(
+            // 1. 底层全屏全幅流式滚动区域 (穿透到屏幕顶部和底部，折射完全可见)
+            Positioned.fill(
               child: ListView(
-                padding: const EdgeInsets.all(20),
+                padding: EdgeInsets.only(
+                  top: MediaQuery.of(context).padding.top + 130, // 避让顶部浮动玻璃卡片
+                  bottom: MediaQuery.of(context).padding.bottom + 140, // 避让底部操作栏
+                  left: 20,
+                  right: 20,
+                ),
                 physics: const BouncingScrollPhysics(),
                 children: [
-                  // 主题色模式选择
-                  liquid.LiquidCard(
-                    borderRadius: 24,
-                    padding: 20,
-                    glassColor:
-                        GlassSettingsHelper.getCardSettings().glassColor,
+                  // 主题色模式选择 -> HyperOSCard
+                  liquid.HyperOSCard(
+                    cornerRadius: 24,
+                    padding: const EdgeInsets.all(20),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -164,12 +125,10 @@ class _OnboardingThemeState extends State<OnboardingTheme> {
 
                   const SizedBox(height: 16),
 
-                  // 实况通知 (Live Activities)
-                  liquid.LiquidCard(
-                    borderRadius: 24,
-                    padding: 20,
-                    glassColor:
-                        GlassSettingsHelper.getCardSettings().glassColor,
+                  // 实况通知 (Live Activities) -> HyperOSCard
+                  liquid.HyperOSCard(
+                    cornerRadius: 24,
+                    padding: const EdgeInsets.all(20),
                     child: Row(
                       children: [
                         Container(
@@ -229,12 +188,10 @@ class _OnboardingThemeState extends State<OnboardingTheme> {
 
                   const SizedBox(height: 16),
 
-                  // 背景图片
-                  liquid.LiquidCard(
-                    borderRadius: 24,
-                    padding: 20,
-                    glassColor:
-                        GlassSettingsHelper.getCardSettings().glassColor,
+                  // 背景图片 -> HyperOSCard
+                  liquid.HyperOSCard(
+                    cornerRadius: 24,
+                    padding: const EdgeInsets.all(20),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -269,25 +226,76 @@ class _OnboardingThemeState extends State<OnboardingTheme> {
               ),
             ),
 
-            // Navigation
-            SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  children: [
-                    liquid.LiquidButton(
-                      text: widget.isLastPage ? '完成设置' : '下一步',
-                      onTap: _completeOnboarding,
-                      color: AppThemeColors.babyPink,
+            // 2. 顶部浮动液态玻璃 Header (穿透折射)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
+                  child: Center(
+                    child: liquid.LiquidCard(
+                      borderRadius: 24,
+                      padding: 20,
+                      quality: GlassQuality.premium,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Text(
+                            '个性化',
+                            style: TextStyle(
+                              fontSize: 30,
+                              fontWeight: FontWeight.w900,
+                              color: GlassSettingsHelper.getTextColor(),
+                              decoration: TextDecoration.none,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            '选择你喜欢的主题色和背景',
+                            style: TextStyle(
+                              fontSize: 15,
+                              color: GlassSettingsHelper.getSecondaryTextColor(),
+                              decoration: TextDecoration.none,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
                     ),
-                    const SizedBox(height: 12),
-                    liquid.LiquidButton(
-                      text: '上一步',
-                      onTap: widget.onBack,
-                      color: Colors.white.withValues(alpha: 0.2),
-                    ),
-                  ],
+                  ),
+                ),
+              ),
+            ),
+
+            // 3. 底部浮动 Navigation 按钮栏
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      liquid.LiquidButton(
+                        text: widget.isLastPage ? '完成设置' : '下一步',
+                        onTap: _completeOnboarding,
+                        color: AppThemeColors.babyPink,
+                      ),
+                      const SizedBox(height: 10),
+                      liquid.LiquidButton(
+                        text: '上一步',
+                        onTap: widget.onBack,
+                        color: Colors.white.withValues(alpha: 0.2),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

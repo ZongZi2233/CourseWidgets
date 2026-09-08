@@ -3,7 +3,6 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Colors, Material;
 import 'package:flutter/services.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
-import 'package:figma_squircle/figma_squircle.dart';
 import 'package:flutter_miuix/miuix.dart';
 import '../../constants/theme_constants.dart';
 import '../../utils/glass_settings_helper.dart';
@@ -236,62 +235,57 @@ class LiquidSwitch extends StatelessWidget {
   }
 }
 
-// [v2.2.1] 完全遵循文档的 GlassDialog - 使用 ClipSmoothRect 统一圆角
+// [v2.8.6] 统一使用官方 GlassDialog 超椭圆规格，消除 ClipSmoothRect 造成的双重裁剪与形变
 class LiquidGlassDialog extends StatelessWidget {
   final String title;
   final Widget content;
   final List<GlassDialogAction>? actions;
+  final double maxWidth;
 
   const LiquidGlassDialog({
     super.key,
     required this.title,
     required this.content,
     this.actions,
+    this.maxWidth = 320,
   });
 
   @override
   Widget build(BuildContext context) {
-    // [v2.2.1] 使用 ClipSmoothRect 包装实现统一的超椭圆圆角
-    return ClipSmoothRect(
-      radius: SmoothBorderRadius(
-        cornerRadius: 32.0, // [v2.2.1] 增加圆角半径使其更明显
-        cornerSmoothing: 1.0,
+    return GlassDialog(
+      title: title,
+      maxWidth: maxWidth,
+      content: DefaultTextStyle(
+        style: const TextStyle(
+          fontSize: 15,
+          color: Colors.white70,
+          fontFamily: 'PingFangSC',
+          height: 1.5,
+        ),
+        textAlign: TextAlign.left,
+        child: content,
       ),
-      child: GlassDialog(
-        title: title,
-        content: DefaultTextStyle(
-          style: const TextStyle(
-            fontSize: 15,
-            color: Colors.white70,
-            fontFamily: 'PingFangSC',
-            height: 1.5,
-          ),
-          textAlign: TextAlign.left,
-          child: content,
-        ),
-        actions:
-            actions ??
-            [
-              GlassDialogAction(
-                label: '确定',
-                onPressed: () => Navigator.pop(context),
-                isPrimary: true,
-              ),
-            ],
-        settings: LiquidGlassSettings(
-          glassColor: const Color(0xFF2D2D2D).withValues(alpha: 0.4),
-          blur: 3.5,
-          thickness: 16.0,
-          refractiveIndex: 1.28,
-          lightIntensity: 0.70,
-          ambientStrength: 0.20,
-        ),
+      actions: actions ??
+          [
+            GlassDialogAction(
+              label: '确定',
+              onPressed: () => Navigator.pop(context),
+              isPrimary: true,
+            ),
+          ],
+      settings: LiquidGlassSettings(
+        glassColor: const Color(0xFF2D2D2D).withValues(alpha: 0.5),
+        blur: 4.0,
+        thickness: 16.0,
+        refractiveIndex: 1.30,
+        lightIntensity: 0.70,
+        ambientStrength: 0.25,
       ),
     );
   }
 }
 
-// [修复6] 调整遮罩透明度，避免过黑
+// [v2.8.6] 平滑丝滑缩放微弹遮罩
 Future<T?> showLiquidDialog<T>({
   required BuildContext context,
   required Widget builder,
@@ -300,8 +294,8 @@ Future<T?> showLiquidDialog<T>({
     context: context,
     barrierDismissible: true,
     barrierLabel: 'Dismiss',
-    barrierColor: Colors.transparent,
-    transitionDuration: const Duration(milliseconds: 250),
+    barrierColor: Colors.black.withValues(alpha: 0.25),
+    transitionDuration: const Duration(milliseconds: 220),
     pageBuilder: (ctx, anim1, anim2) => builder,
     transitionBuilder: (ctx, anim1, anim2, child) {
       return Stack(
@@ -312,12 +306,18 @@ Future<T?> showLiquidDialog<T>({
               filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
               child: Container(
                 color: Colors.black.withValues(alpha: 0.15),
-              ), // [修复] 降低遮罩不透明度
+              ),
             ),
           ),
           ScaleTransition(
-            scale: CurvedAnimation(parent: anim1, curve: Curves.easeOutBack),
-            child: FadeTransition(opacity: anim1, child: child),
+            scale: CurvedAnimation(
+              parent: anim1,
+              curve: Curves.easeOutCubic,
+            ),
+            child: FadeTransition(
+              opacity: CurvedAnimation(parent: anim1, curve: Curves.easeOut),
+              child: child,
+            ),
           ),
         ],
       );
@@ -457,14 +457,14 @@ class LiquidBackButton extends StatelessWidget {
   }
 }
 
-/// [v2.8.5] 基于 Flutter MiuiX (HyperOS) 的高性能轻量级卡片
+/// [v2.8.6] 基于 Flutter MiuiX (HyperOS) 的高性能轻量级卡片
 ///
 /// 专用于频繁重绘与高速滚动的课程卡片、日历网格卡片以及设置界面列表卡片。
 /// 特性：
-/// 1. 采用 MiuixSquircleBorder 完美平滑连续超椭圆圆角
+/// 1. 采用 MiuixSquircleBorder 完美平滑连续超椭圆圆角与细腻边框
 /// 2. 具备 HyperOS 原生按压动效与反馈 (MiuixPressFeedbackType.sink)
-/// 3. 轻量级高斯模糊 + 混色半透明背景，零 Impeller 多通道着色器负担
-/// 4. 彻底解放 GPU 渲染算力，保障全局 120 FPS 满帧运行
+/// 3. 混色半透明背景 (Color.alphaBlend 主题微透)，零 Impeller 多通道着色器负担
+/// 4. 默认关闭 BackdropFilter (useBlur: false)，彻底解放 GPU 渲染算力，保障全局 120 FPS 满帧运行
 class HyperOSCard extends StatelessWidget {
   final Widget child;
   final VoidCallback? onTap;
@@ -476,6 +476,7 @@ class HyperOSCard extends StatelessWidget {
   final bool useBlur;
   final double blurRadius;
   final MiuixPressFeedbackType feedbackType;
+  final BorderSide? border;
 
   const HyperOSCard({
     super.key,
@@ -486,23 +487,37 @@ class HyperOSCard extends StatelessWidget {
     this.padding = const EdgeInsets.all(12),
     this.color,
     this.contentColor,
-    this.useBlur = true,
+    this.useBlur = false, // [v2.8.6] 默认关闭多通道模糊以维持 120 FPS 满帧
     this.blurRadius = 6.0,
     this.feedbackType = MiuixPressFeedbackType.sink,
+    this.border,
   });
 
   @override
   Widget build(BuildContext context) {
     final isDark = globalDarkModeNotifier.value;
-    final effectiveColor = color ??
-        (isDark
-            ? const Color(0x281F2430)
-            : const Color(0x16FFFFFF));
+    final primary = AppThemeColors.babyPink;
+
+    // HyperOS 混色半透明背景：微透主题粉色与高品质中性底色融合
+    final defaultBgColor = isDark
+        ? Color.alphaBlend(primary.withValues(alpha: 0.10), const Color(0x331C202A))
+        : Color.alphaBlend(primary.withValues(alpha: 0.08), const Color(0x38FFFFFF));
+
+    final effectiveColor = color ?? defaultBgColor;
     final effectiveTextColor = contentColor ??
         (isDark ? const Color(0xFFF0F3F8) : Colors.white);
 
+    final effectiveBorderSide = border ??
+        BorderSide(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.10)
+              : Colors.white.withValues(alpha: 0.40),
+          width: 0.8,
+        );
+
     final shape = MiuixSquircleBorder(
       cornerRadius: cornerRadius,
+      side: effectiveBorderSide,
       enabled: cornerRadius > 0,
     );
 
@@ -521,17 +536,27 @@ class HyperOSCard extends StatelessWidget {
       );
     }
 
-    return MiuixCard(
-      cornerRadius: cornerRadius,
-      insideMargin: EdgeInsets.zero,
-      colors: MiuixCardColors(
-        color: effectiveColor,
-        contentColor: effectiveTextColor,
+    Widget cardContent = MiuixContentColor(
+      color: effectiveTextColor,
+      child: DecoratedBox(
+        decoration: ShapeDecoration(
+          color: effectiveColor,
+          shape: shape,
+        ),
+        child: innerContent,
       ),
-      onPressed: onTap,
-      onLongPress: onLongPress,
-      feedbackType: feedbackType,
-      child: innerContent,
     );
+
+    if (onTap != null || onLongPress != null || feedbackType != MiuixPressFeedbackType.none) {
+      cardContent = MiuixPressable(
+        onPressed: onTap,
+        onLongPress: onLongPress,
+        feedbackType: feedbackType,
+        borderRadius: BorderRadius.circular(cornerRadius),
+        child: cardContent,
+      );
+    }
+
+    return cardContent;
   }
 }

@@ -24,7 +24,7 @@ class SmoothSlideTransitionsBuilder extends PageTransitionsBuilder {
     Animation<double> secondaryAnimation,
     Widget child,
   ) {
-    // 进入动画：从右边 100% 完全滑入
+    // [v2.8.6] 进入动画：从右边 100% 完全滑入，并辅以 0.85->1.0 细腻淡入，消除画面硬切
     final inSlide =
         Tween<Offset>(begin: const Offset(1.0, 0.0), end: Offset.zero).animate(
           CurvedAnimation(
@@ -34,7 +34,20 @@ class SmoothSlideTransitionsBuilder extends PageTransitionsBuilder {
           ),
         );
 
-    Widget transitionChild = SlideTransition(position: inSlide, child: child);
+    final inFade = Tween<double>(begin: 0.85, end: 1.0).animate(
+      CurvedAnimation(
+        parent: animation,
+        curve: const Interval(0.0, 0.5, curve: Curves.easeOut),
+      ),
+    );
+
+    Widget transitionChild = SlideTransition(
+      position: inSlide,
+      child: FadeTransition(
+        opacity: inFade,
+        child: child,
+      ),
+    );
 
     // [v2.9.8] 模糊渲染：全平台统一使用 BackdropFilter
     //
