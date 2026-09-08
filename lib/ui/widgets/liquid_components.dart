@@ -30,7 +30,7 @@ void showLiquidToast(BuildContext context, String msg) {
             shape: LiquidRoundedSuperellipse(borderRadius: 20),
             settings: LiquidGlassSettings(
               glassColor: Colors.black.withValues(alpha: 0.4), // [修复] 降低不透明度
-              blur: 10,
+              blur: 3.0,
             ),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -86,8 +86,8 @@ class LiquidCard extends StatelessWidget {
     // [v2.8.1] 真实光学折射：充足物理厚度、高质感边缘吸收与双折射、高刷透镜折射
     final settings = glassColor != null
         ? LiquidGlassSettings(
-            thickness: styleType == LiquidStyleType.micro ? 14.0 : 20.0,
-            blur: (styleType == LiquidStyleType.micro) ? 4.0 : 10.0,
+            thickness: styleType == LiquidStyleType.micro ? 12.0 : 16.0,
+            blur: (styleType == LiquidStyleType.micro) ? 2.0 : 4.0,
             glassColor: glassColor!,
             refractiveIndex: 1.40,
             lightIntensity: 0.70,
@@ -161,6 +161,8 @@ class LiquidButton extends StatelessWidget {
   final VoidCallback? onTap;
   final Color color;
   final bool isOutline;
+  final double? width;
+  final double? height;
 
   const LiquidButton({
     super.key,
@@ -168,21 +170,23 @@ class LiquidButton extends StatelessWidget {
     required this.onTap,
     required this.color,
     this.isOutline = false,
+    this.width,
+    this.height,
   });
 
   @override
   Widget build(BuildContext context) {
     return GlassButton.custom(
       onTap: onTap ?? () {},
-      width: double.infinity,
-      height: 48,
+      width: width,
+      height: height ?? 48,
       style: GlassButtonStyle.filled,
       settings: LiquidGlassSettings(
         glassColor: isOutline
             ? Colors.white.withValues(alpha: 0.1)
             : color.withValues(alpha: 0.7),
-        blur: 6.0,
-        thickness: 16.0,
+        blur: 2.0,
+        thickness: 12.0,
         refractiveIndex: 1.35,
         lightIntensity: 0.65,
         bodyMode: GlassBodyMode.adaptive,
@@ -223,7 +227,7 @@ class LiquidSwitch extends StatelessWidget {
       activeColor: AppThemeColors.babyPink,
       settings: const LiquidGlassSettings(
         thickness: 10,
-        blur: 4.0,
+        blur: 2.0,
         refractiveIndex: 1.35,
         lightIntensity: 0.6,
       ),

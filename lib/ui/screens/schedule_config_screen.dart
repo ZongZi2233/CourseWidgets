@@ -76,11 +76,42 @@ class _ScheduleConfigScreenState extends State<ScheduleConfigScreen> {
   }
 
   int _parseTimeToMinutes(String timeStr) {
-    final parts = timeStr.split(':');
-    if (parts.length != 2) return 480;
-    final hour = int.tryParse(parts[0]) ?? 8;
-    final minute = int.tryParse(parts[1]) ?? 0;
-    return hour * 60 + minute;
+    final clean = timeStr
+        .trim()
+        .replaceAll('分', '')
+        .replaceAll('点', ':')
+        .replaceAll('：', ':');
+    // 匹配 "8:30", "8.30", "8-30", "8 30", "8.3"
+    final sepMatch = RegExp(r'^(\d{1,2})[\s.:\-_](\d{1,2})$').firstMatch(clean);
+    if (sepMatch != null) {
+      final h = int.tryParse(sepMatch.group(1)!);
+      final mStr = sepMatch.group(2)!;
+      int? m = int.tryParse(mStr);
+      // 若用户输入 8.3，则 3 视为 30 分钟
+      if (mStr.length == 1 && m != null && m > 0 && m < 6) {
+        m = m * 10;
+      }
+      if (h != null && m != null && h >= 0 && h < 24 && m >= 0 && m < 60) {
+        return h * 60 + m;
+      }
+    }
+    // 纯数字 "830" or "0830"
+    if (clean.length == 3 || clean.length == 4) {
+      final digits = int.tryParse(clean);
+      if (digits != null) {
+        final h = digits ~/ 100;
+        final m = digits % 100;
+        if (h >= 0 && h < 24 && m >= 0 && m < 60) {
+          return h * 60 + m;
+        }
+      }
+    }
+    // 纯小时 "8" or "08"
+    final singleHour = int.tryParse(clean);
+    if (singleHour != null && singleHour >= 0 && singleHour < 24) {
+      return singleHour * 60;
+    }
+    return 480; // 兜底 8:00
   }
 
   @override

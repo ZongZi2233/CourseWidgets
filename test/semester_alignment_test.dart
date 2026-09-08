@@ -71,5 +71,57 @@ void main() {
       expect(alignedEvents.first.dtStart.hour, 8);
       expect(alignedEvents.first.dtStart.minute, 30);
     });
+
+    test('全格式课时输入解析测试 (支持 8.30, 8.3, 8:30, 830, 8点30分等)', () {
+      int? parseTime(String timeStr) {
+        final clean = timeStr
+            .trim()
+            .replaceAll('分', '')
+            .replaceAll('点', ':')
+            .replaceAll('：', ':');
+        final sepMatch =
+            RegExp(r'^(\d{1,2})[\s.:\-_](\d{1,2})$').firstMatch(clean);
+        if (sepMatch != null) {
+          final h = int.tryParse(sepMatch.group(1)!);
+          final mStr = sepMatch.group(2)!;
+          int? m = int.tryParse(mStr);
+          if (mStr.length == 1 && m != null && m > 0 && m < 6) {
+            m = m * 10;
+          }
+          if (h != null && m != null && h >= 0 && h < 24 && m >= 0 && m < 60) {
+            return h * 60 + m;
+          }
+        }
+        if (clean.length == 3 || clean.length == 4) {
+          final digits = int.tryParse(clean);
+          if (digits != null) {
+            final h = digits ~/ 100;
+            final m = digits % 100;
+            if (h >= 0 && h < 24 && m >= 0 && m < 60) {
+              return h * 60 + m;
+            }
+          }
+        }
+        final singleHour = int.tryParse(clean);
+        if (singleHour != null && singleHour >= 0 && singleHour < 24) {
+          return singleHour * 60;
+        }
+        return null;
+      }
+
+      expect(parseTime('8.30'), 510);
+      expect(parseTime('8:30'), 510);
+      expect(parseTime('8：30'), 510);
+      expect(parseTime('8.3'), 510);
+      expect(parseTime('8点30分'), 510);
+      expect(parseTime('8点30'), 510);
+      expect(parseTime('830'), 510);
+      expect(parseTime('0830'), 510);
+      expect(parseTime('8'), 480);
+      expect(parseTime('08'), 480);
+      expect(parseTime('14:00'), 840);
+      expect(parseTime('14.00'), 840);
+      expect(parseTime('14-05'), 845);
+    });
   });
 }

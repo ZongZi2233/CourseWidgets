@@ -105,12 +105,12 @@ class LiveNotificationServiceV2 {
 
   /// 创建 Android 通知通道
   Future<void> _createAndroidNotificationChannels() async {
-    // Live Update 通道
+    // Live Update 通道 (Android 16 Promoted Live Updates 要求最高优先级通道)
     final AndroidNotificationChannel liveChannel = AndroidNotificationChannel(
       _channelId,
       _channelName,
       description: _channelDesc,
-      importance: Importance.high,
+      importance: Importance.max,
       playSound: false,
       enableVibration: false,
       showBadge: true,
@@ -348,34 +348,61 @@ class LiveNotificationServiceV2 {
       }
     }
 
-    // [v2.5.1反馈] 检查 Live Activities 开关决定构建哪种样式的通知面板
+    // [v2.5.1反馈/v2.8.3升级] 严格遵循 Android 16 Live Updates (ProgressStyle) 规范构建实时活动通知
     final bool useLiveUpdate = NotificationManager().isLiveActivitiesEnabled;
+
+    int progressPercent = 0;
+    bool showProgress = false;
+    if (_currentCourse != null) {
+      final start = DateTime.fromMillisecondsSinceEpoch(_currentCourse!.startTime);
+      final end = DateTime.fromMillisecondsSinceEpoch(_currentCourse!.endTime);
+      final diff = start.difference(now);
+      if (diff.isNegative) {
+        // 正在上课: 计算上课耗时百分比
+        final totalMs = end.millisecondsSinceEpoch - start.millisecondsSinceEpoch;
+        final elapsedMs = now.millisecondsSinceEpoch - start.millisecondsSinceEpoch;
+        if (totalMs > 0) {
+          progressPercent = ((elapsedMs / totalMs) * 100).clamp(0, 100).toInt();
+          showProgress = true;
+        }
+      } else {
+        // 临近上课 (60分钟内倒计时进度条)
+        final mins = diff.inMinutes;
+        if (mins <= 60) {
+          progressPercent = (((60 - mins) / 60) * 100).clamp(0, 100).toInt();
+          showProgress = true;
+        }
+      }
+    }
 
     AndroidNotificationDetails androidDetails;
 
     if (useLiveUpdate) {
-      // [v2.5.0] Android Live Update 样式 — 不使用进度条，使用 BigTextStyle + 计时器
+      // [v2.8.3] 符合 Android 16 ProgressStyle 规范的 Promoted Live Update 通知
       androidDetails = AndroidNotificationDetails(
         _channelId,
         _channelName,
         channelDescription: _channelDesc,
-        importance: Importance.high,
-        priority: Priority.high,
-        ongoing: true, // Live Updates 必须是 ongoing
+        importance: Importance.max,
+        priority: Priority.max,
+        ongoing: true, // Live Updates 必须是 ongoing 常驻
         autoCancel: false,
-        onlyAlertOnce: true, // 只在第一次提醒
-        showProgress: false, // [v2.5.0修复] 不显示进度条
-        category: AndroidNotificationCategory.status, // 状态类通知
+        onlyAlertOnce: true, // 仅在状态流转时提醒一次，周期静默刷新
+        showProgress: showProgress,
+        maxProgress: 100,
+        progress: progressPercent,
+        indeterminate: false,
+        category: AndroidNotificationCategory.progress, // Android 16 实时进度条标准分类
         usesChronometer: eventTime != null,
         chronometerCountDown: isCountingDown,
         when: eventTime?.millisecondsSinceEpoch,
         visibility: NotificationVisibility.public,
         color: const Color(0xFFFF9A9E),
-        subText: subLocation,
+        subText: showProgress ? '$subLocation · $progressPercent%' : subLocation,
         styleInformation: BigTextStyleInformation(
           body,
           contentTitle: '$emoji $title',
-          summaryText: '课程实时更新',
+          summaryText: '实时活动 · Live Update',
         ),
         // 操作按钮
         actions: <AndroidNotificationAction>[

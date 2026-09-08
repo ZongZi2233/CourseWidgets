@@ -111,15 +111,26 @@ class _AndroidScheduleConfigScreenState
   }
 
   int? _parseTime(String timeStr) {
-    final clean = timeStr.trim();
-    final match = RegExp(r'^(\d{1,2})[:：.点\s-](\d{1,2})$').firstMatch(clean);
-    if (match != null) {
-      final h = int.tryParse(match.group(1)!);
-      final m = int.tryParse(match.group(2)!);
+    final clean = timeStr
+        .trim()
+        .replaceAll('分', '')
+        .replaceAll('点', ':')
+        .replaceAll('：', ':');
+    // 匹配 "8:30", "8.30", "8-30", "8 30", "8.3"
+    final sepMatch = RegExp(r'^(\d{1,2})[\s.:\-_](\d{1,2})$').firstMatch(clean);
+    if (sepMatch != null) {
+      final h = int.tryParse(sepMatch.group(1)!);
+      final mStr = sepMatch.group(2)!;
+      int? m = int.tryParse(mStr);
+      // 若用户输入 8.3，则 3 视为 30 分钟
+      if (mStr.length == 1 && m != null && m > 0 && m < 6) {
+        m = m * 10;
+      }
       if (h != null && m != null && h >= 0 && h < 24 && m >= 0 && m < 60) {
         return h * 60 + m;
       }
     }
+    // 纯数字 "830" or "0830"
     if (clean.length == 3 || clean.length == 4) {
       final digits = int.tryParse(clean);
       if (digits != null) {
@@ -129,6 +140,11 @@ class _AndroidScheduleConfigScreenState
           return h * 60 + m;
         }
       }
+    }
+    // 纯小时 "8" or "08"
+    final singleHour = int.tryParse(clean);
+    if (singleHour != null && singleHour >= 0 && singleHour < 24) {
+      return singleHour * 60;
     }
     return null;
   }
@@ -163,9 +179,10 @@ class _AndroidScheduleConfigScreenState
       _durationControllers[i].text = duration.toString();
     }
     setState(() {});
+    _saveConfigQuietly();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('✨ 已智能推算所有节次时间（第1节从 ${_formatMinutes(firstStartMin)} 开始，包含大课间与午休）'),
+        content: Text('✨ 已智能推算并保存所有节次时间（第1节从 ${_formatMinutes(firstStartMin)} 开始）'),
         backgroundColor: AppThemeColors.babyPink,
         behavior: SnackBarBehavior.floating,
         duration: const Duration(seconds: 2),
@@ -299,41 +316,50 @@ class _AndroidScheduleConfigScreenState
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDark ? Colors.white : const Color(0xFF1A1A2E);
 
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: Column(
-        children: [
-          // Custom Header - [v2.3.0] 根据 showNavigation 参数决定是否显示
-          if (widget.showNavigation)
-            SafeArea(
-              bottom: false,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-                child: Row(
-                  children: [
-                    const liquid.LiquidBackButton(),
-                    const SizedBox(width: 12),
-                    Text(
-                      '课时配置',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: textColor,
+    return PopScope(
+      canPop: true,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) {
+          _saveConfigQuietly();
+        }
+      },
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        body: Column(
+          children: [
+            // Custom Header - [v2.3.0] 根据 showNavigation 参数决定是否显示
+            if (widget.showNavigation)
+              SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  child: Row(
+                    children: [
+                      const liquid.LiquidBackButton(),
+                      const SizedBox(width: 12),
+                      Text(
+                        '课时配置',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: textColor,
+                        ),
                       ),
-                    ),
-                    const Spacer(),
-                    liquid.LiquidButton(
-                      text: '保存',
-                      onTap: _saveConfig,
-                      color: AppThemeColors.babyPink,
-                    ),
-                  ],
+                      const Spacer(),
+                      liquid.LiquidButton(
+                        text: '保存',
+                        width: 76,
+                        height: 38,
+                        onTap: _saveConfig,
+                        color: AppThemeColors.babyPink,
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
 
           // Content - 使用ListView优化滚动
           Expanded(
@@ -598,6 +624,7 @@ class _AndroidScheduleConfigScreenState
             ),
           ],
         ),
+      ),
     );
   }
 
@@ -650,7 +677,10 @@ class _AndroidScheduleConfigScreenState
                 ),
                 textAlign: TextAlign.center,
                 keyboardType: TextInputType.datetime,
-                onSubmitted: index == 0 ? (_) => _smartCascadeSectionTimes() : null,
+                onSubmitted: index == 0
+                    ? (_) => _smartCascadeSectionTimes()
+                    : (_) => _saveConfigQuietly(),
+                onEditingComplete: () => _saveConfigQuietly(),
               ),
             ),
           ),

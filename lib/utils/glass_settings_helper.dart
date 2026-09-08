@@ -21,19 +21,19 @@ class GlassSettingsHelper {
     // 深色模式：黑色玻璃，中等透明度
     // 浅色模式：白色玻璃，低透明度
     final glassColor = globalUseDarkMode
-        ? Colors.black.withValues(alpha: 0.35)
-        : Colors.white.withValues(alpha: 0.06);
+        ? Colors.black.withValues(alpha: 0.32)
+        : Colors.white.withValues(alpha: 0.08);
 
     return LiquidGlassSettings(
       glassColor: glassColor,
-      blur: blur ?? 10.0, // 真实液态毛玻璃模糊
-      thickness: thickness ?? 22.0, // 充足物理厚度驱动真实折射边界
-      refractiveIndex: 1.45,
+      blur: blur ?? 4.0, // [v2.8.3] 降低大面积模糊，释放 120Hz 高刷
+      thickness: thickness ?? 16.0,
+      refractiveIndex: 1.38,
       lightIntensity: 0.70,
       ambientStrength: 0.50,
       ambientRim: 0.15,
       fresnelStrength: 0.85,
-      saturation: 1.25,
+      saturation: 1.20,
     );
   }
 
@@ -46,14 +46,14 @@ class GlassSettingsHelper {
 
     return LiquidGlassSettings(
       glassColor: glassColor,
-      blur: 10.0,
-      thickness: 20.0,
-      refractiveIndex: 1.45,
+      blur: 3.0, // [v2.8.3] 清透低模糊
+      thickness: 14.0,
+      refractiveIndex: 1.38,
       lightIntensity: 0.70,
       ambientStrength: 0.50,
       ambientRim: 0.15,
       fresnelStrength: 0.85,
-      saturation: 1.25,
+      saturation: 1.20,
     );
   }
 
@@ -79,8 +79,8 @@ class GlassSettingsHelper {
 
     return LiquidGlassSettings(
       glassColor: glassColor,
-      blur: 6.0,
-      thickness: 16.0,
+      blur: 2.0, // [v2.8.3] 超轻量按钮折射
+      thickness: 12.0,
       refractiveIndex: 1.35,
       lightIntensity: 0.65,
       ambientStrength: 0.35,
@@ -97,9 +97,9 @@ class GlassSettingsHelper {
 
     return LiquidGlassSettings(
       glassColor: glassColor,
-      blur: 15.0,
-      thickness: 25.0,
-      refractiveIndex: 1.45,
+      blur: 5.0, // [v2.8.3] 对话框微透
+      thickness: 18.0,
+      refractiveIndex: 1.38,
       lightIntensity: 0.70,
       ambientStrength: 0.45,
       ambientRim: 0.15,

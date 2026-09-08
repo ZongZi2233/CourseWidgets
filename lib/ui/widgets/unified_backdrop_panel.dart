@@ -20,7 +20,7 @@ class UnifiedBackdropPanel extends StatelessWidget {
     this.padding,
     this.margin,
     this.borderRadius = 28.0,
-    this.blur = 10.0,
+    this.blur = 0.0, // [v2.8.3] 默认为 0.0 高性能模式，杜绝在卡片或列表中反复触发 BackdropFilter
     this.width,
     this.height,
   });
@@ -31,12 +31,12 @@ class UnifiedBackdropPanel extends StatelessWidget {
     final primaryTextColor = isDark ? Colors.white : const Color(0xFF1A1A2E);
 
     final bgColor = isDark
-        ? Colors.black.withValues(alpha: 0.35)
-        : Colors.white.withValues(alpha: 0.20);
+        ? Colors.black.withValues(alpha: 0.32)
+        : Colors.white.withValues(alpha: 0.65);
 
     final borderColor = isDark
         ? Colors.white.withValues(alpha: 0.12)
-        : Colors.black.withValues(alpha: 0.06);
+        : Colors.black.withValues(alpha: 0.05);
 
     final themedChild = DefaultTextStyle(
       style: TextStyle(
@@ -72,10 +72,11 @@ class UnifiedBackdropPanel extends StatelessWidget {
     );
 
     if (blur > 0) {
+      final effectiveBlur = blur.clamp(0.0, 6.0);
       panel = ClipRRect(
         borderRadius: BorderRadius.circular(borderRadius),
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+          filter: ImageFilter.blur(sigmaX: effectiveBlur, sigmaY: effectiveBlur),
           child: panel,
         ),
       );

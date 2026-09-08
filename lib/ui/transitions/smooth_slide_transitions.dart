@@ -46,43 +46,53 @@ class SmoothSlideTransitionsBuilder extends PageTransitionsBuilder {
     //
     // 性能：移动端 sigma 降为 10，减少 GPU 采样负担。
     if (route.opaque) {
-      // 首页 (opaque=true)：不渲染任何模糊
+      // 首页 (opaque=true)：不渲染任何遮罩
       return transitionChild;
     }
 
-    // === 二级页面 (opaque=false) 的模糊渲染 ===
-    final blurOpacity = CurvedAnimation(
+    // === 二级/三级页面 (opaque=false) 的转场渲染 ===
+    final bool isMobile = Platform.isAndroid || Platform.isIOS;
+    // [v2.8.3 性能与视觉重构]
+    // 1. 彻底解决“进入三级页面后变暗特别明显”：
+    //    此前硬编码 ColoredBox(color: Colors.black26) 在层级推入时会双重/三重叠加大面积变黑。
+    //    现改用极清透遮罩 (0.05)，并在 secondaryAnimation（推入下级页面）时自动淡出本级遮罩，保证无论推入多少层画面均保持纯净通透。
+    // 2. 彻底解决“切入切出很卡”：
+    //    移动端转场滑入期间严禁全屏 BackdropFilter，消除 GPU 逐帧分配 FBO 造成的 120Hz 掉帧。
+    final scrimAnimation = CurvedAnimation(
       parent: animation,
       curve: const Interval(0.0, 1.0, curve: Curves.easeIn),
       reverseCurve: const Interval(0.0, 0.6, curve: Curves.easeOut),
     );
 
-    final bool isMobile = Platform.isAndroid || Platform.isIOS;
-    // [v2.7.3] 性能优化：BackdropFilter 保持恒定卷积半径 (sigma: 3.0) 并用 RepaintBoundary 隔离，
-    // 渐变动画仅作用于极轻量的暗化遮罩（ColoredBox），彻底消除 Android 120Hz 高刷屏下每帧重新分配模糊 FBO 的管线卡顿
-    final double sigma = isMobile ? 3.0 : 5.0;
+    final secondaryFade = Tween<double>(begin: 1.0, end: 0.0).animate(
+      CurvedAnimation(parent: secondaryAnimation, curve: Curves.easeOut),
+    );
 
-    final blurLayer = Positioned.fill(
-      child: RepaintBoundary(
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
-              child: const SizedBox.expand(),
-            ),
-            FadeTransition(
-              opacity: blurOpacity,
-              child: const ColoredBox(color: Colors.black26),
-            ),
-          ],
-        ),
+    final veil = Positioned.fill(
+      child: AnimatedBuilder(
+        animation: Listenable.merge([animation, secondaryAnimation]),
+        builder: (context, _) {
+          final effectiveAlpha = scrimAnimation.value * secondaryFade.value * 0.05;
+          if (effectiveAlpha <= 0.002) return const SizedBox.shrink();
+
+          final scrimWidget = ColoredBox(
+            color: Colors.black.withValues(alpha: effectiveAlpha),
+          );
+
+          if (!isMobile) {
+            return BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 3.0, sigmaY: 3.0),
+              child: scrimWidget,
+            );
+          }
+          return scrimWidget;
+        },
       ),
     );
 
     return Stack(
       fit: StackFit.expand,
-      children: [blurLayer, transitionChild],
+      children: [veil, transitionChild],
     );
   }
 }

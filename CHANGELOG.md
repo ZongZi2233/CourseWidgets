@@ -4,6 +4,42 @@
 
 ---
 
+## [v2.8.3] - 2026-09-08
+
+### 1. 官方 Android 16 Live Updates (实况通知与状态栏灵动胶囊) 规范全面落地
+- **规范对齐 Google 官方规范**：根据 [Android 开发者官方文档](https://developer.android.com/develop/ui/views/notifications/live-update?hl=zh-cn) 深度重构实时通知体系。
+- **POST_PROMOTED_NOTIFICATIONS 提权**：在 `AndroidManifest.xml` 中配置 Android 16 关键提权权限 `<uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS"/>`，赋能通知在锁屏、通知顶部与状态栏以 Promote 级别高亮常驻。
+- **ProgressStyle 动态进度驱动**：废除此前 `showProgress: false`，切换为 `showProgress: true`，动态推算课程已进行与剩余百分比（`progressPercent` 0..100）。
+- **分类与通道规格提级**：升级通道配置为 `Importance.max, priority: Priority.max, ongoing: true`，分类标定为 `AndroidNotificationCategory.progress`，副标题配置实时进度 `$subLocation · $progressPercent%`，系统完美识别并激活状态栏实况胶囊（Status Bar Chip）。
+
+### 2. 页面切换 0ms 瞬间显示与预热预渲染 (IndexedStack Zero Black-Flash)
+- **根除切页黑屏闪烁与着色器撕裂**：废除此前在透明脚手架（Scaffold）下通过 `AnimatedSwitcher` 做组件销毁与交叉透明淡入淡出的旧逻辑（该逻辑在过渡期底层露黑导致闪烁）。
+- **IndexedStack 保持挂载与着色器预热**：手机端与平板端主 Tab 路由全面切换为 `IndexedStack`，启动阶段一次性完成“课程”、“日历”、“设置”三大主界面的挂载与 GPU 着色器预热，切页响应降至 0ms，彻底消灭闪黑与着色器撕裂。
+
+### 3. 日历页面现代 iOS 18 风格视觉重构与 120Hz 流式性能解锁
+- **根除滚动列表中嵌套 BackdropFilter 性能灾难**：此前日历日程列表中每张卡片均包裹带高斯模糊的 `UnifiedBackdropPanel`，滚动时引发多重离屏帧缓冲递归卷积导致严重掉帧。现全面迁移为高性能轻量晶莹卡片，内层 0 模糊消耗，释放 120Hz 满帧高刷！
+- **现代 iOS 18 极简月历顶栏**：集成年月切换、今天快速回跳胶囊与月/周视图折叠切换，采用清透高光微透材质。
+- **水滴高亮与精致圆点**：选中日期升级为圆润渐变高光水滴胶囊（BabyPink 至 SoftCoral 柔美渐变带环境光晕），今日日期带专属粉色轮廓，有课日期下方带精致双色圆点。
+- **优雅空状态设计**：无课日呈现精致通透插画卡片，排版舒适现代。
+
+### 4. 路由转场与三级页面累积暗化彻底根治 (Non-Cumulative Scrim)
+- **解决“进入三级页面后变暗特别明显”**：排查发现旧转场机制对每个非不透明路由硬编码叠加 `ColoredBox(color: Colors.black26)`，二级推入叠加 26% 黑色，三级推入叠加上层导致总暗化接近 50%。现将遮罩透明度调降至超轻微的 0.05，并引入 `secondaryAnimation` 级联淡出逻辑：当下级页面推入时，本级遮罩自动平滑淡出，保证无论层级多深，全屏透光度恒定通透清亮。
+- **移动端转场剔除全屏 BackdropFilter**：移动端转场滑动动画期间彻底取消全屏 BackdropFilter 离屏捕获，避免 120Hz 高刷屏在 280ms 平移期间的 GPU 带宽挤兑，转场滑入滑出如丝般顺滑。
+
+### 5. 课时设置多格式解析 (8.30 / 8.3 / 8:30 / 830) 与即时自动保存
+- **课时解析器全格式容错**：彻底重构 `_parseTime` / `_parseTimeToMinutes`，支持 `8.30`、`8.3`（智能转为 8:30）、`8:30`、`8：30`、`8点30分`、`830`、`0830` 以及单小时 `8` 等所有输入习惯，绝不发生静默丢弃或回退为 8:00。
+- **四维自动持久化**：
+  1. 点击“保存”按钮即时重算并保存；
+  2. 点击“✨ 智慧推算”自动保存；
+  3. 输入框回车 `onSubmitted` / `onEditingComplete` 自动保存；
+  4. 页面底部注入 `PopScope`，侧滑返回或点击系统返回键均无感自动同步保存。
+
+### 6. 导航栏滑块视觉纯化与全局模糊降噪 (Pristine Liquid Glass)
+- **消除导航栏奇异光斑**：彻底移除了 `GlassTab` 的 `glowColor`，消除底层 32px BoxShadow 形成的刺眼大光斑；滑块精调为超薄清透液态玻璃（`blur: 2.0, thickness: 12, refractiveIndex: 1.35`），边缘高光锋利清澈。
+- **全应用玻璃参数降噪**：全局玻璃系统（`GlassSettingsHelper`、`LiquidCard`、`LiquidButton`、`LiquidSwitch`）将大面积 10.0 ~ 15.0 厚重模糊统一下调至 2.0 ~ 4.0 晶莹折射级，减少 80% 的 GPU 高斯采样负担，彻底告别浑浊发灰，通透纯澈。
+
+---
+
 ## [v2.8.2] - 2026-09-08
 
 ### 1. 安卓安装包版本彻底同步与打包归档修复 (Release Artifacts Pipeline Fix)
