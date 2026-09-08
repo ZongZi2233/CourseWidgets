@@ -132,8 +132,8 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
                         glassColor: isSelected
                             ? AppThemeColors.babyPink.withValues(alpha: 0.3)
                             : Colors.white.withValues(alpha: 0.05),
-                        blur: 0,
-                        thickness: 10,
+                        blur: 6,
+                        thickness: 15,
                       ),
                       shape: const LiquidRoundedSuperellipse(borderRadius: 12),
                       child: Center(
@@ -165,7 +165,7 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
     return liquid.LiquidCard(
       borderRadius: 20,
       padding: 16,
-      quality: GlassQuality.standard,
+      quality: GlassQuality.premium,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -178,7 +178,7 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
             width: 100,
             height: 40,
             style: GlassButtonStyle.filled,
-            settings: LiquidGlassSettings(blur: 0, thickness: 10),
+            settings: const LiquidGlassSettings(blur: 6, thickness: 15),
             shape: const LiquidRoundedSuperellipse(borderRadius: 12),
             child: const Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -242,7 +242,7 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
             width: 100,
             height: 40,
             style: GlassButtonStyle.filled,
-            settings: LiquidGlassSettings(blur: 0, thickness: 10),
+            settings: const LiquidGlassSettings(blur: 6, thickness: 15),
             shape: const LiquidRoundedSuperellipse(borderRadius: 12),
             child: const Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -392,7 +392,7 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
     return liquid.LiquidCard(
       borderRadius: 20,
       padding: 12,
-      quality: GlassQuality.standard,
+      quality: GlassQuality.premium,
       child: Column(
         children: [
           // 星期标题 + 日期

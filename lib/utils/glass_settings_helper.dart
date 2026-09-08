@@ -26,29 +26,33 @@ class GlassSettingsHelper {
 
     return LiquidGlassSettings(
       glassColor: glassColor,
-      blur: blur ?? 1.5, // 极低模糊，极致高帧率，通透清澈
-      thickness: thickness ?? 18.0, // 增大物理厚度，增强光学真实折射边界
-      refractiveIndex: 1.25,
-      lightIntensity: 0.65,
-      ambientStrength: 0.35,
+      blur: blur ?? 10.0, // 真实液态毛玻璃模糊
+      thickness: thickness ?? 22.0, // 充足物理厚度驱动真实折射边界
+      refractiveIndex: 1.45,
+      lightIntensity: 0.70,
+      ambientStrength: 0.50,
+      ambientRim: 0.15,
+      fresnelStrength: 0.85,
       saturation: 1.25,
     );
   }
 
   /// 获取卡片玻璃设置
   static LiquidGlassSettings getCardSettings({double? alpha}) {
-    // 极其通透清澈的 Apple iOS 26/27 液态玻璃微质感
+    // 极其通透清澈的 Apple iOS 26/27 液态玻璃质感
     final glassColor = globalUseDarkMode
-        ? Colors.black.withValues(alpha: alpha ?? 0.18)
-        : Colors.white.withValues(alpha: alpha ?? 0.08);
+        ? Colors.black.withValues(alpha: alpha ?? 0.20)
+        : Colors.white.withValues(alpha: alpha ?? 0.10);
 
     return LiquidGlassSettings(
       glassColor: glassColor,
-      blur: 1.5, // 极低模糊，杜绝多次高斯模糊采样丢帧
-      thickness: 18.0, // 物理厚度驱动边缘透镜折射
-      refractiveIndex: 1.25,
-      lightIntensity: 0.65,
-      ambientStrength: 0.35,
+      blur: 10.0,
+      thickness: 20.0,
+      refractiveIndex: 1.45,
+      lightIntensity: 0.70,
+      ambientStrength: 0.50,
+      ambientRim: 0.15,
+      fresnelStrength: 0.85,
       saturation: 1.25,
     );
   }
@@ -75,11 +79,13 @@ class GlassSettingsHelper {
 
     return LiquidGlassSettings(
       glassColor: glassColor,
-      blur: 0,
-      thickness: 10.0,
-      refractiveIndex: 1.20,
-      lightIntensity: 0.50,
-      ambientStrength: 0.10,
+      blur: 6.0,
+      thickness: 16.0,
+      refractiveIndex: 1.35,
+      lightIntensity: 0.65,
+      ambientStrength: 0.35,
+      ambientRim: 0.12,
+      fresnelStrength: 0.75,
     );
   }
 
@@ -91,11 +97,13 @@ class GlassSettingsHelper {
 
     return LiquidGlassSettings(
       glassColor: glassColor,
-      blur: 2.0,
-      thickness: 12.0,
-      refractiveIndex: 1.20,
-      lightIntensity: 0.50,
-      ambientStrength: 0.18,
+      blur: 15.0,
+      thickness: 25.0,
+      refractiveIndex: 1.45,
+      lightIntensity: 0.70,
+      ambientStrength: 0.45,
+      ambientRim: 0.15,
+      fresnelStrength: 0.85,
     );
   }
 

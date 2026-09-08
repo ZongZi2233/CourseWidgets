@@ -38,7 +38,7 @@ class _ScheduleConfigScreenState extends State<ScheduleConfigScreen> {
         '${_config.semesterStartDate.year}-${_config.semesterStartDate.month.toString().padLeft(2, '0')}-${_config.semesterStartDate.day.toString().padLeft(2, '0')}';
     _breakTimeController.text = _config.breakTime.toString();
 
-    for (int i = 1; i <= 11; i++) {
+    for (int i = 1; i <= 12; i++) {
       _startControllers.add(
         TextEditingController(
           text: _formatMinutes(_config.sectionStartTimes[i] ?? 480),
@@ -716,7 +716,7 @@ class _ScheduleConfigScreenState extends State<ScheduleConfigScreen> {
     });
   }
 
-  void _saveConfig() {
+  Future<void> _saveConfig() async {
     if (!_formKey.currentState!.validate()) {
       return;
     }
@@ -740,7 +740,7 @@ class _ScheduleConfigScreenState extends State<ScheduleConfigScreen> {
       final sectionStartTimes = <int, int>{};
       final sectionDurations = <int, int>{};
 
-      for (int i = 1; i <= 11; i++) {
+      for (int i = 1; i <= 12; i++) {
         final startTime = _parseTimeToMinutes(_startControllers[i - 1].text);
         final duration = int.tryParse(_durationControllers[i - 1].text) ?? 50;
 
@@ -770,7 +770,7 @@ class _ScheduleConfigScreenState extends State<ScheduleConfigScreen> {
       }
 
       // 保存到Provider
-      context.read<ScheduleProvider>().updateConfig(newConfig);
+      await context.read<ScheduleProvider>().updateConfig(newConfig);
 
       // 显示成功消息
       _showCupertinoAlert('配置已保存', '课时配置已成功保存');

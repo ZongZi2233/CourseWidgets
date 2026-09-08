@@ -201,73 +201,66 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
             ),
           ),
         ),
-        // 官方原生 GlassBottomBar 专用导航栏
+        // 官方原生旗舰 GlassTabBar.bottom 专用导航栏
         bottomNavigationBar: AnimatedSlide(
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeOutCubic,
           offset: _isBottomNavVisible ? Offset.zero : const Offset(0, 1.2),
           child: RepaintBoundary(
-            child: GlassContentAwareBrightness(
-              builder: (context, brightness, darkAmount) {
-                final isBarLight = brightness == Brightness.light;
-                final selectedColor =
-                    isBarLight ? const Color(0xFF1A1A2E) : Colors.white;
-                final unselectedColor = isBarLight
-                    ? const Color(0x8A1A1A2E)
-                    : const Color(0xB3FFFFFF);
-
-                return GlassBottomBar(
-                  selectedIndex: _currentIndex,
-                  onTabSelected: (index) {
-                    HapticFeedback.selectionClick();
-                    setState(() => _currentIndex = index);
-                  },
-                  quality: GlassQuality.standard,
-                  maskingQuality: MaskingQuality.high,
-                  barBorderRadius: 32.0,
-                  indicatorColor:
-                      AppThemeColors.babyPink.withValues(alpha: 0.35),
-                  selectedIconColor: selectedColor,
-                  unselectedIconColor: unselectedColor,
-                  textStyle: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: selectedColor,
-                  ),
-                  glassSettings: const LiquidGlassSettings(
-                    blur: 1.5,
-                    thickness: 18.0,
-                    refractiveIndex: 1.25,
-                    lightIntensity: 0.70,
-                    ambientStrength: 0.35,
-                    ambientRim: 0.05,
-                    fresnelStrength: 0.12,
-                    edgeAbsorption: 0.15,
-                    saturation: 1.25,
-                    glassColor: Color.fromRGBO(255, 255, 255, 0.08),
-                  ),
-                  tabs: const [
-                    GlassBottomBarTab(
-                      icon: CupertinoIcons.square_grid_2x2,
-                      selectedIcon: CupertinoIcons.square_grid_2x2_fill,
-                      label: '课程',
-                      glowColor: Color(0xFFFF9A9E),
-                    ),
-                    GlassBottomBarTab(
-                      icon: CupertinoIcons.calendar,
-                      selectedIcon: CupertinoIcons.calendar_today,
-                      label: '日历',
-                      glowColor: Color(0xFF4FACFE),
-                    ),
-                    GlassBottomBarTab(
-                      icon: CupertinoIcons.gear_alt,
-                      selectedIcon: CupertinoIcons.gear_alt_fill,
-                      label: '设置',
-                      glowColor: Color(0xFFFFB347),
-                    ),
-                  ],
-                );
+            child: GlassTabBar.bottom(
+              selectedIndex: _currentIndex,
+              onTabSelected: (index) {
+                HapticFeedback.selectionClick();
+                setState(() => _currentIndex = index);
               },
+              quality: GlassQuality.premium,
+              maskingQuality: MaskingQuality.high,
+              barBorderRadius: 999.0,
+              indicatorBorderRadius: 999.0,
+              adaptiveBrightness: true,
+              magnification: 1.15,
+              interactionBehavior: GlassInteractionBehavior.full,
+              settings: const LiquidGlassSettings(
+                thickness: 28,
+                blur: 10,
+                chromaticAberration: 0.25,
+                lightIntensity: 0.70,
+                refractiveIndex: 1.45,
+                saturation: 1.25,
+                ambientStrength: 0.60,
+                ambientRim: 0.15,
+                fresnelStrength: 0.85,
+                glassColor: Color(0x24FFFFFF),
+              ),
+              indicatorSettings: const LiquidGlassSettings(
+                thickness: 30,
+                blur: 6,
+                chromaticAberration: 0.3,
+                refractiveIndex: 1.55,
+                ambientRim: 0.18,
+                fresnelStrength: 1.0,
+                glassColor: Color(0x35FFFFFF),
+              ),
+              tabs: const [
+                GlassTab(
+                  icon: Icon(CupertinoIcons.square_grid_2x2),
+                  activeIcon: Icon(CupertinoIcons.square_grid_2x2_fill),
+                  label: '课程',
+                  glowColor: Color(0xFFFF9A9E),
+                ),
+                GlassTab(
+                  icon: Icon(CupertinoIcons.calendar),
+                  activeIcon: Icon(CupertinoIcons.calendar_today),
+                  label: '日历',
+                  glowColor: Color(0xFF4FACFE),
+                ),
+                GlassTab(
+                  icon: Icon(CupertinoIcons.gear_alt),
+                  activeIcon: Icon(CupertinoIcons.gear_alt_fill),
+                  label: '设置',
+                  glowColor: Color(0xFFFFB347),
+                ),
+              ],
             ),
           ),
         ),
@@ -344,14 +337,17 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                 ),
                 child: GlassContainer(
                   useOwnLayer: true,
+                  quality: GlassQuality.premium,
                   shape: const LiquidRoundedSuperellipse(borderRadius: 20),
                   settings: const LiquidGlassSettings(
-                    glassColor: Color.fromRGBO(255, 255, 255, 0.10),
-                    blur: 1.5,
-                    thickness: 16.0,
-                    refractiveIndex: 1.25,
-                    lightIntensity: 0.68,
-                    ambientStrength: 0.35,
+                    glassColor: Color(0x22FFFFFF),
+                    blur: 10.0,
+                    thickness: 22.0,
+                    refractiveIndex: 1.45,
+                    lightIntensity: 0.70,
+                    ambientStrength: 0.50,
+                    ambientRim: 0.15,
+                    fresnelStrength: 0.85,
                     saturation: 1.25,
                   ),
                   child: Padding(
@@ -397,16 +393,18 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
   /// [v2.6.0] 重构手机端主课表页面：顶部轻量化折射标题 + 紧凑日历胶囊，解放全屏纵向空间
   Widget _buildSchedulePage() {
     return AdaptiveLiquidGlassLayer(
-      quality: GlassQuality.standard,
+      quality: GlassQuality.premium,
       settings: const LiquidGlassSettings(
-        blur: 1.5,
-        thickness: 18.0,
-        glassColor: Color.fromRGBO(255, 255, 255, 0.08),
+        blur: 10.0,
+        thickness: 24.0,
+        glassColor: Color(0x20FFFFFF),
         lightAngle: 135,
-        lightIntensity: 0.70,
-        ambientStrength: 0.35,
+        lightIntensity: 0.75,
+        ambientStrength: 0.50,
+        ambientRim: 0.15,
+        fresnelStrength: 0.85,
         saturation: 1.25,
-        refractiveIndex: 1.25,
+        refractiveIndex: 1.45,
       ),
       child: Consumer<ScheduleProvider>(
         builder: (context, provider, _) {
@@ -476,14 +474,18 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
         ],
       ),
       child: GlassContainer(
+        useOwnLayer: true,
+        quality: GlassQuality.premium,
         shape: const LiquidRoundedSuperellipse(borderRadius: 20),
         settings: const LiquidGlassSettings(
-          glassColor: Color.fromRGBO(255, 255, 255, 0.10),
-          blur: 1.5,
-          thickness: 16.0,
-          refractiveIndex: 1.25,
-          lightIntensity: 0.68,
-          ambientStrength: 0.35,
+          glassColor: Color(0x22FFFFFF),
+          blur: 10.0,
+          thickness: 22.0,
+          refractiveIndex: 1.45,
+          lightIntensity: 0.70,
+          ambientStrength: 0.50,
+          ambientRim: 0.15,
+          fresnelStrength: 0.85,
           saturation: 1.25,
         ),
         child: Padding(
@@ -713,14 +715,18 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
         ],
       ),
       child: GlassContainer(
+        useOwnLayer: true,
+        quality: GlassQuality.premium,
         shape: const LiquidRoundedSuperellipse(borderRadius: 18),
         settings: const LiquidGlassSettings(
-          glassColor: Color.fromRGBO(255, 255, 255, 0.08),
-          blur: 1.5,
-          thickness: 15.0,
-          refractiveIndex: 1.25,
-          lightIntensity: 0.65,
-          ambientStrength: 0.35,
+          glassColor: Color(0x20FFFFFF),
+          blur: 10.0,
+          thickness: 20.0,
+          refractiveIndex: 1.45,
+          lightIntensity: 0.70,
+          ambientStrength: 0.50,
+          ambientRim: 0.15,
+          fresnelStrength: 0.85,
           saturation: 1.20,
         ),
         child: Padding(
@@ -889,10 +895,21 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                     gradient: LinearGradient(
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
-                      colors: [
-                        AppThemeColors.babyPink.withValues(alpha: 0.35),
-                        AppThemeColors.softCoral.withValues(alpha: 0.22),
-                      ],
+                      colors: isDark
+                          ? [
+                              AppThemeColors.babyPink.withValues(alpha: 0.35),
+                              AppThemeColors.softCoral.withValues(alpha: 0.22),
+                            ]
+                          : [
+                              AppThemeColors.babyPink.withValues(alpha: 0.20),
+                              AppThemeColors.softCoral.withValues(alpha: 0.12),
+                            ],
+                    ),
+                    border: Border.all(
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.12)
+                          : AppThemeColors.babyPink.withValues(alpha: 0.35),
+                      width: 0.8,
                     ),
                     borderRadius: BorderRadius.circular(14),
                   ),
@@ -901,8 +918,8 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                     children: [
                       Text(
                         timeStart,
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: isDark ? Colors.white : const Color(0xFF1A1A2E),
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
                         ),
@@ -912,7 +929,9 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                         Text(
                           timeEnd,
                           style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.8),
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.8)
+                                : const Color(0x991A1A2E),
                             fontSize: 10,
                             fontWeight: FontWeight.w500,
                           ),
@@ -925,13 +944,15 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                           vertical: 1.5,
                         ),
                         decoration: BoxDecoration(
-                          color: AppThemeColors.babyPink.withValues(alpha: 0.35),
+                          color: isDark
+                              ? AppThemeColors.babyPink.withValues(alpha: 0.35)
+                              : AppThemeColors.babyPink.withValues(alpha: 0.25),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
                           sectionText,
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: isDark ? Colors.white : const Color(0xFF1A1A2E),
                             fontSize: 9,
                             fontWeight: FontWeight.w600,
                           ),

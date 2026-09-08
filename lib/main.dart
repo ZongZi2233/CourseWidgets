@@ -346,11 +346,15 @@ class _MyAppState extends State<MyApp> {
               // 去掉后，Flutter可直接执行 ThemeData 的平滑过渡动画而完美保留局部 State 页面！
               debugShowCheckedModeBanner: false,
               navigatorObservers: [routeObserver], // [v2.6.0] 注册全局路由监听器
+              themeMode: globalUseDarkMode
+                  ? material.ThemeMode.dark
+                  : material.ThemeMode.light,
               theme: material.ThemeData(
                 useMaterial3: true,
+                brightness: material.Brightness.light,
                 colorScheme: material.ColorScheme.fromSeed(
                   seedColor: themeService.primaryColor,
-                  brightness: material.Theme.of(context).brightness,
+                  brightness: material.Brightness.light,
                 ),
                 // [v2.4.4] 全局字体：仅在桌面端强制使用 PingFangSC/SFPro 以避免移动端字体文件被打包带来的体积膨胀
                 // [v2.7.0] 移动端恢复系统默认字体 (Roboto/San Francisco)
@@ -367,6 +371,34 @@ class _MyAppState extends State<MyApp> {
                 ),
                 // [v2.9.7] Android 使用 CustomPredictiveBackPageTransitionsBuilder
                 // 保留预测式返回手势，内部统一调用 SmoothSlideTransitionsBuilder
+                pageTransitionsTheme: material.PageTransitionsTheme(
+                  builders: {
+                    material.TargetPlatform.android:
+                        const CustomPredictiveBackPageTransitionsBuilder(),
+                    material.TargetPlatform.iOS:
+                        const SmoothSlideTransitionsBuilder(),
+                    material.TargetPlatform.windows:
+                        const SmoothSlideTransitionsBuilder(),
+                  },
+                ),
+              ),
+              darkTheme: material.ThemeData(
+                useMaterial3: true,
+                brightness: material.Brightness.dark,
+                colorScheme: material.ColorScheme.fromSeed(
+                  seedColor: themeService.primaryColor,
+                  brightness: material.Brightness.dark,
+                ),
+                fontFamily: (Platform.isWindows || Platform.isMacOS)
+                    ? 'PingFangSC'
+                    : null,
+                fontFamilyFallback: (Platform.isWindows || Platform.isMacOS)
+                    ? const ['SFPro']
+                    : null,
+                textTheme: const material.TextTheme(
+                  titleLarge: TextStyle(fontWeight: FontWeight.bold),
+                  titleMedium: TextStyle(fontWeight: FontWeight.bold),
+                ),
                 pageTransitionsTheme: material.PageTransitionsTheme(
                   builders: {
                     material.TargetPlatform.android:

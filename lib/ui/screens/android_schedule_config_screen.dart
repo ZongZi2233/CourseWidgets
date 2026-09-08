@@ -135,7 +135,7 @@ class _AndroidScheduleConfigScreenState
 
   void _smartCascadeSectionTimes() {
     final firstStartStr = _startControllers[0].text;
-    final firstStartMin = _parseTime(firstStartStr) ?? 510; // 默认 8:30
+    final firstStartMin = _parseTime(firstStartStr) ?? 510; // 默认 8:30 (510分钟)
     final duration = int.tryParse(_durationControllers[0].text) ?? 45;
     final breakTime = int.tryParse(_breakTimeController.text) ?? 10;
 
@@ -144,7 +144,7 @@ class _AndroidScheduleConfigScreenState
       if (i == 0) {
         currentMin = firstStartMin;
       } else if (i == 2) {
-        // 上午大课间
+        // 上午大课间 (默认20分钟)
         currentMin += duration + math.max(breakTime, 20);
       } else if (i == 4) {
         // 下午第一节（第5节），保证午休后开始（如13:30或14:00）
@@ -160,14 +160,12 @@ class _AndroidScheduleConfigScreenState
       }
 
       _startControllers[i].text = _formatMinutes(currentMin);
-      if (_config.isEqualDuration) {
-        _durationControllers[i].text = duration.toString();
-      }
+      _durationControllers[i].text = duration.toString();
     }
     setState(() {});
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: const Text('✨ 已智能推算所有节次时间（包含大课间与午休）'),
+        content: Text('✨ 已智能推算所有节次时间（第1节从 ${_formatMinutes(firstStartMin)} 开始，包含大课间与午休）'),
         backgroundColor: AppThemeColors.babyPink,
         behavior: SnackBarBehavior.floating,
         duration: const Duration(seconds: 2),
@@ -177,8 +175,9 @@ class _AndroidScheduleConfigScreenState
 
   Future<void> _saveConfig() async {
     try {
+      final newStartDate = _parseDate(_semesterDateController.text);
       final newConfig = ScheduleConfigModel(
-        semesterStartDate: _parseDate(_semesterDateController.text),
+        semesterStartDate: newStartDate,
         breakTime: int.tryParse(_breakTimeController.text) ?? _config.breakTime,
         showWeekends: _showWeekends,
         sectionStartTimes: Map.from(_config.sectionStartTimes),
@@ -206,7 +205,18 @@ class _AndroidScheduleConfigScreenState
         defaultDuration: defaultDur,
       );
 
-      await context.read<ScheduleProvider>().updateConfig(savedConfig);
+      final provider = context.read<ScheduleProvider>();
+      final earliestMonday = provider.getEarliestCourseMonday();
+      final targetMonday = DateTime(newStartDate.year, newStartDate.month, newStartDate.day)
+          .subtract(Duration(days: newStartDate.weekday - 1));
+
+      // 1. 保存配置并重算节次时间
+      await provider.updateConfig(savedConfig);
+
+      // 2. 若课表首周与设置的目标开学日不同步，执行首周课表平移对齐
+      if (earliestMonday != null && earliestMonday != targetMonday) {
+        await provider.alignScheduleToStartDate(targetMonday);
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -632,9 +642,15 @@ class _AndroidScheduleConfigScreenState
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
                 ),
-                decoration: const InputDecoration.collapsed(hintText: ''),
+                decoration: InputDecoration.collapsed(
+                  hintText: index == 0 ? '8:30' : '',
+                  hintStyle: TextStyle(
+                    color: isDark ? Colors.white24 : Colors.black26,
+                  ),
+                ),
                 textAlign: TextAlign.center,
-                keyboardType: TextInputType.number,
+                keyboardType: TextInputType.datetime,
+                onSubmitted: index == 0 ? (_) => _smartCascadeSectionTimes() : null,
               ),
             ),
           ),

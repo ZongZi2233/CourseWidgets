@@ -96,8 +96,8 @@ class _WindowsScheduleScreenState extends State<WindowsScheduleScreen> {
                         glassColor: isSelected
                             ? AppThemeColors.babyPink.withValues(alpha: 0.3)
                             : Colors.white.withValues(alpha: 0.05),
-                        blur: 0,
-                        thickness: 10,
+                        blur: 6,
+                        thickness: 15,
                       ),
                       shape: const LiquidRoundedSuperellipse(borderRadius: 12),
                       child: Center(
@@ -176,8 +176,8 @@ class _WindowsScheduleScreenState extends State<WindowsScheduleScreen> {
                 style: GlassButtonStyle.filled,
                 settings: LiquidGlassSettings(
                   glassColor: Colors.white.withValues(alpha: 0.05),
-                  blur: 0,
-                  thickness: 10,
+                  blur: 6,
+                  thickness: 15,
                 ),
                 shape: const LiquidRoundedSuperellipse(borderRadius: 12),
                 child: const Icon(
@@ -238,8 +238,8 @@ class _WindowsScheduleScreenState extends State<WindowsScheduleScreen> {
                                       alpha: 0.3,
                                     )
                                   : Colors.white.withValues(alpha: 0.05),
-                              blur: 0,
-                              thickness: 10,
+                              blur: 6,
+                              thickness: 15,
                             ),
                             shape: const LiquidRoundedSuperellipse(
                               borderRadius: 100,
@@ -276,8 +276,8 @@ class _WindowsScheduleScreenState extends State<WindowsScheduleScreen> {
                 style: GlassButtonStyle.filled,
                 settings: LiquidGlassSettings(
                   glassColor: Colors.white.withValues(alpha: 0.05),
-                  blur: 0,
-                  thickness: 10,
+                  blur: 6,
+                  thickness: 15,
                 ),
                 shape: const LiquidRoundedSuperellipse(borderRadius: 12),
                 child: const Icon(
@@ -396,8 +396,9 @@ class _WindowsScheduleScreenState extends State<WindowsScheduleScreen> {
               glassColor: isToday
                   ? AppThemeColors.babyPink.withValues(alpha: 0.3)
                   : Colors.white.withValues(alpha: 0.05),
-              blur: 0,
-              thickness: 10,
+              blur: 8,
+              thickness: 16,
+              refractiveIndex: 1.35,
             ),
             shape: const LiquidRoundedSuperellipse(borderRadius: 12),
             height: 50,
@@ -491,8 +492,11 @@ class _WindowsScheduleScreenState extends State<WindowsScheduleScreen> {
           useOwnLayer: true,
           settings: LiquidGlassSettings(
             glassColor: AppThemeColors.softCoral.withValues(alpha: 0.6),
-            blur: 0,
-            thickness: 10,
+            blur: 8,
+            thickness: 16,
+            refractiveIndex: 1.35,
+            ambientRim: 0.12,
+            fresnelStrength: 0.75,
           ),
           shape: const LiquidRoundedSuperellipse(borderRadius: 12),
           child: Material(

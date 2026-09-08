@@ -73,7 +73,7 @@ class LiquidCard extends StatelessWidget {
     this.styleType = LiquidStyleType.standard,
     this.isPanel = false,
     this.stretch,
-    this.quality = GlassQuality.standard,
+    this.quality = GlassQuality.premium,
     bool? useFakeGlass,
     bool? isDisabled,
   });
@@ -83,20 +83,20 @@ class LiquidCard extends StatelessWidget {
     // [v2.7.8] 智能检测是否位于父级玻璃图层中，实现共享图层与独立渲染自适应
     final inLayer = context.dependOnInheritedWidgetOfExactType<InheritedLiquidGlass>() != null;
 
-    // [v2.7.9] 纯净光学折射：Beer-Lambert 边缘吸收增强、微弱 Fresnel 消除假白边、低模糊高帧率
+    // [v2.8.1] 真实光学折射：充足物理厚度、高质感边缘吸收与双折射、高刷透镜折射
     final settings = glassColor != null
         ? LiquidGlassSettings(
-            thickness: styleType == LiquidStyleType.micro ? 12.0 : 18.0,
-            blur: (styleType == LiquidStyleType.micro) ? 0.0 : 1.5,
+            thickness: styleType == LiquidStyleType.micro ? 14.0 : 20.0,
+            blur: (styleType == LiquidStyleType.micro) ? 4.0 : 10.0,
             glassColor: glassColor!,
-            refractiveIndex: 1.25,
-            lightIntensity: 0.68,
-            ambientStrength: 0.35,
+            refractiveIndex: 1.40,
+            lightIntensity: 0.70,
+            ambientStrength: 0.45,
             saturation: 1.25,
             bodyMode: GlassBodyMode.adaptive,
             edgeAbsorption: 0.18,
-            ambientRim: 0.06,
-            fresnelStrength: 0.15,
+            ambientRim: 0.15,
+            fresnelStrength: 0.85,
             specularSharpness: GlassSpecularSharpness.medium,
           )
         : (isPanel
@@ -104,8 +104,8 @@ class LiquidCard extends StatelessWidget {
             : GlassSettingsHelper.defaultSettings).copyWith(
                 bodyMode: GlassBodyMode.adaptive,
                 edgeAbsorption: 0.18,
-                ambientRim: 0.06,
-                fresnelStrength: 0.15,
+                ambientRim: 0.15,
+                fresnelStrength: 0.85,
                 specularSharpness: GlassSpecularSharpness.medium,
               );
 
@@ -181,12 +181,14 @@ class LiquidButton extends StatelessWidget {
         glassColor: isOutline
             ? Colors.white.withValues(alpha: 0.1)
             : color.withValues(alpha: 0.7),
-        blur: 0,
+        blur: 6.0,
+        thickness: 16.0,
+        refractiveIndex: 1.35,
         lightIntensity: 0.65,
         bodyMode: GlassBodyMode.adaptive,
         edgeAbsorption: 0.15,
-        ambientRim: 0.06,
-        fresnelStrength: 0.15,
+        ambientRim: 0.12,
+        fresnelStrength: 0.75,
         specularSharpness: GlassSpecularSharpness.medium,
       ),
       shape: LiquidRoundedSuperellipse(borderRadius: 16),
@@ -220,9 +222,10 @@ class LiquidSwitch extends StatelessWidget {
       height: 32, // [v2.1.8] 增加高度
       activeColor: AppThemeColors.babyPink,
       settings: const LiquidGlassSettings(
-        thickness: 5,
-        blur: 0,
-        lightIntensity: 0.4,
+        thickness: 10,
+        blur: 4.0,
+        refractiveIndex: 1.35,
+        lightIntensity: 0.6,
       ),
     );
   }

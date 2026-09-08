@@ -32,11 +32,11 @@ class UnifiedBackdropPanel extends StatelessWidget {
 
     final bgColor = isDark
         ? Colors.black.withValues(alpha: 0.35)
-        : Colors.white.withValues(alpha: 0.28);
+        : Colors.white.withValues(alpha: 0.20);
 
     final borderColor = isDark
         ? Colors.white.withValues(alpha: 0.12)
-        : Colors.black.withValues(alpha: 0.08);
+        : Colors.black.withValues(alpha: 0.06);
 
     final themedChild = DefaultTextStyle(
       style: TextStyle(

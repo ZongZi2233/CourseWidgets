@@ -470,13 +470,19 @@ class ScheduleProvider with ChangeNotifier {
     return minutes >= 0 && minutes <= 5;
   }
 
-  /// 设置学期开始日期 — 统一通过 updateConfig 保存并触发重算
+  /// 设置学期开始日期 — 统一通过 updateConfig 保存并触发重算与课表首周对齐
   Future<void> setSemesterStartDate(DateTime date) async {
-    final newConfig = _currentConfig.copyWith(semesterStartDate: date);
+    final targetMonday = DateTime(date.year, date.month, date.day)
+        .subtract(Duration(days: date.weekday - 1));
+    final newConfig = _currentConfig.copyWith(semesterStartDate: targetMonday);
+    
+    final earliestMonday = getEarliestCourseMonday();
     await updateConfig(newConfig);
-    // 重算后需要跳转到当前日期
+    if (earliestMonday != null && earliestMonday != targetMonday) {
+      await alignScheduleToStartDate(targetMonday);
+    }
     await _jumpToCurrentDate();
-    debugPrint('✅ 开学日期已更新为 $date，已重算所有课程时间戳');
+    debugPrint('✅ 开学日期已更新为 $targetMonday，并自动对齐首周课表');
   }
 
   /// 更新课时配置
@@ -564,8 +570,8 @@ class ScheduleProvider with ChangeNotifier {
       int endSection = section;
       for (int s = section; s <= 12; s++) {
         final sEnd =
-            (newConfig.sectionStartTimes[s] ?? (480 + (s - 1) * 60)) +
-            (newConfig.sectionDurations[s] ?? 50);
+            (oldConfig.sectionStartTimes[s] ?? (480 + (s - 1) * 60)) +
+            (oldConfig.sectionDurations[s] ?? 50);
         endSection = s;
         if (sEnd >= endMinutes - 5) break; // 5分钟容差
       }

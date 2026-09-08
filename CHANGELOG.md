@@ -4,6 +4,29 @@
 
 ---
 
+## [v2.8.1] - 2026-09-08
+
+### 1. 光学折射管线彻底打通与毛玻璃质感全量恢复 (Physical Refraction & Impeller Premium)
+- **根除祖先层折射抑制**：排查并修复了 `AdaptiveLiquidGlassLayer` 预设 `quality: GlassQuality.standard` 与 `blur: 1.5` 在 grouped 模式（`useOwnLayer: false`）下直接忽略子组件自定义 settings 并压制全屏着色器的底层机制。全屏根节点与独立容器全面升级为 `GlassQuality.premium`，并配合 `useOwnLayer: true` 彻底打通 Impeller 3D 凸透镜碎片着色器（Fragment Shader）管线。
+- **全面恢复真实高斯模糊与折射率**：摒弃导致肉眼扁平透明的 `blur: 0 / 1.5` 极限降级，统一将卡片、容器、周次选择器与导航栏升级为 `blur: 6.0 ~ 12.0`、`refractiveIndex: 1.35 ~ 1.45`、`thickness: 20.0 ~ 24.0`、`ambientRim: 0.15`、`fresnelStrength: 0.85`，使背景壁纸呈现真实、通透且具有景深物理扭曲的光学折射效果。
+- **全端玻璃组件对齐**：Windows 桌面端卡片与周次指示器同步解除 `blur: 0` 封印；`LiquidCard`、`LiquidButton`、`LiquidSwitch` 与平板端 `WeeklyScheduleGrid` 均恢复 `GlassQuality.premium` 渲染。
+
+### 2. 导航栏与全天候文字对比度自适应修复 (GlassTabBar & Contrast Dynamics)
+- **官方旗舰级 GlassTabBar.bottom 架构重构**：底部导航栏全面切换为 `GlassTabBar.bottom` + `GlassTab` 胶囊流体设计，配置 `barBorderRadius: 999.0` 与 `adaptiveBrightness: true`，彻底消除滑块错位与拉伸变形。
+- **全应用明暗色彩反转修复**：修复 `MaterialApp` 外层锁死单向亮度导致深色模式无法反色的缺陷，完整贯通 `themeMode: themeProvider.themeMode`。
+- **混色背板清透化与文字反差增强**：`UnifiedBackdropPanel` 浅色模式调优为高透清澈白（alpha 0.20）；课程卡片“时间胶囊”与详情文字根据深/浅模式动态反色（浅色采用深黑墨色 `#1A1A2E`，深色采用冰晶白），根除“白底白字、模糊脏乱看不清”的痛点。
+
+### 3. 开学日期强校准平移与全局课时智能联动算法 (Semester Alignment & Smart Cascade)
+- **开学日期首周强对齐算法 (`alignScheduleToStartDate`)**：彻底修复已导入课表时间戳固化在 9.14 导致在设置中修改开学日期为 9.7 仍陷入死循环被锁在第 2 周的逻辑缺陷。现在修改或保存开学日期时，自动执行首周对齐，将整学期课表平移至目标周一。
+- **全局节次反推精度修复 (`_recalculateAllTimestamps`)**：修复更新课时配置时反推旧课程节次误用 `newConfig` 导致计算错位的 bug，确保换算始终基于旧课时区间真实匹配。
+- **一键 8:30 智能全天课时推算**：课时设置界面支持多种输入格式（`8.30` / `8:30` / `830` 等），修改首节（如 8:30）回车或点击按钮即可一键级联智慧推算全天 12 节课；修复 12 节循环越界遗留问题，保存时即刻持久化并全面重算课表。
+
+### 4. 双端同步 Release 构建与本地 Git 归档
+- Windows x64 与 Android arm64 同步编译发布，由 `collect_release.py` 自动归档至 `release/`。
+- 本地自动提交 Git 标签 `v2.8.1+10008045`（严格遵循仅本地 commit 原则，禁止远程 push）。
+
+---
+
 ## [v2.8.0] - 2026-09-08
 
 ### 1. 渲染引擎与光学折射管线修复 (Optical Refraction Pipeline & Vulkan)
