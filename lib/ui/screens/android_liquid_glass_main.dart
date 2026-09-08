@@ -16,7 +16,9 @@ import '../../main.dart' hide globalUseDarkMode; // [v2.6.0] 引用全局 routeO
 import 'course_edit_screen.dart';
 import 'calendar_view_screen.dart';
 import 'settings_main_screen.dart';
+import 'android_schedule_config_screen.dart';
 import '../widgets/liquid_components.dart' as liquid;
+import '../widgets/unified_backdrop_panel.dart';
 import '../transitions/smooth_slide_transitions.dart';
 import '../widgets/glass_context_menu.dart';
 import '../widgets/tablet_sidebar.dart';
@@ -85,8 +87,8 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
         }
       });
 
-      // 获取下一节课并启动实时通知
-      final nextCourse = provider.getNextCourse();
+      // [v2.8.0] 获取当前或下一节课并启动全天候实时常驻通知
+      final nextCourse = provider.getCurrentOrNextCourse();
       await liveService.startLiveUpdate(nextCourse);
 
       if (mounted) {
@@ -183,78 +185,90 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
 
   /// 手机布局
   Widget _buildPhoneLayout(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      extendBody: true,
-      body: RepaintBoundary(
-        key: TransparentMaterialPageRoute.contentBoundaryKey,
-        child: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 200),
-          child: KeyedSubtree(
-            key: ValueKey('phone_page_$_currentIndex'),
-            child: _buildCurrentPhonePage(),
+    return GlassContentAwareScope(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        extendBody: true,
+        body: GlassContentAwareContent(
+          child: RepaintBoundary(
+            key: TransparentMaterialPageRoute.contentBoundaryKey,
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              child: KeyedSubtree(
+                key: ValueKey('phone_page_$_currentIndex'),
+                child: _buildCurrentPhonePage(),
+              ),
+            ),
           ),
         ),
-      ),
-      // 官方标准 iOS 26 液态玻璃底部导航栏
-      bottomNavigationBar: AnimatedSlide(
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOutCubic,
-        offset: _isBottomNavVisible ? Offset.zero : const Offset(0, 1.2),
-        child: RepaintBoundary(
-          child: GlassTabBar.bottom(
-            selectedIndex: _currentIndex,
-            onTabSelected: (index) {
-              HapticFeedback.selectionClick();
-              setState(() => _currentIndex = index);
-            },
-            quality: GlassQuality.standard,
-            barBorderRadius: 999.0,
-            indicatorBorderRadius: 999.0,
-            adaptiveBrightness: true,
-            magnification: 1.12,
-            interactionBehavior: GlassInteractionBehavior.full,
-            settings: const LiquidGlassSettings(
-              blur: 1.5,
-              thickness: 18.0,
-              refractiveIndex: 1.25,
-              lightIntensity: 0.70,
-              ambientStrength: 0.35,
-              ambientRim: 0.05,
-              fresnelStrength: 0.12,
-              edgeAbsorption: 0.15,
-              saturation: 1.25,
-              glassColor: Color.fromRGBO(255, 255, 255, 0.08),
+        // 官方原生 GlassBottomBar 专用导航栏
+        bottomNavigationBar: AnimatedSlide(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOutCubic,
+          offset: _isBottomNavVisible ? Offset.zero : const Offset(0, 1.2),
+          child: RepaintBoundary(
+            child: GlassContentAwareBrightness(
+              builder: (context, brightness, darkAmount) {
+                final isBarLight = brightness == Brightness.light;
+                final selectedColor =
+                    isBarLight ? const Color(0xFF1A1A2E) : Colors.white;
+                final unselectedColor = isBarLight
+                    ? const Color(0x8A1A1A2E)
+                    : const Color(0xB3FFFFFF);
+
+                return GlassBottomBar(
+                  selectedIndex: _currentIndex,
+                  onTabSelected: (index) {
+                    HapticFeedback.selectionClick();
+                    setState(() => _currentIndex = index);
+                  },
+                  quality: GlassQuality.standard,
+                  maskingQuality: MaskingQuality.high,
+                  barBorderRadius: 32.0,
+                  indicatorColor:
+                      AppThemeColors.babyPink.withValues(alpha: 0.35),
+                  selectedIconColor: selectedColor,
+                  unselectedIconColor: unselectedColor,
+                  textStyle: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: selectedColor,
+                  ),
+                  glassSettings: const LiquidGlassSettings(
+                    blur: 1.5,
+                    thickness: 18.0,
+                    refractiveIndex: 1.25,
+                    lightIntensity: 0.70,
+                    ambientStrength: 0.35,
+                    ambientRim: 0.05,
+                    fresnelStrength: 0.12,
+                    edgeAbsorption: 0.15,
+                    saturation: 1.25,
+                    glassColor: Color.fromRGBO(255, 255, 255, 0.08),
+                  ),
+                  tabs: const [
+                    GlassBottomBarTab(
+                      icon: CupertinoIcons.square_grid_2x2,
+                      selectedIcon: CupertinoIcons.square_grid_2x2_fill,
+                      label: '课程',
+                      glowColor: Color(0xFFFF9A9E),
+                    ),
+                    GlassBottomBarTab(
+                      icon: CupertinoIcons.calendar,
+                      selectedIcon: CupertinoIcons.calendar_today,
+                      label: '日历',
+                      glowColor: Color(0xFF4FACFE),
+                    ),
+                    GlassBottomBarTab(
+                      icon: CupertinoIcons.gear_alt,
+                      selectedIcon: CupertinoIcons.gear_alt_fill,
+                      label: '设置',
+                      glowColor: Color(0xFFFFB347),
+                    ),
+                  ],
+                );
+              },
             ),
-            indicatorSettings: const LiquidGlassSettings(
-              blur: 1.5,
-              thickness: 20.0,
-              refractiveIndex: 1.28,
-              lightIntensity: 0.85,
-              ambientStrength: 0.40,
-              ambientRim: 0.06,
-              fresnelStrength: 0.15,
-              edgeAbsorption: 0.15,
-              glassColor: Color.fromRGBO(255, 255, 255, 0.14),
-            ),
-            indicatorColor: AppThemeColors.babyPink.withValues(alpha: 0.35),
-            tabs: const [
-              GlassTab(
-                icon: Icon(CupertinoIcons.square_grid_2x2),
-                activeIcon: Icon(CupertinoIcons.square_grid_2x2_fill),
-                label: '课程',
-              ),
-              GlassTab(
-                icon: Icon(CupertinoIcons.calendar),
-                activeIcon: Icon(CupertinoIcons.calendar_today),
-                label: '日历',
-              ),
-              GlassTab(
-                icon: Icon(CupertinoIcons.gear_alt),
-                activeIcon: Icon(CupertinoIcons.gear_alt_fill),
-                label: '设置',
-              ),
-            ],
           ),
         ),
       ),
@@ -596,6 +610,83 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                   ),
                 ),
               ),
+              const SizedBox(width: 8),
+              // [v2.8.0] 液态变形引擎驱动的三点展开菜单
+              GlassMenu(
+                menuWidth: 170,
+                menuBorderRadius: 20,
+                triggerBuilder: (context, toggleMenu) {
+                  return GestureDetector(
+                    onTap: toggleMenu,
+                    behavior: HitTestBehavior.opaque,
+                    child: Container(
+                      padding: const EdgeInsets.all(5),
+                      decoration: BoxDecoration(
+                        color: AppThemeColors.babyPink.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: AppThemeColors.babyPink.withValues(alpha: 0.35),
+                          width: 0.8,
+                        ),
+                      ),
+                      child: const Icon(
+                        CupertinoIcons.ellipsis,
+                        size: 14,
+                        color: Colors.white,
+                      ),
+                    ),
+                  );
+                },
+                items: [
+                  GlassMenuItem(
+                    icon: const Icon(
+                      CupertinoIcons.add,
+                      size: 18,
+                      color: Colors.white,
+                    ),
+                    title: '添加课程',
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        TransparentMaterialPageRoute(
+                          builder: (_) => const CourseEditScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  GlassMenuItem(
+                    icon: const Icon(
+                      CupertinoIcons.slider_horizontal_3,
+                      size: 18,
+                      color: Colors.white,
+                    ),
+                    title: '课时设置',
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        TransparentMaterialPageRoute(
+                          builder: (_) => const AndroidScheduleConfigScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  GlassMenuItem(
+                    icon: const Icon(
+                      CupertinoIcons.calendar_today,
+                      size: 18,
+                      color: Colors.white,
+                    ),
+                    title: '回到今天',
+                    onTap: () {
+                      final now = DateTime.now();
+                      final start = provider.currentConfig.semesterStartDate;
+                      final week = (now.difference(start).inDays ~/ 7) + 1;
+                      provider.setCurrentWeek(week);
+                      provider.setCurrentDay(now.weekday);
+                    },
+                  ),
+                ],
+              ),
             ],
           ),
         ),
@@ -754,8 +845,13 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
     return parts.isNotEmpty ? parts[0].trim() : '课程';
   }
 
-  /// [v2.7.6] 极具 Apple iOS 26/27 现代液态玻璃微质感的高性能课程卡片（增大折射边界，安全健壮解析）
+  /// [v2.8.0] 遵循官方“Glass is a platter, not a wrapper”原则的高性能混色背板课程卡片，消除滚动掉帧并自适应文字对比度
   Widget _buildModernCourseCard(dynamic course, [dynamic config]) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryTextColor = isDark ? Colors.white : const Color(0xFF1A1A2E);
+    final secondaryTextColor =
+        isDark ? Colors.white70 : const Color(0x991A1A2E);
+
     final timeStr = course.timeStr?.toString() ?? '';
     final timeStart = timeStr.contains('-')
         ? timeStr.split('-')[0].trim()
@@ -773,163 +869,162 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
             borderRadius: BorderRadius.circular(22),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.08),
+                color: Colors.black.withValues(alpha: isDark ? 0.12 : 0.04),
                 blurRadius: 8,
                 offset: const Offset(0, 3),
               ),
             ],
           ),
-          child: GlassContainer(
-            useOwnLayer: false, // 共享渲染层，消除多重独立 BackdropFilter 造成的 120Hz 丢帧卡顿
-            shape: const LiquidRoundedSuperellipse(borderRadius: 22),
-            quality: GlassQuality.standard,
-            settings: const LiquidGlassSettings(
-              thickness: 18.0, // 增大透镜折射物理厚度，凸显真实折射边界立体感
-              blur: 1.5, // 官方推荐低模糊，通透清澈不掉帧
-              glassColor: Color.fromRGBO(255, 255, 255, 0.08),
-              refractiveIndex: 1.25, // 优雅自然光学折射率
-              lightIntensity: 0.65,
-              ambientStrength: 0.35,
-              saturation: 1.25,
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  // 左侧时间胶囊条
-                  Container(
-                    width: 58,
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          AppThemeColors.babyPink.withValues(alpha: 0.35),
-                          AppThemeColors.softCoral.withValues(alpha: 0.22),
-                        ],
-                      ),
-                      borderRadius: BorderRadius.circular(14),
+          child: UnifiedBackdropPanel(
+            borderRadius: 22,
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // 左侧时间胶囊条
+                Container(
+                  width: 58,
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        AppThemeColors.babyPink.withValues(alpha: 0.35),
+                        AppThemeColors.softCoral.withValues(alpha: 0.22),
+                      ],
                     ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          timeStart,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                          ),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        timeStart,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
                         ),
-                        if (timeEnd.isNotEmpty) ...[
-                          const SizedBox(height: 1),
-                          Text(
-                            timeEnd,
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.6),
-                              fontSize: 10,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                        const SizedBox(height: 3),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-                          decoration: BoxDecoration(
-                            color: AppThemeColors.babyPink.withValues(alpha: 0.35),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            sectionText,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 9,
-                              fontWeight: FontWeight.w600,
-                            ),
+                      ),
+                      if (timeEnd.isNotEmpty) ...[
+                        const SizedBox(height: 1),
+                        Text(
+                          timeEnd,
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.8),
+                            fontSize: 10,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
                       ],
-                    ),
-                  ),
-
-                  const SizedBox(width: 14),
-
-                  // 中间课程详情
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          course.name,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 16,
-                            color: Colors.white,
-                            letterSpacing: 0.2,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
+                      const SizedBox(height: 3),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                          vertical: 1.5,
                         ),
-                        const SizedBox(height: 6),
-                        Row(
-                          children: [
-                            if (course.location.isNotEmpty)
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.08),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      CupertinoIcons.location_solid,
-                                      size: 11,
-                                      color: AppThemeColors.babyPink,
-                                    ),
-                                    const SizedBox(width: 3),
-                                    Text(
-                                      course.location,
-                                      style: TextStyle(
-                                        color: Colors.white.withValues(alpha: 0.85),
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                        decoration: BoxDecoration(
+                          color: AppThemeColors.babyPink.withValues(alpha: 0.35),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          sectionText,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(width: 14),
+
+                // 中间课程详情
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        course.name,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 16,
+                          color: primaryTextColor,
+                          letterSpacing: 0.2,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          if (course.location.isNotEmpty)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 7,
+                                vertical: 2,
                               ),
-                            if (course.location.isNotEmpty && course.teacher.isNotEmpty)
-                              const SizedBox(width: 8),
-                            if (course.teacher.isNotEmpty)
-                              Row(
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? Colors.white.withValues(alpha: 0.08)
+                                    : Colors.black.withValues(alpha: 0.05),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Icon(
-                                    CupertinoIcons.person_fill,
+                                    CupertinoIcons.location_solid,
                                     size: 11,
-                                    color: Colors.white.withValues(alpha: 0.5),
+                                    color: AppThemeColors.babyPink,
                                   ),
                                   const SizedBox(width: 3),
                                   Text(
-                                    course.teacher,
+                                    course.location,
                                     style: TextStyle(
-                                      color: Colors.white.withValues(alpha: 0.65),
+                                      color: secondaryTextColor,
                                       fontSize: 12,
-                                      fontWeight: FontWeight.w400,
+                                      fontWeight: FontWeight.w500,
                                     ),
                                   ),
                                 ],
                               ),
-                          ],
-                        ),
-                      ],
-                    ),
+                            ),
+                          if (course.location.isNotEmpty &&
+                              course.teacher.isNotEmpty)
+                            const SizedBox(width: 8),
+                          if (course.teacher.isNotEmpty)
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  CupertinoIcons.person_fill,
+                                  size: 11,
+                                  color: isDark
+                                      ? Colors.white54
+                                      : const Color(0x8A1A1A2E),
+                                ),
+                                const SizedBox(width: 3),
+                                Text(
+                                  course.teacher,
+                                  style: TextStyle(
+                                    color: secondaryTextColor,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w400,
+                                  ),
+                                ),
+                              ],
+                            ),
+                        ],
+                      ),
+                    ],
                   ),
+                ),
 
                   // 右侧操作菜单
                   GlassContextMenu(
@@ -998,9 +1093,8 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
             ),
           ),
         ),
-      ),
-    );
-  }
+      );
+    }
 
   /// 优雅的无课程占位视图
   Widget _buildEmptyCourseView() {

@@ -17,7 +17,7 @@ void main() {
 
     test('计算当前周次 - 课程进行中', () {
       final semesterStart = DateTime(2025, 9, 1);
-      final now = DateTime(2025, 9, 15); // 第2周
+      final now = DateTime(2025, 9, 10); // 第2周 (9月8日~9月14日)
       
       final weeksSinceStart = now.difference(semesterStart).inDays ~/ 7 + 1;
       

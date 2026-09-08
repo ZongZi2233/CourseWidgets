@@ -6,37 +6,41 @@
 
 ## [v2.8.0] - 2026-09-08
 
-### 1. 渲染引擎与图形管线革新 (Impeller Vulkan & ANGLE)
-- **强制 Vulkan 引擎后端**：Android 端配置 `io.flutter.embedding.android.ImpellerBackend = vulkan` 并在 `MainActivity` 注入 `--enable-impeller=true` 与 `--impeller-backend=vulkan`，彻底淘汰过时的 OpenGL GLES。
-- **全平台异步字节码预热**：启动阶段异步预热并编译所有核心液态玻璃 fragment shaders，保证 Frame 1 渲染零卡顿。
-- **杜绝“玻璃叠玻璃”引起的掉帧**：创建轻量级 `UnifiedBackdropPanel`，日历与课时设置等超大滚动面板降级为随深/浅色模式智能染色（深色 35% 黑、浅色 65% 白）的抗锯齿混色模糊背板，大幅缩减 GPU 离屏通道卷积开销，释放 120Hz 满帧高刷。
+### 1. 渲染引擎与光学折射管线修复 (Optical Refraction Pipeline & Vulkan)
+- **光学折射与着色器纹理采样修复**：在 `AdaptiveGlass` 及 `GlassBottomBar` 等底层渲染节点显式注入 `LiquidGlassScope.of(context)`，修复壁纸纹理采样丢失问题，使玻璃组件具备真实的光学背景凸透镜弯曲、色散折射与菲涅尔高光。
+- **消除生硬白边与假玻璃感**：深度调优折射参数（`ambientRim: 0.05`、`fresnelStrength: 0.12`、`edgeAbsorption: 0.15`），彻底消除假白边，纯靠物理光学折射呈现饱满通透水润感。
+- **强制 Vulkan 引擎后端**：Android 端配置 `io.flutter.embedding.android.ImpellerBackend = vulkan` 并在 `MainActivity` 注入 `--enable-impeller=true` 与 `--impeller-backend=vulkan`，淘汰过时的 OpenGL GLES。
+- **杜绝“玻璃叠玻璃”引起的掉帧**：创建轻量级 `UnifiedBackdropPanel`，日历与课时设置等超大滚动面板降级为随深/浅色模式智能染色的混色模糊背板，大幅缩减 GPU 离屏通道卷积开销，释放 120Hz 满帧高刷。
 
 ### 2. 官方 Liquid Glass 1.4.0 核心组件与动效全量迁移
-- **标准胶囊底部导航栏**：
-  - 迁移至官方 `GlassTabBar.bottom` 标准，指定 `barBorderRadius: 999.0` 与 `indicatorBorderRadius: 999.0`，修复滑块错位与非胶囊形状；
-  - 开启 `adaptiveBrightness: true`，实现**内容感知亮度**，根据背部内容动态反转图标明暗反差；
-  - 优化折射参数（`ambientRim: 0.05`、`fresnelStrength: 0.12`、`edgeAbsorption: 0.15`），消除生硬的人工白边，纯靠物理折射呈现饱满水润感。
+- **官方专属 GlassBottomBar 导航栏重构**：
+  - 全面切换为官方专属 `GlassBottomBar` + `GlassBottomBarTab`，启用 `maskingQuality: MaskingQuality.high` 双层视差剪裁，彻底根除滑块错位、拉伸变形与非胶囊形状问题。
+  - 接入 `GlassContentAwareScope` 与 `GlassContentAwareBrightness`，底栏文字与图标根据背景明暗实时智能反色自适应。
 - **Liquid Morph Engine 液态变形菜单**：
-  - 上下文菜单全面迁移至官方 `GlassMenu` + `GlassMenuItem`，弃用传统底部弹窗；
-  - 触发时三点按钮直接沿 5px 抛物线（Liquid Swoop）物理形变展开为玻璃菜单，点击选项自动柔和回缩，完美契合 iOS 26/27 弹簧流体动效。
+  - 上下文菜单全面迁移至官方 `GlassMenu` + `GlassMenuItem`，弃用传统弹出弹窗；
+  - 触发时三点按钮直接沿抛物线（Liquid Swoop）物理形变展开为玻璃菜单，点击选项自动柔和回缩，完美契合 iOS 26/27 弹簧流体动效。
 - **陀螺仪实时镜面高光 (GlassMotionScope)**：
-  - 引入 `sensors_plus` 捕获设备倾斜，经低通滤波后通过 `GlassMotionScope` 驱动着色器 `lightAngle` 动态流，实现真实环境光跟随设备倾斜晃动的镜面菲涅尔高光。
+  - 捕获设备倾斜，经低通滤波后通过 `GlassMotionScope` 驱动着色器 `lightAngle` 动态流，实现真实环境光跟随设备倾斜晃动的镜面菲涅尔高光。
 
-### 3. 教务系统导入与课表调度系统核心 Bug 根除
-- **根治首周课程偏移至 9月14日 的严重缺陷**：
-  - 修复树维 EAMS 53 位周次位串解码逻辑。由于 EAMS 索引 0 为空置占位符 '0'，索引 1 即为第 1 周，彻底修正此前误加 1 导致所有课程后推一周的算法；
-  - 课表第一周课程（9月7日）即刻精准定位至当前周，空课表不显示的困扰彻底解决。
-- **节次时间与备份还原对齐**：
-  - 解决导入带有时间戳备份时被系统强行覆盖为默认 8:00 的缺陷，优先直读原生 `startTime` 与 `endTime`；
-  - 修复 `_recalculateAllTimestamps` 循环节次上限（支持 1~12 全节次），节次时间严格联动用户的开学日期与自定义课时时间表。
+### 3. 全局课时与开学日期智能对齐调度算法
+- **课时设置智能化与级联推算**：
+  - 容忍多种输入格式（如 `8.30`、`8:30`、`8：30`、`830`），杜绝因格式不规范导致的保存跳过；
+  - 新增“一键智能推算全天节次”：以第一节课（如 8:30）为基准，智能级联推算全天 12 节课的时间（含课间、大课间、午休、晚饭）；
+  - 修复 `_saveConfig()` 异步保存时序，确保修改课时后即刻触发课表时间戳全面重算并自动刷新。
+- **开学首周校准与智能对齐 (9.7 基准周次平移)**：
+  - 彻底根治树维 EAMS 53 位周次位串解码算法（修正此前误加 1 导致课程后推一周的问题）；
+  - 新增 `alignScheduleToStartDate()` 智能算法，解决已导入课表时间戳固化在 9.14 导致无法切回 9.7 首周的顽疾，实现课表基准周次一键无损平移。
 
-### 4. Android 16 Live Updates（灵动岛 / 前台常驻通知）适配
-- 升级实时通知通道为 `live_course_updates_v3`，将通知和通道优先级统一设置为 `Importance.high` 与 `Priority.high`。
-- 修复 Android 16 (BP2A) 上因重要性为 Default 导致状态栏胶囊无法常驻的问题，实现锁屏与状态栏常驻倒计时胶囊。
+### 4. 背板对比度自适应与 Live Updates 全时段保活
+- **背板对比度与自适应文字色彩**：
+  - `UnifiedBackdropPanel` 引入 `DefaultTextStyle` 与 `IconTheme` 上下文注入，日历、课表卡片与设置面板在深色模式使用清晰亮白，浅色模式使用深灰黑色，彻底杜绝白底白字、模糊脏乱。
+- **Android 16 Live Updates（灵动岛 / 前台常驻通知）全天候保活**：
+  - 升级通知通道为 `live_course_updates_v3`（`Importance.high` / `Priority.high`）；
+  - 修复课后及无课时通知被自动取消的缺陷，实现正在上课倒计时、课前倒计时与全天候前台状态胶囊常驻。
 
 ### 5. 双端同步 Release 构建与本地 Git 归档
 - Windows x64 与 Android arm64 同步编译发布，由 `collect_release.py` 自动归档至 `release/`。
-- 本地自动提交 Git 标签 `v2.8.0+10008044`。
+- 本地自动提交 Git 标签 `v2.8.0+10008044`（严格仅本地提交，禁止远程 push）。
 
 ---
 

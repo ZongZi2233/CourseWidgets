@@ -22,6 +22,8 @@ import '../shared/adaptive_glass.dart';
 import '../shared/adaptive_liquid_glass_layer.dart';
 import '../shared/animated_glass_indicator.dart';
 import '../shared/inherited_liquid_glass.dart';
+import '../interactive/liquid_glass_scope.dart';
+import 'shared/tab_bar_types.dart';
 
 /// A glass morphism bottom navigation bar following Apple's design patterns.
 ///
@@ -125,39 +127,6 @@ import '../shared/inherited_liquid_glass.dart';
 ///   showIndicator: false,
 /// )
 /// ```
-
-/// Rendering quality for the liquid glass masking effect in [GlassBottomBar].
-///
-/// Controls the complexity of the masking effect that creates the "magic lens"
-/// appearance where selected tab content appears to glow through the glass indicator.
-enum MaskingQuality {
-  /// No masking effect, simple icon color change (fastest).
-  ///
-  /// Uses the traditional approach where tabs simply change color when selected.
-  /// No dual-layer rendering or clipping. Best performance, but less visual polish.
-  ///
-  /// **Recommended for:**
-  /// - Apps targeting older devices (iPhone X or older)
-  /// - Maximum performance requirements
-  /// - 7+ tabs
-  off,
-
-  /// Full jelly physics clip path with dual-layer rendering (best quality, default).
-  ///
-  /// Creates a "magic lens" effect where selected tabs appear to glow through
-  /// the glass indicator as it moves. Content is magnified and the clip path
-  /// follows the jelly physics for perfect synchronization.
-  ///
-  /// **Recommended for:**
-  /// - Modern devices (iPhone 12+, Pixel 5+)
-  /// - 3-5 tabs (typical use case)
-  /// - Premium/polished apps
-  /// - When visual quality is a priority
-  ///
-  /// **Performance:** Renders tabs twice with ClipPath operations. Maintains
-  /// 60fps on modern devices with typical 3-5 tab configurations.
-  high,
-}
 
 class GlassBottomBar extends StatefulWidget {
   /// Creates a glass bottom navigation bar.
@@ -476,7 +445,8 @@ class _GlassBottomBarState extends State<GlassBottomBar> {
                 barHeight: widget.barHeight,
                 barBorderRadius: widget.barBorderRadius,
                 tabPadding: widget.tabPadding,
-                backgroundKey: widget.backgroundKey,
+                backgroundKey:
+                    widget.backgroundKey ?? LiquidGlassScope.of(context),
                 maskingQuality: widget.maskingQuality,
                 // Pass unselected tabs (background layer)
                 childUnselected: Row(

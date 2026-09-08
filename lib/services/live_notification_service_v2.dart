@@ -167,19 +167,12 @@ class LiveNotificationServiceV2 {
     _onNotificationTapCallback = callback;
   }
 
-  /// [v2.2.9] 启动实时更新（每分钟更新一次）+ 提前 10 分钟提醒
+  /// [v2.8.0] 启动全天候实时更新（每分钟更新一次）+ 提前 10 分钟提醒
   Future<void> startLiveUpdate(CourseEvent? nextCourse) async {
-    // 权限检查已挪到下方统一处理
-
     // 请求通知权限
     final status = await Permission.notification.request();
     if (status.isDenied) {
       debugPrint('❌ 通知权限被拒绝');
-      return;
-    }
-
-    if (nextCourse == null) {
-      await cancelNotification();
       return;
     }
 
@@ -198,12 +191,14 @@ class LiveNotificationServiceV2 {
       _updateNotification();
     });
 
-    // [v2.2.9] 每 30 秒检查一次是否需要提前提醒
-    _reminderCheckTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
-      _checkAndShowReminder();
-    });
+    // 每 30 秒检查一次是否需要提前提醒
+    if (_currentCourse != null) {
+      _reminderCheckTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
+        _checkAndShowReminder();
+      });
+    }
 
-    debugPrint('🚀 实时通知已启动: ${nextCourse.name}');
+    debugPrint('🚀 实时常驻通知已启动: ${nextCourse?.name ?? "今日无课常驻"}');
   }
 
   /// [v2.2.9] 检查并显示提前 10 分钟提醒
@@ -278,59 +273,78 @@ class LiveNotificationServiceV2 {
 
   /// 更新 Live Update 通知内容
   Future<void> _updateNotification() async {
-    if (_currentCourse == null) return;
-
     final now = DateTime.now();
-    final start = DateTime.fromMillisecondsSinceEpoch(
-      _currentCourse!.startTime,
-    );
-    final end = DateTime.fromMillisecondsSinceEpoch(_currentCourse!.endTime);
-    final diff = start.difference(now);
-
     String title;
     String body;
     String emoji = '📚';
+    DateTime? eventTime;
+    bool isCountingDown = false;
+    String subLocation = '课表助手';
 
-    if (diff.isNegative) {
-      // 正在上课
-      final totalMinutes =
-          (end.millisecondsSinceEpoch - start.millisecondsSinceEpoch) ~/ 60000;
-      final elapsedMinutes = now.difference(start).inMinutes;
-      final remainingMinutes = totalMinutes - elapsedMinutes;
-
-      if (remainingMinutes > 0) {
-        emoji = '📚';
-        title = '正在上课';
-        body =
-            '${_currentCourse!.name} · ${_currentCourse!.location} · 还有 $remainingMinutes 分钟下课';
-      } else {
-        // 课程已结束
-        await cancelNotification();
-        return;
-      }
+    if (_currentCourse == null) {
+      title = '今日无课 · 享受悠闲时光';
+      body = '课程表全天候同步中，点击查看完整课表';
+      emoji = '☕';
     } else {
-      // 即将上课
-      final minutesUntil = diff.inMinutes;
+      subLocation = _currentCourse!.location;
+      final start = DateTime.fromMillisecondsSinceEpoch(
+        _currentCourse!.startTime,
+      );
+      final end = DateTime.fromMillisecondsSinceEpoch(_currentCourse!.endTime);
+      final diff = start.difference(now);
 
-      if (minutesUntil > 60) {
-        emoji = '⏰';
-        title = '下节课';
-        body =
-            '${_currentCourse!.name} · ${_currentCourse!.location} · ${start.hour}:${start.minute.toString().padLeft(2, '0')} 开始';
-      } else if (minutesUntil > 20) {
-        emoji = '⏰';
-        title = '即将开始';
-        body =
-            '${_currentCourse!.name} · ${_currentCourse!.location} · 还有 $minutesUntil 分钟';
-      } else if (minutesUntil > 0) {
-        emoji = '🔔';
-        title = '马上开始';
-        body =
-            '${_currentCourse!.name} · ${_currentCourse!.location} · 还有 $minutesUntil 分钟！';
+      if (diff.isNegative) {
+        // 正在上课
+        final totalMinutes =
+            (end.millisecondsSinceEpoch - start.millisecondsSinceEpoch) ~/ 60000;
+        final elapsedMinutes = now.difference(start).inMinutes;
+        final remainingMinutes = totalMinutes - elapsedMinutes;
+
+        if (remainingMinutes > 0) {
+          emoji = '📚';
+          title = '正在上课';
+          body =
+              '${_currentCourse!.name} · ${_currentCourse!.location} · 离下课还有 $remainingMinutes 分钟';
+          eventTime = end;
+          isCountingDown = true;
+        } else {
+          emoji = '☕';
+          title = '已下课 · 休息中';
+          body = '${_currentCourse!.name} 刚刚结束';
+        }
       } else {
-        emoji = '🔔';
-        title = '课程开始';
-        body = '${_currentCourse!.name} · ${_currentCourse!.location} · 现在开始';
+        // 即将上课
+        final minutesUntil = diff.inMinutes;
+        final isToday = start.year == now.year && start.month == now.month && start.day == now.day;
+
+        if (isToday) {
+          if (minutesUntil > 60) {
+            emoji = '⏰';
+            title = '下节课 (${start.hour}:${start.minute.toString().padLeft(2, '0')})';
+            body = '${_currentCourse!.name} · ${_currentCourse!.location}';
+          } else if (minutesUntil > 20) {
+            emoji = '⏰';
+            title = '即将上课';
+            body =
+                '${_currentCourse!.name} · ${_currentCourse!.location} · 还有 $minutesUntil 分钟';
+          } else if (minutesUntil > 0) {
+            emoji = '🔔';
+            title = '马上开始';
+            body =
+                '${_currentCourse!.name} · ${_currentCourse!.location} · 还有 $minutesUntil 分钟！';
+          } else {
+            emoji = '🔔';
+            title = '课程开始';
+            body = '${_currentCourse!.name} · ${_currentCourse!.location} · 现在开始';
+          }
+        } else {
+          // 非今日课程（明日或下周预告）
+          emoji = '📅';
+          title = '下节预告 · ${start.month}月${start.day}日';
+          body = '${_currentCourse!.name} · ${start.hour}:${start.minute.toString().padLeft(2, '0')} · ${_currentCourse!.location}';
+        }
+        eventTime = start;
+        isCountingDown = true;
       }
     }
 
@@ -352,12 +366,12 @@ class LiveNotificationServiceV2 {
         onlyAlertOnce: true, // 只在第一次提醒
         showProgress: false, // [v2.5.0修复] 不显示进度条
         category: AndroidNotificationCategory.status, // 状态类通知
-        usesChronometer: true, // 显示计时器
-        chronometerCountDown: !diff.isNegative, // 倒计时或正计时
-        when: start.millisecondsSinceEpoch, // 课程开始时间
+        usesChronometer: eventTime != null,
+        chronometerCountDown: isCountingDown,
+        when: eventTime?.millisecondsSinceEpoch,
         visibility: NotificationVisibility.public,
         color: const Color(0xFFFF9A9E),
-        subText: _currentCourse!.location, // 副标题显示地点
+        subText: subLocation,
         styleInformation: BigTextStyleInformation(
           body,
           contentTitle: '$emoji $title',
@@ -394,13 +408,12 @@ class LiveNotificationServiceV2 {
         category: AndroidNotificationCategory.status,
         visibility: NotificationVisibility.public,
         color: const Color(0xFFFF9A9E),
-        subText: _currentCourse!.location,
+        subText: subLocation,
         styleInformation: BigTextStyleInformation(
           body,
           contentTitle: '$emoji $title',
           summaryText: '课程提醒',
         ),
-        // 旧版依然可以包含按钮，但是没有计时器(usesChronometer)和强制持久(ongoing: true)
         actions: <AndroidNotificationAction>[
           const AndroidNotificationAction(
             'view_details',
@@ -417,13 +430,11 @@ class LiveNotificationServiceV2 {
     );
 
     // 如果禁用了Live Update并且已经到了上课状态，则可能不想频繁弹窗
-    if (!useLiveUpdate && diff.isNegative && title == '正在上课') {
-      // 对于旧版通知，正在上课时不再持续刷新通知内容（让用户可以清除）
+    if (!useLiveUpdate && title == '正在上课') {
       return;
     }
 
     if (Platform.isWindows) {
-      // [v2.5.1] Windows 使用原生的 local_notifier 发送 Toast 通知
       final windowToast = LocalNotification(title: '$emoji $title', body: body);
       windowToast.onClick = () {
         if (_onNotificationTapCallback != null && _currentCourse != null) {
@@ -437,7 +448,7 @@ class LiveNotificationServiceV2 {
         title: '$emoji $title',
         body: body,
         notificationDetails: details,
-        payload: 'course_${_currentCourse!.startTime}',
+        payload: _currentCourse != null ? 'course_${_currentCourse!.startTime}' : 'course_general',
       );
     }
   }

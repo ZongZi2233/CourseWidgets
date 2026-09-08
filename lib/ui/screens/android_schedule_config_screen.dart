@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
@@ -74,9 +75,6 @@ class _AndroidScheduleConfigScreenState
   }
 
   void _pickSemesterDate() async {
-    // [v2.6.5] 记录选中日期，确认时关闭弹窗
-    DateTime selectedDate = _config.semesterStartDate;
-
     // 使用液态玻璃风格的日期选择器
     liquid.showLiquidDialog(
       context: context,
@@ -87,7 +85,6 @@ class _AndroidScheduleConfigScreenState
           child: LiquidGlassDatePicker(
             initialDate: _config.semesterStartDate,
             onDateChanged: (date) {
-              selectedDate = date;
               setState(() {
                 _semesterDateController.text =
                     '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
@@ -113,7 +110,72 @@ class _AndroidScheduleConfigScreenState
     );
   }
 
-  void _saveConfig() {
+  int? _parseTime(String timeStr) {
+    final clean = timeStr.trim();
+    final match = RegExp(r'^(\d{1,2})[:：.点\s-](\d{1,2})$').firstMatch(clean);
+    if (match != null) {
+      final h = int.tryParse(match.group(1)!);
+      final m = int.tryParse(match.group(2)!);
+      if (h != null && m != null && h >= 0 && h < 24 && m >= 0 && m < 60) {
+        return h * 60 + m;
+      }
+    }
+    if (clean.length == 3 || clean.length == 4) {
+      final digits = int.tryParse(clean);
+      if (digits != null) {
+        final h = digits ~/ 100;
+        final m = digits % 100;
+        if (h >= 0 && h < 24 && m >= 0 && m < 60) {
+          return h * 60 + m;
+        }
+      }
+    }
+    return null;
+  }
+
+  void _smartCascadeSectionTimes() {
+    final firstStartStr = _startControllers[0].text;
+    final firstStartMin = _parseTime(firstStartStr) ?? 510; // 默认 8:30
+    final duration = int.tryParse(_durationControllers[0].text) ?? 45;
+    final breakTime = int.tryParse(_breakTimeController.text) ?? 10;
+
+    int currentMin = firstStartMin;
+    for (int i = 0; i < 12; i++) {
+      if (i == 0) {
+        currentMin = firstStartMin;
+      } else if (i == 2) {
+        // 上午大课间
+        currentMin += duration + math.max(breakTime, 20);
+      } else if (i == 4) {
+        // 下午第一节（第5节），保证午休后开始（如13:30或14:00）
+        currentMin = math.max(currentMin + duration + 90, 13 * 60 + 30);
+      } else if (i == 6) {
+        // 下午大课间
+        currentMin += duration + math.max(breakTime, 20);
+      } else if (i == 8) {
+        // 晚自习第一节（第9节），保证晚饭后开始（如18:30）
+        currentMin = math.max(currentMin + duration + 70, 18 * 60 + 30);
+      } else {
+        currentMin += duration + breakTime;
+      }
+
+      _startControllers[i].text = _formatMinutes(currentMin);
+      if (_config.isEqualDuration) {
+        _durationControllers[i].text = duration.toString();
+      }
+    }
+    setState(() {});
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('✨ 已智能推算所有节次时间（包含大课间与午休）'),
+        backgroundColor: AppThemeColors.babyPink,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  Future<void> _saveConfig() async {
     try {
       final newConfig = ScheduleConfigModel(
         semesterStartDate: _parseDate(_semesterDateController.text),
@@ -126,13 +188,9 @@ class _AndroidScheduleConfigScreenState
       // 解析时间
       for (int i = 1; i <= 12; i++) {
         final timeStr = _startControllers[i - 1].text;
-        final parts = timeStr.split(':');
-        if (parts.length == 2) {
-          final hour = int.tryParse(parts[0]);
-          final minute = int.tryParse(parts[1]);
-          if (hour != null && minute != null) {
-            newConfig.sectionStartTimes[i] = hour * 60 + minute;
-          }
+        final minutes = _parseTime(timeStr);
+        if (minutes != null) {
+          newConfig.sectionStartTimes[i] = minutes;
         }
 
         final duration = int.tryParse(_durationControllers[i - 1].text);
@@ -148,27 +206,30 @@ class _AndroidScheduleConfigScreenState
         defaultDuration: defaultDur,
       );
 
-      context.read<ScheduleProvider>().updateConfig(savedConfig);
+      await context.read<ScheduleProvider>().updateConfig(savedConfig);
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('配置已保存', style: TextStyle(color: Colors.white)),
-          backgroundColor: AppThemeColors.babyPink,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('配置已保存并智能重算课表', style: TextStyle(color: Colors.white)),
+            backgroundColor: AppThemeColors.babyPink,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
           ),
-        ),
-      );
-
-      Navigator.pop(context);
+        );
+        Navigator.pop(context);
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('保存失败: $e', style: TextStyle(color: Colors.white)),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('保存失败: $e', style: const TextStyle(color: Colors.white)),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -182,16 +243,11 @@ class _AndroidScheduleConfigScreenState
         sectionDurations: Map.from(_config.sectionDurations),
       );
 
-      // 解析时间
       for (int i = 1; i <= 12; i++) {
         final timeStr = _startControllers[i - 1].text;
-        final parts = timeStr.split(':');
-        if (parts.length == 2) {
-          final hour = int.tryParse(parts[0]);
-          final minute = int.tryParse(parts[1]);
-          if (hour != null && minute != null) {
-            newConfig.sectionStartTimes[i] = hour * 60 + minute;
-          }
+        final minutes = _parseTime(timeStr);
+        if (minutes != null) {
+          newConfig.sectionStartTimes[i] = minutes;
         }
 
         final duration = int.tryParse(_durationControllers[i - 1].text);
@@ -378,7 +434,81 @@ class _AndroidScheduleConfigScreenState
                     ),
                   ),
 
-                  const SizedBox(height: 16),
+                  // [v2.8.0] 课表首周智能对齐卡片
+                  Consumer<ScheduleProvider>(
+                    builder: (context, provider, _) {
+                      final earliestMonday = provider.getEarliestCourseMonday();
+                      if (earliestMonday == null) return const SizedBox.shrink();
+                      final targetStartDate = _parseDate(_semesterDateController.text);
+                      final targetMonday = DateTime(targetStartDate.year, targetStartDate.month, targetStartDate.day)
+                          .subtract(Duration(days: targetStartDate.weekday - 1));
+                      final diffDays = earliestMonday.difference(targetMonday).inDays;
+
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: UnifiedBackdropPanel(
+                          borderRadius: 24,
+                          padding: const EdgeInsets.all(20),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(
+                                    diffDays == 0 ? CupertinoIcons.checkmark_seal_fill : CupertinoIcons.calendar_badge_plus,
+                                    color: diffDays == 0 ? Colors.greenAccent : const Color(0xFF4FACFE),
+                                    size: 22,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    '课表首周校准与智能对齐',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: textColor,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                diffDays == 0
+                                    ? '✅ 当前课表首周与开学日期 (${targetMonday.month}月${targetMonday.day}日) 已对齐。'
+                                    : '⚠️ 检测到已导入课表首周 (${earliestMonday.month}月${earliestMonday.day}日) 与设置的开学日期 (${targetMonday.month}月${targetMonday.day}日) 相差 ${(diffDays.abs() / 7).round()} 周。点击下方一键智能平移，可将全学期课表对齐至开学第 1 周！',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: isDark ? Colors.white70 : const Color(0x991A1A2E),
+                                  height: 1.4,
+                                ),
+                              ),
+                              if (diffDays != 0) ...[
+                                const SizedBox(height: 12),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: liquid.LiquidButton(
+                                    text: '一键校准：对齐首周至 ${targetMonday.month}月${targetMonday.day}日 (第1周)',
+                                    color: const Color(0xFF4FACFE),
+                                    onTap: () async {
+                                      await provider.alignScheduleToStartDate(targetMonday);
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text('已成功将课表对齐至 ${targetMonday.month}月${targetMonday.day}日 第 1 周！'),
+                                            backgroundColor: const Color(0xFF4FACFE),
+                                            behavior: SnackBarBehavior.floating,
+                                          ),
+                                        );
+                                      }
+                                    },
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
 
                   // 课时设置
                   UnifiedBackdropPanel(
@@ -387,13 +517,23 @@ class _AndroidScheduleConfigScreenState
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          '课时设置',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: textColor,
-                          ),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              '课时设置',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: textColor,
+                              ),
+                            ),
+                            liquid.LiquidButton(
+                              text: '✨ 智慧推算',
+                              color: const Color(0xFF4FACFE),
+                              onTap: _smartCascadeSectionTimes,
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 16),
                         // 表头

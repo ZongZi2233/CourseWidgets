@@ -13,6 +13,7 @@ import 'glass_accessibility_scope.dart';
 import 'glass_isolation_scope.dart';
 import 'lightweight_liquid_glass.dart';
 import 'inherited_liquid_glass.dart';
+import '../interactive/liquid_glass_scope.dart';
 
 /// A renderer-agnostic glass surface that intelligently selects the best
 /// rendering path based on [GlassQuality] and the active Flutter renderer.
@@ -335,6 +336,8 @@ class AdaptiveGlass extends StatelessWidget {
             )
           : normalizedSettings;
 
+      final scopeBackgroundKey = LiquidGlassScope.of(context);
+
       // If this is a container (allowElevation=false), we are providing a blur
       // for all our children to use. We update the InheritedLiquidGlass tree.
       if (!allowElevation) {
@@ -343,6 +346,7 @@ class AdaptiveGlass extends StatelessWidget {
           settings: effectiveSettings,
           densityFactor: 0.0, // Containers are never elevated
           glowIntensity: 0.0, // Containers don't glow
+          backgroundKey: scopeBackgroundKey,
           child: InheritedLiquidGlass(
             settings: effectiveSettings,
             quality: quality,
@@ -357,14 +361,14 @@ class AdaptiveGlass extends StatelessWidget {
         );
       }
 
-      // Elevated widgets use PATH B (no backgroundKey). They composite via
-      // SrcOver against the container's output.
+      // Elevated widgets composite via SrcOver or sample background
       final Widget lightweightWidget = LightweightLiquidGlass(
         shape: shape,
         settings: effectiveSettings,
         densityFactor: densityFactor, // 0.0 or 1.0 based on elevation
         glowIntensity:
             glowIntensity * 0.35, // Normalise additive glow to match Impeller
+        backgroundKey: scopeBackgroundKey,
         child: content,
       );
 

@@ -328,21 +328,108 @@ class ScheduleProvider with ChangeNotifier {
 
   /// 获取下一个课程
   CourseEvent? getNextCourse() {
-    final now = DateTime.now();
-    final todayCourses = _courses.where((course) {
-      final courseDate = DateTime.fromMillisecondsSinceEpoch(course.startTime);
-      return courseDate.year == now.year &&
-          courseDate.month == now.month &&
-          courseDate.day == now.day;
-    }).toList();
+    return getCurrentOrNextCourse();
+  }
 
-    for (var course in todayCourses) {
-      if (course.startTime > now.millisecondsSinceEpoch) {
+  /// [v2.8.0] 获取当前正在进行或未来的下一节课程（全时段保活，支持跨天、跨周查找）
+  CourseEvent? getCurrentOrNextCourse() {
+    if (_courses.isEmpty) return null;
+
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+
+    // 1. 优先查找当前正在进行中的课程
+    for (final course in _courses) {
+      if (course.startTime <= nowMs && course.endTime > nowMs) {
         return course;
       }
     }
 
-    return null;
+    // 2. 查找未来即将开始的最早一门课程（包括今日后续、明天或下周课程）
+    CourseEvent? nextUpcoming;
+    for (final course in _courses) {
+      if (course.startTime > nowMs) {
+        if (nextUpcoming == null || course.startTime < nextUpcoming.startTime) {
+          nextUpcoming = course;
+        }
+      }
+    }
+
+    if (nextUpcoming != null) {
+      return nextUpcoming;
+    }
+
+    // 3. 如果所有课程都已结束，返回最后一门课程以保持状态胶囊
+    CourseEvent? lastCourse;
+    for (final course in _courses) {
+      if (lastCourse == null || course.endTime > lastCourse.endTime) {
+        lastCourse = course;
+      }
+    }
+    return lastCourse;
+  }
+
+  /// [v2.8.0] 获取现有课表中最早课程所在的周一（用于智能检测是否对齐开学首周）
+  DateTime? getEarliestCourseMonday() {
+    if (_courses.isEmpty) return null;
+    DateTime? earliest;
+    for (final c in _courses) {
+      final dt = DateTime.fromMillisecondsSinceEpoch(c.startTime);
+      if (earliest == null || dt.isBefore(earliest)) {
+        earliest = dt;
+      }
+    }
+    if (earliest == null) return null;
+    final dateOnly = DateTime(earliest.year, earliest.month, earliest.day);
+    return dateOnly.subtract(Duration(days: dateOnly.weekday - 1));
+  }
+
+  /// [v2.8.0] 智能课表平移：将整个课表基准平移至目标开学日期首周，并按当前课时重算
+  Future<void> alignScheduleToStartDate(DateTime targetStartDate) async {
+    if (_courses.isEmpty) return;
+    final earliestMonday = getEarliestCourseMonday();
+    if (earliestMonday == null) return;
+
+    final targetMonday = DateTime(targetStartDate.year, targetStartDate.month, targetStartDate.day)
+        .subtract(Duration(days: targetStartDate.weekday - 1));
+
+    final offsetDays = targetMonday.difference(earliestMonday).inDays;
+    
+    // 如果存在整周偏移，进行全局平移
+    if (offsetDays != 0) {
+      final newCourses = <CourseEvent>[];
+      for (final course in _courses) {
+        final originalStart = DateTime.fromMillisecondsSinceEpoch(course.startTime);
+        final originalEnd = DateTime.fromMillisecondsSinceEpoch(course.endTime);
+
+        final shiftedStart = originalStart.add(Duration(days: offsetDays));
+        final shiftedEnd = originalEnd.add(Duration(days: offsetDays));
+
+        newCourses.add(
+          CourseEvent(
+            id: course.id,
+            name: course.name,
+            location: course.location,
+            teacher: course.teacher,
+            startTime: shiftedStart.millisecondsSinceEpoch,
+            endTime: shiftedEnd.millisecondsSinceEpoch,
+          ),
+        );
+      }
+      _courses = newCourses;
+      await DatabaseHelper.instance.insertCourses(newCourses);
+      debugPrint('✅ 课表首周已从 ${earliestMonday.toString().substring(0, 10)} 平移 $offsetDays 天至 ${targetMonday.toString().substring(0, 10)}');
+    }
+
+    // 更新配置中的开学日期为 targetMonday 并持久化
+    _currentConfig = _currentConfig.copyWith(semesterStartDate: targetMonday);
+    final storage = StorageService();
+    await storage.setString('schedule_config', jsonEncode(_currentConfig.toJson()));
+
+    // 重新根据节次时间刷新每个时间戳
+    await _recalculateAllTimestamps(_currentConfig, _currentConfig);
+    await _refreshAvailableWeeks();
+    await _jumpToCurrentDate();
+    notifyListeners();
   }
 
   /// 获取所有有效周次（即将废弃，请使用 availableWeeks getter）
@@ -410,6 +497,7 @@ class ScheduleProvider with ChangeNotifier {
         _sectionTimesChanged(oldConfig, newConfig);
     if (configChanged && _courses.isNotEmpty) {
       await _recalculateAllTimestamps(oldConfig, newConfig);
+      await _jumpToCurrentDate();
     }
 
     await _refreshAvailableWeeks();
@@ -425,13 +513,15 @@ class ScheduleProvider with ChangeNotifier {
     ScheduleConfigModel oldConfig,
     ScheduleConfigModel newConfig,
   ) {
-    for (int i = 1; i <= 11; i++) {
+    for (int i = 1; i <= 12; i++) {
       if ((oldConfig.sectionStartTimes[i] ?? 0) !=
-          (newConfig.sectionStartTimes[i] ?? 0))
+          (newConfig.sectionStartTimes[i] ?? 0)) {
         return true;
+      }
       if ((oldConfig.sectionDurations[i] ?? 0) !=
-          (newConfig.sectionDurations[i] ?? 0))
+          (newConfig.sectionDurations[i] ?? 0)) {
         return true;
+      }
     }
     return false;
   }

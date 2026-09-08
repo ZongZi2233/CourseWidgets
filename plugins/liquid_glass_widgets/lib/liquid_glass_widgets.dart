@@ -145,5 +145,5 @@ export 'widgets/surfaces/glass_tab_bar.dart';
 export 'widgets/surfaces/glass_toolbar.dart';
 export 'src/renderer/liquid_glass.dart' show LiquidGlass;
 export 'widgets/containers/glass_panel.dart';
-export 'widgets/surfaces/glass_bottom_bar.dart' hide MaskingQuality, JellyClipper;
+export 'widgets/surfaces/glass_bottom_bar.dart' hide JellyClipper;
 export 'widgets/surfaces/glass_side_bar.dart';

@@ -126,6 +126,9 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
 
   // 仅修改 _buildHeader
   Widget _buildHeader() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? Colors.white : const Color(0xFF1A1A2E);
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: liquid.LiquidCard(
@@ -136,24 +139,24 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             IconButton(
-              icon: const Icon(
+              icon: Icon(
                 CupertinoIcons.left_chevron,
-                color: Colors.white,
+                color: textColor,
               ),
               onPressed: () => _changeMonth(-1),
             ),
             Text(
               '${_currentMonth.year}年${_currentMonth.month}月',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w800,
-                color: Colors.white,
+                color: textColor,
               ),
             ),
             IconButton(
-              icon: const Icon(
+              icon: Icon(
                 CupertinoIcons.right_chevron,
-                color: Colors.white,
+                color: textColor,
               ),
               onPressed: () => _changeMonth(1),
             ),
@@ -175,6 +178,9 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
   // ...
 
   Widget _buildCalendarGrid(ScheduleProvider provider) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final secondaryTextColor = isDark ? Colors.white54 : const Color(0x991A1A2E);
+
     List<DateTime> days = [];
     if (_isMonthView) {
       final firstDay = _firstDayOfMonth;
@@ -215,10 +221,10 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
                         child: Center(
                           child: Text(
                             d,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.bold,
-                              color: Colors.white54,
+                              color: secondaryTextColor,
                             ),
                           ),
                         ),
@@ -269,6 +275,11 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
     bool hasCourses,
     bool isToday,
   ) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final dayTextColor = isSelected
+        ? Colors.white
+        : (isDark ? Colors.white : const Color(0xFF1A1A2E));
+
     Widget content = Stack(
       alignment: Alignment.center,
       children: [
@@ -288,7 +299,7 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
             Text(
               '${date.day}',
               style: TextStyle(
-                color: isSelected ? Colors.white : Colors.white70,
+                color: dayTextColor,
                 fontWeight: FontWeight.bold,
                 fontSize: 13,
               ),
@@ -338,14 +349,27 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
     final courses = _getCoursesForDate(_selectedDate!, provider.courses);
     courses.sort((a, b) => a.startTime.compareTo(b.startTime));
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryTextColor = isDark ? Colors.white : const Color(0xFF1A1A2E);
+    final secondaryTextColor = isDark ? Colors.white60 : const Color(0x991A1A2E);
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16), // 添加水平边距
-      child: liquid.LiquidCard(
-        padding: 0,
+      child: UnifiedBackdropPanel(
+        padding: EdgeInsets.zero,
         borderRadius: 28,
         child: courses.isEmpty
             ? Center(
-                child: Text('该日无课', style: TextStyle(color: Colors.white38)),
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Text(
+                    '该日无课',
+                    style: TextStyle(
+                      color: isDark ? Colors.white38 : const Color(0x661A1A2E),
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
               )
             : DynMouseScroll(
                 durationMS: 250,
@@ -359,12 +383,9 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
                     final course = courses[index];
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 12),
-                      child: liquid.LiquidCard(
+                      child: UnifiedBackdropPanel(
                         borderRadius: 20,
-                        padding: 14,
-                        // [v2.5.2] 恢复真玻璃带光柱质感
-                        quality: GlassQuality.standard,
-                        styleType: liquid.LiquidStyleType.standard,
+                        padding: const EdgeInsets.all(14),
                         child: Row(
                           children: [
                             Container(
@@ -407,24 +428,24 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
                                 children: [
                                   Text(
                                     course.name,
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontWeight: FontWeight.w800,
-                                      color: Colors.white,
+                                      color: primaryTextColor,
                                       fontSize: 15,
                                     ),
                                   ),
                                   Text(
                                     course.location,
-                                    style: const TextStyle(
-                                      color: Colors.white60,
+                                    style: TextStyle(
+                                      color: secondaryTextColor,
                                       fontSize: 12,
                                     ),
                                   ),
                                   if (course.teacher.isNotEmpty)
                                     Text(
                                       course.teacher,
-                                      style: const TextStyle(
-                                        color: Colors.white60,
+                                      style: TextStyle(
+                                        color: secondaryTextColor,
                                         fontSize: 11,
                                       ),
                                     ),

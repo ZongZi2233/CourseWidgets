@@ -28,14 +28,29 @@ class UnifiedBackdropPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryTextColor = isDark ? Colors.white : const Color(0xFF1A1A2E);
 
     final bgColor = isDark
         ? Colors.black.withValues(alpha: 0.35)
-        : Colors.white.withValues(alpha: 0.65);
+        : Colors.white.withValues(alpha: 0.28);
 
     final borderColor = isDark
         ? Colors.white.withValues(alpha: 0.12)
-        : Colors.black.withValues(alpha: 0.06);
+        : Colors.black.withValues(alpha: 0.08);
+
+    final themedChild = DefaultTextStyle(
+      style: TextStyle(
+        color: primaryTextColor,
+        fontSize: 14,
+        fontFamily: Theme.of(context).textTheme.bodyMedium?.fontFamily,
+      ),
+      child: IconTheme(
+        data: IconThemeData(
+          color: primaryTextColor,
+        ),
+        child: child,
+      ),
+    );
 
     Widget panel = Container(
       width: width,
@@ -53,7 +68,7 @@ class UnifiedBackdropPanel extends StatelessWidget {
           ),
         ],
       ),
-      child: child,
+      child: themedChild,
     );
 
     if (blur > 0) {
