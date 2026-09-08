@@ -237,19 +237,21 @@ class DatabaseHelper {
     return result.map((e) => CourseEvent.fromMap(e)).toList();
   }
 
-  /// 获取所有可用周次
+  /// 获取所有可用周次 (始终从第 1 周开始连续提供，绝不丢失第 1 周)
   Future<List<int>> getAvailableWeeks(DateTime startDate) async {
     final courses = await getAllCourses();
-    final weeks = <int>{};
+    int maxWeek = 16;
 
     for (var course in courses) {
       final week = course.getWeekNumber(startDate);
-      if (week > 0) {
-        weeks.add(week);
+      if (week > maxWeek) {
+        maxWeek = week;
       }
     }
 
-    return weeks.toList()..sort();
+    // 学期周次必须从第 1 周到 maxWeek 连续提供，确保即使第 1 周暂无排课也完全可访问与选择
+    maxWeek = maxWeek.clamp(16, 30);
+    return List.generate(maxWeek, (i) => i + 1);
   }
 
   /// 清空所有数据

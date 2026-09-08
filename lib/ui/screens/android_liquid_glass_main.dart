@@ -202,65 +202,72 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
           ),
         ),
         // 官方原生旗舰 GlassTabBar.bottom 专用导航栏
-        bottomNavigationBar: AnimatedSlide(
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOutCubic,
-          offset: _isBottomNavVisible ? Offset.zero : const Offset(0, 1.2),
-          child: RepaintBoundary(
-            child: GlassTabBar.bottom(
-              selectedIndex: _currentIndex,
-              onTabSelected: (index) {
-                HapticFeedback.selectionClick();
-                setState(() => _currentIndex = index);
-              },
-              quality: GlassQuality.premium,
-              maskingQuality: MaskingQuality.high,
-              barBorderRadius: 999.0,
-              indicatorBorderRadius: 999.0,
-              adaptiveBrightness: true,
-              magnification: 1.15,
-              interactionBehavior: GlassInteractionBehavior.full,
-              settings: const LiquidGlassSettings(
-                thickness: 28,
-                blur: 10,
-                chromaticAberration: 0.25,
-                lightIntensity: 0.70,
-                refractiveIndex: 1.45,
-                saturation: 1.25,
-                ambientStrength: 0.60,
-                ambientRim: 0.15,
-                fresnelStrength: 0.85,
-                glassColor: Color(0x24FFFFFF),
+        bottomNavigationBar: SafeArea(
+          bottom: true,
+          top: false,
+          child: AnimatedSlide(
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOutCubic,
+            offset: _isBottomNavVisible ? Offset.zero : const Offset(0, 1.2),
+            child: RepaintBoundary(
+              child: GlassTabBar.bottom(
+                selectedIndex: _currentIndex,
+                onTabSelected: (index) {
+                  HapticFeedback.selectionClick();
+                  setState(() => _currentIndex = index);
+                },
+                quality: GlassQuality.premium,
+                maskingQuality: MaskingQuality.high,
+                barBorderRadius: 999.0,
+                indicatorBorderRadius: 999.0,
+                adaptiveBrightness: true,
+                barHeight: 64.0,
+                horizontalPadding: 16.0,
+                verticalPadding: 8.0,
+                magnification: 1.15,
+                interactionBehavior: GlassInteractionBehavior.full,
+                settings: const LiquidGlassSettings(
+                  thickness: 28,
+                  blur: 10,
+                  chromaticAberration: 0.25,
+                  lightIntensity: 0.70,
+                  refractiveIndex: 1.45,
+                  saturation: 1.25,
+                  ambientStrength: 0.60,
+                  ambientRim: 0.15,
+                  fresnelStrength: 0.85,
+                  glassColor: Color(0x24FFFFFF),
+                ),
+                indicatorSettings: const LiquidGlassSettings(
+                  thickness: 30,
+                  blur: 6,
+                  chromaticAberration: 0.3,
+                  refractiveIndex: 1.55,
+                  ambientRim: 0.18,
+                  fresnelStrength: 1.0,
+                  glassColor: Color(0x35FFFFFF),
+                ),
+                tabs: const [
+                  GlassTab(
+                    icon: Icon(CupertinoIcons.square_grid_2x2),
+                    activeIcon: Icon(CupertinoIcons.square_grid_2x2_fill),
+                    label: '课程',
+                    glowColor: Color(0xFFFF9A9E),
+                  ),
+                  GlassTab(
+                    icon: Icon(CupertinoIcons.calendar),
+                    activeIcon: Icon(CupertinoIcons.calendar_today),
+                    label: '日历',
+                    glowColor: Color(0xFF4FACFE),
+                  ),
+                  GlassTab(
+                    icon: Icon(CupertinoIcons.gear_alt),
+                    activeIcon: Icon(CupertinoIcons.gear_alt_fill),
+                    label: '设置',
+                    glowColor: Color(0xFFFFB347),
+                  ),
+                ],
               ),
-              indicatorSettings: const LiquidGlassSettings(
-                thickness: 30,
-                blur: 6,
-                chromaticAberration: 0.3,
-                refractiveIndex: 1.55,
-                ambientRim: 0.18,
-                fresnelStrength: 1.0,
-                glassColor: Color(0x35FFFFFF),
-              ),
-              tabs: const [
-                GlassTab(
-                  icon: Icon(CupertinoIcons.square_grid_2x2),
-                  activeIcon: Icon(CupertinoIcons.square_grid_2x2_fill),
-                  label: '课程',
-                  glowColor: Color(0xFFFF9A9E),
-                ),
-                GlassTab(
-                  icon: Icon(CupertinoIcons.calendar),
-                  activeIcon: Icon(CupertinoIcons.calendar_today),
-                  label: '日历',
-                  glowColor: Color(0xFF4FACFE),
-                ),
-                GlassTab(
-                  icon: Icon(CupertinoIcons.gear_alt),
-                  activeIcon: Icon(CupertinoIcons.gear_alt_fill),
-                  label: '设置',
-                  glowColor: Color(0xFFFFB347),
-                ),
-              ],
             ),
           ),
         ),
@@ -870,23 +877,12 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
     return RepaintBoundary(
       child: Padding(
         padding: const EdgeInsets.only(bottom: 12),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(22),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: isDark ? 0.12 : 0.04),
-                blurRadius: 8,
-                offset: const Offset(0, 3),
-              ),
-            ],
-          ),
-          child: UnifiedBackdropPanel(
-            borderRadius: 22,
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
+        child: GlassCard(
+          shape: const LiquidRoundedSuperellipse(borderRadius: 22),
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
                 // 左侧时间胶囊条
                 Container(
                   width: 58,
@@ -1113,9 +1109,8 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
               ),
             ),
           ),
-        ),
-      );
-    }
+        );
+      }
 
   /// 优雅的无课程占位视图
   Widget _buildEmptyCourseView() {
@@ -1176,10 +1171,14 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
       isScrollControlled: true,
       builder: (ctx) {
         return GlassSheet(
+          quality: GlassQuality.premium,
           settings: LiquidGlassSettings(
             glassColor: Colors.black.withValues(alpha: 0.45),
-            blur: 2.0,
-            thickness: 18.0,
+            blur: 10.0,
+            thickness: 22.0,
+            refractiveIndex: 1.45,
+            ambientRim: 0.15,
+            fresnelStrength: 0.85,
           ),
           child: SafeArea(
             child: Padding(

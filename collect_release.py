@@ -60,28 +60,28 @@ def collect_android_apks(version, build):
         print(f"[提示] 未找到 Android 构建输出目录: {apk_dir}")
         return []
 
-    # 优先只收集当前标准的构建输出: app-arm64-v8a-release.apk, app-armeabi-v7a-release.apk, app-x86_64-release.apk, app-release.apk
-    # 忽略历史 beta 包
-    standard_files = [
-        ('app-arm64-v8a-release.apk', f"CourseWidgets-v{version}-android-arm64-v8a.apk"),
-        ('app-armeabi-v7a-release.apk', f"CourseWidgets-v{version}-android-armeabi-v7a.apk"),
-        ('app-x86_64-release.apk', f"CourseWidgets-v{version}-android-x86_64.apk"),
-        ('app-release.apk', f"CourseWidgets-v{version}-android-universal.apk"),
-    ]
-
     collected = []
     now = datetime.now().timestamp()
-    for src_fname, target_name in standard_files:
-        src_path = os.path.join(apk_dir, src_fname)
-        if not os.path.exists(src_path):
-            continue
+    
+    arm64_src = os.path.join(apk_dir, 'app-arm64-v8a-release.apk')
+    universal_src = os.path.join(apk_dir, 'app-release.apk')
+    
+    universal_fresh = os.path.exists(universal_src) and (now - os.path.getmtime(universal_src)) < 7200
+    arm64_fresh = os.path.exists(arm64_src) and (now - os.path.getmtime(arm64_src)) < 7200
+    
+    effective_arm64_src = None
+    if arm64_fresh:
+        effective_arm64_src = arm64_src
+    elif universal_fresh:
+        effective_arm64_src = universal_src
 
-        # 检查是否为本次或近期构建产物（24小时内），避免采集到历史遗留旧包
-        mtime = os.path.getmtime(src_path)
-        if (now - mtime) > 86400:
-            print(f"[跳过] 发现历史遗留旧包（超过24小时未更新）: {src_fname}")
-            continue
-
+    targets = []
+    if effective_arm64_src:
+        targets.append((effective_arm64_src, f"CourseWidgets-v{version}-android-arm64-v8a.apk"))
+    if universal_fresh:
+        targets.append((universal_src, f"CourseWidgets-v{version}-android-universal.apk"))
+        
+    for src_path, target_name in targets:
         dst_path = os.path.join(RELEASE_DIR, target_name)
         shutil.copy2(src_path, dst_path)
         
@@ -90,7 +90,7 @@ def collect_android_apks(version, build):
         collected.append({
             'platform': 'Android',
             'filename': target_name,
-            'source': src_fname,
+            'source': os.path.basename(src_path),
             'path': dst_path,
             'size': size,
             'size_formatted': format_size(size),

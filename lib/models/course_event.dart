@@ -58,10 +58,12 @@ class CourseEvent {
     return DateTime.fromMillisecondsSinceEpoch(startTime).weekday;
   }
 
-  // 获取周次 (从学期开始计算)
+  // 获取周次 (从学期开始计算，使用纯日期对齐防时差与夏令时)
   int getWeekNumber(DateTime startDate) {
     final start = DateTime.fromMillisecondsSinceEpoch(startTime);
-    final diff = start.difference(startDate).inDays;
-    return (diff ~/ 7) + 1;
+    final startDateOnly = DateTime(startDate.year, startDate.month, startDate.day);
+    final startDayOnly = DateTime(start.year, start.month, start.day);
+    final diff = startDayOnly.difference(startDateOnly).inDays;
+    return (diff >= 0) ? (diff ~/ 7) + 1 : 1;
   }
 }

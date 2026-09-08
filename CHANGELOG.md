@@ -4,6 +4,30 @@
 
 ---
 
+## [v2.8.2] - 2026-09-08
+
+### 1. 安卓安装包版本彻底同步与打包归档修复 (Release Artifacts Pipeline Fix)
+- **根除安卓端版本号未切换顽疾**：排查并彻底修复了 `collect_release.py` 优先搜集构建目录中历史遗留的旧 `app-arm64-v8a-release.apk` 导致用户安装旧包的致命缺陷。将构建产物搜集窗口从 24 小时缩减至 2 小时，自动适配单架构构建输出的 `app-release.apk` 并严格重命名映射；版本号全面升级为 **2.8.2 (Build 10008046)**，确保安装包与最新代码 100% 同步。
+
+### 2. 官方 GlassCard 深度重构与 120Hz 满帧性能释放 (Zero-Backdrop Grouped Pipeline)
+- **废除多重 BackdropFilter 离屏冲突**：彻底移除了每个课程卡片内包裹 `UnifiedBackdropPanel` 带来的多个独立 `BackdropFilter`。排查发现滚动时多重离屏 Framebuffer 拷贝与多次卷积会导致 GPU 吞吐暴跌并引发严重掉帧。
+- **全面迁移至官方旗舰级 GlassCard**：课程卡片全面迁移至官方 `GlassCard(shape: const LiquidRoundedSuperellipse(borderRadius: 22))`。在 Grouped 模式下与顶层 `AdaptiveLiquidGlassLayer(quality: GlassQuality.premium)` 共享单个着色器批处理通道，单次 Pass 完成全屏折射计算，消除离屏缓冲开销，释放 120Hz 满帧高刷与 Impeller 物理真实 3D 凸透镜折射！
+- **官方 GlassSheet 质感提升**：周次选择面板升级为官方 `GlassSheet` 并配置 `quality: GlassQuality.premium, blur: 10.0, refractiveIndex: 1.45, ambientRim: 0.15`，背景半透水润高光自然呈现。
+
+### 3. 导航栏绝对固定与系统手势防遮挡 (SafeArea & GlassTabBar Anchoring)
+- **官方专属 GlassTabBar.bottom 悬浮固定**：底部导航栏采用官方专属 `GlassTabBar.bottom` + `GlassTab` 架构，参数配置 `quality: GlassQuality.premium, barBorderRadius: 999.0, adaptiveBrightness: true, barHeight: 64.0`。
+- **系统手势条精准避让**：外层包裹 `SafeArea(bottom: true, top: false)`，彻底消除 Android 导航手势小白条（Gesture Bar）与系统按键对导航胶囊的遮挡、裁切与触摸事件劫持，实现底部悬浮固定。
+
+### 4. 彻底解锁第 1 周与全学期周次自适应对齐 (Week 1 Always Available & Zero Offset)
+- **彻底根除“锁定在第 2 周无第 1 周”**：此前 `DatabaseHelper.getAvailableWeeks` 仅根据已导入课程时间戳反推周次，排课从第 2 周开始时周次列表缺失 `1`，导致 `minWeek` 为 2 且 `_jumpToCurrentDate` 强制锁定第 2 周。现改为强制生成从第 1 周至 `maxWeek`（1..16~30）的连续完整周次，周次选择器随时可选第 1 周。
+- **纯日期差值计算杜绝漂移**：`CourseEvent.getWeekNumber` 和 `_jumpToCurrentDate` 统一使用纯日期（`year, month, day`）归一化天数计算，杜绝时分秒或夏令时产生的周次偏差。
+- **开学日期智能自动校准**：`loadSavedData()` 自动比对已导入课表首周与配置的开学周一，不一致时自动触发 `alignScheduleToStartDate()` 进行整学期周次无损平移对齐。
+
+### 5. 双端 Release 构建与纯本地 Git 归档
+- Windows x64 与 Android arm64 Release 同步编译，`collect_release.py` 自动检验产物 SHA256，`commit_version.py` 完成本地 Git 提交（严格禁止远程 push）。
+
+---
+
 ## [v2.8.1] - 2026-09-08
 
 ### 1. 光学折射管线彻底打通与毛玻璃质感全量恢复 (Physical Refraction & Impeller Premium)

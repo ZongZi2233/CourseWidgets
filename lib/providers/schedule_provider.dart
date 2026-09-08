@@ -45,7 +45,9 @@ class ScheduleProvider with ChangeNotifier {
       _currentConfig.semesterStartDate,
     );
     if (_availableWeeks.isEmpty) {
-      _availableWeeks = [1];
+      _availableWeeks = List.generate(16, (i) => i + 1);
+    } else if (!_availableWeeks.contains(1)) {
+      _availableWeeks = [1, ..._availableWeeks]..sort();
     }
     notifyListeners();
   }
@@ -220,12 +222,22 @@ class ScheduleProvider with ChangeNotifier {
       final courses = await _importService.getAllCourses();
       if (courses.isNotEmpty) {
         _courses = courses;
-        await _refreshAvailableWeeks();
 
-        await Future.microtask(() async {
-          await _jumpToCurrentDate();
-          debugPrint('✅ 数据加载完成，已跳转到当前日期：第 $_currentWeek 周，星期 $_currentDay');
-        });
+        // [v2.8.2] 自动校准：如果课表首周与配置的目标开学周一不一致，自动平移对齐，彻底杜绝锁定在第2周
+        final earliestMonday = getEarliestCourseMonday();
+        final targetStartDate = _currentConfig.semesterStartDate;
+        final targetMonday = DateTime(targetStartDate.year, targetStartDate.month, targetStartDate.day)
+            .subtract(Duration(days: targetStartDate.weekday - 1));
+        if (earliestMonday != null && earliestMonday != targetMonday) {
+          debugPrint('🔄 检测到课表首周 ($earliestMonday) 与开学周一 ($targetMonday) 不一致，自动对齐...');
+          await alignScheduleToStartDate(targetMonday);
+        } else {
+          await _refreshAvailableWeeks();
+          await Future.microtask(() async {
+            await _jumpToCurrentDate();
+            debugPrint('✅ 数据加载完成，已跳转到当前日期：第 $_currentWeek 周，星期 $_currentDay');
+          });
+        }
       } else {
         _availableWeeks = [1];
         if (_currentWeek < 1) _currentWeek = 1;
@@ -654,17 +666,23 @@ class ScheduleProvider with ChangeNotifier {
 
     if (availableWeeks.isEmpty) return;
 
-    // 计算当前日期相对于学期开始日期的周次
-    final weeksSinceStart =
-        now.difference(_currentConfig.semesterStartDate).inDays ~/ 7 + 1;
+    // [v2.8.2] 计算当前日期相对于学期开始日期的周次（纯日期对齐防时差）
+    final nowDayOnly = DateTime(now.year, now.month, now.day);
+    final startDayOnly = DateTime(
+      _currentConfig.semesterStartDate.year,
+      _currentConfig.semesterStartDate.month,
+      _currentConfig.semesterStartDate.day,
+    );
+    final daysSinceStart = nowDayOnly.difference(startDayOnly).inDays;
+    final weeksSinceStart = (daysSinceStart >= 0) ? (daysSinceStart ~/ 7) + 1 : 1;
 
     // 检查课程是否已经结束
     final maxWeek = availableWeeks.last;
-    final minWeek = availableWeeks.first;
+    const minWeek = 1;
 
     if (weeksSinceStart < minWeek) {
       // 课程还没开始，显示第一周
-      _currentWeek = minWeek;
+      _currentWeek = 1;
       _currentDay = now.weekday;
     } else if (weeksSinceStart > maxWeek) {
       // 课程已结束，显示最后一周
