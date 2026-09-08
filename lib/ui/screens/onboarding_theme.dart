@@ -45,22 +45,35 @@ class _OnboardingThemeState extends State<OnboardingTheme> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Material(
-        // [v2.3.2修复] 添加 Material 包裹，消除黄色双下划线
         type: MaterialType.transparency,
-        child: Stack(
-          children: [
-            // 1. 底层全屏全幅流式滚动区域 (穿透到屏幕顶部和底部，折射完全可见)
-            Positioned.fill(
-              child: ListView(
-                padding: EdgeInsets.only(
-                  top: MediaQuery.of(context).padding.top + 130, // 避让顶部浮动玻璃卡片
-                  bottom: MediaQuery.of(context).padding.bottom + 140, // 避让底部操作栏
-                  left: 20,
-                  right: 20,
-                ),
+        child: AdaptiveLiquidGlassLayer(
+          quality: GlassQuality.premium,
+          settings: const LiquidGlassSettings(
+            blur: 3.0,
+            thickness: 20.0,
+            glassColor: Color(0x12FFFFFF),
+            lightIntensity: 0.70,
+            ambientStrength: 0.45,
+            ambientRim: 0.0,
+            fresnelStrength: 0.05,
+            saturation: 1.20,
+            refractiveIndex: 1.46,
+          ),
+          child: Stack(
+            children: [
+              // 1. 底层全屏全幅流式滚动区域 (穿透到屏幕顶部和底部，折射完全可见)
+              Positioned.fill(
+                child: ListView(
+                  padding: EdgeInsets.only(
+                    top: MediaQuery.of(context).padding.top + 130, // 避让顶部浮动玻璃卡片
+                    bottom: MediaQuery.of(context).padding.bottom + 160, // 避让底部操作栏
+                    left: 20,
+                    right: 20,
+                  ),
                 physics: const BouncingScrollPhysics(),
                 children: [
                   // 主题色模式选择 -> HyperOSCard
@@ -271,7 +284,7 @@ class _OnboardingThemeState extends State<OnboardingTheme> {
               ),
             ),
 
-            // 3. 底部浮动 Navigation 按钮栏
+            // 3. 底部浮动 Navigation 按钮栏（配备透光磨砂托盘，防止与下层卡片内容重叠时采样异常）
             Positioned(
               bottom: 0,
               left: 0,
@@ -280,21 +293,43 @@ class _OnboardingThemeState extends State<OnboardingTheme> {
                 top: false,
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      liquid.LiquidButton(
-                        text: widget.isLastPage ? '完成设置' : '下一步',
-                        onTap: _completeOnboarding,
-                        color: AppThemeColors.babyPink,
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: ShapeDecoration(
+                      color: isDark
+                          ? const Color(0xCC1E2028)
+                          : const Color(0xCCFFFFFF),
+                      shape: const RoundedSuperellipseBorder(
+                        borderRadius: BorderRadius.all(Radius.circular(24)),
+                        side: BorderSide(
+                          color: Color(0x22FFFFFF),
+                          width: 0.8,
+                        ),
                       ),
-                      const SizedBox(height: 10),
-                      liquid.LiquidButton(
-                        text: '上一步',
-                        onTap: widget.onBack,
-                        color: Colors.white.withValues(alpha: 0.2),
-                      ),
-                    ],
+                      shadows: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.08),
+                          blurRadius: 16,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        liquid.LiquidButton(
+                          text: widget.isLastPage ? '完成设置' : '下一步',
+                          onTap: _completeOnboarding,
+                          color: AppThemeColors.babyPink,
+                        ),
+                        const SizedBox(height: 10),
+                        liquid.LiquidButton(
+                          text: '上一步',
+                          onTap: widget.onBack,
+                          color: Colors.white.withValues(alpha: 0.2),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -302,8 +337,9 @@ class _OnboardingThemeState extends State<OnboardingTheme> {
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildThemeModeOption(
     theme.ThemeMode mode,

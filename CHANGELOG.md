@@ -4,6 +4,33 @@
 
 ---
 
+## [v2.8.7] - 2026-09-08
+
+### 1. 前级页面离屏高斯模糊景深重构 (Gaussian Blurred Frozen Snapshot)
+- **真·高斯模糊前级页面**：二级与三级页面打开时，对捕获的 0.5x 离屏快照施加硬件加速的 `ImageFilter.blur(sigmaX: 18, sigmaY: 18)` 高斯模糊滤镜与景深微暗化层，配合 `RepaintBoundary` 仅在推入页面瞬间一次性生成静态模糊贴图，既完美呈现层级深度景深效果，又保持 120 FPS 满帧不掉帧。
+
+### 2. HyperOSCard 深度重构（对标 flutter_miuix 官方规范与超椭圆曲率对齐）
+- **告别纯透明与不模糊**：依据 MIUIX / HyperOS 规范，采用 92% 高品质透光底色结合主题色微透混色（浅色 `Color(0xEBFFFFFF)` / 深色 `Color(0xEB23252E)`），默认启用 `useBlur: true`（16dp 模糊半径），展现纯正 HyperOS 层次质感。
+- **对齐 LiquidGlass 官方超椭圆曲率**：卡片轮廓全面采用与 `liquid_glass_widgets` 内部完全一致的 `RoundedSuperellipseBorder`，彻底统一视觉曲率，边框和谐流畅。
+- **立体悬浮阴影**：加入 HyperOS 柔和微弥散阴影 (`BoxShadow`)，并保留 `MiuixPressable` 下沉触感反馈。
+
+### 3. 实况通知与状态栏胶囊精准文案（杜绝“明天课程”）
+- **胶囊与标题文案规范**：无论前台或后台扫描，凡命中明日及未来课程，胶囊与标题均统一规范为 `明天${count}节课`（例如“明天2节课”），彻底根除“明天课程”的生硬文本；全天无课时显示 `今日无课`。
+- **状态栏跑马灯/滚动 Ticker 启用**：在 Android 平台注入 `builder.setTicker(subLocation)`，全面激活状态栏微缩走马灯滚动能力。
+
+### 4. 主界面三大标签页左右滑动切换动画 (PageView Slide Transitions)
+- **平滑左右位移动画**：主界面（课程、日历、设置）升级为 `PageView` 与 `PageController` 驱动，点击底部导航栏或侧边栏切换时提供 320ms `easeOutCubic` 自然跟手的左右滑动转场动效。
+- **页面状态完整保留**：各子页面通过 `AutomaticKeepAliveClientMixin` 保持滚动偏移与渲染树，防止重复初始化。
+
+### 5. Onboarding 全局液态折射上下文与课时自动持久化保存
+- **统一 AdaptiveLiquidGlassLayer 作用域**：为引导页注入全局折射作用域，修复底部操作栏与 HyperOSCard 穿透重叠时 BackdropFilter 采样异常和分辨率崩解的问题。
+- **课时配置一键持久化保存**：课时引导页点击“下一步”时强制调用保存配置，并将 `ScheduleConfigModel.defaultConfig()` 默认设定为高校专属 45 分钟作息模板（5m 小课间与 15m 大课间，14:00 下午/18:30 晚间）。
+
+### 6. 课程卡片三点按钮升级为 Premium 悬浮液态玻璃按键
+- **高级液态玻璃悬浮按钮**：将课程卡片与日历卡片右侧的平庸三点按钮重构为独立浮动的 `GlassContainer`，具备超椭圆连续边缘、独立弥散投影与 1.35 高折射率液态质感，边界清晰细腻。
+
+---
+
 ## [v2.8.6] - 2026-09-08
 
 ### 1. Android 16 实况胶囊与常驻通知深度净化 (Live Updates Ultra-Clean Text)

@@ -366,11 +366,11 @@ class LiveNotificationServiceV2 {
         final first = tomorrowCourses.first;
         final startDt = DateTime.fromMillisecondsSinceEpoch(first.startTime);
         final startStr = '${startDt.hour}:${startDt.minute.toString().padLeft(2, '0')}';
-        title = '今日课程已结束';
-        body = '明日共${tomorrowCourses.length}节课 首节 ${first.name} ($startStr ${first.location})';
-        subLocation = '明日${tomorrowCourses.length}节课';
+        title = '明天${tomorrowCourses.length}节课';
+        body = '明天共${tomorrowCourses.length}节课 首节 ${first.name} ($startStr ${first.location})';
+        subLocation = '明天${tomorrowCourses.length}节课';
       } else {
-        title = '今日无课 享受悠闲时光';
+        title = '今日无课';
         body = '课程表全天候同步中，点击查看完整课表';
         subLocation = '今日无课';
       }
@@ -438,10 +438,23 @@ class LiveNotificationServiceV2 {
           }
         } else {
           // 非今日课程（明日、后天或下周预告）
-          final relDay = _formatRelativeDate(start, now);
-          title = '$relDay课程';
-          body = '${_currentCourse!.name} $startStr ${_currentCourse!.location}';
-          subLocation = '$relDay$startStr';
+          final startDate = DateTime(start.year, start.month, start.day);
+          final nowDate = DateTime(now.year, now.month, now.day);
+          final dayDiff = startDate.difference(nowDate).inDays;
+
+          if (dayDiff == 1) {
+            // [v2.8.7] 明日课程：胶囊与标题严格规范为 "明天X节课"，杜绝 "明天课程"
+            final tomorrowCourses = _getTomorrowCourses(now);
+            final count = tomorrowCourses.isNotEmpty ? tomorrowCourses.length : 1;
+            title = '明天${count}节课';
+            subLocation = '明天${count}节课';
+            body = '首节 $startStr ${_currentCourse!.name} ${_currentCourse!.location}';
+          } else {
+            final relDay = _formatRelativeDate(start, now);
+            title = '$relDay课程';
+            body = '${_currentCourse!.name} $startStr ${_currentCourse!.location}';
+            subLocation = '$relDay $startStr';
+          }
           showProgress = false;
         }
 

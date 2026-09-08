@@ -1,3 +1,4 @@
+import 'dart:ui' as ui;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -34,11 +35,24 @@ class AndroidLiquidGlassMain extends StatefulWidget {
 class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
     with SingleTickerProviderStateMixin, RouteAware {
   int _currentIndex = 0;
+  late final PageController _pageController = PageController();
   bool _isLoading = true;
   bool _isBottomNavVisible = true;
   bool _isCoveredBySubPage = false; // [v2.8.4] 二级页面覆盖状态，用于彻底离屏冻结前级页面 Ticker 与着色管线
   bool _isWeekPickerActive = false; // [v2.8.6] 周次选择器打开状态，用于挂起背景重绘保障 120 FPS
   final DataImportService _importService = DataImportService();
+
+  void _onTabSelected(int index) {
+    if (_currentIndex == index) return;
+    setState(() => _currentIndex = index);
+    if (_pageController.hasClients) {
+      _pageController.animateToPage(
+        index,
+        duration: const Duration(milliseconds: 320),
+        curve: Curves.easeOutCubic,
+      );
+    }
+  }
 
   @override
   void initState() {
@@ -101,11 +115,10 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
       final liveService = LiveNotificationServiceV2();
       await liveService.initialize();
 
-      // 设置通知点击回调 - 跳转到课程详情
+      // 设置通知点击回调 - 跳转到课程页面
       liveService.setOnNotificationTapCallback((course) {
-        // 切换到课程页面
         if (mounted) {
-          setState(() => _currentIndex = 0);
+          _onTabSelected(0);
         }
       });
 
@@ -128,6 +141,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
   void dispose() {
     routeObserver.unsubscribe(this); // [v2.6.0] 卸载路由监听
     _scheduleProvider?.removeListener(_onScheduleChanged);
+    _pageController.dispose();
     // 停止通知服务
     LiveNotificationServiceV2().dispose();
     super.dispose();
@@ -160,7 +174,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
             selectedIndex: _currentIndex,
             onTabSelected: (index) {
               HapticFeedback.selectionClick();
-              setState(() => _currentIndex = index);
+              _onTabSelected(index);
             },
             items: const [
               TabletSideBarItem(
@@ -192,8 +206,9 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                     offstage: _isCoveredBySubPage,
                     child: TickerMode(
                       enabled: !_isCoveredBySubPage,
-                      child: IndexedStack(
-                        index: _currentIndex,
+                      child: PageView(
+                        controller: _pageController,
+                        physics: const NeverScrollableScrollPhysics(),
                         children: [
                           TickerMode(
                             enabled: _currentIndex == 0 && !_isCoveredBySubPage && !_isWeekPickerActive,
@@ -225,19 +240,35 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                         removeLeft: true,
                         removeRight: true,
                         context: context,
-                        child: ListenableBuilder(
-                          listenable: PageBlurController.instance,
-                          builder: (context, _) {
-                            final img = PageBlurController.instance.capturedImage;
-                            if (img != null) {
-                              return RawImage(
-                                image: img,
-                                fit: BoxFit.cover,
-                                filterQuality: FilterQuality.medium,
-                              );
-                            }
-                            return const SizedBox.shrink();
-                          },
+                        child: RepaintBoundary(
+                          child: ListenableBuilder(
+                            listenable: PageBlurController.instance,
+                            builder: (context, _) {
+                              final img = PageBlurController.instance.capturedImage;
+                              if (img != null) {
+                                final isDark = Theme.of(context).brightness == Brightness.dark;
+                                return Stack(
+                                  fit: StackFit.expand,
+                                  children: [
+                                    ImageFiltered(
+                                      imageFilter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                                      child: RawImage(
+                                        image: img,
+                                        fit: BoxFit.cover,
+                                        filterQuality: FilterQuality.medium,
+                                      ),
+                                    ),
+                                    Container(
+                                      color: isDark
+                                          ? Colors.black.withValues(alpha: 0.25)
+                                          : Colors.white.withValues(alpha: 0.12),
+                                    ),
+                                  ],
+                                );
+                              }
+                              return const SizedBox.shrink();
+                            },
+                          ),
                         ),
                       ),
                     ),
@@ -267,8 +298,9 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                   offstage: _isCoveredBySubPage,
                   child: TickerMode(
                     enabled: !_isCoveredBySubPage,
-                    child: IndexedStack(
-                      index: _currentIndex,
+                    child: PageView(
+                      controller: _pageController,
+                      physics: const NeverScrollableScrollPhysics(),
                       children: [
                         TickerMode(
                           enabled: _currentIndex == 0 && !_isCoveredBySubPage && !_isWeekPickerActive,
@@ -300,19 +332,35 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                       removeLeft: true,
                       removeRight: true,
                       context: context,
-                      child: ListenableBuilder(
-                        listenable: PageBlurController.instance,
-                        builder: (context, _) {
-                          final img = PageBlurController.instance.capturedImage;
-                          if (img != null) {
-                            return RawImage(
-                              image: img,
-                              fit: BoxFit.cover,
-                              filterQuality: FilterQuality.medium,
-                            );
-                          }
-                          return const SizedBox.shrink();
-                        },
+                      child: RepaintBoundary(
+                        child: ListenableBuilder(
+                          listenable: PageBlurController.instance,
+                          builder: (context, _) {
+                            final img = PageBlurController.instance.capturedImage;
+                            if (img != null) {
+                              final isDark = Theme.of(context).brightness == Brightness.dark;
+                              return Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  ImageFiltered(
+                                    imageFilter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                                    child: RawImage(
+                                      image: img,
+                                      fit: BoxFit.cover,
+                                      filterQuality: FilterQuality.medium,
+                                    ),
+                                  ),
+                                  Container(
+                                    color: isDark
+                                        ? Colors.black.withValues(alpha: 0.25)
+                                        : Colors.white.withValues(alpha: 0.12),
+                                  ),
+                                ],
+                              );
+                            }
+                            return const SizedBox.shrink();
+                          },
+                        ),
                       ),
                     ),
                   ),
@@ -333,7 +381,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                 selectedIndex: _currentIndex,
                 onTabSelected: (index) {
                   HapticFeedback.selectionClick();
-                  setState(() => _currentIndex = index);
+                  _onTabSelected(index);
                 },
                 quality: GlassQuality.premium,
                 maskingQuality: MaskingQuality.high,
@@ -1186,16 +1234,39 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                       ),
                     ],
                     trigger: Container(
-                      width: 32,
-                      height: 32,
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: isDark ? 0.30 : 0.08),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
                       ),
-                      child: const Icon(
-                        CupertinoIcons.ellipsis,
-                        color: Colors.white70,
-                        size: 16,
+                      child: GlassContainer(
+                        width: 34,
+                        height: 34,
+                        quality: GlassQuality.premium,
+                        shape: const LiquidRoundedSuperellipse(borderRadius: 12),
+                        settings: LiquidGlassSettings(
+                          glassColor: isDark
+                              ? const Color(0x33FFFFFF)
+                              : const Color(0x66FFFFFF),
+                          blur: 4.0,
+                          thickness: 12.0,
+                          refractiveIndex: 1.35,
+                          lightIntensity: 0.85,
+                          ambientRim: 0.0,
+                          fresnelStrength: 0.08,
+                        ),
+                        child: Center(
+                          child: Icon(
+                            CupertinoIcons.ellipsis,
+                            color: isDark ? Colors.white : const Color(0xFF1A1A2E),
+                            size: 16,
+                          ),
+                        ),
                       ),
                     ),
                   ),

@@ -26,8 +26,8 @@ class PageBlurController extends ChangeNotifier {
               as RenderRepaintBoundary?;
       if (boundary == null || !boundary.hasSize) return false;
 
-      // [v2.8.6] pixelRatio=0.65 平衡清晰度与GPU开销，杜绝颗粒与锯齿感
-      final image = await boundary.toImage(pixelRatio: 0.65);
+      // [v2.8.7] pixelRatio=0.50 最契合后续高斯模糊的降采样率，极大减轻 GPU 离屏开销同时保证平滑无颗粒
+      final image = await boundary.toImage(pixelRatio: 0.50);
       _capturedImage?.dispose(); // 释放旧截图
       _capturedImage = image;
       notifyListeners();
@@ -50,7 +50,7 @@ class PageBlurController extends ChangeNotifier {
 
       // 先尝试同步截图（Impeller 支持）
       // 失败时静默降级（截图不可用，转场将使用简单暗化回退）
-      final image = boundary.toImageSync(pixelRatio: 0.65);
+      final image = boundary.toImageSync(pixelRatio: 0.50);
       _capturedImage?.dispose();
       _capturedImage = image;
       notifyListeners();

@@ -237,6 +237,7 @@ class MainActivity : FlutterActivity() {
 
         if (subLocation != null && subLocation.isNotEmpty()) {
             builder.setSubText(subLocation)
+            builder.setTicker(subLocation)
         }
 
         if (showProgress) {

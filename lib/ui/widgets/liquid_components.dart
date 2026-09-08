@@ -457,14 +457,14 @@ class LiquidBackButton extends StatelessWidget {
   }
 }
 
-/// [v2.8.6] 基于 Flutter MiuiX (HyperOS) 的高性能轻量级卡片
+/// [v2.8.7] 基于 Flutter MiuiX 与 Liquid Glass 规范的 HyperOS 超椭圆混色卡片
 ///
-/// 专用于频繁重绘与高速滚动的课程卡片、日历网格卡片以及设置界面列表卡片。
 /// 特性：
-/// 1. 采用 MiuixSquircleBorder 完美平滑连续超椭圆圆角与细腻边框
-/// 2. 具备 HyperOS 原生按压动效与反馈 (MiuixPressFeedbackType.sink)
-/// 3. 混色半透明背景 (Color.alphaBlend 主题微透)，零 Impeller 多通道着色器负担
-/// 4. 默认关闭 BackdropFilter (useBlur: false)，彻底解放 GPU 渲染算力，保障全局 120 FPS 满帧运行
+/// 1. 采用与 Liquid Glass 完全一致的 RoundedSuperellipseBorder 连续超椭圆圆角与细腻边框
+/// 2. 具备 HyperOS 原生微交互下沉触感反馈 (MiuixPressFeedbackType.sink)
+/// 3. 混色半透明质感：92% 不透明度底色与主题微透混色，非廉价纯透明
+/// 4. 标配超轻量硬件级高斯模糊 (useBlur: true, sigma: 16)，极致优雅
+/// 5. 附带 HyperOS 柔和微弥散阴影，层次立体分明
 class HyperOSCard extends StatelessWidget {
   final Widget child;
   final VoidCallback? onTap;
@@ -487,8 +487,8 @@ class HyperOSCard extends StatelessWidget {
     this.padding = const EdgeInsets.all(12),
     this.color,
     this.contentColor,
-    this.useBlur = false, // [v2.8.6] 默认关闭多通道模糊以维持 120 FPS 满帧
-    this.blurRadius = 6.0,
+    this.useBlur = true, // [v2.8.7] 默认开启高斯模糊，还原正统 HyperOS 毛玻璃质感
+    this.blurRadius = 16.0,
     this.feedbackType = MiuixPressFeedbackType.sink,
     this.border,
   });
@@ -498,53 +498,60 @@ class HyperOSCard extends StatelessWidget {
     final isDark = globalDarkModeNotifier.value;
     final primary = AppThemeColors.babyPink;
 
-    // HyperOS 混色半透明背景：微透主题粉色与高品质中性底色融合
+    // HyperOS 混色半透明背景：92% 高品质透光底色结合主题微透混色，告别纯透明
     final defaultBgColor = isDark
-        ? Color.alphaBlend(primary.withValues(alpha: 0.10), const Color(0x331C202A))
-        : Color.alphaBlend(primary.withValues(alpha: 0.08), const Color(0x38FFFFFF));
+        ? Color.alphaBlend(primary.withValues(alpha: 0.08), const Color(0xEB23252E))
+        : Color.alphaBlend(primary.withValues(alpha: 0.06), const Color(0xEBFFFFFF));
 
     final effectiveColor = color ?? defaultBgColor;
     final effectiveTextColor = contentColor ??
-        (isDark ? const Color(0xFFF0F3F8) : Colors.white);
+        (isDark ? const Color(0xFFF0F3F8) : const Color(0xFF1A1A2E));
 
     final effectiveBorderSide = border ??
         BorderSide(
           color: isDark
-              ? Colors.white.withValues(alpha: 0.10)
-              : Colors.white.withValues(alpha: 0.40),
+              ? Colors.white.withValues(alpha: 0.12)
+              : Colors.black.withValues(alpha: 0.06),
           width: 0.8,
         );
 
-    final shape = MiuixSquircleBorder(
-      cornerRadius: cornerRadius,
+    // [v2.8.7] 采用与 liquid_glass_widgets 内部一致的 RoundedSuperellipseBorder，保证曲率完全对齐统一
+    final shape = RoundedSuperellipseBorder(
+      borderRadius: BorderRadius.all(Radius.circular(cornerRadius)),
       side: effectiveBorderSide,
-      enabled: cornerRadius > 0,
     );
 
-    Widget innerContent = Padding(
-      padding: padding,
-      child: child,
+    Widget cardBody = DecoratedBox(
+      decoration: ShapeDecoration(
+        color: effectiveColor,
+        shape: shape,
+        shadows: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.05),
+            blurRadius: 14,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: padding,
+        child: child,
+      ),
     );
 
     if (useBlur) {
-      innerContent = ClipPath(
+      cardBody = ClipPath(
         clipper: ShapeBorderClipper(shape: shape),
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: blurRadius, sigmaY: blurRadius),
-          child: innerContent,
+          child: cardBody,
         ),
       );
     }
 
     Widget cardContent = MiuixContentColor(
       color: effectiveTextColor,
-      child: DecoratedBox(
-        decoration: ShapeDecoration(
-          color: effectiveColor,
-          shape: shape,
-        ),
-        child: innerContent,
-      ),
+      child: cardBody,
     );
 
     if (onTap != null || onLongPress != null || feedbackType != MiuixPressFeedbackType.none) {

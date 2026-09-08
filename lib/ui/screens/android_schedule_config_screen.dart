@@ -24,10 +24,10 @@ class AndroidScheduleConfigScreen extends StatefulWidget {
 
   @override
   State<AndroidScheduleConfigScreen> createState() =>
-      _AndroidScheduleConfigScreenState();
+      AndroidScheduleConfigScreenState();
 }
 
-class _AndroidScheduleConfigScreenState
+class AndroidScheduleConfigScreenState
     extends State<AndroidScheduleConfigScreen> {
   late ScheduleConfigModel _config;
   final _semesterDateController = TextEditingController();
@@ -35,6 +35,11 @@ class _AndroidScheduleConfigScreenState
   final List<TextEditingController> _startControllers = [];
   final List<TextEditingController> _durationControllers = [];
   bool _showWeekends = true;
+
+  /// 供外部（如 Onboarding）显式触发静默保存并更新课表
+  void saveConfigFromParent() {
+    _saveConfigQuietly();
+  }
 
   @override
   void initState() {
@@ -308,6 +313,7 @@ class _AndroidScheduleConfigScreenState
 
   @override
   void dispose() {
+    _saveConfigQuietly();
     _semesterDateController.dispose();
     _breakTimeController.dispose();
     for (var controller in _startControllers) {
