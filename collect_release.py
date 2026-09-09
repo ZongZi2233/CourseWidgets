@@ -111,7 +111,7 @@ def collect_android_apks(version, build):
     arm64_src = os.path.join(apk_dir, 'app-arm64-v8a-release.apk')
     universal_src = os.path.join(apk_dir, 'app-release.apk')
 
-    # 清理 release/ 中已存在的同版本旧包，避免混淆残留
+    # 清理 release/ 中已存在的同版本旧包，避免残留
     if os.path.exists(RELEASE_DIR):
         for fname in os.listdir(RELEASE_DIR):
             if fname.startswith(f"CourseWidgets-v{version}-android-"):
@@ -122,7 +122,7 @@ def collect_android_apks(version, build):
 
     targets = []
 
-    # 1. 严格校验并收集 arm64-v8a
+    # 严格校验并仅收集 arm64-v8a (按用户要求不提供 Universal 冗余包)
     if os.path.exists(arm64_src):
         apk_ver, apk_code = get_apk_badging(arm64_src, aapt_exe)
         print(f"[APK 校验] arm64-v8a: versionName={apk_ver}, versionCode={apk_code}, 目标预期={version}+{build}")
@@ -136,20 +136,6 @@ def collect_android_apks(version, build):
             targets.append((arm64_src, f"CourseWidgets-v{version}-android-arm64-v8a.apk"))
     else:
         print(f"[提示] 未找到 arm64-v8a 构建产物: {arm64_src}")
-
-    # 2. 严格校验并收集 universal
-    if os.path.exists(universal_src):
-        apk_ver, apk_code = get_apk_badging(universal_src, aapt_exe)
-        print(f"[APK 校验] universal: versionName={apk_ver}, versionCode={apk_code}, 目标预期={version}+{build}")
-        if apk_ver is not None:
-            if apk_ver == version:
-                targets.append((universal_src, f"CourseWidgets-v{version}-android-universal.apk"))
-            else:
-                print(f"[严重错误] universal APK 版本号 ({apk_ver}) 与预期 ({version}) 不一致，严禁收集陈旧脏包！")
-        else:
-            targets.append((universal_src, f"CourseWidgets-v{version}-android-universal.apk"))
-    else:
-        print(f"[提示] 未找到 universal 构建产物: {universal_src}")
 
     for src_path, target_name in targets:
         dst_path = os.path.join(RELEASE_DIR, target_name)
