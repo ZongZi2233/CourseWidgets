@@ -1,9 +1,89 @@
-# Miscellaneous
+# ─────────────────────────────────────────────────────────────
+# CourseWidgets .gitignore
+# ─────────────────────────────────────────────────────────────
+
+# ─────────────────────────────────────────────────────────────
+# 1. 签名证书、密钥与隐私配置文件 (Signing Keys, Keystores & Secrets)
+# ─────────────────────────────────────────────────────────────
+*.jks
+*.keystore
+*.p12
+*.key
+*.pem
+*.cer
+*.crt
+my-release-key.jks
+key.properties
+android/key.properties
+
+# ─────────────────────────────────────────────────────────────
+# 2. 本地机器配置、环境变量与临时缓存 (Local Environment & Machine Config)
+# ─────────────────────────────────────────────────────────────
+local.properties
+**/local.properties
+.env
+.env.*
+*.env
+**/ephemeral/
+.gradle/
+**/.gradle/
+
+# ─────────────────────────────────────────────────────────────
+# 3. Flutter / Dart / 构建产物 (Flutter & Build Artifacts)
+# ─────────────────────────────────────────────────────────────
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+**/build/
+/coverage/
+**/doc/api/
+**/ios/Flutter/.last_build_id
+
+# ─────────────────────────────────────────────────────────────
+# 4. 发布归档包与调试符号 (Release Binaries & Debug Symbols)
+# ─────────────────────────────────────────────────────────────
+/release/*.apk
+/release/*.zip
+/symbols/
+/debug-info/
+/scratch/
+app.*.symbols
+app.*.map.json
+*.apk
+*.aab
+*.zip
+
+# Android 构建中间体
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# ─────────────────────────────────────────────────────────────
+# 5. 编辑器与 IDE (IDE & Editor Settings)
+# ─────────────────────────────────────────────────────────────
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.clinerules/
+
+# ─────────────────────────────────────────────────────────────
+# 6. 操作系统与临时文件 (OS Artifacts & Temp Files)
+# ─────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
 *.class
 *.log
 *.pyc
+*.pyo
+*.pyd
+__pycache__/
 *.swp
-.DS_Store
+*~
 .atom/
 .build/
 .buildlog/
@@ -11,44 +91,3 @@
 .svn/
 .swiftpm/
 migrate_working_dir/
-
-# IntelliJ related
-*.iml
-*.ipr
-*.iws
-.idea/
-
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control, so this line
-# is commented out by default.
-#.vscode/
-
-# Flutter/Dart/Pub related
-**/doc/api/
-**/ios/Flutter/.last_build_id
-.dart_tool/
-.flutter-plugins-dependencies
-.pub-cache/
-.pub/
-/build/
-/coverage/
-
-# Symbolication related
-app.*.symbols
-
-# Obfuscation related
-app.*.map.json
-
-# Android Studio will place build artifacts here
-/android/app/debug
-/android/app/profile
-/android/app/release
-
-# Release binaries and archives
-/release/*.apk
-/release/*.zip
-/symbols/
-/scratch/
-*.apk
-*.zip
-

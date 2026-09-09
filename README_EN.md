@@ -2,235 +2,134 @@
 
 <div align="center">
 
-<img src="https://github.com/ZongZi2233AI/CourseWidgets/blob/main/assets/icon.png" width="128px">
+<img src="assets/icon.png" width="128px" alt="CourseWidgets Icon">
 
-**A Modern Course Schedule App with iOS 26 Liquid Glass Design**
+**Next-Generation Multi-Platform University Course Schedule App built with Apple iOS 26 Liquid Glass and HyperOS Design Languages**
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Flutter](https://img.shields.io/badge/Flutter-3.41.2+-02569B?logo=flutter)](https://flutter.dev)
-[![Dart](https://img.shields.io/badge/Dart-3.11.0+-0175C2?logo=dart)](https://dart.dev)
-[![Version](https://img.shields.io/badge/Version-2.8.0-FF9BAE)](https://github.com/ZongZi2233AI/CourseWidgets/releases/)
+[![Flutter](https://img.shields.io/badge/Flutter-3.44.0+-02569B?logo=flutter)](https://flutter.dev)
+[![Dart](https://img.shields.io/badge/Dart-3.12.0+-0175C2?logo=dart)](https://dart.dev)
+[![Version](https://img.shields.io/badge/Version-2.9.0-FF9BAE)](https://github.com/ZongZi2233AI/CourseWidgets/releases/)
 
 English | [简体中文](README.md)
 
 </div>
 
-> **Note**: This application is built entirely with AI-assisted development. Core by [MiMo-V2-Flash](https://github.com/XiaomiMiMo/MiMo-V2-Flash), Windows portion by Claude Opus 4.6, complex implementations by Gemini 3.0 Pro, v2.4+ by Gemini 3.1 Pro.
+> **Statement**: This project was developed entirely through human-AI collaborative Vibe Coding. Core architecture by [MiMo-V2-Flash](https://github.com/XiaomiMiMo/MiMo-V2-Flash) and Gemini 3.1 Pro, with Windows desktop integration engineered in collaboration with Claude Opus 4.6.
 
-### **Reminder**: The v2.6.0 release removed some real Liquid Glass code due to unresolved issues. To prioritize build completion, it will be restored around v2.6.0-beta8 (shader refactoring, rendering pipeline optimization, and rendering bug fixes are now complete).
+### 📦 Latest Release: [v2.9.0 (Build 10008060)](https://github.com/ZongZi2233AI/CourseWidgets/releases)
+* **Android Standalone**: `CourseWidgets-v2.9.0-android-arm64-v8a.apk` (54.58 MB) — Built with R8 code shrinking and Dart AOT obfuscation.
+* **Windows Client**: `CourseWidgets-v2.9.0-windows-x64.zip` (53.88 MB) — Borderless acrylic desktop app with tray support and high-DPI scaling.
 
-### 📦 Latest Release: [v2.6.0](https://github.com/ZongZi2233AI/CourseWidgets/releases/tag/v2.6.0.21)
+---
 
-The latest version is still unstable and debugging is being accelerated.
+## ✨ Core Highlights
 
-## ✨ Core Features
+### 🎨 Apple iOS 26 Liquid Glass 1.4.1 Premium
+* **Hardware Real-Time Fragment Shaders**: Fully tailored to Flutter's Impeller graphics backend, providing high-curvature optical lens refraction, specular edge sheen, and responsive ambient lighting.
+* **Squircle Superellipse Curvature**: Continuous curvature across all glass surfaces matching iOS 26 and HyperOS standards, completely eliminating artificial white edges and edge absorption artifacts.
+* **Strict 3-Tier Layering Architecture**: Floating Header and Bottom Navigation Bar reside at the topmost layer of the render tree, optically refracting cards and background content passing beneath them.
 
-### 🎨 Liquid Glass Design
+### 📱 HyperOSCard Translucent Acrylic System
+* **Borderless Design with Soft Ambient Shadows**: Replaces harsh hard borders (`BorderSide.none`) with multi-layered diffused ambient shadows that naturally define card boundaries.
+* **Translucent Acrylic with Theme Blending**: Semi-transparent background (`0x991C2028` dark / `0xB8FFFFFF` light) dynamically blended with the active theme color (`Color.alphaBlend`), allowing wallpaper textures to softly shine through.
+* **Viewport Single-Pass Blur (Solid 120 FPS)**: Eliminates per-card `BackdropFilter` shader calls that starve GPU fillrate bandwidth; renders the course grid in a single pass at a fluid 120 FPS.
+* **Instant Text Contrast Adaptation**: Analyzes resulting card background luminance (`computeLuminance`) to automatically select high-contrast dark or white typography in real time.
 
-- Full implementation of Apple iOS 26 Liquid Glass design language
-- Real-time shader rendering + Impeller engine
-- Unified superellipse (squircle) corners throughout
-- Adaptive dark/light mode
-- Premium interactive effects: stretch, press feedback, chromatic edge dispersion
-- Highly optimized power-saving animations
+### 🖼️ Viewport-Adaptive 4K Wallpaper Engine
+* **Dynamic Downsampling Decoder**: Employs `resolveAdaptiveImage` to sample device physical viewport dimensions and device pixel ratio (DPR) on the fly.
+* **Pin-Sharp Clarity without Memory Spikes**: Scales dynamically up to 4096 physical pixels on 4K desktop and tablet displays, while efficiently matching viewport resolution on smartphones to prevent GPU memory spikes and frame drops.
 
-### 📅 Smart Schedule Management
+### ⏰ Full Custom Schedule Protection
+* **Independent 1~13 Section Configuration**: Flexibly customize start times, section durations, and break intervals for every individual period.
+* **No-Overwrite Import Protection**: When importing external ICS, HTML, or JSON schedules, user-defined bell schedules are strictly preserved unless the file explicitly includes the app's proprietary `X-SCHEDULE-CONFIG` header.
+* **Lossless ICS Export**: Bell schedules and section durations are automatically embedded inside exported `.ics` calendar files for seamless cross-device migration.
 
-| Feature | Description |
-|---------|-------------|
-| ICS Import | Import `.ics` calendar files from other schedule apps |
-| HTML Import | Parse HTML schedules exported from school systems |
-| Multi-Semester | Unlimited schedule imports with history switching |
-| Auto Recognition | Automatic course time, location, and teacher detection |
-| Custom Schedule | Flexibly adjust based on school bell schedules |
+### 🔔 Smart Notifications & Live Updates
+* **Android 16 Live Updates**: Supports real-time status bar capsules with minute-and-second live countdowns and expanded app icon display.
+* **Pre-Class Reminders**: Configurable 15-minute and 5-minute pre-class alerts.
+* **Windows Tray Resident**: Minimizes gracefully to the system tray on window close, preserving background notification routines.
 
-### 🔔 Smart Notifications
+### 📥 Schedule Import Capabilities
+| Import Source | Supported Formats | Highlights |
+| :--- | :--- | :--- |
+| **School Systems** | In-app WebView crawler | Supports EAMS (Tree Valley) and similar portals with automated schedule extraction |
+| **ICS Calendars** | `.ics` calendar format | Intelligent parsing of recurrence rules, week ranges, teachers, and classroom locations |
+| **HTML Tables** | `.html` exported files | Direct parsing of schedule tables saved from university web portals |
+| **JSON Backups** | `.json` backup format | Full lossless export and restore of all courses and custom schedule settings |
 
-- **Android 16 Live Updates**: Real-time notifications with chronometer countdown (not progress bars)
-- **Dual Reminders**: 15 min + 5 min before class
-- **System Tray**: Windows tray icon with background running on window close
-- **Notification Interaction**: Tap notification to jump to course details
+---
 
-### 🎯 Multi-Platform Support
+## 🎯 Platform Support Matrix
 
-| Platform | Status | Description |
-|----------|--------|-------------|
-| ✅ Android | Released | Phone + Tablet landscape adaptation |
-| ✅ Windows | Released | Custom window + sidebar navigation + system tray |
-| 🔧 macOS | In Development | Contributions welcome |
-| 🔧 iOS / iPadOS | In Development | Contributions welcome |
-| ❌ Linux | Not Started | Contributions welcome |
-
-### 🌈 Personalization
-
-- Default theme color (Baby Pink gradient)
-- Android 12+ **Material You** dynamic colors
-- **Monet Color Extraction**: Natively uses `ColorScheme.fromImageProvider` for fast async primary color extraction from any background photo or asset wallpaper.
-- Custom background images (supports Android 14+ Photo Picker)
+| Platform | Status | Highlights & Formats |
+| :--- | :---: | :--- |
+| **Android** | ✅ **Released** | Full-bleed weekly schedule grid + tablet landscape 2-column layout, arm64-v8a package (R8 + Dart obfuscation) |
+| **Windows** | ✅ **Released** | Custom borderless acrylic window + sidebar navigation + tray resident + 4K High-DPI scaling |
+| **macOS** | 🔧 *In Development* | Planned support for native menu bar and retina Liquid Glass rendering |
+| **iOS / iPadOS** | 🔧 *In Development* | Dynamic Island and Live Activities integration planned |
+| **Linux** | ❌ *Not Started* | Open source contributions welcome |
 
 ---
 
 ## 🚀 Quick Start
 
-### Requirements
-
+### Prerequisites
+```yaml
+Flutter SDK:  >= 3.44.0
+Dart SDK:     >= 3.12.0
+Android SDK:  CompileSDK 36, TargetSDK 36, MinSDK 26
+AGP / Gradle: AGP 8.9+ / Gradle 8.11+
+Java Runtime: JDK 21
 ```
-Flutter SDK    ≥ 3.38.7
-Dart SDK       ≥ 3.10.7
-AGP            ≥ 9.0
-Kotlin         ≥ 2.3
-Java           21
-```
 
-### Install & Run
+### Clone & Run
 
 ```bash
-# 1. Clone the repository
+# 1. Clone repository
 git clone https://github.com/ZongZi2233AI/CourseWidgets.git
 cd CourseWidgets
 
-# 2. Install dependencies
+# 2. Fetch dependencies
 flutter pub get
 
-# 3. Run (hot reload not recommended for Android, may cause lag)
-flutter run -d android    # Android
-flutter run -d windows    # Windows
-flutter run -d macos      # macOS
-flutter run -d ios        # iOS
+# 3. Launch debug session
+flutter run -d android    # Android device / emulator
+flutter run -d windows    # Windows desktop
 ```
 
-### Build Release
+### Production Release Build with Obfuscation
 
 ```bash
-# Android (recommended: split ABI + obfuscation)
-flutter build apk --split-per-abi --obfuscate --split-debug-info=build/debug-info
+# 1. Build Android arm64-v8a APK (R8 & Dart code obfuscation enabled)
+flutter build apk --release --target-platform android-arm64 --split-per-abi --obfuscate --split-debug-info=build/app/outputs/symbols
 
-# Windows
-flutter build windows --release
+# 2. Build Windows x64 Client (Dart code obfuscation enabled)
+flutter build windows --release --obfuscate --split-debug-info=build/windows/x64/symbols
 
-# macOS
-flutter build macos --release
+# 3. Collect and verify release packages
+python collect_release.py
 ```
+> Running `collect_release.py` automatically validates package names, generates SHA256 checksums, and organizes output into the `release/` directory alongside `RELEASE_MANIFEST.json`.
 
 ---
 
-## 📖 User Guide
+## 🔒 Security & Privacy Policy
 
-### Import Schedule
-
-#### Method 1: ICS File
-1. Settings → Data Management → Import ICS Calendar
-2. Select `.ics` file → Auto parse and import
-
-#### Method 2: HTML Schedule
-1. Settings → Data Management → Import HTML Schedule
-2. Select HTML file exported from school system → Auto parse
-
-### Course Operations
-
-| Action | Method |
-|--------|--------|
-| View Courses | Main screen shows current week's course grid |
-| Edit Course | Tap course card → Edit |
-| Switch Week | Swipe left/right or tap week button |
-| Switch Semester | Settings → Data Management → History |
-
-### Theme & Background
-
-1. Settings → General → Theme Color
-   - **Default Theme** (Baby Pink)
-   - **System Theme** (Material You, Android 12+)
-   - **Monet Extraction** (from background image)
-2. Settings → General → Change Background Image
-
----
-
-## 🏗️ Project Structure
-
-```
-lib/
-├── constants/            # Constants (theme, version)
-├── models/               # Data models
-├── providers/            # State management (Provider)
-├── services/             # Business logic
-│   ├── notification_manager.dart       # Unified notification manager
-│   ├── live_notification_service_v3.dart  # Android Live Update
-│   ├── windows_tray_service.dart       # Windows system tray
-│   ├── data_import_service.dart        # Data import
-│   └── ...
-├── ui/
-│   ├── screens/          # Pages
-│   │   ├── android_liquid_glass_main.dart   # Android main screen
-│   │   ├── windows_custom_window.dart       # Windows custom window
-│   │   ├── settings_*.dart                  # Settings pages
-│   │   └── ...
-│   ├── widgets/          # Components (liquid glass widgets, grids, etc.)
-│   └── transitions/      # Page transition animations
-└── utils/                # Utilities
-```
-
----
-
-## 🛠️ Tech Stack
-
-| Category | Technology |
-|----------|-----------|
-| **Framework** | Flutter + Dart |
-| **UI** | `liquid_glass_widgets` · `liquid_glass_renderer` · `figma_squircle` |
-| **State Management** | Provider |
-| **Storage** | SQLite · MMKV |
-| **Notifications** | `flutter_local_notifications` · `flutter_foreground_task` |
-| **Desktop** | `window_manager` · `tray_manager` |
-| **Data** | `icalendar_parser` · `rrule` · `intl` |
-| **File** | `file_selector` |
-
----
-
-## 📝 Development Guide
-
-### Code Standards
-
-- Follow [Effective Dart](https://dart.dev/guides/language/effective-dart) guidelines
-- Use `flutter_lints` for code checking
-
-### Commit Format
-
-```
-feat: Add new feature      fix: Fix bug
-docs: Update docs          style: Code formatting
-refactor: Refactoring      chore: Build/tooling
-```
-
----
-
-## 🤝 Contributing
-
-1. Fork this repository
-2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit changes (`git commit -m 'feat: Add some AmazingFeature'`)
-4. Push and open a Pull Request
-
----
-
-## 🗺️ Roadmap
-
-### v2.6.x
-Will focus on educational system integration optimization and UI design improvements.
+* **Key Protection**: All production certificates (`*.jks`, `*.keystore`, `*.key`), private environment files, and local build paths are strictly excluded via `.gitignore`. Never commit signing credentials to any public repository.
+* **Commit Guidelines**:
+  ```
+  feat: New feature             fix: Bug fix
+  refactor: Code refactoring    perf: Performance & rendering optimization
+  docs: Documentation updates   chore: Tooling & build script updates
+  ```
 
 ---
 
 ## 📄 License
 
-Licensed under the [Apache 2.0 License](LICENSE). Third-party licenses: [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
-
-## 📮 Contact
-
-- **Issues**: [GitHub Issues](https://github.com/ZongZi2233AI/CourseWidgets/issues)
-
-## ⭐ Star History
-
-If this project helps you, please give it a Star ⭐
+This software is licensed under the [Apache 2.0 License](LICENSE). Third-party open source notices are detailed in [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
 
 ---
 
-**Copyright © 2025-2026 ZongZi** · Made with ❤️ and Flutter
+**Copyright © 2025-2026 ZongZi** · Crafted with ❤️ and Flutter

@@ -4,6 +4,38 @@
 
 ---
 
+## [v2.9.0] - 2026-09-09
+
+### 1. 引导页渲染层级彻底重构 (Floating Glass Top-Tier Architecture)
+- **玻璃悬浮组件置于顶层**：彻底根治此前 `HyperOSCard` 覆盖遮挡玻璃标题栏与底部导航按钮的层级 Bug。移除引导页面（`OnboardingTheme`、`OnboardingConfig`、`OnboardingImport`）根节点包裹的全局 `AdaptiveLiquidGlassLayer`，重构为严谨的三层渲染架构：
+  - **Layer 0 (底层)**：`Positioned.fill` 全幅流式滚动区域，包含所有 `HyperOSCard` 与内容，设置上下充足避让边距，全幅穿透滚动；
+  - **Layer 1 (顶层)**：`Positioned(top: 0)` 悬浮 Header `LiquidCard`，启用独立渲染图层，物理折射下方滑过卡片；
+  - **Layer 2 (顶层)**：`Positioned(bottom: 0)` 悬浮操作栏，内嵌专属 `AdaptiveLiquidGlassLayer`，包裹“上一步”与“下一步”液态玻璃按钮，牢牢锁死在渲染树最顶层，物理折射下方滑动穿过的所有卡片。
+- **LiquidButton 独立图层与光学透镜**：支持 `useOwnLayer: useOwnLayer ?? !inLayer` 与 `GlassQuality.premium`，在独立悬浮场景下自成折射通道。
+
+### 2. HyperOSCard 混色半透明丙烯酸质感升级 (Translucent Acrylic with Theme Blending)
+- **动态主题色温润融合**：彻底废弃单一写死粉色，动态接入 `ThemeService().primaryColor`，通过 `Color.alphaBlend` 将半透明底色（深色 `0x991C2028`、浅色 `0xB8FFFFFF`）与用户当前选定主题色相融合，让背景壁纸色彩温润透出。
+- **文本对比度与主题切换实时响应**：引导页与关于页所有 `GlassSettingsHelper.getTextColor(context)` 均显式绑定当前 `BuildContext`，浅色墨黑、深色纯白秒级响应；欢迎页 Logo 玻璃容器文字升级为高对比自适应色彩。
+
+### 3. 绝对尊重用户自定义作息 (No-Overwrite Bell Schedule Protection)
+- **导入强保护机制**：重构 `DataImportService._applyImportedConfig`，外部导入 ICS / HTML / JSON 课表时，若未携带本软件专有 `X-SCHEDULE-CONFIG` 标签，**严禁随意覆盖洗刷用户自定义的 1~13 节上下课时间与时长**，仅对齐学期起始日期以确保周次正确计算。
+- **作息配置完整导出**：导出 ICS 时完整写入 `X-SCHEDULE-CONFIG`，支持多端与备份还原 100% 完整复原。
+
+### 4. 首创自适应视口分辨率 4K 壁纸渲染引擎 (Adaptive Viewport Resolution)
+- **智能探测与动态下采样**：在 `main.dart` 中建立全局 `resolveAdaptiveImage` 引擎，动态捕获屏幕视口物理像素与 DPR。
+- **兼顾超清画质与 120 FPS 满帧**：PC 4K 屏与平板 3K 屏（如 3200×1440、3440×1440）扩展至 4096 物理像素极限画质，手机端自适应按视口分辨率下采样解码，杜绝 64MB 显存暴涨与浅色模式滑动掉帧。
+
+### 5. 全平台全新 Authentic 高清立体图标
+- **统一高清图标基准**：以 `assets/new_icon.png` (1004×1004) 为唯一真源，重新生成全套 Android `mipmap-*/ic_launcher.png`（mdpi 至 xxxhdpi）与 Windows 多规格 `app_icon.ico` / `tray_icon.ico`，彻底替换清理所有老旧历史图标。
+
+### 6. 发布流水线与构建安全加固 (Obfuscation & Clean Release Pipeline)
+- **单包极速分发**：根据用户规范，移除冗余 Universal APK，集中构建高质量 Android `arm64-v8a` 单包与 Windows x64 桌面端。
+- **生产级代码混淆与符号剥离**：全面启用 R8 压缩与 Dart 源码混淆（`--obfuscate --split-debug-info`），大幅减小安装包体积并保障代码安全。
+- **Release 归档工具加固**：`collect_release.py` 严格进行包名、版本号与 SHA256 校验，自动输出 `RELEASE_MANIFEST.json`。
+- **敏感文件脱敏与 .gitignore 升级**：将签名证书 `my-release-key.jks`、本地路径配置 `local.properties` 与构建临时物移出 Git 追踪，杜绝密钥泄露风险。
+
+---
+
 ## [v2.8.9] - 2026-09-09
 
 ### 1. 竖屏全周课程看板迁移与全端 HyperOSCard 重构
