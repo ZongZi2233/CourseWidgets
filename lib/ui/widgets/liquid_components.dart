@@ -457,14 +457,14 @@ class LiquidBackButton extends StatelessWidget {
   }
 }
 
-/// [v2.8.7] 基于 Flutter MiuiX 与 Liquid Glass 规范的 HyperOS 超椭圆混色卡片
+/// [v2.8.9] 基于 Flutter MiuiX 与 Liquid Glass 规范的 HyperOS 超椭圆混色无边框卡片
 ///
 /// 特性：
-/// 1. 采用与 Liquid Glass 完全一致的 RoundedSuperellipseBorder 连续超椭圆圆角与细腻边框
-/// 2. 具备 HyperOS 原生微交互下沉触感反馈 (MiuixPressFeedbackType.sink)
-/// 3. 混色半透明质感：92% 不透明度底色与主题微透混色，非廉价纯透明
-/// 4. 标配超轻量硬件级高斯模糊 (useBlur: true, sigma: 16)，极致优雅
-/// 5. 附带 HyperOS 柔和微弥散阴影，层次立体分明
+/// 1. 采用与 Liquid Glass 完全一致的大曲率 RoundedSuperellipseBorder 连续超椭圆圆角（默认 20.0）
+/// 2. 彻底移除生硬边框（BorderSide.none），采用环境光多层立体投影自然界定卡片边界
+/// 3. 消除按压时的灰色暗影蒙层（overlayColor: Colors.transparent），仅保留轻快弹性微交互下沉触感 (MiuixPressFeedbackType.sink)
+/// 4. 视口级单层模糊共享架构，课程网格多卡片极速满帧渲染
+/// 5. 字体高对比度自适应：根据背景明度（computeLuminance）自动匹配高对比黑白文字
 class HyperOSCard extends StatelessWidget {
   final Widget child;
   final VoidCallback? onTap;
@@ -483,11 +483,11 @@ class HyperOSCard extends StatelessWidget {
     required this.child,
     this.onTap,
     this.onLongPress,
-    this.cornerRadius = 16,
+    this.cornerRadius = 20, // [v2.8.9] 大曲率超椭圆，对齐 LiquidGlass
     this.padding = const EdgeInsets.all(12),
     this.color,
     this.contentColor,
-    this.useBlur = true, // [v2.8.8] 开启轻量高斯模糊，还原正统 HyperOS 半透明混色毛玻璃质感
+    this.useBlur = false, // [v2.8.9] 默认单层模糊共享架构，避免多卡片离屏模糊爆炸
     this.blurRadius = 10.0,
     this.feedbackType = MiuixPressFeedbackType.sink,
     this.border,
@@ -498,24 +498,25 @@ class HyperOSCard extends StatelessWidget {
     final isDark = globalDarkModeNotifier.value;
     final primary = AppThemeColors.babyPink;
 
-    // [v2.8.8] HyperOS 混色半透明毛玻璃：70%~75% 透光底色结合主题微透混色，壁纸柔和通透折射
+    // [v2.8.9] HyperOS 混色半透明丙烯酸质感：通透柔和，透出背景壁纸
     final defaultBgColor = isDark
-        ? Color.alphaBlend(primary.withValues(alpha: 0.08), const Color(0xAF1E2128))
-        : Color.alphaBlend(primary.withValues(alpha: 0.06), const Color(0xB8FFFFFF));
+        ? Color.alphaBlend(primary.withValues(alpha: 0.10), const Color(0xB81C2028))
+        : Color.alphaBlend(primary.withValues(alpha: 0.08), const Color(0xC4FFFFFF));
 
-    final effectiveColor = color ?? defaultBgColor;
-    final effectiveTextColor = contentColor ??
-        (isDark ? const Color(0xFFF0F3F8) : const Color(0xFF1A1A2E));
+    // 如果指定了自定义颜色（例如课程卡片自定义染色），将其与基底进行自然半透明混合
+    final effectiveColor = color != null
+        ? Color.alphaBlend(color!.withValues(alpha: isDark ? 0.35 : 0.28), defaultBgColor)
+        : defaultBgColor;
 
-    final effectiveBorderSide = border ??
-        BorderSide(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.14)
-              : Colors.black.withValues(alpha: 0.07),
-          width: 0.8,
-        );
+    // [v2.8.9] 字体颜色根据最终背景计算明度（computeLuminance），确保黑白高对比 100% 极速自适应
+    final lum = effectiveColor.computeLuminance();
+    final autoTextColor = lum > 0.45 ? const Color(0xFF1B1D24) : const Color(0xFFF2F5FA);
+    final effectiveTextColor = contentColor ?? autoTextColor;
 
-    // [v2.8.7] 采用与 liquid_glass_widgets 内部一致的 RoundedSuperellipseBorder，保证曲率完全对齐统一
+    // [v2.8.9] 用户明确要求：彻底移除生硬边框（默认 BorderSide.none），纯靠柔和投影界定边界
+    final effectiveBorderSide = border ?? BorderSide.none;
+
+    // 采用与 liquid_glass_widgets 内部一致的 RoundedSuperellipseBorder，保证曲率完全对齐统一
     final shape = RoundedSuperellipseBorder(
       borderRadius: BorderRadius.all(Radius.circular(cornerRadius)),
       side: effectiveBorderSide,
@@ -526,10 +527,17 @@ class HyperOSCard extends StatelessWidget {
         color: effectiveColor,
         shape: shape,
         shadows: [
+          // 第一层：轻柔弥散环境阴影
           BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.06),
-            blurRadius: 12,
-            offset: const Offset(0, 3),
+            color: Colors.black.withValues(alpha: isDark ? 0.28 : 0.06),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+          // 第二层：微立体轮廓阴影
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.16 : 0.03),
+            blurRadius: 4,
+            offset: const Offset(0, 1),
           ),
         ],
       ),
@@ -555,10 +563,13 @@ class HyperOSCard extends StatelessWidget {
     );
 
     if (onTap != null || onLongPress != null || feedbackType != MiuixPressFeedbackType.none) {
+      // [v2.8.9] overlayColor 设为 Colors.transparent，彻底根除按压时的灰色蒙层，仅保留纯正弹性下沉触感
       cardContent = MiuixPressable(
         onPressed: onTap,
         onLongPress: onLongPress,
         feedbackType: feedbackType,
+        sinkAmount: 0.96,
+        overlayColor: Colors.transparent,
         borderRadius: BorderRadius.circular(cornerRadius),
         child: cardContent,
       );

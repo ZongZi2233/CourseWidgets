@@ -133,16 +133,18 @@ class OnboardingImport extends StatelessWidget {
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
                     child: Center(
-                      child: liquid.HyperOSCard(
-                        cornerRadius: 24,
-                        padding: const EdgeInsets.all(20),
+                      child: liquid.LiquidCard(
+                        borderRadius: 24,
+                        padding: 20,
+                        quality: GlassQuality.premium,
+                        styleType: liquid.LiquidStyleType.standard,
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
                             Text(
                               '导入课表',
                               style: TextStyle(
-                                fontSize: 30,
+                                fontSize: 28,
                                 fontWeight: FontWeight.w900,
                                 color: GlassSettingsHelper.getTextColor(),
                                 decoration: TextDecoration.none,
@@ -153,7 +155,7 @@ class OnboardingImport extends StatelessWidget {
                             Text(
                               '选择一种方式导入你的课程数据',
                               style: TextStyle(
-                                fontSize: 15,
+                                fontSize: 14,
                                 color: GlassSettingsHelper.getSecondaryTextColor(),
                                 decoration: TextDecoration.none,
                               ),
@@ -167,55 +169,33 @@ class OnboardingImport extends StatelessWidget {
                 ),
               ),
 
-              // Navigation (浮动底栏磨砂托盘)
+              // Navigation (纯透光液态按钮栏，无厚重不透明底托)
               Positioned(
                 bottom: 0,
                 left: 0,
                 right: 0,
-                child: Container(
-                  padding: EdgeInsets.only(
-                    left: 20,
-                    right: 20,
-                    top: 14,
-                    bottom: MediaQuery.of(context).padding.bottom + 14,
-                  ),
-                  decoration: BoxDecoration(
-                    color: isDark
-                        ? const Color(0xCC1E2028)
-                        : const Color(0xCCFFFFFF),
-                    border: Border(
-                      top: BorderSide(
-                        color: isDark
-                            ? Colors.white.withValues(alpha: 0.12)
-                            : Colors.black.withValues(alpha: 0.06),
-                        width: 0.8,
-                      ),
-                    ),
-                  ),
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 400),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: liquid.LiquidButton(
-                              text: '上一步',
-                              onTap: onBack,
-                              color: isDark
-                                  ? Colors.white.withValues(alpha: 0.12)
-                                  : Colors.black.withValues(alpha: 0.06),
-                            ),
+                child: SafeArea(
+                  top: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: liquid.LiquidButton(
+                            text: '上一步',
+                            onTap: onBack,
+                            color: Colors.white.withValues(alpha: 0.2),
                           ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: liquid.LiquidButton(
-                              text: isLastPage ? '开始使用' : '完成',
-                              onTap: onNext,
-                              color: AppThemeColors.babyPink,
-                            ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: liquid.LiquidButton(
+                            text: isLastPage ? '开始使用' : '完成',
+                            onTap: onNext,
+                            color: AppThemeColors.babyPink,
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -372,8 +352,7 @@ class OnboardingImport extends StatelessWidget {
       HapticFeedback.mediumImpact();
 
       final provider = context.read<ScheduleProvider>();
-      final success = await provider
-          .importFromAssets(); // 使用 importFromAssets 作为 JSON 导入
+      final success = await provider.importJsonFile();
 
       if (context.mounted) {
         if (success) {

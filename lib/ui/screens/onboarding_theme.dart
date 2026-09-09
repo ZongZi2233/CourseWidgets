@@ -249,16 +249,18 @@ class _OnboardingThemeState extends State<OnboardingTheme> {
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
                   child: Center(
-                    child: liquid.HyperOSCard(
-                      cornerRadius: 24,
-                      padding: const EdgeInsets.all(20),
+                    child: liquid.LiquidCard(
+                      borderRadius: 24,
+                      padding: 20,
+                      quality: GlassQuality.premium,
+                      styleType: liquid.LiquidStyleType.standard,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
                           Text(
                             '个性化',
                             style: TextStyle(
-                              fontSize: 30,
+                              fontSize: 28,
                               fontWeight: FontWeight.w900,
                               color: GlassSettingsHelper.getTextColor(),
                               decoration: TextDecoration.none,
@@ -269,7 +271,7 @@ class _OnboardingThemeState extends State<OnboardingTheme> {
                           Text(
                             '选择你喜欢的主题色和背景',
                             style: TextStyle(
-                              fontSize: 15,
+                              fontSize: 14,
                               color: GlassSettingsHelper.getSecondaryTextColor(),
                               decoration: TextDecoration.none,
                             ),
@@ -283,7 +285,7 @@ class _OnboardingThemeState extends State<OnboardingTheme> {
               ),
             ),
 
-            // 3. 底部浮动 Navigation 按钮栏（配备透光磨砂托盘，防止与下层卡片内容重叠时采样异常）
+            // 3. 底部浮动 Navigation 按钮栏（纯透光液态按钮，无厚重不透明底托）
             Positioned(
               bottom: 0,
               left: 0,
@@ -292,43 +294,21 @@ class _OnboardingThemeState extends State<OnboardingTheme> {
                 top: false,
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: ShapeDecoration(
-                      color: isDark
-                          ? const Color(0xCC1E2028)
-                          : const Color(0xCCFFFFFF),
-                      shape: const RoundedSuperellipseBorder(
-                        borderRadius: BorderRadius.all(Radius.circular(24)),
-                        side: BorderSide(
-                          color: Color(0x22FFFFFF),
-                          width: 0.8,
-                        ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      liquid.LiquidButton(
+                        text: widget.isLastPage ? '完成设置' : '下一步',
+                        onTap: _completeOnboarding,
+                        color: AppThemeColors.babyPink,
                       ),
-                      shadows: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.08),
-                          blurRadius: 16,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        liquid.LiquidButton(
-                          text: widget.isLastPage ? '完成设置' : '下一步',
-                          onTap: _completeOnboarding,
-                          color: AppThemeColors.babyPink,
-                        ),
-                        const SizedBox(height: 10),
-                        liquid.LiquidButton(
-                          text: '上一步',
-                          onTap: widget.onBack,
-                          color: Colors.white.withValues(alpha: 0.2),
-                        ),
-                      ],
-                    ),
+                      const SizedBox(height: 8),
+                      liquid.LiquidButton(
+                        text: '上一步',
+                        onTap: widget.onBack,
+                        color: Colors.white.withValues(alpha: 0.2),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -377,11 +357,9 @@ class _OnboardingThemeState extends State<OnboardingTheme> {
         if (mode == theme.ThemeMode.system && Platform.isAndroid && mounted) {
           await _themeService.applySystemTheme(context);
           debugPrint('✅ 系统主题已应用: ${_themeService.primaryColor}');
-        } else if (mode == theme.ThemeMode.monet &&
-            globalBackgroundPath.value != null) {
-          await _themeService.extractColorsFromImage(
-            globalBackgroundPath.value!,
-          );
+        } else if (mode == theme.ThemeMode.monet) {
+          final bgPath = globalBackgroundPath.value ?? 'asset:assets/Light.png';
+          await _themeService.extractColorsFromImage(bgPath);
           debugPrint('✅ 莫奈取色已应用: ${_themeService.primaryColor}');
         }
 
@@ -529,9 +507,9 @@ class _OnboardingThemeState extends State<OnboardingTheme> {
           await _themeService.applySystemTheme(context);
           debugPrint('✅ 引导完成 - 系统主题已应用');
         }
-      } else if (_selectedThemeMode == theme.ThemeMode.monet &&
-          globalBackgroundPath.value != null) {
-        await _themeService.extractColorsFromImage(globalBackgroundPath.value!);
+      } else if (_selectedThemeMode == theme.ThemeMode.monet) {
+        final bgPath = globalBackgroundPath.value ?? 'asset:assets/Light.png';
+        await _themeService.extractColorsFromImage(bgPath);
         debugPrint('✅ 引导完成 - 莫奈取色已应用: ${_themeService.primaryColor}');
       } else if (_selectedThemeMode == theme.ThemeMode.defaultMode) {
         debugPrint('✅ 引导完成 - 默认主题已应用: ${_themeService.primaryColor}');

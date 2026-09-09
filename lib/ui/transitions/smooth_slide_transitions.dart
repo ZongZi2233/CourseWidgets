@@ -41,11 +41,40 @@ class SmoothSlideTransitionsBuilder extends PageTransitionsBuilder {
       ),
     );
 
+    // [v2.8.9] 次级页面被更深层页面推入覆盖时，当前页面轻微向左平移 (-25%) 并轻微缩放 (0.96)，营造细腻的 iOS/HyperOS 景深层次感
+    final secondarySlide = Tween<Offset>(
+      begin: Offset.zero,
+      end: const Offset(-0.25, 0.0),
+    ).animate(
+      CurvedAnimation(
+        parent: secondaryAnimation,
+        curve: _iosDecelerateCurve,
+        reverseCurve: _iosAccelerateCurve,
+      ),
+    );
+
+    final secondaryScale = Tween<double>(
+      begin: 1.0,
+      end: 0.96,
+    ).animate(
+      CurvedAnimation(
+        parent: secondaryAnimation,
+        curve: _iosDecelerateCurve,
+        reverseCurve: _iosAccelerateCurve,
+      ),
+    );
+
     Widget transitionChild = SlideTransition(
       position: inSlide,
       child: FadeTransition(
         opacity: inFade,
-        child: child,
+        child: SlideTransition(
+          position: secondarySlide,
+          child: ScaleTransition(
+            scale: secondaryScale,
+            child: child,
+          ),
+        ),
       ),
     );
 

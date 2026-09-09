@@ -39,6 +39,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
   bool _isLoading = true;
   bool _isBottomNavVisible = true;
   bool _isCoveredBySubPage = false; // [v2.8.4] 二级页面覆盖状态，用于彻底离屏冻结前级页面 Ticker 与着色管线
+  bool _hasBlurSnapshot = false; // [v2.8.9] 景深快照就绪状态，控制模糊遮罩层在动画期间平滑交叉淡入淡出
   bool _isWeekPickerActive = false; // [v2.8.6] 周次选择器打开状态，用于挂起背景重绘保障 120 FPS
   final DataImportService _importService = DataImportService();
 
@@ -79,7 +80,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
     routeObserver.subscribe(this, ModalRoute.of(context) as PageRoute);
   }
 
-  // [v2.6.0/v2.8.8] 被其他页面覆盖时，截图捕获完成后平滑淡入高斯模糊与暗色景深
+  // [v2.6.0/v2.8.9] 被其他页面覆盖时：在底层页面依然呈现的同时平滑淡入高斯模糊快照，待完全覆盖后再冻结底层，消除硬切
   @override
   void didPushNext() {
     if (mounted) {
@@ -89,25 +90,32 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
       PageBlurController.instance.capture(TransparentMaterialPageRoute.contentBoundaryKey).then((success) {
         if (mounted && success) {
           setState(() {
-            _isCoveredBySubPage = true;
+            _hasBlurSnapshot = true;
           });
-          _blurAnimationController.forward(from: 0.0);
+          _blurAnimationController.forward(from: 0.0).then((_) {
+            if (mounted && _hasBlurSnapshot && _blurAnimationController.isCompleted) {
+              setState(() {
+                _isCoveredBySubPage = true; // 完全模糊覆盖后离屏冻结底层 Ticker 与渲染，保 120 FPS
+              });
+            }
+          });
         }
       });
     }
   }
 
-  // [v2.6.0/v2.8.8] 上一层页面弹出，回到当前页面时平滑淡出高斯模糊，优雅还原底层清晰界面
+  // [v2.6.0/v2.8.9] 上一层页面弹出：先立刻解除底层冻结让清晰页面就绪，再平滑淡出高斯模糊快照，完全消除生硬还原
   @override
   void didPopNext() {
     if (mounted) {
       setState(() {
         _isBottomNavVisible = true;
+        _isCoveredBySubPage = false; // 立刻解除离屏冻结，让清晰主页面在模糊淡出过程中平滑显露
       });
       _blurAnimationController.reverse().then((_) {
         if (mounted) {
           setState(() {
-            _isCoveredBySubPage = false;
+            _hasBlurSnapshot = false;
           });
           PageBlurController.instance.clear();
         }
@@ -252,7 +260,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                       ),
                     ),
                   ),
-                  if (_isCoveredBySubPage)
+                  if (_hasBlurSnapshot)
                     Positioned.fill(
                       child: MediaQuery.removeViewInsets(
                         removeBottom: true,
@@ -306,151 +314,147 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
 
   /// 手机布局
   Widget _buildPhoneLayout(BuildContext context) {
-    return GlassContentAwareScope(
-      child: Scaffold(
-        resizeToAvoidBottomInset: false, // [v2.8.6] 软键盘弹出时防止底层背景与冻结快照被压缩或上移漂移
-        backgroundColor: Colors.transparent,
-        extendBody: true,
-        body: GlassContentAwareContent(
-          child: RepaintBoundary(
-            key: TransparentMaterialPageRoute.contentBoundaryKey,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                Offstage(
-                  offstage: _isCoveredBySubPage,
-                  child: TickerMode(
-                    enabled: !_isCoveredBySubPage,
-                    child: PageView(
-                      controller: _pageController,
-                      physics: const NeverScrollableScrollPhysics(),
-                      children: [
-                        TickerMode(
-                          enabled: _currentIndex == 0 && !_isCoveredBySubPage && !_isWeekPickerActive,
-                          child: RepaintBoundary(
-                            child: _buildSchedulePage(),
-                          ),
-                        ),
-                        TickerMode(
-                          enabled: _currentIndex == 1 && !_isCoveredBySubPage,
-                          child: const RepaintBoundary(
-                            child: CalendarViewScreen(),
-                          ),
-                        ),
-                        TickerMode(
-                          enabled: _currentIndex == 2 && !_isCoveredBySubPage,
-                          child: RepaintBoundary(
-                            child: _buildPageWithHeader(2, const SettingsMainScreen(), '设置'),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                if (_isCoveredBySubPage)
-                  Positioned.fill(
-                    child: MediaQuery.removeViewInsets(
-                      removeBottom: true,
-                      removeTop: true,
-                      removeLeft: true,
-                      removeRight: true,
-                      context: context,
+    return Scaffold(
+      resizeToAvoidBottomInset: false, // [v2.8.6] 软键盘弹出时防止底层背景与冻结快照被压缩或上移漂移
+      backgroundColor: Colors.transparent,
+      extendBody: true,
+      body: RepaintBoundary(
+        key: TransparentMaterialPageRoute.contentBoundaryKey,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Offstage(
+              offstage: _isCoveredBySubPage,
+              child: TickerMode(
+                enabled: !_isCoveredBySubPage,
+                child: PageView(
+                  controller: _pageController,
+                  physics: const NeverScrollableScrollPhysics(),
+                  children: [
+                    TickerMode(
+                      enabled: _currentIndex == 0 && !_isCoveredBySubPage && !_isWeekPickerActive,
                       child: RepaintBoundary(
-                        child: ListenableBuilder(
-                          listenable: PageBlurController.instance,
-                          builder: (context, _) {
-                            final img = PageBlurController.instance.capturedImage;
-                            if (img != null) {
-                              final isDark = Theme.of(context).brightness == Brightness.dark;
-                              return FadeTransition(
-                                opacity: _blurAnimation,
-                                child: Stack(
-                                  fit: StackFit.expand,
-                                  children: [
-                                    ImageFiltered(
-                                      imageFilter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                                      child: RawImage(
-                                        image: img,
-                                        fit: BoxFit.cover,
-                                        filterQuality: FilterQuality.medium,
-                                      ),
-                                    ),
-                                    Container(
-                                      color: isDark
-                                          ? Colors.black.withValues(alpha: 0.25)
-                                          : Colors.white.withValues(alpha: 0.12),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            }
-                            return const SizedBox.shrink();
-                          },
-                        ),
+                        child: _buildSchedulePage(),
                       ),
                     ),
-                  ),
-              ],
-            ),
-          ),
-        ),
-        // 官方原生旗舰 GlassTabBar.bottom 专用导航栏
-        bottomNavigationBar: SafeArea(
-          bottom: true,
-          top: false,
-          child: AnimatedSlide(
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeOutCubic,
-            offset: _isBottomNavVisible ? Offset.zero : const Offset(0, 1.2),
-            child: RepaintBoundary(
-              child: GlassTabBar.bottom(
-                selectedIndex: _currentIndex,
-                onTabSelected: (index) {
-                  HapticFeedback.selectionClick();
-                  _onTabSelected(index);
-                },
-                quality: GlassQuality.premium,
-                maskingQuality: MaskingQuality.high,
-                barBorderRadius: 999.0,
-                indicatorBorderRadius: 999.0,
-                adaptiveBrightness: true,
-                barHeight: 64.0,
-                horizontalPadding: 16.0,
-                verticalPadding: 8.0,
-                magnification: 1.12,
-                interactionBehavior: GlassInteractionBehavior.full,
-                settings: const LiquidGlassSettings(
-                  thickness: 24.0,
-                  blur: 4.0,
-                  chromaticAberration: 0.15,
-                  lightIntensity: 0.70,
-                  refractiveIndex: 1.46,
-                  saturation: 1.20,
-                  ambientStrength: 0.45,
-                  ambientRim: 0.0,
-                  fresnelStrength: 0.05,
-                  glassColor: Color(0x18FFFFFF),
+                    TickerMode(
+                      enabled: _currentIndex == 1 && !_isCoveredBySubPage,
+                      child: const RepaintBoundary(
+                        child: CalendarViewScreen(),
+                      ),
+                    ),
+                    TickerMode(
+                      enabled: _currentIndex == 2 && !_isCoveredBySubPage,
+                      child: RepaintBoundary(
+                        child: _buildPageWithHeader(2, const SettingsMainScreen(), '设置'),
+                      ),
+                    ),
+                  ],
                 ),
-                // [v2.8.4] 遵循官方演示：采用 100% 纯澈透光的物理凸透镜滑块（blur: 0，无任何高斯模糊浑浊感）
-                indicatorSettings: AnimatedGlassIndicator.baseIndicatorSettings,
-                tabs: const [
-                  GlassTab(
-                    icon: Icon(CupertinoIcons.square_grid_2x2),
-                    activeIcon: Icon(CupertinoIcons.square_grid_2x2_fill),
-                    label: '课程',
-                  ),
-                  GlassTab(
-                    icon: Icon(CupertinoIcons.calendar),
-                    activeIcon: Icon(CupertinoIcons.calendar_today),
-                    label: '日历',
-                  ),
-                  GlassTab(
-                    icon: Icon(CupertinoIcons.gear_alt),
-                    activeIcon: Icon(CupertinoIcons.gear_alt_fill),
-                    label: '设置',
-                  ),
-                ],
               ),
+            ),
+            if (_hasBlurSnapshot)
+              Positioned.fill(
+                child: MediaQuery.removeViewInsets(
+                  removeBottom: true,
+                  removeTop: true,
+                  removeLeft: true,
+                  removeRight: true,
+                  context: context,
+                  child: RepaintBoundary(
+                    child: ListenableBuilder(
+                      listenable: PageBlurController.instance,
+                      builder: (context, _) {
+                        final img = PageBlurController.instance.capturedImage;
+                        if (img != null) {
+                          final isDark = Theme.of(context).brightness == Brightness.dark;
+                          return FadeTransition(
+                            opacity: _blurAnimation,
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                ImageFiltered(
+                                  imageFilter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                                  child: RawImage(
+                                    image: img,
+                                    fit: BoxFit.cover,
+                                    filterQuality: FilterQuality.medium,
+                                  ),
+                                ),
+                                Container(
+                                  color: isDark
+                                      ? Colors.black.withValues(alpha: 0.25)
+                                      : Colors.white.withValues(alpha: 0.12),
+                                ),
+                              ],
+                            ),
+                          );
+                        }
+                        return const SizedBox.shrink();
+                      },
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+      // 官方原生旗舰 GlassTabBar.bottom 专用导航栏
+      bottomNavigationBar: SafeArea(
+        bottom: true,
+        top: false,
+        child: AnimatedSlide(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOutCubic,
+          offset: _isBottomNavVisible ? Offset.zero : const Offset(0, 1.2),
+          child: RepaintBoundary(
+            child: GlassTabBar.bottom(
+              selectedIndex: _currentIndex,
+              onTabSelected: (index) {
+                HapticFeedback.selectionClick();
+                _onTabSelected(index);
+              },
+              quality: GlassQuality.premium,
+              maskingQuality: MaskingQuality.high,
+              barBorderRadius: 999.0,
+              indicatorBorderRadius: 999.0,
+              adaptiveBrightness: false, // [v2.8.9] 禁用实时纹理反读消除卡顿，保持流畅 120 FPS
+              barHeight: 64.0,
+              horizontalPadding: 16.0,
+              verticalPadding: 8.0,
+              magnification: 1.12,
+              interactionBehavior: GlassInteractionBehavior.full,
+              settings: const LiquidGlassSettings(
+                thickness: 24.0,
+                blur: 4.0,
+                chromaticAberration: 0.15,
+                lightIntensity: 0.70,
+                refractiveIndex: 1.46,
+                saturation: 1.20,
+                ambientStrength: 0.45,
+                ambientRim: 0.0,
+                fresnelStrength: 0.05,
+                glassColor: Color(0x18FFFFFF),
+              ),
+              // [v2.8.4] 遵循官方演示：采用 100% 纯澈透光的物理凸透镜滑块（blur: 0，无任何高斯模糊浑浊感）
+              indicatorSettings: AnimatedGlassIndicator.baseIndicatorSettings,
+              tabs: const [
+                GlassTab(
+                  icon: Icon(CupertinoIcons.square_grid_2x2),
+                  activeIcon: Icon(CupertinoIcons.square_grid_2x2_fill),
+                  label: '课程',
+                ),
+                GlassTab(
+                  icon: Icon(CupertinoIcons.calendar),
+                  activeIcon: Icon(CupertinoIcons.calendar_today),
+                  label: '日历',
+                ),
+                GlassTab(
+                  icon: Icon(CupertinoIcons.gear_alt),
+                  activeIcon: Icon(CupertinoIcons.gear_alt_fill),
+                  label: '设置',
+                ),
+              ],
             ),
           ),
         ),
@@ -580,7 +584,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
     );
   }
 
-  /// [v2.6.0] 重构手机端主课表页面：顶部轻量化折射标题 + 紧凑日历胶囊，解放全屏纵向空间
+  /// [v2.8.9] 重构手机端主课表页面：全周看板网格贯通上下滑动，穿透悬浮标题栏与底栏
   Widget _buildSchedulePage() {
     return AdaptiveLiquidGlassLayer(
       quality: GlassQuality.premium,
@@ -597,30 +601,26 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
       ),
       child: Consumer<ScheduleProvider>(
         builder: (context, provider, _) {
-          final courses = provider.getCurrentDayCourses();
+          final topPadding = MediaQuery.of(context).padding.top + 58;
 
           return Stack(
             children: [
-              // 课程滑动列表
+              // 课程网格本周全看板：全屏铺满，上下纵向滚动，平滑穿过顶栏与底栏
               Positioned.fill(
-                child: ListView.builder(
-                  key: ValueKey('schedule_${provider.currentWeek}_${provider.currentDay}'),
-                  padding: const EdgeInsets.fromLTRB(16, 172, 16, 96),
-                  physics: const BouncingScrollPhysics(
-                    parent: AlwaysScrollableScrollPhysics(),
+                child: WeeklyScheduleGrid(
+                  key: ValueKey('weekly_grid_${provider.currentWeek}'),
+                  showControlBar: false,
+                  isPhone: true,
+                  contentPadding: EdgeInsets.only(
+                    top: topPadding,
+                    bottom: 96,
+                    left: 2,
+                    right: 2,
                   ),
-                  itemCount: courses.isEmpty ? 1 : courses.length,
-                  itemBuilder: (context, index) {
-                    if (courses.isEmpty) {
-                      return _buildEmptyCourseView();
-                    }
-                    final course = courses[index];
-                    return _buildModernCourseCard(course, provider.currentConfig);
-                  },
                 ),
               ),
 
-              // 顶部悬浮栏组（标题栏 + 星期选择器）：独立 RepaintBoundary 缓存，滑动时 0 重绘
+              // 顶部悬浮标题栏（带周次切换）：独立 RepaintBoundary 缓存，滑动时 0 重绘
               Positioned(
                 top: 0,
                 left: 0,
@@ -630,16 +630,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
                     child: RepaintBoundary(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // 1. 顶部晶透 App Bar
-                          _buildModernTopBar(provider),
-                          const SizedBox(height: 8),
-                          // 2. 紧凑型星期日历胶囊栏
-                          _buildModernDaySelector(provider),
-                        ],
-                      ),
+                      child: _buildModernTopBar(provider),
                     ),
                   ),
                 ),

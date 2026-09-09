@@ -102,6 +102,30 @@ class ScheduleProvider with ChangeNotifier {
     return false;
   }
 
+  /// [v2.8.9] 导入 JSON 课表文件并同步课时设置
+  Future<bool> importJsonFile() async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final result = await _importService.importFromJsonFile();
+      if (result != null) {
+        await loadSavedData();
+
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      }
+    } catch (e) {
+      _errorMessage = 'JSON导入失败: $e';
+    }
+
+    _isLoading = false;
+    notifyListeners();
+    return false;
+  }
+
   /// [v2.5.9] 从 HTML 字符串导入（教务系统 WebView 抓取）
   Future<bool> importHtmlDataFromString(String htmlContent) async {
     _isLoading = true;

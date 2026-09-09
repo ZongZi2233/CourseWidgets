@@ -89,6 +89,10 @@ class AppLogger {
   /// 获取内存中的全部日志快照
   static List<LogEntry> get logsSnapshot => List.unmodifiable(_memoryBuffer);
 
+  /// 获取当前活跃的日志输出目录绝对路径
+  static String get activeLogDirectoryPath =>
+      _publicLogDir?.path ?? _internalLogDir?.path ?? '未初始化';
+
   /// 系统初始化
   static Future<void> initialize() async {
     if (_isInitialized) return;
@@ -183,10 +187,8 @@ class AppLogger {
     try {
       _fileSink?.write(logStr);
       _publicFileSink?.write(logStr);
-      if (level.priority >= LogLevel.error.priority) {
-        _fileSink?.flush();
-        _publicFileSink?.flush();
-      }
+      _fileSink?.flush();
+      _publicFileSink?.flush();
     } catch (_) {}
 
     // 5. 若为致命错误 (Fatal)，尝试紧急写出 Crash 快照到公共下载目录

@@ -305,7 +305,26 @@ class IcsParser {
       }
     }
 
-    // 3. 推算未提取到的节次时间并生成完整的 1-12 节配置
+    // 3. 推算节次时间：若正则未提取到，自动聚类各门课程的真实起止时间并对齐 1~13 节
+    if (extractedStartTimes.isEmpty && courses.isNotEmpty) {
+      final Set<int> uniqueStarts = {};
+      final Set<int> uniqueEnds = {};
+      for (final c in courses) {
+        final startDt = DateTime.fromMillisecondsSinceEpoch(c.startTime).toLocal();
+        final endDt = DateTime.fromMillisecondsSinceEpoch(c.endTime).toLocal();
+        uniqueStarts.add(startDt.hour * 60 + startDt.minute);
+        uniqueEnds.add(endDt.hour * 60 + endDt.minute);
+      }
+      final sortedStarts = uniqueStarts.toList()..sort();
+      final sortedEnds = uniqueEnds.toList()..sort();
+      for (int i = 0; i < sortedStarts.length && i < 13; i++) {
+        extractedStartTimes[i + 1] = sortedStarts[i];
+      }
+      for (int i = 0; i < sortedEnds.length && i < 13; i++) {
+        extractedEndTimes[i + 1] = sortedEnds[i];
+      }
+    }
+
     if (extractedStartTimes.isEmpty) {
       return ScheduleConfigModel.defaultConfig().copyWith(
         semesterStartDate: semesterStartDate,
@@ -322,7 +341,7 @@ class IcsParser {
         classesCount++;
       } else {
         int? matchingEndSec;
-        for (int endSec = startSec; endSec <= 12; endSec++) {
+        for (int endSec = startSec; endSec <= 13; endSec++) {
           if (extractedEndTimes.containsKey(endSec)) {
             matchingEndSec = endSec;
             break;
@@ -339,19 +358,19 @@ class IcsParser {
     });
 
     final int defaultDuration = classesCount > 0
-        ? (totalClassDuration / classesCount).round()
+        ? (totalClassDuration / classesCount).round().clamp(30, 120)
         : 45;
 
     // 如果找不到指定的 section，用前后的推断
-    for (int i = 1; i <= 12; i++) {
+    for (int i = 1; i <= 13; i++) {
       sectionDurations[i] = defaultDuration;
     }
 
-    // 补全 sectionStartTimes
+    // 补全 sectionStartTimes (1~13 节)
     final List<int> sortedSections = extractedStartTimes.keys.toList()..sort();
 
     if (sortedSections.isNotEmpty) {
-      for (int i = 1; i <= 12; i++) {
+      for (int i = 1; i <= 13; i++) {
         if (extractedStartTimes.containsKey(i)) {
           sectionStartTimes[i] = extractedStartTimes[i]!;
         } else {
@@ -370,7 +389,7 @@ class IcsParser {
           } else {
             // 往后找最近的起点
             int nextAnc = -1;
-            for (int j = i + 1; j <= 12; j++) {
+            for (int j = i + 1; j <= 13; j++) {
               if (extractedStartTimes.containsKey(j)) {
                 nextAnc = j;
                 break;
@@ -387,7 +406,7 @@ class IcsParser {
         }
       }
     } else {
-      for (int i = 1; i <= 12; i++) {
+      for (int i = 1; i <= 13; i++) {
         sectionStartTimes[i] = 480 + (i - 1) * (defaultDuration + 10);
       }
     }

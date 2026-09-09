@@ -1,9 +1,9 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 
-/// 当前版本：[v2.8.8] 官方正式版 - HyperOSCard半透明混色毛玻璃重构、120 FPS渲染管线大幅优化、1:1默认壁纸居中铺满、首页三点悬浮按钮层级与清晰度修复、二级页面模糊平滑过渡动效、胶囊与实时通知纯净分秒倒计时与相对日节数、全局覆盖新版Logo/Icon、Onboarding大幅卡片全面切换HyperOSCard
-const String appVersion = '2.8.8';
-const int buildNumber = 10008052;
+/// 当前版本：[v2.8.9] 官方正式版 - 竖屏全周看板看板迁移、全端HyperOSCard无边框重构、120 FPS渲染管线深度优化、实况通知大图标、ICS时间表自动同步、JSON原生导入、Onboarding体验修复
+const String appVersion = '2.8.9';
+const int buildNumber = 10008053;
 const String copyright = '© 2025-2026 CourseWidgets. All rights reserved.';
 
 // 全局状态

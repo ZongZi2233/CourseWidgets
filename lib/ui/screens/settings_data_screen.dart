@@ -134,6 +134,18 @@ class SettingsDataScreen extends StatelessWidget {
                             },
                           ),
                           _buildActionCard(
+                            '导入 JSON 课表',
+                            '',
+                            Icons.receipt_long_rounded,
+                            Colors.blueAccent,
+                            () async {
+                              final success = await provider.importJsonFile();
+                              if (success && context.mounted) {
+                                _showToast(context, 'JSON 导入成功，已同步时间配置');
+                              }
+                            },
+                          ),
+                          _buildActionCard(
                             '导入测试数据',
                             '',
                             Icons.data_exploration_rounded,

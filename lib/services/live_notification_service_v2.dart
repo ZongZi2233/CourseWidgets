@@ -479,6 +479,8 @@ class LiveNotificationServiceV2 {
         _channelId,
         _channelName,
         channelDescription: _channelDesc,
+        icon: '@mipmap/ic_launcher',
+        largeIcon: const DrawableResourceAndroidBitmap('@mipmap/ic_launcher'),
         importance: Importance.max,
         priority: Priority.max,
         ongoing: true, // Live Updates 必须是 ongoing 常驻

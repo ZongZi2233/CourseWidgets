@@ -143,45 +143,62 @@ class _LiquidToastWidgetState extends State<_LiquidToastWidget>
         child: SlideTransition(
           position: _slideAnimation,
           child: SafeArea(
-            child: GlassContainer(
-              shape: LiquidRoundedSuperellipse(borderRadius: 16),
-              settings: LiquidGlassSettings(
-                glassColor: _getColor().withValues(alpha: 0.2),
-                blur: 1.5,
-                thickness: 18.0,
-                ambientRim: 0.06,
-                fresnelStrength: 0.15,
-                edgeAbsorption: 0.15,
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.15),
+                    blurRadius: 16,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
               ),
-              quality: GlassQuality.standard,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
+              child: GlassContainer(
+                useOwnLayer: true, // [v2.8.9] 独立离屏折射图层，真实折射底层页面内容
+                shape: const LiquidRoundedSuperellipse(borderRadius: 16),
+                settings: LiquidGlassSettings(
+                  glassColor: _getColor().withValues(alpha: 0.20),
+                  blur: 2.5,
+                  thickness: 20.0,
+                  refractiveIndex: 1.45,
+                  lightIntensity: 0.70,
+                  ambientStrength: 0.45,
+                  ambientRim: 0.0, // [v2.8.9] 彻底消除黑边与暗角
+                  edgeAbsorption: 0.0, // [v2.8.9] 消除边缘发黑吸光
+                  fresnelStrength: 0.05,
+                  saturation: 1.20,
                 ),
-                child: Row(
-                  children: [
-                    Icon(_getIcon(), color: _getColor(), size: 24),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: DefaultTextStyle(
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          decoration: TextDecoration.none, // [v2.3.0修复] 移除下划线
-                          fontFamily: 'PingFangSC',
-                        ),
-                        child: Text(
-                          widget.message,
+                quality: GlassQuality.premium,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(_getIcon(), color: _getColor(), size: 24),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: DefaultTextStyle(
                           style: const TextStyle(
-                            decoration:
-                                TextDecoration.none, // [v2.3.0修复] 双重保险移除下划线
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            decoration: TextDecoration.none, // [v2.3.0修复] 移除下划线
+                            fontFamily: 'PingFangSC',
+                          ),
+                          child: Text(
+                            widget.message,
+                            style: const TextStyle(
+                              decoration:
+                                  TextDecoration.none, // [v2.3.0修复] 双重保险移除下划线
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),

@@ -1,27 +1,37 @@
 {
-  "version": "2.8.8",
-  "buildNumber": 10008052,
-  "collectedAt": "2026-09-09T16:56:49.563336",
+  "version": "2.8.9",
+  "buildNumber": 10008053,
+  "collectedAt": "2026-09-09T17:56:50.418210",
   "artifacts": [
     {
       "platform": "Android",
-      "filename": "CourseWidgets-v2.8.8-android-arm64-v8a.apk",
+      "filename": "CourseWidgets-v2.8.9-android-arm64-v8a.apk",
       "source": "app-arm64-v8a-release.apk",
-      "path": "D:\\VSCODE\\Schedule\\schedule_app\\release\\CourseWidgets-v2.8.8-android-arm64-v8a.apk",
+      "path": "D:\\VSCODE\\Schedule\\schedule_app\\release\\CourseWidgets-v2.8.9-android-arm64-v8a.apk",
       "size": 57459592,
       "size_formatted": "54.80 MB",
       "sha256": "bd21e510f3d633a2ee21f18583247c4b099c207d730f875d75973a8f7b7db5a0",
-      "updated_at": "2026-09-09 16:56:47"
+      "updated_at": "2026-09-09 17:56:48"
+    },
+    {
+      "platform": "Android",
+      "filename": "CourseWidgets-v2.8.9-android-universal.apk",
+      "source": "app-release.apk",
+      "path": "D:\\VSCODE\\Schedule\\schedule_app\\release\\CourseWidgets-v2.8.9-android-universal.apk",
+      "size": 58405684,
+      "size_formatted": "55.70 MB",
+      "sha256": "9dbb606bc6b42713cff7fcc9b8e8e375db0c932b699e271a29436f1ed7a3c82b",
+      "updated_at": "2026-09-09 17:56:48"
     },
     {
       "platform": "Windows",
-      "filename": "CourseWidgets-v2.8.8-windows-x64.zip",
+      "filename": "CourseWidgets-v2.8.9-windows-x64.zip",
       "source": "build/windows/x64/runner/Release",
-      "path": "D:\\VSCODE\\Schedule\\schedule_app\\release\\CourseWidgets-v2.8.8-windows-x64.zip",
-      "size": 56823398,
+      "path": "D:\\VSCODE\\Schedule\\schedule_app\\release\\CourseWidgets-v2.8.9-windows-x64.zip",
+      "size": 56825289,
       "size_formatted": "54.19 MB",
-      "sha256": "089432b0dd9df11c8199635204da2019b6f61b6333cfff8c139f52a60e02a258",
-      "updated_at": "2026-09-09 16:56:49"
+      "sha256": "10a9a6502fc0e2cb3dbedfe3635fbc70b3e887396b79313de4b148ed26e33b9d",
+      "updated_at": "2026-09-09 17:56:50"
     }
   ]
 }

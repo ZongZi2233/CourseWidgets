@@ -84,6 +84,13 @@ class DataImportService {
         htmlContent = await File(file.path).readAsString();
       }
 
+      // [v2.8.9] 自动嗅探：若用户选择了 JSON 课表文件，自动分流至 JSON 原生导入器
+      final trimmed = htmlContent.trim();
+      if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+        debugPrint('💡 检测到导入内容为 JSON 格式，自动调用 JSON 导入引擎');
+        return await importFromJsonString(htmlContent);
+      }
+
       // 使用HTML转换器转换为ICS
       String? icsContent = await HtmlImportService.convertHtmlToIcs(
         htmlContent,
@@ -603,7 +610,91 @@ class DataImportService {
     }
   }
 
-  /// 导出当前数据为JSON文件
+  /// [v2.8.9] 选择 JSON 文件并导入课表与课时时间设置
+  Future<List<CourseEvent>?> importFromJsonFile() async {
+    try {
+      const typeGroup = XTypeGroup(label: 'json', extensions: ['json']);
+      final file = await openFile(acceptedTypeGroups: [typeGroup]);
+      if (file == null) return null;
+
+      String jsonString;
+      if (kIsWeb) {
+        final bytes = await file.readAsBytes();
+        jsonString = String.fromCharCodes(bytes);
+      } else {
+        jsonString = await File(file.path).readAsString();
+      }
+
+      return await importFromJsonString(jsonString);
+    } catch (e) {
+      debugPrint('JSON文件读取导入失败: $e');
+      return null;
+    }
+  }
+
+  /// [v2.8.9] 解析 JSON 数据：自动识别全量配置模型与课程列表，覆盖同步时间设置
+  Future<List<CourseEvent>?> importFromJsonString(String jsonString) async {
+    try {
+      final decoded = jsonDecode(jsonString);
+      List<CourseEvent> courses = [];
+      ScheduleConfigModel? config;
+
+      if (decoded is Map<String, dynamic>) {
+        if (decoded.containsKey('config') && decoded['config'] != null) {
+          try {
+            config = ScheduleConfigModel.fromJson(
+              Map<String, dynamic>.from(decoded['config']),
+            );
+          } catch (e) {
+            debugPrint('⚠️ 解析 JSON 配置失败，将采用自动推断: $e');
+          }
+        }
+        if (decoded.containsKey('courses') && decoded['courses'] is List) {
+          final list = decoded['courses'] as List;
+          courses = list
+              .map((e) => CourseEvent.fromMap(Map<String, dynamic>.from(e)))
+              .toList();
+        }
+      } else if (decoded is List) {
+        courses = decoded
+            .map((e) => CourseEvent.fromMap(Map<String, dynamic>.from(e)))
+            .toList();
+      }
+
+      if (courses.isEmpty) {
+        debugPrint('⚠️ JSON 文件中未找到任何有效课程数据');
+        return null;
+      }
+
+      // 如果未携带配置，自动根据课程时间戳聚类生成精细配置并对齐 1~13 节
+      config ??= IcsParser.deduceConfigFromCourses(courses, '');
+
+      if (config != null) {
+        final storage = StorageService();
+        await storage.setString('schedule_config', jsonEncode(config.toJson()));
+        debugPrint('✅ 自动应用并同步了 JSON 中的课时配置与开学日期');
+      }
+
+      // 保存到数据库
+      await DatabaseHelper.instance.insertCourses(courses);
+
+      // 保存到历史记录
+      await _saveToHistory(
+        name: 'JSON导入_${DateTime.now().toString().substring(0, 16)}',
+        sourceType: 'json',
+        sourceData: jsonString,
+        courses: courses,
+        semester: '2025-2026学年',
+      );
+
+      return courses;
+    } catch (e) {
+      debugPrint('❌ 解析 JSON 数据失败: $e');
+      return null;
+    }
+  }
+
+  /// [v2.8.9] 导出当前数据为JSON文件（完整打包当前课时时间配置与所有课程）
   Future<bool> exportData() async {
     try {
       final courses = await DatabaseHelper.instance.getAllCourses();
@@ -629,7 +720,6 @@ class DataImportService {
           await dir.create(recursive: true);
         }
       } catch (e) {
-        // 如果失败，使用当前工作目录
         exportDir = '.';
       }
 
@@ -637,13 +727,19 @@ class DataImportService {
           'schedule_export_${DateTime.now().millisecondsSinceEpoch}.json';
       final filePath = join(exportDir, fileName);
 
-      // 转换为可序列化的格式
-      final jsonData = courses.map((e) => e.toMap()).toList();
-      final jsonString = jsonEncode(jsonData);
+      final storage = StorageService();
+      final configStr = storage.getString('schedule_config');
+      final dynamic configJson = configStr != null ? jsonDecode(configStr) : null;
 
-      await File(filePath).writeAsString(jsonString);
+      final Map<String, dynamic> exportPayload = {
+        'version': 2,
+        'config': configJson,
+        'courses': courses.map((e) => e.toMap()).toList(),
+      };
 
-      debugPrint('数据已导出到: $filePath');
+      await File(filePath).writeAsString(jsonEncode(exportPayload));
+
+      debugPrint('数据已导出到: $filePath (包含课时配置与课程)');
       return true;
     } catch (e) {
       debugPrint('导出数据失败: $e');

@@ -21,11 +21,8 @@ class _SettingsNotificationScreenState
   final NotificationManager _notificationManager = NotificationManager();
 
   bool _notificationEnabled = true;
-  int _advanceMinutes = 15;
   bool _doubleReminder = true;
   bool _liveActivitiesEnabled = true;
-
-  final List<int> _advanceOptions = [5, 10, 15, 20, 30];
 
   @override
   void initState() {
@@ -36,7 +33,6 @@ class _SettingsNotificationScreenState
   Future<void> _loadSettings() async {
     setState(() {
       _notificationEnabled = _notificationManager.isNotificationEnabled;
-      _advanceMinutes = _notificationManager.getAdvanceMinutes();
       _doubleReminder = _notificationManager.isDoubleReminderEnabled;
       _liveActivitiesEnabled = _notificationManager.isLiveActivitiesEnabled;
     });
@@ -104,11 +100,6 @@ class _SettingsNotificationScreenState
                       await _notificationManager.setNotificationEnabled(value);
                     },
                   ),
-
-                  const SizedBox(height: 16),
-
-                  // 提前通知时间
-                  _buildAdvanceTimeCard(),
 
                   const SizedBox(height: 16),
 
@@ -217,96 +208,6 @@ class _SettingsNotificationScreenState
     );
   }
 
-  Widget _buildAdvanceTimeCard() {
-    return liquid.HyperOSCard(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 50,
-                height: 50,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      AppThemeColors.softCoral.withValues(alpha: 0.8),
-                      AppThemeColors.paleApricot.withValues(alpha: 0.8),
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: const Icon(
-                  CupertinoIcons.clock_fill,
-                  color: Colors.white,
-                  size: 24,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '提前通知时间',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: GlassSettingsHelper.getTextColor(),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '在课程开始前多久提醒',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: GlassSettingsHelper.getSecondaryTextColor(),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: _advanceOptions.map((minutes) {
-              final isSelected = minutes == _advanceMinutes;
-              return GlassButton.custom(
-                onTap: () async {
-                  setState(() => _advanceMinutes = minutes);
-                  await _notificationManager.setAdvanceMinutes(minutes);
-                },
-                width: 70,
-                height: 40,
-                style: GlassButtonStyle.filled,
-                settings: GlassSettingsHelper.getButtonSettings(
-                  isSelected: isSelected,
-                  selectedColor: AppThemeColors.softCoral,
-                ),
-                shape: const LiquidRoundedSuperellipse(borderRadius: 12),
-                child: Center(
-                  child: Text(
-                    '$minutes 分钟',
-                    style: TextStyle(
-                      color: isSelected ? Colors.white : Colors.white70,
-                      fontSize: 13,
-                      fontWeight: isSelected
-                          ? FontWeight.bold
-                          : FontWeight.normal,
-                    ),
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildInfoCard() {
     return liquid.HyperOSCard(

@@ -229,6 +229,12 @@ class MainActivity : FlutterActivity() {
         builder.setContentTitle(title)
         builder.setContentText(body)
         builder.setSmallIcon(R.mipmap.ic_launcher)
+        try {
+            val appIconBitmap = android.graphics.BitmapFactory.decodeResource(resources, R.mipmap.ic_launcher)
+            if (appIconBitmap != null) {
+                builder.setLargeIcon(appIconBitmap)
+            }
+        } catch (_: Exception) {}
         builder.setOngoing(true)
         builder.setOnlyAlertOnce(true)
         builder.setAutoCancel(false)

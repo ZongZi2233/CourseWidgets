@@ -83,17 +83,6 @@ class _OnboardingWelcomeState extends State<OnboardingWelcome>
                 ),
               ),
 
-              // "欢迎使用" Glassify 文字
-              Center(
-                child: Transform.translate(
-                  offset: const Offset(0, 80),
-                  child: Opacity(
-                    opacity: _textAnimation.value,
-                    child: _buildGlassifyText(),
-                  ),
-                ),
-              ),
-
               // "开始使用" 按钮
               Positioned(
                 left: 40,
@@ -170,58 +159,6 @@ class _OnboardingWelcomeState extends State<OnboardingWelcome>
     );
   }
 
-  Widget _buildGlassifyText() {
-    // [v2.7.9] 真正的跨平台液态玻璃字体：透镜基底 + 高光折射文字 ShaderMask，解除 Windows 降级
-    return GlassContainer(
-      useOwnLayer: true,
-      shape: const LiquidRoundedSuperellipse(borderRadius: 24),
-      settings: const LiquidGlassSettings(
-        thickness: 16.0,
-        blur: 1.5, // 官方推荐低模糊高帧率
-        glassColor: Color(0x18FFFFFF),
-        refractiveIndex: 1.25,
-        lightIntensity: 0.70,
-        ambientStrength: 0.35,
-        edgeAbsorption: 0.15,
-        ambientRim: 0.06,
-        fresnelStrength: 0.15,
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
-        child: ShaderMask(
-          blendMode: BlendMode.srcIn,
-          shaderCallback: (bounds) => LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Colors.white,
-              Colors.white.withValues(alpha: 0.85),
-              AppThemeColors.babyPink.withValues(alpha: 0.85),
-              Colors.white.withValues(alpha: 0.95),
-            ],
-            stops: const [0.0, 0.45, 0.75, 1.0],
-          ).createShader(bounds),
-          child: const Text(
-            '欢迎使用',
-            style: TextStyle(
-              fontSize: 64,
-              fontWeight: FontWeight.w900,
-              color: Colors.white,
-              letterSpacing: 6.0,
-              shadows: [
-                Shadow(
-                  color: Colors.black26,
-                  offset: Offset(0, 3),
-                  blurRadius: 6,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildStartButton() {
     return GlassButton.custom(
       onTap: () {
@@ -233,11 +170,15 @@ class _OnboardingWelcomeState extends State<OnboardingWelcome>
       style: GlassButtonStyle.filled,
       settings: LiquidGlassSettings(
         glassColor: AppThemeColors.babyPink.withValues(alpha: 0.25),
-        blur: 1.5,
-        thickness: 18,
-        ambientRim: 0.06,
-        fresnelStrength: 0.15,
-        edgeAbsorption: 0.15,
+        blur: 2.0,
+        thickness: 20,
+        refractiveIndex: 1.45,
+        lightIntensity: 0.70,
+        ambientStrength: 0.45,
+        ambientRim: 0.0, // [v2.8.9] 彻底消除暗边
+        edgeAbsorption: 0.0, // [v2.8.9] 消除边缘吸光暗角
+        fresnelStrength: 0.05,
+        saturation: 1.20,
       ),
       shape: const LiquidRoundedSuperellipse(borderRadius: 24),
       child: const Center(

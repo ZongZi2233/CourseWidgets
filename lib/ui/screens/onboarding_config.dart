@@ -64,16 +64,18 @@ class OnboardingConfig extends StatelessWidget {
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
                     child: Center(
-                      child: liquid.HyperOSCard(
-                        cornerRadius: 24,
-                        padding: const EdgeInsets.all(20),
+                      child: liquid.LiquidCard(
+                        borderRadius: 24,
+                        padding: 20,
+                        quality: GlassQuality.premium,
+                        styleType: liquid.LiquidStyleType.standard,
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
                             Text(
                               '课时配置',
                               style: TextStyle(
-                                fontSize: 30,
+                                fontSize: 28,
                                 fontWeight: FontWeight.w900,
                                 color: GlassSettingsHelper.getTextColor(),
                                 decoration: TextDecoration.none,
@@ -84,7 +86,7 @@ class OnboardingConfig extends StatelessWidget {
                             Text(
                               '设置开学日期和课程时间',
                               style: TextStyle(
-                                fontSize: 15,
+                                fontSize: 14,
                                 color: GlassSettingsHelper.getSecondaryTextColor(),
                                 decoration: TextDecoration.none,
                               ),
@@ -98,7 +100,7 @@ class OnboardingConfig extends StatelessWidget {
                 ),
               ),
 
-              // Navigation (浮动底栏磨砂托盘)
+              // Navigation (纯透光液态按钮栏，无厚重不透明底托)
               Positioned(
                 bottom: 0,
                 left: 0,
@@ -107,50 +109,28 @@ class OnboardingConfig extends StatelessWidget {
                   top: false,
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
-                    child: Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: ShapeDecoration(
-                        color: isDark
-                            ? const Color(0xCC1E2028)
-                            : const Color(0xCCFFFFFF),
-                        shape: const RoundedSuperellipseBorder(
-                          borderRadius: BorderRadius.all(Radius.circular(24)),
-                          side: BorderSide(
-                            color: Color(0x22FFFFFF),
-                            width: 0.8,
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: liquid.LiquidButton(
+                            text: '上一步',
+                            onTap: onBack,
+                            color: Colors.white.withValues(alpha: 0.2),
                           ),
                         ),
-                        shadows: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.08),
-                            blurRadius: 16,
-                            offset: const Offset(0, 4),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: liquid.LiquidButton(
+                            text: '下一步',
+                            onTap: () {
+                              // [v2.8.7] 显式触发课时配置静默保存并更新课表
+                              _configKey.currentState?.saveConfigFromParent();
+                              onNext();
+                            },
+                            color: Colors.blue,
                           ),
-                        ],
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: liquid.LiquidButton(
-                              text: '上一步',
-                              onTap: onBack,
-                              color: Colors.white.withValues(alpha: 0.2),
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: liquid.LiquidButton(
-                              text: '下一步',
-                              onTap: () {
-                                // [v2.8.7] 显式触发课时配置静默保存并更新课表
-                                _configKey.currentState?.saveConfigFromParent();
-                                onNext();
-                              },
-                              color: Colors.blue,
-                            ),
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
