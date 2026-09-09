@@ -132,23 +132,7 @@ class _ScheduleConfigScreenState extends State<ScheduleConfigScreen> {
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: _isDarkMode
-                ? [
-                    const Color(0xFF1A1A2E),
-                    const Color(0xFF16213E),
-                    const Color(0xFF0F3460),
-                  ]
-                : [
-                    const Color(0xFFF5F5F5),
-                    const Color(0xFFE8E8E8),
-                    const Color(0xFFDADADA),
-                  ],
-          ),
-        ),
+        color: Colors.transparent,
         child: LiquidGlassLayer(
           settings: LiquidGlassSettings(
             thickness: 20,

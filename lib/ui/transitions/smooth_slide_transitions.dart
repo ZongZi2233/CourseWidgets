@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import 'dart:ui';
-import 'dart:io';
-import 'page_blur_controller.dart';
+import '../widgets/app_background_layer.dart';
 
 /// [v2.5.0] 自定义页面过渡动画 — iOS 非线性全幅平移
 ///
@@ -65,10 +63,17 @@ class SmoothSlideTransitionsBuilder extends PageTransitionsBuilder {
     );
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    // [v2.9.0 修复] 通透半透磨砂底色：透出底层高斯模糊截图的深度光韵，杜绝死白遮挡前级
-    final frostedBg = isDark
-        ? const Color(0x3512151B)
-        : const Color(0x28FFFFFF);
+
+    // [v2.9.3 核心升级] 二级页面直接挂载全局动态壁纸与清润亚克力景深，彻底告别死白与截图卡顿
+    final pageContent = (!route.opaque)
+        ? Stack(
+            fit: StackFit.expand,
+            children: [
+              const AppBackgroundLayer(blur: 16.0),
+              child,
+            ],
+          )
+        : child;
 
     Widget transitionChild = SlideTransition(
       position: inSlide,
@@ -78,12 +83,7 @@ class SmoothSlideTransitionsBuilder extends PageTransitionsBuilder {
           position: secondarySlide,
           child: ScaleTransition(
             scale: secondaryScale,
-            child: (!route.opaque)
-                ? DecoratedBox(
-                    decoration: BoxDecoration(color: frostedBg),
-                    child: child,
-                  )
-                : child,
+            child: pageContent,
           ),
         ),
       ),
@@ -95,7 +95,6 @@ class SmoothSlideTransitionsBuilder extends PageTransitionsBuilder {
     }
 
     // === 二级/三级页面 (opaque=false) 的转场渲染 ===
-    final bool isMobile = Platform.isAndroid || Platform.isIOS;
     final scrimAnimation = CurvedAnimation(
       parent: animation,
       curve: const Interval(0.0, 1.0, curve: Curves.easeIn),
@@ -108,37 +107,16 @@ class SmoothSlideTransitionsBuilder extends PageTransitionsBuilder {
 
     final veil = Positioned.fill(
       child: AnimatedBuilder(
-        animation: Listenable.merge([animation, secondaryAnimation, PageBlurController.instance]),
+        animation: Listenable.merge([animation, secondaryAnimation]),
         builder: (context, _) {
           final effectiveAlpha = scrimAnimation.value * secondaryFade.value;
           if (effectiveAlpha <= 0.002) return const SizedBox.shrink();
 
-          if (PageBlurController.instance.hasCapture) {
-            return Opacity(
-              opacity: effectiveAlpha.clamp(0.0, 1.0),
-              child: ImageFiltered(
-                imageFilter: ImageFilter.blur(sigmaX: 16.0, sigmaY: 16.0),
-                child: RawImage(
-                  image: PageBlurController.instance.capturedImage,
-                  fit: BoxFit.cover,
-                ),
-              ),
-            );
-          }
-
-          // [v2.9.0 修复] 截图尚未就绪时的安全降级：45% 雾化遮罩，兼顾层次与通透感
-          final scrimWidget = ColoredBox(
-            color: (isDark ? Colors.black : const Color(0xFFF2F4F7))
-                .withValues(alpha: effectiveAlpha * 0.45),
+          // 自然暗化遮罩，营造细腻的前后景深
+          return ColoredBox(
+            color: (isDark ? Colors.black : const Color(0xFF1E2129))
+                .withValues(alpha: effectiveAlpha * (isDark ? 0.35 : 0.18)),
           );
-
-          if (!isMobile) {
-            return BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
-              child: scrimWidget,
-            );
-          }
-          return scrimWidget;
         },
       ),
     );
@@ -161,9 +139,7 @@ class CustomPredictiveSlideTransitionsBuilder extends PageTransitionsBuilder {
     Animation<double> secondaryAnimation,
     Widget child,
   ) {
-    // [v2.6.0.19] 安卓双弹彻底消灭指南：抛弃任何针对 Android 的手写平滑，强制归宗至系统默认的 ZoomPageTransitionsBuilder
-    // 在 main.dart 中我们已经切掉它了。这里仅作兼容保留。
-    return const ZoomPageTransitionsBuilder().buildTransitions(
+    return const SmoothSlideTransitionsBuilder().buildTransitions(
       route,
       context,
       animation,
@@ -174,10 +150,9 @@ class CustomPredictiveSlideTransitionsBuilder extends PageTransitionsBuilder {
 }
 
 /// [v2.5.0] 非不透明路由 — 让退出页面在动画期间可见
-/// [v2.7.3] 统一使用底层 BackdropFilter，消除页面层级遮罩与重影
+/// [v2.9.3] 搭载全局壁纸与单次弹栈锁，彻底根除白屏、进场掉帧与双弹
 class TransparentMaterialPageRoute<T> extends MaterialPageRoute<T> {
   /// 绑定到主页面内容区的 RepaintBoundary 的 GlobalKey
-  /// 在 android_liquid_glass_main.dart 或 schedule_screen.dart 中设置
   static final GlobalKey contentBoundaryKey = GlobalKey(
     debugLabel: 'contentBoundary',
   );
@@ -190,28 +165,18 @@ class TransparentMaterialPageRoute<T> extends MaterialPageRoute<T> {
   });
 
   @override
-  bool get opaque => false; // 确保不产生白底遮罩
+  bool get opaque => false; // 确保不产生原生死白遮罩
 
   @override
   Duration get transitionDuration => const Duration(milliseconds: 280);
-
-  @override
-  TickerFuture didPush() {
-    // [v2.9.0] 触发一次静态模糊截图，供次级转场底层平滑展示，彻底杜绝文字穿透与叠化
-    PageBlurController.instance.capture(contentBoundaryKey);
-    return super.didPush();
-  }
 
   bool _isPopping = false;
 
   @override
   bool didPop(T? result) {
-    if (_isPopping) return false;
+    if (_isPopping) return true; // [v2.9.3 核心修复] 锁住二次调用，彻底消灭双弹
     _isPopping = true;
-    // 延迟清除，等动画结束
-    Future.delayed(transitionDuration, () {
-      PageBlurController.instance.clear();
-    });
     return super.didPop(result);
   }
 }
+

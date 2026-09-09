@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:ui';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -315,11 +314,6 @@ class LiveNotificationServiceV2 {
     return courses;
   }
 
-  List<CourseEvent> _getTomorrowCourses(DateTime now) {
-    final tomorrow = now.add(const Duration(days: 1));
-    return _getCoursesForDate(tomorrow);
-  }
-
   CourseEvent? _getNextCourseToday(int currentStartTime, DateTime now) {
     final endOfToday = DateTime(now.year, now.month, now.day, 23, 59, 59, 999).millisecondsSinceEpoch;
     final remainingToday = _allCourses.where((c) => 
@@ -372,12 +366,15 @@ class LiveNotificationServiceV2 {
         final relDay = _formatRelativeDate(nextDt, now);
         final count = _getCoursesForDate(nextDt).length;
         final startStr = '${nextDt.hour}:${nextDt.minute.toString().padLeft(2, '0')}';
-        // [v2.8.8] 严格格式化为 "明天X节课" / "后天X节课" / "周X几节课"，杜绝 "XX课程"
-        title = '$relDay${count}节课';
-        subLocation = '$relDay${count}节课';
-        body = '$relDay共${count}节课 首节 ${nextFirst.name} ($startStr ${nextFirst.location})';
+        final loc = nextFirst.location.trim().isNotEmpty && !nextFirst.location.contains('未知')
+            ? ' 📍 ${nextFirst.location}'
+            : '';
+        // [v2.9.3] 富文本状态标题与清晰信息密度排版
+        title = '<b>📅 $relDay</b> · <b>共$count节课</b>';
+        subLocation = '$relDay$count节课';
+        body = '首节 $startStr <b>${nextFirst.name}</b>$loc';
       } else {
-        title = '今日无课';
+        title = '<b>今日无课</b>';
         body = '课程表全天候同步中，点击查看完整课表';
         subLocation = '今日无课';
       }
@@ -393,18 +390,23 @@ class LiveNotificationServiceV2 {
         final remainingSec = ((end.millisecondsSinceEpoch - nowMs) / 1000).ceil();
         final m = remainingSec ~/ 60;
         final s = remainingSec % 60;
-        final countdownStr = '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+        final countdownStr = '$m:${s.toString().padLeft(2, '0')}';
 
         if (remainingSec > 0) {
-          title = '正在上课 剩$m分钟';
-          body = '${_currentCourse!.name} ${_currentCourse!.location}';
-          // [v2.8.8] 胶囊形态显示准确的分钟+秒倒计时（例如 24:59），不再是一堆文字
-          subLocation = countdownStr;
+          title = '<b><font color="#FF5252">● 正在上课</font></b> · <b>${_currentCourse!.name}</b>';
+          // [v2.9.3] 胶囊形态显示剩余分秒（例如 1:20），不再是生硬百分比
+          subLocation = '剩 $countdownStr';
 
           if (totalMs > 0) {
             progressPercent = ((elapsedMs / totalMs) * 100).clamp(0, 100).toInt();
             showProgress = true;
           }
+          final loc = _currentCourse!.location.trim().isNotEmpty &&
+                  !_currentCourse!.location.contains('未知')
+              ? ' 📍 ${_currentCourse!.location}'
+              : '';
+          final progressBar = _renderTextProgressBar(progressPercent, countdownStr, prefix: '剩');
+          body = '<b>${_currentCourse!.name}</b>$loc\n$progressBar';
           eventTime = end;
           isCountingDown = true;
 
@@ -413,12 +415,16 @@ class LiveNotificationServiceV2 {
           if (nextCourseToday != null) {
             final nextStart = DateTime.fromMillisecondsSinceEpoch(nextCourseToday.startTime);
             final nextStartStr = '${nextStart.hour}:${nextStart.minute.toString().padLeft(2, '0')}';
-            body += '\n下一节: ${nextCourseToday.name} ${nextCourseToday.location} ($nextStartStr)';
+            final nextLoc = nextCourseToday.location.trim().isNotEmpty &&
+                    !nextCourseToday.location.contains('未知')
+                ? ' (${nextCourseToday.location})'
+                : '';
+            body += '\n<b>下一节</b>: ${nextCourseToday.name}$nextLoc · $nextStartStr';
           }
         } else {
           // 刚刚下课过渡
-          title = '已下课 休息中';
-          body = '${_currentCourse!.name} 刚刚结束';
+          title = '<b><font color="#4CAF50">✓ 已下课</font></b> · 休息中';
+          body = '<b>${_currentCourse!.name}</b> 刚刚结束';
           subLocation = '课间休息';
         }
       } else {
@@ -426,27 +432,33 @@ class LiveNotificationServiceV2 {
         final diffSec = ((start.millisecondsSinceEpoch - nowMs) / 1000).ceil();
         final m = diffSec ~/ 60;
         final s = diffSec % 60;
-        final countdownStr = '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+        final countdownStr = '$m:${s.toString().padLeft(2, '0')}';
         final startStr = '${start.hour}:${start.minute.toString().padLeft(2, '0')}';
         final isToday = start.year == now.year && start.month == now.month && start.day == now.day;
 
         if (isToday) {
           if (m <= 45) {
-            // [v2.8.8] 课前胶囊形态直接显示准确的分钟+秒倒计时，不再是一堆冗长文字
-            subLocation = countdownStr;
+            // [v2.9.3] 课前胶囊形态显示剩余分秒（例如 12:45）
+            subLocation = '倒计时 $countdownStr';
             progressPercent = (((45 - m) / 45) * 100).clamp(0, 100).toInt();
             showProgress = true;
 
-            if (m <= 10) {
-              title = '马上开始 ($m分钟后)';
-            } else {
-              title = '即将上课 ($m分钟后)';
-            }
-            body = '${_currentCourse!.name} ${_currentCourse!.location} $startStr 开始';
+            final statusTag = m <= 10 ? '马上开始' : '即将上课';
+            title = '<b><font color="#FFA000">⏳ $statusTag</font></b> · <b>${_currentCourse!.name}</b>';
+            final loc = _currentCourse!.location.trim().isNotEmpty &&
+                    !_currentCourse!.location.contains('未知')
+                ? ' 📍 ${_currentCourse!.location}'
+                : '';
+            final progressBar = _renderTextProgressBar(progressPercent, countdownStr, prefix: '距上课');
+            body = '<b>${_currentCourse!.name}</b>$loc · $startStr 开课\n$progressBar';
           } else {
             // 课前45分钟以上
-            title = '下节课 ($startStr)';
-            body = '${_currentCourse!.name} ${_currentCourse!.location}';
+            title = '<b>下节课 ($startStr)</b> · <b>${_currentCourse!.name}</b>';
+            final loc = _currentCourse!.location.trim().isNotEmpty &&
+                    !_currentCourse!.location.contains('未知')
+                ? ' 📍 ${_currentCourse!.location}'
+                : '';
+            body = '<b>${_currentCourse!.name}</b>$loc';
             subLocation = startStr;
             showProgress = false;
           }
@@ -456,10 +468,13 @@ class LiveNotificationServiceV2 {
           final targetCourses = _getCoursesForDate(startDate);
           final count = targetCourses.isNotEmpty ? targetCourses.length : 1;
           final relDay = _formatRelativeDate(start, now);
-          // [v2.8.8] 严格格式化为 "明天X节课" / "后天X节课" / "周X几节课"，绝不出现 "后天课程"
-          title = '$relDay${count}节课';
-          subLocation = '$relDay${count}节课';
-          body = '首节 $startStr ${_currentCourse!.name} ${_currentCourse!.location}';
+          title = '<b>📅 $relDay</b> · <b>共$count节课</b>';
+          subLocation = '$relDay$count节课';
+          final loc = _currentCourse!.location.trim().isNotEmpty &&
+                  !_currentCourse!.location.contains('未知')
+              ? ' 📍 ${_currentCourse!.location}'
+              : '';
+          body = '首节 $startStr <b>${_currentCourse!.name}</b>$loc';
           showProgress = false;
         }
 
@@ -499,8 +514,11 @@ class LiveNotificationServiceV2 {
         subText: subLocation,
         styleInformation: BigTextStyleInformation(
           body,
+          htmlFormatBigText: true,
           contentTitle: title,
+          htmlFormatContentTitle: true,
           summaryText: '实时活动',
+          htmlFormatSummaryText: true,
         ),
         // 操作按钮
         actions: <AndroidNotificationAction>[
@@ -535,8 +553,11 @@ class LiveNotificationServiceV2 {
         subText: subLocation,
         styleInformation: BigTextStyleInformation(
           body,
+          htmlFormatBigText: true,
           contentTitle: title,
+          htmlFormatContentTitle: true,
           summaryText: '课程提醒',
+          htmlFormatSummaryText: true,
         ),
         actions: <AndroidNotificationAction>[
           const AndroidNotificationAction(
@@ -606,6 +627,15 @@ class LiveNotificationServiceV2 {
         payload: _currentCourse != null ? 'course_${_currentCourse!.startTime}' : 'course_general',
       );
     }
+  }
+
+  /// [v2.9.3] 渲染紧凑高质感字符倒计时进度条（支持 1:20 剩余分秒）
+  String _renderTextProgressBar(int percent, String remainText, {String prefix = '剩'}) {
+    const totalBars = 10;
+    final filledCount = ((percent / 100) * totalBars).round().clamp(0, totalBars);
+    final emptyCount = totalBars - filledCount;
+    final bar = '█' * filledCount + '░' * emptyCount;
+    return '[$bar] $prefix $remainText';
   }
 
   /// 取消通知

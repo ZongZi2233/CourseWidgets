@@ -355,6 +355,7 @@ class _MyAppState extends State<MyApp> {
               theme: material.ThemeData(
                 useMaterial3: true,
                 brightness: material.Brightness.light,
+                scaffoldBackgroundColor: material.Colors.transparent,
                 colorScheme: material.ColorScheme.fromSeed(
                   seedColor: themeService.primaryColor,
                   brightness: material.Brightness.light,
@@ -372,22 +373,22 @@ class _MyAppState extends State<MyApp> {
                   titleLarge: TextStyle(fontWeight: FontWeight.bold),
                   titleMedium: TextStyle(fontWeight: FontWeight.bold),
                 ),
-                // [v2.9.7] Android 使用 CustomPredictiveBackPageTransitionsBuilder
-                // 保留预测式返回手势，内部统一调用 SmoothSlideTransitionsBuilder
-                pageTransitionsTheme: material.PageTransitionsTheme(
+                // [v2.9.3] 统一使用 SmoothSlideTransitionsBuilder，杜绝双弹
+                pageTransitionsTheme: const material.PageTransitionsTheme(
                   builders: {
                     material.TargetPlatform.android:
-                        const CustomPredictiveBackPageTransitionsBuilder(),
+                        SmoothSlideTransitionsBuilder(),
                     material.TargetPlatform.iOS:
-                        const SmoothSlideTransitionsBuilder(),
+                        SmoothSlideTransitionsBuilder(),
                     material.TargetPlatform.windows:
-                        const SmoothSlideTransitionsBuilder(),
+                        SmoothSlideTransitionsBuilder(),
                   },
                 ),
               ),
               darkTheme: material.ThemeData(
                 useMaterial3: true,
                 brightness: material.Brightness.dark,
+                scaffoldBackgroundColor: material.Colors.transparent,
                 colorScheme: material.ColorScheme.fromSeed(
                   seedColor: themeService.primaryColor,
                   brightness: material.Brightness.dark,
@@ -402,14 +403,14 @@ class _MyAppState extends State<MyApp> {
                   titleLarge: TextStyle(fontWeight: FontWeight.bold),
                   titleMedium: TextStyle(fontWeight: FontWeight.bold),
                 ),
-                pageTransitionsTheme: material.PageTransitionsTheme(
+                pageTransitionsTheme: const material.PageTransitionsTheme(
                   builders: {
                     material.TargetPlatform.android:
-                        const CustomPredictiveBackPageTransitionsBuilder(),
+                        SmoothSlideTransitionsBuilder(),
                     material.TargetPlatform.iOS:
-                        const SmoothSlideTransitionsBuilder(),
+                        SmoothSlideTransitionsBuilder(),
                     material.TargetPlatform.windows:
-                        const SmoothSlideTransitionsBuilder(),
+                        SmoothSlideTransitionsBuilder(),
                   },
                 ),
               ),

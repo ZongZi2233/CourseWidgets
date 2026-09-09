@@ -226,8 +226,22 @@ class MainActivity : FlutterActivity() {
             android.app.Notification.Builder(this)
         }
 
-        builder.setContentTitle(title)
-        builder.setContentText(body)
+        val titleSpan = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            android.text.Html.fromHtml(title, android.text.Html.FROM_HTML_MODE_LEGACY)
+        } else {
+            @Suppress("DEPRECATION")
+            android.text.Html.fromHtml(title)
+        }
+        val bodySpan = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            android.text.Html.fromHtml(body.replace("\n", "<br/>"), android.text.Html.FROM_HTML_MODE_LEGACY)
+        } else {
+            @Suppress("DEPRECATION")
+            android.text.Html.fromHtml(body.replace("\n", "<br/>"))
+        }
+
+        builder.setContentTitle(titleSpan)
+        builder.setContentText(bodySpan)
+        builder.setStyle(android.app.Notification.BigTextStyle().bigText(bodySpan))
         builder.setSmallIcon(R.mipmap.ic_launcher)
         try {
             val appIconBitmap = android.graphics.BitmapFactory.decodeResource(resources, R.mipmap.ic_launcher)
@@ -248,6 +262,8 @@ class MainActivity : FlutterActivity() {
 
         if (showProgress) {
             builder.setProgress(maxProgress, progress, false)
+        } else {
+            builder.setProgress(0, 0, false)
         }
 
         if (whenTime != null && whenTime > 0) {

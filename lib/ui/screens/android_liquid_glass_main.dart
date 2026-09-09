@@ -449,8 +449,8 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
       ),
       child: Consumer<ScheduleProvider>(
         builder: (context, provider, _) {
-          // [v2.9.0 修复] 留出充足安全预留距离，避免星期横行紧贴甚至被顶部悬浮 Header 遮挡
-          final topPadding = MediaQuery.of(context).padding.top + 76;
+          // [v2.9.3 优化安全距离] 星期冻结栏与顶部悬浮 Header 保持舒适呼吸感（top + 88）
+          final topPadding = MediaQuery.of(context).padding.top + 88;
 
           return Stack(
             children: [

@@ -9,7 +9,7 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Flutter](https://img.shields.io/badge/Flutter-3.44.0+-02569B?logo=flutter)](https://flutter.dev)
 [![Dart](https://img.shields.io/badge/Dart-3.12.0+-0175C2?logo=dart)](https://dart.dev)
-[![Version](https://img.shields.io/badge/Version-2.9.0-FF9BAE)](https://github.com/ZongZi2233AI/CourseWidgets/releases/)
+[![Version](https://img.shields.io/badge/Version-2.9.3-FF9BAE)](https://github.com/ZongZi2233AI/CourseWidgets/releases/)
 
 [English](README_EN.md) | 简体中文
 
@@ -17,9 +17,9 @@
 
 > **声明**：本软件除开源代码外完全使用 AI 辅助协同开发。核心架构由 [MiMo-V2-Flash](https://github.com/XiaomiMiMo/MiMo-V2-Flash) 与 Gemini 3.1 Pro 深度构建，Windows 桌面部分协同 Claude Opus 4.6 深度定制。
 
-### 📦 最新版本：[v2.9.0 (Build 10008060)](https://github.com/ZongZi2233AI/CourseWidgets/releases)
-* **Android 单包**：`CourseWidgets-v2.9.0-android-arm64-v8a.apk` (54.58 MB) —— 全面开启 R8 压缩与 Dart AOT 源码混淆。
-* **Windows 客户端**：`CourseWidgets-v2.9.0-windows-x64.zip` (53.88 MB) —— 纯净亚克力无边框桌面端，支持托盘驻留与高分屏。
+### 📦 最新版本：[v2.9.3 (Build 10008063)](https://github.com/ZongZi2233AI/CourseWidgets/releases)
+* **Android 单包**：`CourseWidgets-v2.9.3-android-arm64-v8a.apk` —— 全面开启 R8 压缩与 Dart AOT 源码混淆。
+* **Windows 客户端**：`CourseWidgets-v2.9.3-windows-x64.zip` —— 纯净亚克力无边框桌面端，支持托盘驻留与高分屏。
 
 ---
 

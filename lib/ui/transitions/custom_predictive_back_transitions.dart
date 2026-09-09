@@ -60,30 +60,13 @@ class CustomPredictiveBackPageTransitionsBuilder
     Animation<double> secondaryAnimation,
     Widget child,
   ) {
-    return _PredictiveBackGestureDetector(
-      route: route,
-      builder:
-          (
-            BuildContext context,
-            _PredictiveBackPhase phase,
-            PredictiveBackEvent? startBackEvent,
-            PredictiveBackEvent? currentBackEvent,
-            bool wasCommitted,
-          ) {
-            // [v2.9.4] 彻底根治双弹与无模糊问题
-            // 原逻辑在 phase != idle 时使用 _PredictiveBackSharedElementPageTransition（无模糊，且是Android 14挤压动画）
-            // 在松手后又跳回 SmoothSlide，导致严重割裂与重影双弹。
-            // 实际上 _PredictiveBackGestureDetector 已经完美接管了系统手势并同步给 route.animation，
-            // 我们只需要全时段返回 SmoothSlideTransitionsBuilder 即可！
-            // 这样既有了系统的跟手侧滑截断能力（Predictive Back），又维持了绝对纯净的自定义渐隐模糊！
-            return const SmoothSlideTransitionsBuilder().buildTransitions(
-              route,
-              context,
-              animation,
-              secondaryAnimation,
-              child,
-            );
-          },
+    // [v2.9.3 根治双弹] 移除与系统 OnBackPressed 冲突的手势监听器，统一使用 SmoothSlideTransitionsBuilder
+    return const SmoothSlideTransitionsBuilder().buildTransitions(
+      route,
+      context,
+      animation,
+      secondaryAnimation,
+      child,
     );
   }
 }
