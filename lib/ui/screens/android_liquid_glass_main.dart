@@ -42,6 +42,9 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
   bool _isWeekPickerActive = false; // [v2.8.6] 周次选择器打开状态，用于挂起背景重绘保障 120 FPS
   final DataImportService _importService = DataImportService();
 
+  late final AnimationController _blurAnimationController;
+  late final Animation<double> _blurAnimation;
+
   void _onTabSelected(int index) {
     if (_currentIndex == index) return;
     setState(() => _currentIndex = index);
@@ -57,6 +60,15 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
   @override
   void initState() {
     super.initState();
+    _blurAnimationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 260),
+    );
+    _blurAnimation = CurvedAnimation(
+      parent: _blurAnimationController,
+      curve: Curves.easeOutCubic,
+      reverseCurve: Curves.easeInCubic,
+    );
     _loadData();
   }
 
@@ -67,7 +79,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
     routeObserver.subscribe(this, ModalRoute.of(context) as PageRoute);
   }
 
-  // [v2.6.0/v2.8.6] 被其他页面覆盖时，隐藏导航栏并在截图捕获完成后再激活离屏冻结，消除瞬间黑屏闪烁
+  // [v2.6.0/v2.8.8] 被其他页面覆盖时，截图捕获完成后平滑淡入高斯模糊与暗色景深
   @override
   void didPushNext() {
     if (mounted) {
@@ -79,20 +91,27 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
           setState(() {
             _isCoveredBySubPage = true;
           });
+          _blurAnimationController.forward(from: 0.0);
         }
       });
     }
   }
 
-  // [v2.6.0/v2.8.5] 上一层页面弹出，回到当前页面时，显示导航栏并唤醒底层渲染，释放离屏快照
+  // [v2.6.0/v2.8.8] 上一层页面弹出，回到当前页面时平滑淡出高斯模糊，优雅还原底层清晰界面
   @override
   void didPopNext() {
     if (mounted) {
       setState(() {
         _isBottomNavVisible = true;
-        _isCoveredBySubPage = false;
       });
-      PageBlurController.instance.clear();
+      _blurAnimationController.reverse().then((_) {
+        if (mounted) {
+          setState(() {
+            _isCoveredBySubPage = false;
+          });
+          PageBlurController.instance.clear();
+        }
+      });
     }
   }
 
@@ -142,6 +161,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
     routeObserver.unsubscribe(this); // [v2.6.0] 卸载路由监听
     _scheduleProvider?.removeListener(_onScheduleChanged);
     _pageController.dispose();
+    _blurAnimationController.dispose();
     // 停止通知服务
     LiveNotificationServiceV2().dispose();
     super.dispose();
@@ -247,23 +267,26 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                               final img = PageBlurController.instance.capturedImage;
                               if (img != null) {
                                 final isDark = Theme.of(context).brightness == Brightness.dark;
-                                return Stack(
-                                  fit: StackFit.expand,
-                                  children: [
-                                    ImageFiltered(
-                                      imageFilter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                                      child: RawImage(
-                                        image: img,
-                                        fit: BoxFit.cover,
-                                        filterQuality: FilterQuality.medium,
+                                return FadeTransition(
+                                  opacity: _blurAnimation,
+                                  child: Stack(
+                                    fit: StackFit.expand,
+                                    children: [
+                                      ImageFiltered(
+                                        imageFilter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                                        child: RawImage(
+                                          image: img,
+                                          fit: BoxFit.cover,
+                                          filterQuality: FilterQuality.medium,
+                                        ),
                                       ),
-                                    ),
-                                    Container(
-                                      color: isDark
-                                          ? Colors.black.withValues(alpha: 0.25)
-                                          : Colors.white.withValues(alpha: 0.12),
-                                    ),
-                                  ],
+                                      Container(
+                                        color: isDark
+                                            ? Colors.black.withValues(alpha: 0.25)
+                                            : Colors.white.withValues(alpha: 0.12),
+                                      ),
+                                    ],
+                                  ),
                                 );
                               }
                               return const SizedBox.shrink();
@@ -339,23 +362,26 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                             final img = PageBlurController.instance.capturedImage;
                             if (img != null) {
                               final isDark = Theme.of(context).brightness == Brightness.dark;
-                              return Stack(
-                                fit: StackFit.expand,
-                                children: [
-                                  ImageFiltered(
-                                    imageFilter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                                    child: RawImage(
-                                      image: img,
-                                      fit: BoxFit.cover,
-                                      filterQuality: FilterQuality.medium,
+                              return FadeTransition(
+                                opacity: _blurAnimation,
+                                child: Stack(
+                                  fit: StackFit.expand,
+                                  children: [
+                                    ImageFiltered(
+                                      imageFilter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                                      child: RawImage(
+                                        image: img,
+                                        fit: BoxFit.cover,
+                                        filterQuality: FilterQuality.medium,
+                                      ),
                                     ),
-                                  ),
-                                  Container(
-                                    color: isDark
-                                        ? Colors.black.withValues(alpha: 0.25)
-                                        : Colors.white.withValues(alpha: 0.12),
-                                  ),
-                                ],
+                                    Container(
+                                      color: isDark
+                                          ? Colors.black.withValues(alpha: 0.25)
+                                          : Colors.white.withValues(alpha: 0.12),
+                                    ),
+                                  ],
+                                ),
                               );
                             }
                             return const SizedBox.shrink();
@@ -1234,38 +1260,32 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                       ),
                     ],
                     trigger: Container(
+                      width: 32,
+                      height: 32,
                       decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
+                        color: isDark
+                            ? Colors.white.withValues(alpha: 0.12)
+                            : Colors.black.withValues(alpha: 0.05),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: isDark
+                              ? Colors.white.withValues(alpha: 0.16)
+                              : Colors.black.withValues(alpha: 0.08),
+                          width: 0.8,
+                        ),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withValues(alpha: isDark ? 0.30 : 0.08),
-                            blurRadius: 8,
+                            color: Colors.black.withValues(alpha: isDark ? 0.20 : 0.04),
+                            blurRadius: 6,
                             offset: const Offset(0, 2),
                           ),
                         ],
                       ),
-                      child: GlassContainer(
-                        width: 34,
-                        height: 34,
-                        quality: GlassQuality.premium,
-                        shape: const LiquidRoundedSuperellipse(borderRadius: 12),
-                        settings: LiquidGlassSettings(
-                          glassColor: isDark
-                              ? const Color(0x33FFFFFF)
-                              : const Color(0x66FFFFFF),
-                          blur: 4.0,
-                          thickness: 12.0,
-                          refractiveIndex: 1.35,
-                          lightIntensity: 0.85,
-                          ambientRim: 0.0,
-                          fresnelStrength: 0.08,
-                        ),
-                        child: Center(
-                          child: Icon(
-                            CupertinoIcons.ellipsis,
-                            color: isDark ? Colors.white : const Color(0xFF1A1A2E),
-                            size: 16,
-                          ),
+                      child: Center(
+                        child: Icon(
+                          CupertinoIcons.ellipsis,
+                          color: isDark ? Colors.white : const Color(0xFF1A1A2E),
+                          size: 16,
                         ),
                       ),
                     ),

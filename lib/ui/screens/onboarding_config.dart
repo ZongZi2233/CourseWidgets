@@ -64,10 +64,9 @@ class OnboardingConfig extends StatelessWidget {
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
                     child: Center(
-                      child: liquid.LiquidCard(
-                        borderRadius: 24,
-                        padding: 20,
-                        quality: GlassQuality.premium,
+                      child: liquid.HyperOSCard(
+                        cornerRadius: 24,
+                        padding: const EdgeInsets.all(20),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [

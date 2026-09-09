@@ -768,38 +768,32 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
                 ),
               ],
               trigger: Container(
+                width: 32,
+                height: 32,
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.12)
+                      : Colors.black.withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.16)
+                        : Colors.black.withValues(alpha: 0.08),
+                    width: 0.8,
+                  ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: isDark ? 0.30 : 0.08),
-                      blurRadius: 8,
+                      color: Colors.black.withValues(alpha: isDark ? 0.20 : 0.04),
+                      blurRadius: 6,
                       offset: const Offset(0, 2),
                     ),
                   ],
                 ),
-                child: GlassContainer(
-                  width: 34,
-                  height: 34,
-                  quality: GlassQuality.premium,
-                  shape: const LiquidRoundedSuperellipse(borderRadius: 12),
-                  settings: LiquidGlassSettings(
-                    glassColor: isDark
-                        ? const Color(0x33FFFFFF)
-                        : const Color(0x66FFFFFF),
-                    blur: 4.0,
-                    thickness: 12.0,
-                    refractiveIndex: 1.35,
-                    lightIntensity: 0.85,
-                    ambientRim: 0.0,
-                    fresnelStrength: 0.08,
-                  ),
-                  child: Center(
-                    child: Icon(
-                      CupertinoIcons.ellipsis_vertical,
-                      color: isDark ? Colors.white : const Color(0xFF1A1A2E),
-                      size: 16,
-                    ),
+                child: Center(
+                  child: Icon(
+                    CupertinoIcons.ellipsis_vertical,
+                    color: isDark ? Colors.white : const Color(0xFF1A1A2E),
+                    size: 16,
                   ),
                 ),
               ),

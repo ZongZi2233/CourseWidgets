@@ -1,37 +1,27 @@
 {
-  "version": "2.8.7",
-  "buildNumber": 10008051,
-  "collectedAt": "2026-09-08T21:14:43.389350",
+  "version": "2.8.8",
+  "buildNumber": 10008052,
+  "collectedAt": "2026-09-09T16:56:49.563336",
   "artifacts": [
     {
       "platform": "Android",
-      "filename": "CourseWidgets-v2.8.7-android-arm64-v8a.apk",
+      "filename": "CourseWidgets-v2.8.8-android-arm64-v8a.apk",
       "source": "app-arm64-v8a-release.apk",
-      "path": "D:\\VSCODE\\Schedule\\schedule_app\\release\\CourseWidgets-v2.8.7-android-arm64-v8a.apk",
-      "size": 51574361,
-      "size_formatted": "49.19 MB",
-      "sha256": "f797bb87a5947496719c70e091952ac3d6de871c966448016e637fc9f8f802c4",
-      "updated_at": "2026-09-08 21:14:41"
-    },
-    {
-      "platform": "Android",
-      "filename": "CourseWidgets-v2.8.7-android-universal.apk",
-      "source": "app-release.apk",
-      "path": "D:\\VSCODE\\Schedule\\schedule_app\\release\\CourseWidgets-v2.8.7-android-universal.apk",
-      "size": 53831117,
-      "size_formatted": "51.34 MB",
-      "sha256": "0691a51450fd62837cb401bfad86f845fbdde7c5464fa91b8a2bced24b1cd013",
-      "updated_at": "2026-09-08 21:14:41"
+      "path": "D:\\VSCODE\\Schedule\\schedule_app\\release\\CourseWidgets-v2.8.8-android-arm64-v8a.apk",
+      "size": 57459592,
+      "size_formatted": "54.80 MB",
+      "sha256": "bd21e510f3d633a2ee21f18583247c4b099c207d730f875d75973a8f7b7db5a0",
+      "updated_at": "2026-09-09 16:56:47"
     },
     {
       "platform": "Windows",
-      "filename": "CourseWidgets-v2.8.7-windows-x64.zip",
+      "filename": "CourseWidgets-v2.8.8-windows-x64.zip",
       "source": "build/windows/x64/runner/Release",
-      "path": "D:\\VSCODE\\Schedule\\schedule_app\\release\\CourseWidgets-v2.8.7-windows-x64.zip",
-      "size": 45030422,
-      "size_formatted": "42.94 MB",
-      "sha256": "2ad12882fae70a48f5c05365883e6bf92fecf7ee76b3e0339df395ddc63ee65e",
-      "updated_at": "2026-09-08 21:14:43"
+      "path": "D:\\VSCODE\\Schedule\\schedule_app\\release\\CourseWidgets-v2.8.8-windows-x64.zip",
+      "size": 56823398,
+      "size_formatted": "54.19 MB",
+      "sha256": "089432b0dd9df11c8199635204da2019b6f61b6333cfff8c139f52a60e02a258",
+      "updated_at": "2026-09-09 16:56:49"
     }
   ]
 }

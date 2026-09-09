@@ -487,8 +487,8 @@ class HyperOSCard extends StatelessWidget {
     this.padding = const EdgeInsets.all(12),
     this.color,
     this.contentColor,
-    this.useBlur = true, // [v2.8.7] 默认开启高斯模糊，还原正统 HyperOS 毛玻璃质感
-    this.blurRadius = 16.0,
+    this.useBlur = true, // [v2.8.8] 开启轻量高斯模糊，还原正统 HyperOS 半透明混色毛玻璃质感
+    this.blurRadius = 10.0,
     this.feedbackType = MiuixPressFeedbackType.sink,
     this.border,
   });
@@ -498,10 +498,10 @@ class HyperOSCard extends StatelessWidget {
     final isDark = globalDarkModeNotifier.value;
     final primary = AppThemeColors.babyPink;
 
-    // HyperOS 混色半透明背景：92% 高品质透光底色结合主题微透混色，告别纯透明
+    // [v2.8.8] HyperOS 混色半透明毛玻璃：70%~75% 透光底色结合主题微透混色，壁纸柔和通透折射
     final defaultBgColor = isDark
-        ? Color.alphaBlend(primary.withValues(alpha: 0.08), const Color(0xEB23252E))
-        : Color.alphaBlend(primary.withValues(alpha: 0.06), const Color(0xEBFFFFFF));
+        ? Color.alphaBlend(primary.withValues(alpha: 0.08), const Color(0xAF1E2128))
+        : Color.alphaBlend(primary.withValues(alpha: 0.06), const Color(0xB8FFFFFF));
 
     final effectiveColor = color ?? defaultBgColor;
     final effectiveTextColor = contentColor ??
@@ -510,8 +510,8 @@ class HyperOSCard extends StatelessWidget {
     final effectiveBorderSide = border ??
         BorderSide(
           color: isDark
-              ? Colors.white.withValues(alpha: 0.12)
-              : Colors.black.withValues(alpha: 0.06),
+              ? Colors.white.withValues(alpha: 0.14)
+              : Colors.black.withValues(alpha: 0.07),
           width: 0.8,
         );
 
@@ -527,8 +527,8 @@ class HyperOSCard extends StatelessWidget {
         shape: shape,
         shadows: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.05),
-            blurRadius: 14,
+            color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.06),
+            blurRadius: 12,
             offset: const Offset(0, 3),
           ),
         ],

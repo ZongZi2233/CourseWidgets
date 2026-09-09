@@ -47,8 +47,15 @@ Future<void> loadGlobalBackground() async {
 
     if (savedPath != null && savedPath.isNotEmpty) {
       if (savedPath.startsWith('asset:')) {
-        globalBackgroundPath.value = savedPath;
-        AppLogger.ui('加载默认壁纸: $savedPath');
+        // [v2.8.8] 如果是旧版壁纸，自动升级为全新的 1:1 自适应壁纸
+        if (savedPath == 'asset:assets/mobile wallpaper light.png' ||
+            savedPath == 'asset:assets/tahoe.jpg') {
+          globalBackgroundPath.value = null;
+          await storage.remove('background_image_path');
+        } else {
+          globalBackgroundPath.value = savedPath;
+        }
+        AppLogger.ui('加载默认壁纸: ${globalBackgroundPath.value}');
         return;
       }
 
@@ -59,24 +66,12 @@ Future<void> loadGlobalBackground() async {
       }
     }
 
-    String defaultWallpaper;
-    if (Platform.isAndroid || Platform.isIOS) {
-      defaultWallpaper = 'asset:assets/mobile wallpaper light.png';
-    } else {
-      defaultWallpaper = 'asset:assets/tahoe.jpg';
-    }
-
-    globalBackgroundPath.value = defaultWallpaper;
-    AppLogger.ui('使用默认壁纸: $defaultWallpaper');
+    // 默认设为 null，由深浅色模式动态决定使用 Light.png 还是 Dark.png
+    globalBackgroundPath.value = null;
+    AppLogger.ui('使用自适应 1:1 默认壁纸 (Light.png / Dark.png)');
   } catch (e, st) {
     AppLogger.error('WALLPAPER', '加载壁纸错误: $e', e, st);
-    String defaultWallpaper;
-    if (Platform.isAndroid || Platform.isIOS) {
-      defaultWallpaper = 'asset:assets/mobile wallpaper light.png';
-    } else {
-      defaultWallpaper = 'asset:assets/tahoe.jpg';
-    }
-    globalBackgroundPath.value = defaultWallpaper;
+    globalBackgroundPath.value = null;
   }
 }
 
@@ -424,15 +419,16 @@ class _MyAppState extends State<MyApp> {
                 // 构建背景组件
                 Widget backgroundWidget;
 
-                // [v2.6.2] 修复反馈: 浅色模式不再强制对背景进行变暗处理
-                final darkenAlpha = isDarkMode ? 0.6 : 0.0;
+                // [v2.8.8] 1:1 自适应壁纸：亮色 Light.png，深色 Dark.png（居中平铺裁切，自动适配任意宽高比屏幕）
+                final defaultAsset = isDarkMode ? 'assets/Dark.png' : 'assets/Light.png';
 
                 if (backgroundPath != null && backgroundPath.isNotEmpty) {
-                  // 检查是否是 asset 路径
                   if (backgroundPath.startsWith('asset:')) {
-                    final assetPath = backgroundPath.substring(
-                      6,
-                    ); // 移除 'asset:' 前缀
+                    final rawAsset = backgroundPath.substring(6);
+                    final assetPath = (rawAsset == 'assets/mobile wallpaper light.png' ||
+                            rawAsset == 'assets/tahoe.jpg')
+                        ? defaultAsset
+                        : rawAsset;
                     debugPrint('🎨 使用 Asset 背景: $assetPath');
                     backgroundWidget = AnimatedContainer(
                       duration: const Duration(milliseconds: 500),
@@ -440,45 +436,41 @@ class _MyAppState extends State<MyApp> {
                         image: DecorationImage(
                           image: AssetImage(assetPath),
                           fit: BoxFit.cover,
-                          colorFilter: ColorFilter.mode(
-                            Colors.black.withValues(alpha: darkenAlpha),
-                            BlendMode.darken,
-                          ),
+                          alignment: Alignment.center,
                         ),
                       ),
                     );
                   } else {
                     // 用户自定义的文件路径
                     debugPrint('🎨 使用文件背景: $backgroundPath');
+                    final darkenAlpha = isDarkMode ? 0.45 : 0.0;
                     backgroundWidget = AnimatedContainer(
                       duration: const Duration(milliseconds: 500),
                       decoration: BoxDecoration(
                         image: DecorationImage(
                           image: FileImage(File(backgroundPath)),
                           fit: BoxFit.cover,
-                          colorFilter: ColorFilter.mode(
-                            Colors.black.withValues(alpha: darkenAlpha),
-                            BlendMode.darken,
-                          ),
+                          alignment: Alignment.center,
+                          colorFilter: darkenAlpha > 0
+                              ? ColorFilter.mode(
+                                  Colors.black.withValues(alpha: darkenAlpha),
+                                  BlendMode.darken,
+                                )
+                              : null,
                         ),
                       ),
                     );
                   }
                 } else {
-                  // 没有背景时使用渐变
-                  debugPrint('🎨 使用渐变背景 (fallback)');
+                  // 默认 1:1 亮暗壁纸：自动居中铺满
+                  debugPrint('🎨 使用 1:1 默认壁纸: $defaultAsset');
                   backgroundWidget = AnimatedContainer(
                     duration: const Duration(milliseconds: 500),
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: isDarkMode
-                            ? [const Color(0xFF1A1A2E), const Color(0xFF16213E)]
-                            : [
-                                const Color(0xFFE0C3FC),
-                                const Color(0xFF8EC5FC),
-                              ],
+                      image: DecorationImage(
+                        image: AssetImage(defaultAsset),
+                        fit: BoxFit.cover,
+                        alignment: Alignment.center,
                       ),
                     ),
                   );

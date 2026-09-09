@@ -191,8 +191,8 @@ class LiveNotificationServiceV2 {
     // 立即显示一次
     await _updateNotification();
 
-    // 每分钟更新一次 Live Update
-    _updateTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
+    // [v2.8.8] 优化通知定时器刷新频率（每 10 秒更新一次，确保胶囊分秒倒计时精准跟手）
+    _updateTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
       _updateNotification();
     });
 
@@ -307,14 +307,17 @@ class LiveNotificationServiceV2 {
     }
   }
 
-  List<CourseEvent> _getTomorrowCourses(DateTime now) {
-    final tomorrow = now.add(const Duration(days: 1));
-    final startOfTomorrow = DateTime(tomorrow.year, tomorrow.month, tomorrow.day).millisecondsSinceEpoch;
-    final endOfTomorrow = DateTime(tomorrow.year, tomorrow.month, tomorrow.day, 23, 59, 59, 999).millisecondsSinceEpoch;
-
-    final courses = _allCourses.where((c) => c.startTime >= startOfTomorrow && c.startTime <= endOfTomorrow).toList();
+  List<CourseEvent> _getCoursesForDate(DateTime date) {
+    final startOfDay = DateTime(date.year, date.month, date.day).millisecondsSinceEpoch;
+    final endOfDay = DateTime(date.year, date.month, date.day, 23, 59, 59, 999).millisecondsSinceEpoch;
+    final courses = _allCourses.where((c) => c.startTime >= startOfDay && c.startTime <= endOfDay).toList();
     courses.sort((a, b) => a.startTime.compareTo(b.startTime));
     return courses;
+  }
+
+  List<CourseEvent> _getTomorrowCourses(DateTime now) {
+    final tomorrow = now.add(const Duration(days: 1));
+    return _getCoursesForDate(tomorrow);
   }
 
   CourseEvent? _getNextCourseToday(int currentStartTime, DateTime now) {
@@ -361,14 +364,18 @@ class LiveNotificationServiceV2 {
 
     if (_currentCourse == null) {
       // 当前与后续无未结束课程
-      final tomorrowCourses = _getTomorrowCourses(now);
-      if (tomorrowCourses.isNotEmpty) {
-        final first = tomorrowCourses.first;
-        final startDt = DateTime.fromMillisecondsSinceEpoch(first.startTime);
-        final startStr = '${startDt.hour}:${startDt.minute.toString().padLeft(2, '0')}';
-        title = '明天${tomorrowCourses.length}节课';
-        body = '明天共${tomorrowCourses.length}节课 首节 ${first.name} ($startStr ${first.location})';
-        subLocation = '明天${tomorrowCourses.length}节课';
+      final nextCourses = _allCourses.where((c) => c.startTime > nowMs).toList();
+      if (nextCourses.isNotEmpty) {
+        nextCourses.sort((a, b) => a.startTime.compareTo(b.startTime));
+        final nextFirst = nextCourses.first;
+        final nextDt = DateTime.fromMillisecondsSinceEpoch(nextFirst.startTime);
+        final relDay = _formatRelativeDate(nextDt, now);
+        final count = _getCoursesForDate(nextDt).length;
+        final startStr = '${nextDt.hour}:${nextDt.minute.toString().padLeft(2, '0')}';
+        // [v2.8.8] 严格格式化为 "明天X节课" / "后天X节课" / "周X几节课"，杜绝 "XX课程"
+        title = '$relDay${count}节课';
+        subLocation = '$relDay${count}节课';
+        body = '$relDay共${count}节课 首节 ${nextFirst.name} ($startStr ${nextFirst.location})';
       } else {
         title = '今日无课';
         body = '课程表全天候同步中，点击查看完整课表';
@@ -383,12 +390,16 @@ class LiveNotificationServiceV2 {
         // 正在上课中
         final totalMs = end.millisecondsSinceEpoch - start.millisecondsSinceEpoch;
         final elapsedMs = nowMs - start.millisecondsSinceEpoch;
-        final remainingMinutes = ((end.millisecondsSinceEpoch - nowMs) / 60000).ceil();
+        final remainingSec = ((end.millisecondsSinceEpoch - nowMs) / 1000).ceil();
+        final m = remainingSec ~/ 60;
+        final s = remainingSec % 60;
+        final countdownStr = '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
 
-        if (remainingMinutes > 0) {
-          title = '正在上课 剩$remainingMinutes分钟';
+        if (remainingSec > 0) {
+          title = '正在上课 剩$m分钟';
           body = '${_currentCourse!.name} ${_currentCourse!.location}';
-          subLocation = '剩${remainingMinutes}分';
+          // [v2.8.8] 胶囊形态显示准确的分钟+秒倒计时（例如 24:59），不再是一堆文字
+          subLocation = countdownStr;
 
           if (totalMs > 0) {
             progressPercent = ((elapsedMs / totalMs) * 100).clamp(0, 100).toInt();
@@ -412,49 +423,43 @@ class LiveNotificationServiceV2 {
         }
       } else {
         // 即将上课
-        final minutesUntil = diff.inMinutes;
+        final diffSec = ((start.millisecondsSinceEpoch - nowMs) / 1000).ceil();
+        final m = diffSec ~/ 60;
+        final s = diffSec % 60;
+        final countdownStr = '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
         final startStr = '${start.hour}:${start.minute.toString().padLeft(2, '0')}';
         final isToday = start.year == now.year && start.month == now.month && start.day == now.day;
 
         if (isToday) {
-          if (minutesUntil <= 30) {
-            // 课前30分钟内：微缩胶囊 "中5202 25分"，极简无emoji
-            subLocation = '${_currentCourse!.location} ${minutesUntil}分';
-            progressPercent = (((30 - minutesUntil) / 30) * 100).clamp(0, 100).toInt();
+          if (m <= 45) {
+            // [v2.8.8] 课前胶囊形态直接显示准确的分钟+秒倒计时，不再是一堆冗长文字
+            subLocation = countdownStr;
+            progressPercent = (((45 - m) / 45) * 100).clamp(0, 100).toInt();
             showProgress = true;
 
-            if (minutesUntil <= 10) {
-              title = '马上开始 ($minutesUntil分钟后)';
+            if (m <= 10) {
+              title = '马上开始 ($m分钟后)';
             } else {
-              title = '即将上课 ($minutesUntil分钟后)';
+              title = '即将上课 ($m分钟后)';
             }
             body = '${_currentCourse!.name} ${_currentCourse!.location} $startStr 开始';
           } else {
-            // 课前30分钟以上
+            // 课前45分钟以上
             title = '下节课 ($startStr)';
             body = '${_currentCourse!.name} ${_currentCourse!.location}';
-            subLocation = '${_currentCourse!.location} $startStr';
+            subLocation = startStr;
             showProgress = false;
           }
         } else {
-          // 非今日课程（明日、后天或下周预告）
+          // 非今日课程（明日、后天或之后日程）
           final startDate = DateTime(start.year, start.month, start.day);
-          final nowDate = DateTime(now.year, now.month, now.day);
-          final dayDiff = startDate.difference(nowDate).inDays;
-
-          if (dayDiff == 1) {
-            // [v2.8.7] 明日课程：胶囊与标题严格规范为 "明天X节课"，杜绝 "明天课程"
-            final tomorrowCourses = _getTomorrowCourses(now);
-            final count = tomorrowCourses.isNotEmpty ? tomorrowCourses.length : 1;
-            title = '明天${count}节课';
-            subLocation = '明天${count}节课';
-            body = '首节 $startStr ${_currentCourse!.name} ${_currentCourse!.location}';
-          } else {
-            final relDay = _formatRelativeDate(start, now);
-            title = '$relDay课程';
-            body = '${_currentCourse!.name} $startStr ${_currentCourse!.location}';
-            subLocation = '$relDay $startStr';
-          }
+          final targetCourses = _getCoursesForDate(startDate);
+          final count = targetCourses.isNotEmpty ? targetCourses.length : 1;
+          final relDay = _formatRelativeDate(start, now);
+          // [v2.8.8] 严格格式化为 "明天X节课" / "后天X节课" / "周X几节课"，绝不出现 "后天课程"
+          title = '$relDay${count}节课';
+          subLocation = '$relDay${count}节课';
+          body = '首节 $startStr ${_currentCourse!.name} ${_currentCourse!.location}';
           showProgress = false;
         }
 
