@@ -94,7 +94,7 @@ class LiquidCard extends StatelessWidget {
             ambientStrength: 0.45,
             saturation: 1.25,
             bodyMode: GlassBodyMode.adaptive,
-            edgeAbsorption: 0.18,
+            edgeAbsorption: 0.0, // [v2.8.9] 消除边缘吸光暗角
             ambientRim: 0.0,
             fresnelStrength: 0.05,
             specularSharpness: GlassSpecularSharpness.medium,
@@ -103,7 +103,7 @@ class LiquidCard extends StatelessWidget {
             ? GlassSettingsHelper.panelSettings
             : GlassSettingsHelper.defaultSettings).copyWith(
                 bodyMode: GlassBodyMode.adaptive,
-                edgeAbsorption: 0.18,
+                edgeAbsorption: 0.0, // [v2.8.9] 消除边缘吸光暗角
                 ambientRim: 0.0,
                 fresnelStrength: 0.05,
                 specularSharpness: GlassSpecularSharpness.medium,
@@ -503,10 +503,8 @@ class HyperOSCard extends StatelessWidget {
         ? Color.alphaBlend(primary.withValues(alpha: 0.10), const Color(0xB81C2028))
         : Color.alphaBlend(primary.withValues(alpha: 0.08), const Color(0xC4FFFFFF));
 
-    // 如果指定了自定义颜色（例如课程卡片自定义染色），将其与基底进行自然半透明混合
-    final effectiveColor = color != null
-        ? Color.alphaBlend(color!.withValues(alpha: isDark ? 0.35 : 0.28), defaultBgColor)
-        : defaultBgColor;
+    // 如果指定了自定义颜色（例如课程卡片自定义整卡染色），直接应用；否则使用默认半透明丙烯酸底色
+    final effectiveColor = color ?? defaultBgColor;
 
     // [v2.8.9] 字体颜色根据最终背景计算明度（computeLuminance），确保黑白高对比 100% 极速自适应
     final lum = effectiveColor.computeLuminance();

@@ -121,7 +121,7 @@ class TabletSideBar extends StatelessWidget {
             thickness: 18.0,
             ambientRim: 0.06,
             fresnelStrength: 0.15,
-            edgeAbsorption: 0.15,
+            edgeAbsorption: 0.0,
           ),
           shape: const LiquidRoundedSuperellipse(borderRadius: 16),
           child: Icon(

@@ -54,6 +54,47 @@ def format_size(bytes_size):
         bytes_size /= 1024.0
     return f"{bytes_size:.2f} TB"
 
+def find_aapt():
+    candidate_dirs = [
+        r"D:\Users\26390\AppData\Android\build-tools",
+        os.path.expandvars(r"%LOCALAPPDATA%\Android\Sdk\build-tools"),
+    ]
+    local_props = os.path.join(ROOT_DIR, 'android', 'local.properties')
+    if os.path.exists(local_props):
+        try:
+            with open(local_props, 'r', encoding='utf-8') as f:
+                for line in f:
+                    if line.startswith('sdk.dir='):
+                        sdk_dir = line.split('=', 1)[1].strip().replace('\\\\', '\\')
+                        candidate_dirs.insert(0, os.path.join(sdk_dir, 'build-tools'))
+        except Exception:
+            pass
+    for base in candidate_dirs:
+        if os.path.exists(base):
+            try:
+                for entry in sorted(os.listdir(base), reverse=True):
+                    aapt_path = os.path.join(base, entry, 'aapt.exe')
+                    if os.path.exists(aapt_path):
+                        return aapt_path
+            except Exception:
+                pass
+    return shutil.which('aapt')
+
+def get_apk_badging(apk_path, aapt_exe):
+    if not aapt_exe or not os.path.exists(aapt_exe):
+        return None, None
+    import subprocess
+    try:
+        res = subprocess.run([aapt_exe, 'dump', 'badging', apk_path], capture_output=True, text=True, errors='ignore')
+        m_ver = re.search(r"versionName='([^']+)'", res.stdout)
+        m_code = re.search(r"versionCode='([^']+)'", res.stdout)
+        ver = m_ver.group(1) if m_ver else None
+        code = m_code.group(1) if m_code else None
+        return ver, code
+    except Exception as e:
+        print(f"[警告] 读取 APK badging 失败: {e}")
+        return None, None
+
 def collect_android_apks(version, build):
     apk_dir = os.path.join(ROOT_DIR, 'build', 'app', 'outputs', 'flutter-apk')
     if not os.path.exists(apk_dir):
@@ -61,30 +102,59 @@ def collect_android_apks(version, build):
         return []
 
     collected = []
-    now = datetime.now().timestamp()
-    
+    aapt_exe = find_aapt()
+    if aapt_exe:
+        print(f"[工具] 找到 aapt 工具: {aapt_exe}")
+    else:
+        print(f"[警告] 未找到 aapt 工具，将仅依赖修改时间进行收集")
+
     arm64_src = os.path.join(apk_dir, 'app-arm64-v8a-release.apk')
     universal_src = os.path.join(apk_dir, 'app-release.apk')
-    
-    universal_fresh = os.path.exists(universal_src) and (now - os.path.getmtime(universal_src)) < 7200
-    arm64_fresh = os.path.exists(arm64_src) and (now - os.path.getmtime(arm64_src)) < 7200
-    
-    effective_arm64_src = None
-    if arm64_fresh:
-        effective_arm64_src = arm64_src
-    elif universal_fresh:
-        effective_arm64_src = universal_src
+
+    # 清理 release/ 中已存在的同版本旧包，避免混淆残留
+    if os.path.exists(RELEASE_DIR):
+        for fname in os.listdir(RELEASE_DIR):
+            if fname.startswith(f"CourseWidgets-v{version}-android-"):
+                try:
+                    os.remove(os.path.join(RELEASE_DIR, fname))
+                except Exception:
+                    pass
 
     targets = []
-    if effective_arm64_src:
-        targets.append((effective_arm64_src, f"CourseWidgets-v{version}-android-arm64-v8a.apk"))
-    if universal_fresh:
-        targets.append((universal_src, f"CourseWidgets-v{version}-android-universal.apk"))
-        
+
+    # 1. 严格校验并收集 arm64-v8a
+    if os.path.exists(arm64_src):
+        apk_ver, apk_code = get_apk_badging(arm64_src, aapt_exe)
+        print(f"[APK 校验] arm64-v8a: versionName={apk_ver}, versionCode={apk_code}, 目标预期={version}+{build}")
+        if apk_ver is not None:
+            if apk_ver == version:
+                targets.append((arm64_src, f"CourseWidgets-v{version}-android-arm64-v8a.apk"))
+            else:
+                print(f"[严重错误] arm64-v8a APK 版本号 ({apk_ver}) 与预期 ({version}) 不一致，严禁收集陈旧脏包！")
+        else:
+            # aapt 不可用时的保护
+            targets.append((arm64_src, f"CourseWidgets-v{version}-android-arm64-v8a.apk"))
+    else:
+        print(f"[提示] 未找到 arm64-v8a 构建产物: {arm64_src}")
+
+    # 2. 严格校验并收集 universal
+    if os.path.exists(universal_src):
+        apk_ver, apk_code = get_apk_badging(universal_src, aapt_exe)
+        print(f"[APK 校验] universal: versionName={apk_ver}, versionCode={apk_code}, 目标预期={version}+{build}")
+        if apk_ver is not None:
+            if apk_ver == version:
+                targets.append((universal_src, f"CourseWidgets-v{version}-android-universal.apk"))
+            else:
+                print(f"[严重错误] universal APK 版本号 ({apk_ver}) 与预期 ({version}) 不一致，严禁收集陈旧脏包！")
+        else:
+            targets.append((universal_src, f"CourseWidgets-v{version}-android-universal.apk"))
+    else:
+        print(f"[提示] 未找到 universal 构建产物: {universal_src}")
+
     for src_path, target_name in targets:
         dst_path = os.path.join(RELEASE_DIR, target_name)
         shutil.copy2(src_path, dst_path)
-        
+
         size = os.path.getsize(dst_path)
         sha = calculate_sha256(dst_path)
         collected.append({
@@ -97,7 +167,7 @@ def collect_android_apks(version, build):
             'sha256': sha,
             'updated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         })
-        print(f"[OK] 已收集 Android APK: {target_name} ({format_size(size)})")
+        print(f"[OK] 已收集并校验 Android APK: {target_name} ({format_size(size)})")
 
     return collected
 

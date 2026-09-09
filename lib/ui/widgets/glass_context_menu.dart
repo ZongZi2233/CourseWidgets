@@ -32,7 +32,7 @@ class GlassContextMenu extends StatelessWidget {
         refractiveIndex: 1.25,
         ambientRim: 0.05,
         fresnelStrength: 0.12,
-        edgeAbsorption: 0.15,
+        edgeAbsorption: 0.0,
         glassColor: Color.fromRGBO(255, 255, 255, 0.10),
       ),
       items: items.map((item) {
