@@ -466,6 +466,11 @@ class DatabaseHelper {
       sb.write('END:STANDARD\r\n');
       sb.write('END:VTIMEZONE\r\n');
 
+      final configDataStr = result.first['config_data'] as String?;
+      if (configDataStr != null && configDataStr.isNotEmpty) {
+        sb.write('X-SCHEDULE-CONFIG:$configDataStr\r\n');
+      }
+
       int uid = 0;
       for (final evt in events) {
         final start = DateTime.fromMillisecondsSinceEpoch(evt.startTime);

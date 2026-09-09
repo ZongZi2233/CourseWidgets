@@ -18,12 +18,14 @@ class OnboardingTheme extends StatefulWidget {
   final VoidCallback onComplete;
   final VoidCallback onBack;
   final bool isLastPage;
+  final bool showBackButton;
 
   const OnboardingTheme({
     super.key,
     required this.onComplete,
     required this.onBack,
-    this.isLastPage = true,
+    this.isLastPage = false,
+    this.showBackButton = false,
   });
 
   @override
@@ -34,13 +36,19 @@ class _OnboardingThemeState extends State<OnboardingTheme> {
   final StorageService _storage = StorageService();
   final theme.ThemeService _themeService = theme.ThemeService();
 
-  theme.ThemeMode _selectedThemeMode = theme.ThemeMode.defaultMode;
+  theme.ThemeMode _selectedThemeMode = theme.ThemeMode.monet;
   bool _liveActivitiesEnabled = true;
 
   @override
   void initState() {
     super.initState();
     _liveActivitiesEnabled = NotificationManager().isLiveActivitiesEnabled;
+    final savedModeStr = _storage.getString(StorageService.keyThemeMode);
+    if (savedModeStr != null) {
+      _selectedThemeMode = _themeService.themeMode;
+    } else {
+      _selectedThemeMode = theme.ThemeMode.monet;
+    }
   }
 
   @override
@@ -217,20 +225,79 @@ class _OnboardingThemeState extends State<OnboardingTheme> {
                             decoration: TextDecoration.none,
                           ),
                         ),
-                        const SizedBox(height: 16),
-                        liquid.LiquidButton(
-                          text: '选择背景图片',
-                          onTap: _pickBackgroundImage,
-                          color: Colors.blue,
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          '可以稍后在设置中更改',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: GlassSettingsHelper.getSecondaryTextColor(),
-                            decoration: TextDecoration.none,
-                          ),
+                        const SizedBox(height: 14),
+                        ValueListenableBuilder<String?>(
+                          valueListenable: globalBackgroundPath,
+                          builder: (context, path, _) {
+                            final hasCustomBg = path != null && path.isNotEmpty;
+                            return InkWell(
+                              onTap: _pickBackgroundImage,
+                              borderRadius: BorderRadius.circular(16),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 14,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isDark
+                                      ? const Color(0x22FFFFFF)
+                                      : const Color(0x12000000),
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: isDark
+                                        ? const Color(0x33FFFFFF)
+                                        : const Color(0x22000000),
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 42,
+                                      height: 42,
+                                      decoration: BoxDecoration(
+                                        color: AppThemeColors.babyPink.withValues(alpha: 0.2),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Icon(
+                                        Icons.image_rounded,
+                                        color: AppThemeColors.babyPink,
+                                        size: 24,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 14),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            hasCustomBg ? '已设置自定义壁纸' : '使用内置精美壁纸',
+                                            style: TextStyle(
+                                              fontSize: 15,
+                                              fontWeight: FontWeight.w600,
+                                              color: GlassSettingsHelper.getTextColor(),
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            hasCustomBg ? '点击更换相册壁纸' : '点击选择相册或本地壁纸',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: GlassSettingsHelper.getSecondaryTextColor(),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Icon(
+                                      Icons.chevron_right_rounded,
+                                      color: GlassSettingsHelper.getSecondaryTextColor(),
+                                      size: 22,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
                         ),
                       ],
                     ),
@@ -285,7 +352,7 @@ class _OnboardingThemeState extends State<OnboardingTheme> {
               ),
             ),
 
-            // 3. 底部浮动 Navigation 按钮栏（纯透光液态按钮，无厚重不透明底托）
+            // 3. 底部浮动 Navigation 按钮栏（纯透光液态按钮 Row 布局）
             Positioned(
               bottom: 0,
               left: 0,
@@ -294,19 +361,24 @@ class _OnboardingThemeState extends State<OnboardingTheme> {
                 top: false,
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
+                  child: Row(
                     children: [
-                      liquid.LiquidButton(
-                        text: widget.isLastPage ? '完成设置' : '下一步',
-                        onTap: _completeOnboarding,
-                        color: AppThemeColors.babyPink,
-                      ),
-                      const SizedBox(height: 8),
-                      liquid.LiquidButton(
-                        text: '上一步',
-                        onTap: widget.onBack,
-                        color: Colors.white.withValues(alpha: 0.2),
+                      if (widget.showBackButton) ...[
+                        Expanded(
+                          child: liquid.LiquidButton(
+                            text: '上一步',
+                            onTap: widget.onBack,
+                            color: Colors.white.withValues(alpha: 0.2),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                      ],
+                      Expanded(
+                        child: liquid.LiquidButton(
+                          text: widget.isLastPage ? '完成设置' : '下一步',
+                          onTap: _completeOnboarding,
+                          color: AppThemeColors.babyPink,
+                        ),
                       ),
                     ],
                   ),
@@ -332,15 +404,6 @@ class _OnboardingThemeState extends State<OnboardingTheme> {
       onTap: () async {
         HapticFeedback.selectionClick();
 
-        // [v2.3.0修复] 莫奈取色需要先选择背景图片
-        if (mode == theme.ThemeMode.monet &&
-            globalBackgroundPath.value == null) {
-          if (mounted) {
-            LiquidToast.info(context, '请先选择背景图片');
-          }
-          return;
-        }
-
         // [v2.3.0] 自定义主题色需要打开颜色选择器
         if (mode == theme.ThemeMode.custom) {
           await _showColorPicker();
@@ -349,7 +412,6 @@ class _OnboardingThemeState extends State<OnboardingTheme> {
 
         setState(() => _selectedThemeMode = mode);
 
-        // [v2.3.0修复] 立即应用主题色
         debugPrint('🎨 用户选择主题: $mode');
         await _themeService.setThemeMode(mode);
         debugPrint('✅ 主题模式已设置: $mode, 当前颜色: ${_themeService.primaryColor}');
@@ -358,9 +420,11 @@ class _OnboardingThemeState extends State<OnboardingTheme> {
           await _themeService.applySystemTheme(context);
           debugPrint('✅ 系统主题已应用: ${_themeService.primaryColor}');
         } else if (mode == theme.ThemeMode.monet) {
-          final bgPath = globalBackgroundPath.value ?? 'asset:assets/Light.png';
+          final isDark = Theme.of(context).brightness == Brightness.dark;
+          final defaultAsset = isDark ? 'asset:assets/Dark.png' : 'asset:assets/Light.png';
+          final bgPath = globalBackgroundPath.value ?? defaultAsset;
           await _themeService.extractColorsFromImage(bgPath);
-          debugPrint('✅ 莫奈取色已应用: ${_themeService.primaryColor}');
+          debugPrint('✅ 莫奈取色已自动应用: ${_themeService.primaryColor}');
         }
 
         if (mounted) {

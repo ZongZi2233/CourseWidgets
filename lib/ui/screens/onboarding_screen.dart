@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/onboarding_service.dart';
-import 'onboarding_welcome.dart';
 import 'onboarding_config.dart';
 import 'onboarding_import.dart';
 import 'onboarding_theme.dart';
 
-/// [v2.2.8] 首次启动引导主框架
+/// [v2.2.8/v2.9.0] 首次启动引导主框架
 class OnboardingScreen extends StatefulWidget {
   final VoidCallback onComplete;
 
@@ -29,7 +28,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   void _nextPage() {
-    if (_currentPage < 3) {
+    if (_currentPage < 2) {
       HapticFeedback.selectionClick();
       _pageController.animateToPage(
         _currentPage + 1,
@@ -77,25 +76,26 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           setState(() => _currentPage = index);
         },
         children: [
-          // 第一页：欢迎页
-          OnboardingWelcome(onNext: _nextPage),
-
-          // 第二页：主题设置 (改版调至第二)
+          // 第一步：个性化主题设置
           OnboardingTheme(
             onComplete: _nextPage,
             onBack: _previousPage,
-            isLastPage:
-                false, // [v2.6.0] 增设一个非最后一页的状态参数（需要在onboarding_theme里处理一下，这里若未实现就保持UI原样，只换逻辑）
+            isLastPage: false,
+            showBackButton: false,
           ),
 
-          // 第三页：课时配置
-          OnboardingConfig(onNext: _nextPage, onBack: _previousPage),
-
-          // 第四页：导入课表
+          // 第二步：导入课表
           OnboardingImport(
-            onNext: _completeOnboarding, // [v2.6.0] 改为完成引导
+            onNext: _nextPage,
             onBack: _previousPage,
-            isLastPage: true, // [v2.6.0] 告诉导入页它是最后一页
+            isLastPage: false,
+          ),
+
+          // 第三步：课时配置与时间确认
+          OnboardingConfig(
+            onNext: _completeOnboarding,
+            onBack: _previousPage,
+            isLastPage: true,
           ),
         ],
       ),

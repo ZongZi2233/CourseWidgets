@@ -30,7 +30,7 @@ class ThemeService extends ChangeNotifier {
   // 当前主题色
   Color _primaryColor = defaultPrimaryColor;
   Color _secondaryColor = defaultSecondaryColor;
-  ThemeMode _themeMode = ThemeMode.defaultMode;
+  ThemeMode _themeMode = ThemeMode.monet; // [v2.9.0] 莫奈取色设为默认色彩模式
 
   // Getters
   Color get primaryColor => _primaryColor;
@@ -55,17 +55,22 @@ class ThemeService extends ChangeNotifier {
     if (savedMode != null) {
       _themeMode = ThemeMode.values.firstWhere(
         (e) => e.name == savedMode,
-        orElse: () => ThemeMode.defaultMode,
+        orElse: () => ThemeMode.monet,
       );
+    } else {
+      _themeMode = ThemeMode.monet;
     }
 
-    // [v2.2.9修复] 根据保存的模式恢复颜色
+    // [v2.9.0] 恢复颜色或从壁纸提取默认莫奈色调
     if (_themeMode == ThemeMode.monet) {
       final savedColor = _storage.getInt(StorageService.keyCustomThemeColor);
       if (savedColor != null) {
         _primaryColor = Color(savedColor);
         _secondaryColor = _generateSecondaryColor(_primaryColor);
         debugPrint('✅ 恢复莫奈取色: $_primaryColor');
+      } else {
+        final bgPath = globalBackgroundPath.value ?? (isDarkMode ? 'asset:assets/Dark.png' : 'asset:assets/Light.png');
+        await extractColorsFromImage(bgPath);
       }
     } else if (_themeMode == ThemeMode.defaultMode) {
       _primaryColor = defaultPrimaryColor;

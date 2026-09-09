@@ -30,13 +30,22 @@ class CourseEvent {
 
   // 从 Map 创建对象
   factory CourseEvent.fromMap(Map<String, dynamic> map) {
+    int parseTime(dynamic v) {
+      if (v is int) return v;
+      if (v is num) return v.toInt();
+      if (v is String) return int.tryParse(v) ?? 0;
+      return 0;
+    }
+
     return CourseEvent(
-      id: map['id'],
-      name: map['name'],
-      location: map['location'] ?? '',
-      teacher: map['teacher'] ?? '',
-      startTime: map['startTime'],
-      endTime: map['endTime'],
+      id: (map['id'] is num)
+          ? (map['id'] as num).toInt()
+          : (map['id'] is String ? int.tryParse(map['id']) : null),
+      name: map['name']?.toString() ?? '',
+      location: map['location']?.toString() ?? '',
+      teacher: map['teacher']?.toString() ?? '',
+      startTime: parseTime(map['startTime']),
+      endTime: parseTime(map['endTime']),
     );
   }
 

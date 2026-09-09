@@ -15,7 +15,11 @@ class DataImportService {
   /// 选择ICS文件并导入
   Future<List<CourseEvent>?> importFromIcsFile() async {
     try {
-      const typeGroup = XTypeGroup(label: 'ics', extensions: ['ics']);
+      const typeGroup = XTypeGroup(
+        label: 'ics',
+        extensions: ['ics'],
+        mimeTypes: ['text/calendar', 'text/x-vcalendar', 'text/*'],
+      );
 
       final file = await openFile(acceptedTypeGroups: [typeGroup]);
 
@@ -23,15 +27,7 @@ class DataImportService {
         return null;
       }
 
-      String icsContent;
-
-      if (kIsWeb) {
-        // Web平台需要特殊处理
-        final bytes = await file.readAsBytes();
-        icsContent = String.fromCharCodes(bytes);
-      } else {
-        icsContent = await File(file.path).readAsString();
-      }
+      final icsContent = await file.readAsString();
 
       // 解析ICS内容
       final courses = IcsParser.parse(icsContent);
@@ -66,7 +62,11 @@ class DataImportService {
   /// 选择HTML文件并导入
   Future<List<CourseEvent>?> importFromHtmlFile() async {
     try {
-      const typeGroup = XTypeGroup(label: 'html', extensions: ['html', 'json']);
+      const typeGroup = XTypeGroup(
+        label: 'html',
+        extensions: ['html', 'htm', 'json'],
+        mimeTypes: ['text/html', 'application/json', 'text/*'],
+      );
 
       final file = await openFile(acceptedTypeGroups: [typeGroup]);
 
@@ -74,15 +74,7 @@ class DataImportService {
         return null;
       }
 
-      String htmlContent;
-
-      if (kIsWeb) {
-        // Web平台需要特殊处理
-        final bytes = await file.readAsBytes();
-        htmlContent = String.fromCharCodes(bytes);
-      } else {
-        htmlContent = await File(file.path).readAsString();
-      }
+      final htmlContent = await file.readAsString();
 
       // [v2.8.9] 自动嗅探：若用户选择了 JSON 课表文件，自动分流至 JSON 原生导入器
       final trimmed = htmlContent.trim();
@@ -610,20 +602,18 @@ class DataImportService {
     }
   }
 
-  /// [v2.8.9] 选择 JSON 文件并导入课表与课时时间设置
+  /// [v2.9.0] 选择 JSON 文件并导入课表与课时时间设置
   Future<List<CourseEvent>?> importFromJsonFile() async {
     try {
-      const typeGroup = XTypeGroup(label: 'json', extensions: ['json']);
+      const typeGroup = XTypeGroup(
+        label: 'json',
+        extensions: ['json'],
+        mimeTypes: ['application/json', 'text/*'],
+      );
       final file = await openFile(acceptedTypeGroups: [typeGroup]);
       if (file == null) return null;
 
-      String jsonString;
-      if (kIsWeb) {
-        final bytes = await file.readAsBytes();
-        jsonString = String.fromCharCodes(bytes);
-      } else {
-        jsonString = await File(file.path).readAsString();
-      }
+      final jsonString = await file.readAsString();
 
       return await importFromJsonString(jsonString);
     } catch (e) {

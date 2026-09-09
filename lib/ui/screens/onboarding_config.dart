@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
+import '../../constants/theme_constants.dart';
 import '../../utils/glass_settings_helper.dart';
 import '../widgets/liquid_components.dart' as liquid;
 import 'android_schedule_config_screen.dart';
 
-/// [v2.2.8/v2.8.7] 引导页面 - 课时配置
+/// [v2.2.8/v2.9.0] 引导页面 - 课时配置
 /// 复用现有的课时配置页面，并支持自动持久化与统一液态玻璃折射
 class OnboardingConfig extends StatelessWidget {
   final VoidCallback onNext;
   final VoidCallback onBack;
+  final bool isLastPage;
   final GlobalKey<AndroidScheduleConfigScreenState> _configKey =
       GlobalKey<AndroidScheduleConfigScreenState>();
 
@@ -16,11 +18,11 @@ class OnboardingConfig extends StatelessWidget {
     super.key,
     required this.onNext,
     required this.onBack,
+    this.isLastPage = true,
   });
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Material(
@@ -121,13 +123,13 @@ class OnboardingConfig extends StatelessWidget {
                         const SizedBox(width: 16),
                         Expanded(
                           child: liquid.LiquidButton(
-                            text: '下一步',
+                            text: isLastPage ? '开始使用' : '下一步',
                             onTap: () {
-                              // [v2.8.7] 显式触发课时配置静默保存并更新课表
+                              // [v2.9.0] 显式触发课时配置静默保存并更新课表
                               _configKey.currentState?.saveConfigFromParent();
                               onNext();
                             },
-                            color: Colors.blue,
+                            color: AppThemeColors.babyPink,
                           ),
                         ),
                       ],

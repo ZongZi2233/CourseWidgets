@@ -38,12 +38,10 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
   }
 
   Future<void> _loadSettings() async {
-    final darkMode = _storage.getBool(StorageService.keyDarkMode) ?? false;
     final adaptiveMode =
         _storage.getBool(StorageService.keyAdaptiveDarkMode) ?? false;
 
     setState(() {
-      globalUseDarkMode = darkMode;
       _adaptiveDarkMode = adaptiveMode;
       _currentThemeMode = _themeService.themeMode;
     });
@@ -234,20 +232,17 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
           return;
         }
 
-        // [v2.5.2修复] 莫奈取色：如果当前无背景，直接唤起相册，并且在选择后自动切换为莫奈模式
-        if (mode == theme.ThemeMode.monet &&
-            globalBackgroundPath.value == null) {
-          Navigator.pop(context);
-          await _pickBackgroundImage();
-
-          if (globalBackgroundPath.value != null) {
-            setState(() => _currentThemeMode = theme.ThemeMode.monet);
-            await _themeService.setThemeMode(theme.ThemeMode.monet);
-            await _themeService.extractColorsFromImage(
-              globalBackgroundPath.value!,
-            );
-            if (mounted) setState(() {});
-            _showToast('已应用背景并切换为莫奈取色');
+        // [v2.9.0] 莫奈取色：直接从当前背景或内置壁纸提取颜色，严禁弹出相册
+        if (mode == theme.ThemeMode.monet) {
+          setState(() => _currentThemeMode = theme.ThemeMode.monet);
+          await _themeService.setThemeMode(theme.ThemeMode.monet);
+          final bgPath = globalBackgroundPath.value ??
+              (_isDarkMode ? 'asset:assets/Dark.png' : 'asset:assets/Light.png');
+          await _themeService.extractColorsFromImage(bgPath);
+          if (mounted) {
+            setState(() {});
+            Navigator.pop(context);
+            _showToast('已切换为莫奈取色');
           }
           return;
         }
@@ -257,11 +252,6 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
 
         if (mode == theme.ThemeMode.system && Platform.isAndroid && mounted) {
           await _themeService.applySystemTheme(context);
-        } else if (mode == theme.ThemeMode.monet &&
-            globalBackgroundPath.value != null) {
-          await _themeService.extractColorsFromImage(
-            globalBackgroundPath.value!,
-          );
         }
 
         setState(() {});

@@ -64,6 +64,11 @@ class SmoothSlideTransitionsBuilder extends PageTransitionsBuilder {
       ),
     );
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final frostedBg = isDark
+        ? const Color(0xEB101216)
+        : const Color(0xF2F4F6F9);
+
     Widget transitionChild = SlideTransition(
       position: inSlide,
       child: FadeTransition(
@@ -72,21 +77,17 @@ class SmoothSlideTransitionsBuilder extends PageTransitionsBuilder {
           position: secondarySlide,
           child: ScaleTransition(
             scale: secondaryScale,
-            child: child,
+            child: (!route.opaque)
+                ? DecoratedBox(
+                    decoration: BoxDecoration(color: frostedBg),
+                    child: child,
+                  )
+                : child,
           ),
         ),
       ),
     );
 
-    // [v2.9.8] 模糊渲染：全平台统一使用 BackdropFilter
-    //
-    // 为什么不能用 ImageFiltered(RawImage(截图))？
-    // 因为它是 Stack 中的兄弟元素，会被滑入的二级页面内容完全遮盖，
-    // 用户根本看不到。而 BackdropFilter 作用于渲染树的 **底层背景**，
-    // 即透过透明路由(opaque=false)看到的首页内容。
-    // 即使二级页面铺满全屏，透过玻璃控件的半透明区域仍能看到模糊效果。
-    //
-    // 性能：移动端 sigma 降为 10，减少 GPU 采样负担。
     if (route.opaque) {
       // 首页 (opaque=true)：不渲染任何遮罩
       return transitionChild;
@@ -94,12 +95,6 @@ class SmoothSlideTransitionsBuilder extends PageTransitionsBuilder {
 
     // === 二级/三级页面 (opaque=false) 的转场渲染 ===
     final bool isMobile = Platform.isAndroid || Platform.isIOS;
-    // [v2.8.3 性能与视觉重构]
-    // 1. 彻底解决“进入三级页面后变暗特别明显”：
-    //    此前硬编码 ColoredBox(color: Colors.black26) 在层级推入时会双重/三重叠加大面积变黑。
-    //    现改用极清透遮罩 (0.05)，并在 secondaryAnimation（推入下级页面）时自动淡出本级遮罩，保证无论推入多少层画面均保持纯净通透。
-    // 2. 彻底解决“切入切出很卡”：
-    //    移动端转场滑入期间严禁全屏 BackdropFilter，消除 GPU 逐帧分配 FBO 造成的 120Hz 掉帧。
     final scrimAnimation = CurvedAnimation(
       parent: animation,
       curve: const Interval(0.0, 1.0, curve: Curves.easeIn),
@@ -112,18 +107,32 @@ class SmoothSlideTransitionsBuilder extends PageTransitionsBuilder {
 
     final veil = Positioned.fill(
       child: AnimatedBuilder(
-        animation: Listenable.merge([animation, secondaryAnimation]),
+        animation: Listenable.merge([animation, secondaryAnimation, PageBlurController.instance]),
         builder: (context, _) {
-          final effectiveAlpha = scrimAnimation.value * secondaryFade.value * 0.05;
+          final effectiveAlpha = scrimAnimation.value * secondaryFade.value;
           if (effectiveAlpha <= 0.002) return const SizedBox.shrink();
 
+          if (PageBlurController.instance.hasCapture) {
+            return Opacity(
+              opacity: effectiveAlpha.clamp(0.0, 1.0),
+              child: ImageFiltered(
+                imageFilter: ImageFilter.blur(sigmaX: 16.0, sigmaY: 16.0),
+                child: RawImage(
+                  image: PageBlurController.instance.capturedImage,
+                  fit: BoxFit.cover,
+                ),
+              ),
+            );
+          }
+
           final scrimWidget = ColoredBox(
-            color: Colors.black.withValues(alpha: effectiveAlpha),
+            color: (isDark ? Colors.black : const Color(0xFF666666))
+                .withValues(alpha: effectiveAlpha * 0.25),
           );
 
           if (!isMobile) {
             return BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 3.0, sigmaY: 3.0),
+              filter: ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
               child: scrimWidget,
             );
           }
@@ -186,8 +195,8 @@ class TransparentMaterialPageRoute<T> extends MaterialPageRoute<T> {
 
   @override
   TickerFuture didPush() {
-    // [v2.7.2 性能优化] 严禁在转场刚启动时同步捕获 RepaintBoundary 截图（GPU 回读会阻塞 UI 线程导致掉帧）
-    // 全平台统一由 SmoothSlideTransitionsBuilder 中的 BackdropFilter 负责背景微模糊
+    // [v2.9.0] 触发一次静态模糊截图，供次级转场底层平滑展示，彻底杜绝文字穿透与叠化
+    PageBlurController.instance.capture(contentBoundaryKey);
     return super.didPush();
   }
 

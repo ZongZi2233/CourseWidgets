@@ -157,15 +157,15 @@ class _LiquidToastWidgetState extends State<_LiquidToastWidget>
               child: GlassContainer(
                 useOwnLayer: true, // [v2.8.9] 独立离屏折射图层，真实折射底层页面内容
                 shape: const LiquidRoundedSuperellipse(borderRadius: 16),
-                settings: LiquidGlassSettings(
-                  glassColor: _getColor().withValues(alpha: 0.20),
+                settings: const LiquidGlassSettings(
+                  glassColor: Color(0x1AFFFFFF), // [v2.9.0] 纯净无色中性液态玻璃，拒绝人造绿色/暗色浑浊染色
                   blur: 2.5,
                   thickness: 20.0,
                   refractiveIndex: 1.45,
                   lightIntensity: 0.70,
                   ambientStrength: 0.45,
-                  ambientRim: 0.0, // [v2.8.9] 彻底消除黑边与暗角
-                  edgeAbsorption: 0.0, // [v2.8.9] 消除边缘发黑吸光
+                  ambientRim: 0.0, // [v2.9.0] 彻底消除黑边与暗角
+                  edgeAbsorption: 0.0, // [v2.9.0] 消除边缘发黑吸光
                   fresnelStrength: 0.05,
                   saturation: 1.20,
                 ),

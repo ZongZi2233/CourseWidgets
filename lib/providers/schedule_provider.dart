@@ -248,30 +248,26 @@ class ScheduleProvider with ChangeNotifier {
       if (courses.isNotEmpty) {
         _courses = courses;
 
-        // [v2.8.9] 智能校准课时配置：根据实际课程起止时间智能推导，消除时间轴与课程卡片错位
-        try {
-          final deduced = IcsParser.deduceConfigFromCourses(_courses, '');
-          if (deduced != null) {
-            bool needUpdate = false;
-            if (_currentConfig.sectionStartTimes[1] != deduced.sectionStartTimes[1] ||
-                _currentConfig.sectionStartTimes.length < 12) {
-              needUpdate = true;
-            }
-            if (needUpdate) {
+        // [v2.9.0] 仅在用户从未保存过课时配置时自动智能推导，绝不覆盖用户自定义课时
+        if (savedConfig == null) {
+          try {
+            final deduced = IcsParser.deduceConfigFromCourses(_courses, '');
+            if (deduced != null) {
               _currentConfig = _currentConfig.copyWith(
                 sectionStartTimes: deduced.sectionStartTimes,
                 sectionDurations: deduced.sectionDurations,
                 defaultDuration: deduced.defaultDuration,
+                showWeekends: deduced.showWeekends,
               );
               await storage.setString(
                 'schedule_config',
                 jsonEncode(_currentConfig.toJson()),
               );
-              debugPrint('🎯 课时配置已自动智能校准为真实课程起止时间！');
+              debugPrint('🎯 课时配置已自动智能校准并保存为真实课程起止时间！');
             }
+          } catch (e) {
+            debugPrint('⚠️ 智能校准课时配置失败: $e');
           }
-        } catch (e) {
-          debugPrint('⚠️ 智能校准课时配置失败: $e');
         }
 
         // [v2.8.2] 自动校准：如果课表首周与配置的目标开学周一不一致，自动平移对齐，彻底杜绝锁定在第2周

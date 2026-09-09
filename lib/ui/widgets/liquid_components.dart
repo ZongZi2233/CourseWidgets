@@ -15,9 +15,10 @@ void showNativeToast(String msg) {
   debugPrint("Toast: $msg");
 }
 
-// [修复3] Toast透明度优化 - 更透明
+// [v2.9.0] 纯净无色中性液态玻璃 Toast，消除暗角与多余黑边
 void showLiquidToast(BuildContext context, String msg) {
   final overlay = Overlay.of(context);
+  final isDark = globalDarkModeNotifier.value;
   final entry = OverlayEntry(
     builder: (context) => Positioned(
       bottom: 50,
@@ -27,16 +28,27 @@ void showLiquidToast(BuildContext context, String msg) {
         child: Material(
           color: Colors.transparent,
           child: GlassContainer(
-            shape: LiquidRoundedSuperellipse(borderRadius: 20),
+            useOwnLayer: true,
+            quality: GlassQuality.premium,
+            shape: const LiquidRoundedSuperellipse(borderRadius: 20),
             settings: LiquidGlassSettings(
-              glassColor: Colors.black.withValues(alpha: 0.4), // [修复] 降低不透明度
+              glassColor: isDark
+                  ? const Color(0x2E1E222B)
+                  : const Color(0x22FFFFFF),
               blur: 3.0,
+              thickness: 16.0,
+              lightIntensity: 0.70,
+              ambientStrength: 0.45,
+              ambientRim: 0.0,
+              edgeAbsorption: 0.0,
+              fresnelStrength: 0.05,
+              saturation: 1.20,
             ),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
               child: Text(
                 msg,
-                style: const TextStyle(color: Colors.white, fontSize: 14),
+                style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
               ),
             ),
           ),
@@ -483,11 +495,11 @@ class HyperOSCard extends StatelessWidget {
     required this.child,
     this.onTap,
     this.onLongPress,
-    this.cornerRadius = 20, // [v2.8.9] 大曲率超椭圆，对齐 LiquidGlass
+    this.cornerRadius = 24, // [v2.9.0] 超椭圆 24，对齐 LiquidRoundedSuperellipse
     this.padding = const EdgeInsets.all(12),
     this.color,
     this.contentColor,
-    this.useBlur = false, // [v2.8.9] 默认单层模糊共享架构，避免多卡片离屏模糊爆炸
+    this.useBlur = false, // [v2.9.0] 默认单层模糊共享架构，避免多卡片离屏模糊爆炸
     this.blurRadius = 10.0,
     this.feedbackType = MiuixPressFeedbackType.sink,
     this.border,
@@ -498,7 +510,7 @@ class HyperOSCard extends StatelessWidget {
     final isDark = globalDarkModeNotifier.value;
     final primary = AppThemeColors.babyPink;
 
-    // [v2.8.9] HyperOS 混色半透明丙烯酸质感：通透柔和，透出背景壁纸
+    // [v2.9.0] HyperOS 混色半透明丙烯酸质感：通透柔和，透出背景壁纸
     final defaultBgColor = isDark
         ? Color.alphaBlend(primary.withValues(alpha: 0.10), const Color(0xB81C2028))
         : Color.alphaBlend(primary.withValues(alpha: 0.08), const Color(0xC4FFFFFF));
@@ -506,12 +518,12 @@ class HyperOSCard extends StatelessWidget {
     // 如果指定了自定义颜色（例如课程卡片自定义整卡染色），直接应用；否则使用默认半透明丙烯酸底色
     final effectiveColor = color ?? defaultBgColor;
 
-    // [v2.8.9] 字体颜色根据最终背景计算明度（computeLuminance），确保黑白高对比 100% 极速自适应
+    // [v2.9.0] 字体颜色根据最终背景计算明度（computeLuminance），确保黑白高对比 100% 极速自适应
     final lum = effectiveColor.computeLuminance();
     final autoTextColor = lum > 0.45 ? const Color(0xFF1B1D24) : const Color(0xFFF2F5FA);
     final effectiveTextColor = contentColor ?? autoTextColor;
 
-    // [v2.8.9] 用户明确要求：彻底移除生硬边框（默认 BorderSide.none），纯靠柔和投影界定边界
+    // [v2.9.0] 用户明确要求：彻底移除生硬边框（默认 BorderSide.none），纯靠柔和投影界定边界
     final effectiveBorderSide = border ?? BorderSide.none;
 
     // 采用与 liquid_glass_widgets 内部一致的 RoundedSuperellipseBorder，保证曲率完全对齐统一
@@ -525,15 +537,15 @@ class HyperOSCard extends StatelessWidget {
         color: effectiveColor,
         shape: shape,
         shadows: [
-          // 第一层：轻柔弥散环境阴影
+          // 第一层：轻柔弥散环境阴影（浅色模式加强对比界定物理边界，不依赖硬边框）
           BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.28 : 0.06),
-            blurRadius: 16,
+            color: Colors.black.withValues(alpha: isDark ? 0.32 : 0.12),
+            blurRadius: 14,
             offset: const Offset(0, 4),
           ),
           // 第二层：微立体轮廓阴影
           BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.16 : 0.03),
+            color: Colors.black.withValues(alpha: isDark ? 0.18 : 0.07),
             blurRadius: 4,
             offset: const Offset(0, 1),
           ),

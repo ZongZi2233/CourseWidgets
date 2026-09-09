@@ -549,7 +549,7 @@ class _WindowsScheduleScreenState extends State<WindowsScheduleScreen> {
         padding: const EdgeInsets.all(10),
         color: cardBgColor,
         contentColor: titleColor,
-        onTap: () => _showCourseDetail(course),
+        onTap: null, // [v2.9.0] 移除主体直接展开详情，避免与底部三点操作条冲突
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

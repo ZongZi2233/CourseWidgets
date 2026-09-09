@@ -1,4 +1,3 @@
-import 'dart:ui' as ui;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -11,7 +10,6 @@ import '../../services/live_notification_service_v2.dart';
 import '../../services/data_import_service.dart';
 import '../../models/course_event.dart';
 import '../../models/schedule_config.dart';
-import '../../services/sensor_motion_service.dart';
 import '../../utils/responsive_utils.dart';
 import '../../main.dart' hide globalUseDarkMode; // [v2.6.0] 引用全局 routeObserver
 import 'course_edit_screen.dart';
@@ -19,7 +17,6 @@ import 'calendar_view_screen.dart';
 import 'settings_main_screen.dart';
 import 'android_schedule_config_screen.dart';
 import '../widgets/liquid_components.dart' as liquid;
-import '../widgets/unified_backdrop_panel.dart';
 import '../transitions/smooth_slide_transitions.dart';
 import '../widgets/glass_context_menu.dart';
 import '../widgets/tablet_sidebar.dart';
@@ -34,7 +31,6 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
     with RouteAware {
   int _currentIndex = 0;
   late final PageController _pageController = PageController();
-  bool _isLoading = true;
   bool _isBottomNavVisible = true;
   bool _isWeekPickerActive = false; // [v2.8.6] 周次选择器打开状态，用于挂起背景重绘保障 120 FPS
   final DataImportService _importService = DataImportService();
@@ -115,12 +111,12 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
       await liveService.startLiveUpdate(nextCourse, allCourses: _scheduleProvider!.courses);
 
       if (mounted) {
-        setState(() => _isLoading = false);
+        setState(() {});
       }
     } catch (e) {
       debugPrint('❌ 加载数据失败: $e');
       if (mounted) {
-        setState(() => _isLoading = false);
+        setState(() {});
       }
     }
   }
@@ -144,8 +140,8 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
         ? _buildTabletLayout(context)
         : _buildPhoneLayout(context);
 
+    // [v2.9.0] 彻底关闭陀螺仪持续重绘，提供丝滑稳定 120 FPS
     return GlassMotionScope(
-      lightAngle: SensorMotionService().angleStream,
       child: rootLayout,
     );
   }
@@ -568,30 +564,31 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                     onTap: () => _showWeekPickerSheet(context, provider),
                     behavior: HitTestBehavior.opaque,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                       decoration: BoxDecoration(
-                        color: AppThemeColors.babyPink.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(12),
+                        color: AppThemeColors.babyPink.withValues(alpha: 0.22),
+                        borderRadius: BorderRadius.circular(16),
                         border: Border.all(
-                          color: AppThemeColors.babyPink.withValues(alpha: 0.35),
-                          width: 0.8,
+                          color: AppThemeColors.babyPink.withValues(alpha: 0.45),
+                          width: 1.0,
                         ),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            '第${provider.currentWeek}周',
+                            '第 ${provider.currentWeek} 周',
                             style: const TextStyle(
                               color: Colors.white,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.2,
                             ),
                           ),
-                          const SizedBox(width: 3),
+                          const SizedBox(width: 4),
                           const Icon(
                             CupertinoIcons.chevron_down,
-                            size: 10,
+                            size: 11,
                             color: Colors.white70,
                           ),
                         ],

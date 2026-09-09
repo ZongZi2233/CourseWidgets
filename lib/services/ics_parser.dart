@@ -1,9 +1,11 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:icalendar_parser/icalendar_parser.dart';
 import 'package:rrule/rrule.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import '../models/course_event.dart';
 import '../models/schedule_config.dart';
+import 'storage_service.dart';
 
 /// ICS解析器 - 核心逻辑
 class IcsParser {
@@ -231,11 +233,29 @@ class IcsParser {
 
   /// [v2.7.0/v2.8.9] 自动从解析出的课程列表中推导 ScheduleConfigModel
   /// 返回一个新的 ScheduleConfigModel 对象，如果无法推导则返回空
+  /// [v2.7.0/v2.9.0] 自动从解析出的课程列表中推导 ScheduleConfigModel
+  /// 返回一个新的 ScheduleConfigModel 对象，如果无法推导则返回空
   static ScheduleConfigModel? deduceConfigFromCourses(
     List<CourseEvent> courses,
     String rawIcsContent,
   ) {
     if (courses.isEmpty) return null;
+
+    // 0. 优先尝试从 ICS 附带的 X-SCHEDULE-CONFIG 标签直接无损恢复全量配置
+    if (rawIcsContent.isNotEmpty) {
+      final xConfigReg = RegExp(r'X-SCHEDULE-CONFIG:(.*)');
+      final xMatch = xConfigReg.firstMatch(rawIcsContent);
+      if (xMatch != null) {
+        try {
+          final jsonStr = xMatch.group(1)!.trim();
+          final m = jsonDecode(jsonStr) as Map<String, dynamic>;
+          debugPrint('🎯 从 ICS 标签 X-SCHEDULE-CONFIG 无损恢复课时配置成功！');
+          return ScheduleConfigModel.fromJson(m);
+        } catch (e) {
+          debugPrint('⚠️ 解析 X-SCHEDULE-CONFIG 失败: $e');
+        }
+      }
+    }
 
     // 1. 推断开学日期（取最早课程所在的周一）
     CourseEvent earliestCourse = courses.first;
@@ -291,13 +311,15 @@ class IcsParser {
           final count = endSec - startSec + 1;
 
           if (totalSpan > 0 && count > 0) {
+            // 大学标准：小课间 5 分钟
+            const smallBreak = 5;
             final singleDur = count == 1
                 ? totalSpan
-                : ((totalSpan - (count - 1) * 10) / count).round().clamp(40, 60);
+                : ((totalSpan - (count - 1) * smallBreak) / count).round().clamp(40, 50);
 
             for (int s = startSec; s <= endSec; s++) {
               final offsetInBlock = s - startSec;
-              final secStart = startMin + offsetInBlock * (singleDur + 10);
+              final secStart = startMin + offsetInBlock * (singleDur + smallBreak);
               extractedStartTimes[s] = secStart;
               extractedDurations[s] = singleDur;
             }
@@ -338,60 +360,61 @@ class IcsParser {
 
       int spanSections = 1;
       if (medDur >= 75 && medDur <= 115) {
-        spanSections = 2; // 常见 2 节大课（如 90~100 分钟）
+        spanSections = 2; // 常见 2 节大课（如 90~100 分钟，45+5+45=95）
       } else if (medDur > 115 && medDur <= 165) {
-        spanSections = 3; // 3 节大课（如 135~150 分钟）
+        spanSections = 3; // 3 节大课（如 140~150 分钟）
       } else if (medDur > 165) {
         spanSections = 4;
       }
 
       int targetStartSection;
       if (sMin < 9 * 60 + 15) {
-        targetStartSection = 1; // 上午第 1 节（通常 8:00 或 8:30）
+        targetStartSection = 1; // 上午第 1 节（如 08:30 或 08:00）
       } else if (sMin < 11 * 60 + 45) {
-        targetStartSection = 3; // 上午第 3 节（通常 9:55 或 10:00）
+        targetStartSection = 3; // 上午第 3 节（如 10:20 或 10:00）
       } else if (sMin < 13 * 60 + 30) {
         targetStartSection = 5; // 中午/下午首节
       } else if (sMin < 15 * 60 + 30) {
-        targetStartSection = 5; // 下午第 5 节（通常 13:30 或 14:00）
+        targetStartSection = 5; // 下午第 5 节（如 14:00 或 13:30）
       } else if (sMin < 17 * 60 + 45) {
-        targetStartSection = 7; // 下午第 7 节（通常 15:40 或 16:00）
+        targetStartSection = 7; // 下午第 7 节（如 15:50 或 16:00）
       } else if (sMin < 19 * 60 + 45) {
-        targetStartSection = 9; // 晚间第 9 节（通常 18:30 或 19:00）
+        targetStartSection = 9; // 晚间第 9 节（如 18:30 或 19:00）
       } else {
-        targetStartSection = 11; // 晚间第 11 节（通常 20:00 或 20:30）
+        targetStartSection = 11; // 晚间第 11 节（如 20:15）
       }
 
       if (!sectionStartTimes.containsKey(targetStartSection)) {
+        const smallBreak = 5;
         final singleDur = spanSections > 1
-            ? ((medDur - (spanSections - 1) * 10) / spanSections).round().clamp(40, 50)
-            : medDur.clamp(40, 60);
+            ? ((medDur - (spanSections - 1) * smallBreak) / spanSections).round().clamp(40, 50)
+            : medDur.clamp(40, 50);
 
         for (int k = 0; k < spanSections && (targetStartSection + k) <= 13; k++) {
           final sec = targetStartSection + k;
           if (!sectionStartTimes.containsKey(sec)) {
-            sectionStartTimes[sec] = sMin + k * (singleDur + 10);
+            sectionStartTimes[sec] = sMin + k * (singleDur + smallBreak);
             sectionDurations[sec] = singleDur;
           }
         }
       }
     }
 
-    // 5. 补全未命中的其余节次（使用大学标准推算，确保 1~13 节完整且时间单调递增）
+    // 5. 补全未命中的其余节次（标准大学作息：45分课时 + 5分小课间 + 15分大课间）
     const defaultStarts = {
-      1: 480,
-      2: 535,
-      3: 600,
-      4: 655,
-      5: 840,
-      6: 895,
-      7: 960,
-      8: 1015,
-      9: 1110,
-      10: 1165,
-      11: 1220,
-      12: 1275,
-      13: 1330,
+      1: 510,  // 08:30
+      2: 560,  // 09:20 (08:30 + 45 + 5)
+      3: 620,  // 10:20 (09:20 + 45 + 15 大课间)
+      4: 670,  // 11:10 (10:20 + 45 + 5)
+      5: 840,  // 14:00 (午休后)
+      6: 890,  // 14:50 (14:00 + 45 + 5)
+      7: 950,  // 15:50 (14:50 + 45 + 15 大课间)
+      8: 1000, // 16:40 (15:50 + 45 + 5)
+      9: 1110, // 18:30 (晚自习/晚课)
+      10: 1160,// 19:20 (18:30 + 45 + 5)
+      11: 1215,// 20:15 (19:20 + 45 + 10 课间)
+      12: 1265,// 21:05 (20:15 + 45 + 5)
+      13: 1315,// 21:55 (21:05 + 45 + 5)
     };
 
     for (int i = 1; i <= 13; i++) {
@@ -399,23 +422,62 @@ class IcsParser {
         if (i > 1 && sectionStartTimes.containsKey(i - 1)) {
           final prevStart = sectionStartTimes[i - 1]!;
           final prevDur = sectionDurations[i - 1] ?? 45;
-          final isBigBreak = (i == 3 || i == 5 || i == 7 || i == 9 || i == 11);
-          final gap = isBigBreak ? 20 : 10;
+          int gap = 5;
+          if (i == 3 || i == 7) {
+            gap = 15; // 大课间 15 分钟
+          } else if (i == 5) {
+            // 午休
+            final earlistNoon = prevStart + prevDur + 60;
+            sectionStartTimes[i] = earlistNoon > 840 ? earlistNoon : 840;
+            sectionDurations[i] = 45;
+            continue;
+          } else if (i == 9) {
+            // 晚饭
+            final earlistEve = prevStart + prevDur + 60;
+            sectionStartTimes[i] = earlistEve > 1110 ? earlistEve : 1110;
+            sectionDurations[i] = 45;
+            continue;
+          } else if (i == 11) {
+            gap = 10;
+          }
           sectionStartTimes[i] = prevStart + prevDur + gap;
         } else {
-          sectionStartTimes[i] = defaultStarts[i] ?? (480 + (i - 1) * 55);
+          sectionStartTimes[i] = defaultStarts[i] ?? (510 + (i - 1) * 50);
         }
       }
       sectionDurations.putIfAbsent(i, () => 45);
     }
 
+    // 检测周末是否有课
+    bool hasWeekendCourse = false;
+    for (final c in courses) {
+      final dt = DateTime.fromMillisecondsSinceEpoch(c.startTime).toLocal();
+      if (dt.weekday == 6 || dt.weekday == 7) {
+        hasWeekendCourse = true;
+        break;
+      }
+    }
+
+    // 保留现有 MMKV 设置中的 showWeekends（若存在），避免强行重置
+    bool showWeekends = hasWeekendCourse;
+    try {
+      final storage = StorageService();
+      final savedStr = storage.getString('schedule_config');
+      if (savedStr != null) {
+        final m = jsonDecode(savedStr) as Map<String, dynamic>;
+        if (m.containsKey('showWeekends')) {
+          showWeekends = m['showWeekends'] as bool;
+        }
+      }
+    } catch (_) {}
+
     return ScheduleConfigModel(
       semesterStartDate: semesterStartDate,
       sectionStartTimes: sectionStartTimes,
       sectionDurations: sectionDurations,
-      breakTime: 10,
+      breakTime: 5,
       useCustomConfig: true,
-      showWeekends: true,
+      showWeekends: showWeekends,
       isEqualDuration: true,
       defaultDuration: 45,
     );

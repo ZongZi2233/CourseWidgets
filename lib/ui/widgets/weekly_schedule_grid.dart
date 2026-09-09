@@ -59,7 +59,7 @@ class WeeklyScheduleGrid extends StatefulWidget {
 }
 
 class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
-  static const double kSectionRowHeight = 58.0;
+  static const double kSectionRowHeight = 68.0; // [v2.9.0] 适当增加卡片高度与字体空间
   static const int kTotalSections = 13;
 
   @override
@@ -466,14 +466,14 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
 
     return Column(
       children: [
-        // 星期标题与日期（精致微型水平胶囊，杜绝竖胶囊）
+        // 星期标题与日期（精致扁平横向胶囊，比例协调）
         Container(
-          height: 36,
-          margin: const EdgeInsets.symmetric(horizontal: 1.0),
+          height: 32,
+          margin: const EdgeInsets.symmetric(horizontal: 0.5),
           decoration: isToday
               ? BoxDecoration(
-                  color: AppThemeColors.babyPink.withValues(alpha: isDark ? 0.28 : 0.20),
-                  borderRadius: BorderRadius.circular(8),
+                  color: AppThemeColors.babyPink.withValues(alpha: isDark ? 0.28 : 0.22),
+                  borderRadius: BorderRadius.circular(10),
                   border: Border.all(
                     color: AppThemeColors.babyPink.withValues(alpha: 0.7),
                     width: 1.0,
@@ -482,8 +482,8 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
               : BoxDecoration(
                   color: isDark
                       ? Colors.white.withValues(alpha: 0.04)
-                      : Colors.white.withValues(alpha: 0.30),
-                  borderRadius: BorderRadius.circular(8),
+                      : Colors.white.withValues(alpha: 0.35),
+                  borderRadius: BorderRadius.circular(10),
                   border: Border.all(
                     color: isDark
                         ? Colors.white.withValues(alpha: 0.08)
@@ -501,9 +501,9 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
                         color: isToday
                             ? AppThemeColors.babyPink
                             : (isDark ? Colors.white : const Color(0xFF1F2228)),
-                        fontSize: 11.5,
+                        fontSize: 11.0,
                         fontWeight: isToday ? FontWeight.bold : FontWeight.w600,
-                        height: 1.1,
+                        height: 1.05,
                       ),
                     ),
                     Text(
@@ -511,10 +511,10 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
                       style: TextStyle(
                         color: isToday
                             ? AppThemeColors.babyPink
-                            : (isDark ? Colors.white60 : const Color(0xFF757B88)),
-                        fontSize: 9.5,
+                            : (isDark ? Colors.white70 : const Color(0xFF757B88)),
+                        fontSize: 9.0,
                         fontWeight: isToday ? FontWeight.bold : FontWeight.w500,
-                        height: 1.1,
+                        height: 1.05,
                       ),
                     ),
                   ],
@@ -612,20 +612,21 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
     return RepaintBoundary(
       child: liquid.HyperOSCard(
         useBlur: false, // 视口级单层裁剪模糊共享，彻底根除 FBO 叠加导致的卡顿
-        cornerRadius: widget.isPhone ? 10 : 12,
-        padding: EdgeInsets.all(widget.isPhone ? 4.5 : 8.0),
+        cornerRadius: widget.isPhone ? 12 : 14,
+        padding: EdgeInsets.all(widget.isPhone ? 6.0 : 8.0),
         color: cardBgColor,
         contentColor: titleColor,
-        onTap: () => _showCourseDetail(context, course),
+        // [v2.9.0] 移除主体直接展开详情，避免与底部三点操作条冲突
+        onTap: null,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 课程名称
+            // 课程名称：字号加大
             Text(
               course.name,
               style: TextStyle(
                 color: titleColor,
-                fontSize: widget.isPhone ? 10.5 : 12.0,
+                fontSize: widget.isPhone ? 12.0 : 13.5,
                 fontWeight: FontWeight.bold,
                 height: 1.18,
               ),
@@ -634,14 +635,14 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
             ),
             const Spacer(),
 
-            // 老师与地点
+            // 老师与地点：字号加大，地点支持多行展示，不使用省略号截断
             if (course.teacher.isNotEmpty || course.location.isNotEmpty) ...[
               if (course.teacher.isNotEmpty)
                 Text(
                   course.teacher,
                   style: TextStyle(
                     color: subTextColor,
-                    fontSize: widget.isPhone ? 8.5 : 10.0,
+                    fontSize: widget.isPhone ? 9.5 : 10.5,
                     height: 1.15,
                   ),
                   maxLines: 1,
@@ -652,11 +653,11 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
                   course.location,
                   style: TextStyle(
                     color: subTextColor,
-                    fontSize: widget.isPhone ? 8.5 : 10.0,
+                    fontSize: widget.isPhone ? 9.5 : 10.5,
                     height: 1.15,
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                  maxLines: 2,
+                  overflow: TextOverflow.fade,
                 ),
             ],
 
