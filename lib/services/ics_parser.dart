@@ -57,10 +57,13 @@ class IcsParser {
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
 
-    String location = (eventData['location']?.toString() ?? '未知地点')
+    String location = (eventData['location']?.toString() ?? '')
         .replaceAll(RegExp(r'\\n|\n|\\r|\r'), ' ')
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
+    if (location == '未知地点' || location == '未知' || location == '位置地点') {
+      location = '';
+    }
 
     // 尝试从 Description 提取老师 (格式: "课程 教室 老师")
     // 或者从 CATEGORIES 提取

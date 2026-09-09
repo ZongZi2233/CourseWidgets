@@ -478,7 +478,9 @@ class _WindowsScheduleScreenState extends State<WindowsScheduleScreen> {
 
   /// 构建课程卡片：整卡染色 (CourseColorPalette) + 柔和通透质感 + 底部三点小横条 Morph Engine
   Widget _buildCourseCard(CourseEvent course, bool isDark) {
-    final showLocation = course.location.isNotEmpty &&
+    final showLocation = course.location.trim().isNotEmpty &&
+        !course.location.contains('未知') &&
+        !course.location.contains('未指定') &&
         !course.name.contains(course.location.split('（')[0].split('(')[0].trim());
     final showTeacher = course.teacher.isNotEmpty &&
         !course.name.contains(course.teacher.split(' ')[0].trim());
@@ -691,7 +693,7 @@ class _WindowsScheduleScreenState extends State<WindowsScheduleScreen> {
                 const SizedBox(height: 16),
                 _buildDetailRow('时间', course.timeStr),
                 const SizedBox(height: 10),
-                _buildDetailRow('地点', course.location.isEmpty ? '未指定地点' : course.location),
+                _buildDetailRow('地点', (course.location.isEmpty || course.location.contains('未知')) ? '未指定地点' : course.location),
                 const SizedBox(height: 10),
                 _buildDetailRow('教师', course.teacher.isEmpty ? '未指定教师' : course.teacher),
                 const SizedBox(height: 20),

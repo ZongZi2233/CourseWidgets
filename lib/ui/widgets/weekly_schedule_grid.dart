@@ -261,10 +261,25 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
     final dt = DateTime.fromMillisecondsSinceEpoch(timestamp);
     final totalMinutes = dt.hour * 60 + dt.minute;
 
-    int bestSection = 1;
+    // [v2.9.0 修复] 严格按时段范围限制候选节次，彻底杜绝跨午休/跨晚饭吸附
+    int minSec = 1;
+    int maxSec = 13;
+    if (totalMinutes < 12 * 60 + 30) {
+      minSec = 1;
+      maxSec = 4;
+    } else if (totalMinutes < 17 * 60 + 45) {
+      minSec = 5;
+      maxSec = 8;
+    } else {
+      minSec = 9;
+      maxSec = 13;
+    }
+
+    int bestSection = minSec;
     int minDiff = 10000;
 
     for (var entry in config.sectionStartTimes.entries) {
+      if (entry.key < minSec || entry.key > maxSec) continue;
       int sectionMin = entry.value;
       if (isEnd) {
         int duration = config.isEqualDuration
@@ -304,8 +319,8 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
                       width: timeColWidth,
                       child: Column(
                         children: [
-                          // 对齐单日列 Header 高度 (36px) + Spacing (4px) + Divider (1px) + Spacing (4px) = 45px
-                          const SizedBox(height: 45),
+                          // 对齐单日列 Header 高度 (38px) + Spacing (4px) + Divider (1px) + Spacing (4px) = 47px
+                          const SizedBox(height: 47),
                           ...List.generate(kTotalSections, (i) {
                             final section = i + 1;
                             final startMin = config.sectionStartTimes[section] ?? (480 + (i < 5 ? i * 50 : 360 + i * 50));
@@ -382,29 +397,37 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
 
     return Column(
       children: [
-        // 星期标题与日期（精致扁平横向胶囊，比例协调）
+        // 星期标题与日期（宽适横向胶囊，比例协调舒适）
         Container(
-          height: 32,
-          margin: const EdgeInsets.symmetric(horizontal: 0.5),
+          height: 38,
+          width: double.infinity,
+          margin: const EdgeInsets.symmetric(horizontal: 1.0),
           decoration: isToday
               ? BoxDecoration(
-                  color: AppThemeColors.babyPink.withValues(alpha: isDark ? 0.28 : 0.22),
-                  borderRadius: BorderRadius.circular(10),
+                  color: AppThemeColors.babyPink.withValues(alpha: isDark ? 0.35 : 0.25),
+                  borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: AppThemeColors.babyPink.withValues(alpha: 0.7),
-                    width: 1.0,
+                    color: AppThemeColors.babyPink.withValues(alpha: 0.85),
+                    width: 1.5,
                   ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppThemeColors.babyPink.withValues(alpha: isDark ? 0.25 : 0.18),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 )
               : BoxDecoration(
                   color: isDark
-                      ? Colors.white.withValues(alpha: 0.04)
-                      : Colors.white.withValues(alpha: 0.35),
-                  borderRadius: BorderRadius.circular(10),
+                      ? Colors.white.withValues(alpha: 0.05)
+                      : Colors.white.withValues(alpha: 0.40),
+                  borderRadius: BorderRadius.circular(12),
                   border: Border.all(
                     color: isDark
                         ? Colors.white.withValues(alpha: 0.08)
-                        : Colors.black.withValues(alpha: 0.04),
-                    width: 0.5,
+                        : Colors.black.withValues(alpha: 0.05),
+                    width: 0.8,
                   ),
                 ),
           child: widget.isPhone
@@ -415,22 +438,23 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
                       weekdays[day - 1],
                       style: TextStyle(
                         color: isToday
-                            ? AppThemeColors.babyPink
+                            ? (isDark ? AppThemeColors.babyPink : const Color(0xFFC84B66))
                             : (isDark ? Colors.white : const Color(0xFF1F2228)),
-                        fontSize: 11.0,
-                        fontWeight: isToday ? FontWeight.bold : FontWeight.w600,
-                        height: 1.05,
+                        fontSize: 11.5,
+                        fontWeight: isToday ? FontWeight.w800 : FontWeight.w600,
+                        height: 1.1,
                       ),
                     ),
+                    const SizedBox(height: 1),
                     Text(
                       '${dayDate.day}',
                       style: TextStyle(
                         color: isToday
-                            ? AppThemeColors.babyPink
+                            ? (isDark ? AppThemeColors.babyPink : const Color(0xFFC84B66))
                             : (isDark ? Colors.white70 : const Color(0xFF757B88)),
-                        fontSize: 9.0,
-                        fontWeight: isToday ? FontWeight.bold : FontWeight.w500,
-                        height: 1.05,
+                        fontSize: 10.5,
+                        fontWeight: isToday ? FontWeight.w800 : FontWeight.w600,
+                        height: 1.1,
                       ),
                     ),
                   ],
@@ -491,12 +515,21 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
               // 实际课程卡片
               ...courses.map((course) {
                 final config = provider.currentConfig;
-                final start = _getSectionForTime(course.startTime, config);
-                final end = _getSectionForTime(
+                int start = _getSectionForTime(course.startTime, config);
+                int end = _getSectionForTime(
                   course.endTime,
                   config,
                   isEnd: true,
                 );
+
+                // [v2.9.0 修复] 严格禁止单卡片跨越午休（4->5）与跨越晚餐（8->9）
+                if (start <= 4) {
+                  end = end.clamp(start, 4);
+                } else if (start <= 8) {
+                  end = end.clamp(start, 8);
+                } else {
+                  end = end.clamp(start, 13);
+                }
 
                 final finalStart = start > 0 ? start : 1;
                 final finalEnd = end >= finalStart ? end : finalStart;
@@ -525,6 +558,9 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
     final titleColor = CourseColorPalette.getTitleTextColor(course.name, isDark);
     final subTextColor = CourseColorPalette.getSubTextColor(course.name, isDark);
     final glowColor = CourseColorPalette.getCardGlowShadow(course.name, isDark);
+    final hasLocation = course.location.trim().isNotEmpty &&
+        !course.location.contains('未知') &&
+        !course.location.contains('未指定');
 
     return RepaintBoundary(
       child: liquid.HyperOSCard(
@@ -571,8 +607,8 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
             ),
             const Spacer(),
 
-            // 老师与地点：字号加大，地点支持多行展示，不使用省略号截断
-            if (course.teacher.isNotEmpty || course.location.isNotEmpty) ...[
+            // 老师与地点：字号加大，若无教室则直接留空，不显示“未知地点”
+            if (course.teacher.isNotEmpty || hasLocation) ...[
               if (course.teacher.isNotEmpty)
                 Text(
                   course.teacher,
@@ -584,7 +620,7 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-              if (course.location.isNotEmpty)
+              if (hasLocation)
                 Text(
                   course.location,
                   style: TextStyle(
@@ -730,7 +766,7 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
                 const SizedBox(height: 16),
                 _buildDetailRow(sheetContext, '时间', course.timeStr),
                 const SizedBox(height: 10),
-                _buildDetailRow(sheetContext, '地点', course.location.isEmpty ? '未指定地点' : course.location),
+                _buildDetailRow(sheetContext, '地点', (course.location.isEmpty || course.location.contains('未知')) ? '未指定地点' : course.location),
                 const SizedBox(height: 10),
                 _buildDetailRow(sheetContext, '教师', course.teacher.isEmpty ? '未指定教师' : course.teacher),
                 const SizedBox(height: 20),

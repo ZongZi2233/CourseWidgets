@@ -90,15 +90,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             showBackButton: true,
           ),
 
-          // 第二步：课时配置与时间自定义确认
-          OnboardingConfig(
+          // 第二步：导入课表
+          OnboardingImport(
             onNext: _nextPage,
             onBack: _previousPage,
             isLastPage: false,
           ),
 
-          // 第三步：导入课表
-          OnboardingImport(
+          // 第三步：课时配置与时间自定义确认
+          OnboardingConfig(
             onNext: _completeOnboarding,
             onBack: _previousPage,
             isLastPage: true,

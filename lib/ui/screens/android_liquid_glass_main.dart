@@ -449,7 +449,8 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
       ),
       child: Consumer<ScheduleProvider>(
         builder: (context, provider, _) {
-          final topPadding = MediaQuery.of(context).padding.top + 58;
+          // [v2.9.0 修复] 留出充足安全预留距离，避免星期横行紧贴甚至被顶部悬浮 Header 遮挡
+          final topPadding = MediaQuery.of(context).padding.top + 76;
 
           return Stack(
             children: [
@@ -988,7 +989,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                       const SizedBox(height: 6),
                       Row(
                         children: [
-                          if (course.location.isNotEmpty)
+                          if (course.location.trim().isNotEmpty && !course.location.contains('未知'))
                             Container(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 7,
@@ -1020,7 +1021,8 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                                 ],
                               ),
                             ),
-                          if (course.location.isNotEmpty &&
+                          if (course.location.trim().isNotEmpty &&
+                              !course.location.contains('未知') &&
                               course.teacher.isNotEmpty)
                             const SizedBox(width: 8),
                           if (course.teacher.isNotEmpty)

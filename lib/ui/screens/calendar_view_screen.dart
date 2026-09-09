@@ -666,7 +666,7 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 4),
-                  if (course.location.isNotEmpty)
+                  if (course.location.trim().isNotEmpty && !course.location.contains('未知'))
                     Row(
                       children: [
                         Icon(

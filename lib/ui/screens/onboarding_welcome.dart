@@ -173,6 +173,7 @@ class _OnboardingWelcomeState extends State<OnboardingWelcome>
   }
 
   Widget _buildStartButton() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return GlassButton.custom(
       onTap: () {
         HapticFeedback.heavyImpact();
@@ -194,13 +195,13 @@ class _OnboardingWelcomeState extends State<OnboardingWelcome>
         saturation: 1.25,
       ),
       shape: const LiquidRoundedSuperellipse(borderRadius: 24),
-      child: const Center(
+      child: Center(
         child: Text(
           '开始使用',
           style: TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.bold,
-            color: Colors.white,
+            color: isDark ? Colors.white : const Color(0xFF1E2129),
             letterSpacing: 1.5,
           ),
         ),

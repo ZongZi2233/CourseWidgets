@@ -509,8 +509,6 @@ class ScheduleProvider with ChangeNotifier {
     final storage = StorageService();
     await storage.setString('schedule_config', jsonEncode(_currentConfig.toJson()));
 
-    // 重新根据节次时间刷新每个时间戳
-    await _recalculateAllTimestamps(_currentConfig, _currentConfig);
     await _refreshAvailableWeeks();
     await _jumpToCurrentDate();
     notifyListeners();
@@ -616,8 +614,8 @@ class ScheduleProvider with ChangeNotifier {
     return false;
   }
 
-  /// [v2.7.0] 重新计算所有课程的绝对时间戳
-  /// 从 CourseEvent 反推出 (week, dayOfWeek, section)，再用新配置计算新时间
+  /// [v2.9.0 彻底修复] 重新计算所有课程的绝对时间戳
+  /// 采用严格的节次时段边界锁定法，按时长精确推导节数跨度，并严禁跨越午休与晚餐
   Future<void> _recalculateAllTimestamps(
     ScheduleConfigModel oldConfig,
     ScheduleConfigModel newConfig,
@@ -635,37 +633,78 @@ class ScheduleProvider with ChangeNotifier {
       final week = (daysSinceStart >= 0) ? ((daysSinceStart ~/ 7) + 1) : 1;
       final dayOfWeek = startDt.weekday; // 1=Monday..7=Sunday
 
-      // 反推 section：找到最接近的课节 (覆盖1~12全部节次)
       final timeMinutes = startDt.hour * 60 + startDt.minute;
-      int section = 1;
-      int minDiff = 9999;
-      for (int s = 1; s <= 12; s++) {
-        final sTime = oldConfig.sectionStartTimes[s] ?? (480 + (s - 1) * 60);
-        final diff = (timeMinutes - sTime).abs();
-        if (diff < minDiff) {
-          minDiff = diff;
-          section = s;
-        }
-      }
-
-      // 反推 endSection (覆盖1~12全部节次)
       final endDt = DateTime.fromMillisecondsSinceEpoch(course.endTime);
       final endMinutes = endDt.hour * 60 + endDt.minute;
-      int endSection = section;
-      for (int s = section; s <= 12; s++) {
-        final sEnd =
-            (oldConfig.sectionStartTimes[s] ?? (480 + (s - 1) * 60)) +
-            (oldConfig.sectionDurations[s] ?? 50);
-        endSection = s;
-        if (sEnd >= endMinutes - 5) break; // 5分钟容差
+      final duration = endMinutes - timeMinutes;
+
+      // 1. 根据时长精准推导课程所占节数 (防异常拉伸与午休穿透)
+      // 单节: <= 65 分钟
+      // 双节大课: 66~115 分钟 (如 90~100 分钟)
+      // 三节大课: 116~165 分钟 (如 135~150 分钟)
+      // 四节: > 165 分钟
+      int spanSections;
+      if (duration <= 65) {
+        spanSections = 1;
+      } else if (duration <= 115) {
+        spanSections = 2;
+      } else if (duration <= 165) {
+        spanSections = 3;
+      } else {
+        spanSections = 4;
       }
 
+      // 2. 根据起课时间所属的时段，结合大学标准作息区间锁定起始节次
+      // 08:30 锚定第 1 节（绝不吸附至第 2 节 08:50/09:20）
+      // 10:30 锚定第 3 节（绝不吸附至第 4 节 10:40/11:10）
+      // 13:40 锚定第 5 节
+      // 15:40 锚定第 7 节
+      // 18:30 锚定第 9 节
+      int startSection;
+      if (timeMinutes < 9 * 60 + 15) {
+        startSection = 1; // 上午第 1 节 (08:00~09:15)
+      } else if (timeMinutes < 10 * 60) {
+        startSection = 2; // 上午第 2 节 (09:15~10:00)
+      } else if (timeMinutes < 11 * 60 + 30) {
+        startSection = 3; // 上午第 3 节 (10:00~11:30)
+      } else if (timeMinutes < 12 * 60 + 30) {
+        startSection = 4; // 上午第 4 节 (11:30~12:30)
+      } else if (timeMinutes < 14 * 60 + 20) {
+        startSection = 5; // 下午第 5 节 (13:00~14:20)
+      } else if (timeMinutes < 15 * 60) {
+        startSection = 6; // 下午第 6 节 (14:20~15:00)
+      } else if (timeMinutes < 16 * 60 + 20) {
+        startSection = 7; // 下午第 7 节 (15:00~16:20)
+      } else if (timeMinutes < 17 * 60 + 30) {
+        startSection = 8; // 下午第 8 节 (16:20~17:30)
+      } else if (timeMinutes < 19 * 60 + 20) {
+        startSection = 9; // 晚间第 9 节 (18:00~19:20)
+      } else if (timeMinutes < 20 * 60) {
+        startSection = 10; // 晚间第 10 节 (19:20~20:00)
+      } else {
+        startSection = 11; // 晚间第 11 节
+      }
+
+      // 3. 【核心保护】绝对禁止单门课程跨越午休与晚餐！
+      // 上午课程 (startSection <= 4): 结束节次严禁超过第 4 节
+      // 下午课程 (startSection 5..8): 结束节次严禁超过第 8 节
+      // 晚间课程 (startSection 9..13): 结束节次严禁超过第 13 节
+      if (startSection <= 4) {
+        spanSections = spanSections.clamp(1, 4 - startSection + 1);
+      } else if (startSection <= 8) {
+        spanSections = spanSections.clamp(1, 8 - startSection + 1);
+      } else if (startSection <= 13) {
+        spanSections = spanSections.clamp(1, 13 - startSection + 1);
+      }
+
+      final endSection = startSection + spanSections - 1;
+
       // 用新配置计算新时间
-      final newStartTime = newConfig.getStartTime(week, dayOfWeek, section);
+      final newStartTime = newConfig.getStartTime(week, dayOfWeek, startSection);
       final newEndTime = newConfig.getEndTimeWithDuration(
         week,
         dayOfWeek,
-        section,
+        startSection,
         endSection,
       );
 
@@ -684,7 +723,7 @@ class ScheduleProvider with ChangeNotifier {
     // 写回数据库
     _courses = newCourses;
     await DatabaseHelper.instance.insertCourses(newCourses);
-    debugPrint('✅ 已重新计算 ${newCourses.length} 个课程的时间戳');
+    debugPrint('✅ 已重新计算 ${newCourses.length} 个课程的时间戳，杜绝午休穿透与跨时段重叠');
   }
 
   /// 使用默认配置

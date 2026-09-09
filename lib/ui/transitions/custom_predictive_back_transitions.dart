@@ -175,12 +175,22 @@ class _PredictiveBackGestureDetectorState
   // Begin WidgetsBindingObserver.
 
   @override
+  Future<bool> didPopRoute() async {
+    // [v2.9.0 修复] 若预测式返回已提交或正在进行，拦截 Android 系统分发的二次 popRoute，彻底杜绝快速退出双弹
+    if (_wasCommitted || _phase == _PredictiveBackPhase.commit || widget.route.popGestureInProgress) {
+      return true;
+    }
+    return false;
+  }
+
+  @override
   bool handleStartBackGesture(PredictiveBackEvent backEvent) {
-    phase = _PredictiveBackPhase.start;
+    if (_wasCommitted) return false;
     final bool gestureInProgress = !backEvent.isButtonEvent && _isEnabled;
     if (!gestureInProgress) {
       return false;
     }
+    phase = _PredictiveBackPhase.start;
 
     widget.route.handleStartBackGesture(progress: 1 - backEvent.progress);
     startBackEvent = currentBackEvent = backEvent;
@@ -207,6 +217,8 @@ class _PredictiveBackGestureDetectorState
 
   @override
   void handleCommitBackGesture() {
+    if (_wasCommitted) return;
+    _wasCommitted = true;
     phase = _PredictiveBackPhase.commit;
 
     widget.route.handleCommitBackGesture();
@@ -238,14 +250,8 @@ class _PredictiveBackGestureDetectorState
       effectivePhase = _PredictiveBackPhase.idle;
     }
 
-    // [v2.6.5修复] 利用 _wasCommitted 状态防止路由 pop 瞬间动画被重置为默认滑动而造成双闪
     if (effectivePhase == _PredictiveBackPhase.commit) {
       _wasCommitted = true;
-    } else if (effectivePhase == _PredictiveBackPhase.idle &&
-        _wasCommitted &&
-        widget.route.isActive) {
-      // 动画完全结束或者被外部取消但组件活着
-      _wasCommitted = false;
     }
 
     return widget.builder(

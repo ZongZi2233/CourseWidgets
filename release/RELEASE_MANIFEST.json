@@ -1,7 +1,7 @@
 {
   "version": "2.9.0",
   "buildNumber": 10008060,
-  "collectedAt": "2026-09-09T23:25:18.875900",
+  "collectedAt": "2026-09-10T00:04:50.014464",
   "artifacts": [
     {
       "platform": "Android",
@@ -11,7 +11,7 @@
       "size": 57229548,
       "size_formatted": "54.58 MB",
       "sha256": "999c9fb5a3cbcba7b303949e99baa8549f5d4ae8e6dd8be86ccb0e4e67be6144",
-      "updated_at": "2026-09-09 23:25:17"
+      "updated_at": "2026-09-10 00:04:48"
     },
     {
       "platform": "Windows",
@@ -21,7 +21,7 @@
       "size": 56492228,
       "size_formatted": "53.88 MB",
       "sha256": "a6df86b4025ed0ce34ba98028fa7dfae2d8087ffe630634bfc18e257e089b4d1",
-      "updated_at": "2026-09-09 23:25:18"
+      "updated_at": "2026-09-10 00:04:50"
     }
   ]
 }

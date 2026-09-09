@@ -191,7 +191,7 @@ class OnboardingImport extends StatelessWidget {
                         const SizedBox(width: 16),
                         Expanded(
                           child: liquid.LiquidButton(
-                            text: isLastPage ? '开始使用' : '完成',
+                            text: isLastPage ? '开始使用' : '下一步',
                             onTap: onNext,
                             color: ThemeService().primaryColor,
                           ),

@@ -65,10 +65,10 @@ class SmoothSlideTransitionsBuilder extends PageTransitionsBuilder {
     );
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    // [v2.9.0] 静态磨砂底色：97% 高浓度防穿透，既透出底层壁纸的微弱光韵，又彻底杜绝前级界面文本叠化穿透
+    // [v2.9.0 修复] 通透半透磨砂底色：透出底层高斯模糊截图的深度光韵，杜绝死白遮挡前级
     final frostedBg = isDark
-        ? const Color(0xF812151B)
-        : const Color(0xF8F5F7FA);
+        ? const Color(0x3512151B)
+        : const Color(0x28FFFFFF);
 
     Widget transitionChild = SlideTransition(
       position: inSlide,
@@ -126,10 +126,10 @@ class SmoothSlideTransitionsBuilder extends PageTransitionsBuilder {
             );
           }
 
-          // [v2.9.0] 截图尚未就绪时的安全降级：85% 高密度雾化遮罩，杜绝前级文字露底
+          // [v2.9.0 修复] 截图尚未就绪时的安全降级：45% 雾化遮罩，兼顾层次与通透感
           final scrimWidget = ColoredBox(
             color: (isDark ? Colors.black : const Color(0xFFF2F4F7))
-                .withValues(alpha: effectiveAlpha * 0.85),
+                .withValues(alpha: effectiveAlpha * 0.45),
           );
 
           if (!isMobile) {
@@ -202,8 +202,12 @@ class TransparentMaterialPageRoute<T> extends MaterialPageRoute<T> {
     return super.didPush();
   }
 
+  bool _isPopping = false;
+
   @override
   bool didPop(T? result) {
+    if (_isPopping) return false;
+    _isPopping = true;
     // 延迟清除，等动画结束
     Future.delayed(transitionDuration, () {
       PageBlurController.instance.clear();
