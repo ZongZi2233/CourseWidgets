@@ -5,6 +5,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path/path.dart';
 import '../models/course_event.dart';
 import 'html_to_ics_converter.dart';
+import 'storage_service.dart';
 import 'app_logger.dart';
 
 class DatabaseHelper {
@@ -422,8 +423,29 @@ class DatabaseHelper {
     final sourceType = result.first['source_type'] as String;
 
     if (sourceType == 'ics') {
-      // 如果是ICS导入的，直接返回原始数据
-      return result.first['source_data'] as String;
+      // [v2.9.0] 导出时注入当前最新的自定义课时配置，保证再导入时 100% 无损恢复
+      final sourceData = result.first['source_data'] as String;
+      final storage = StorageService();
+      final configStr = storage.getString('schedule_config');
+      if (configStr != null && configStr.isNotEmpty) {
+        if (sourceData.contains('X-SCHEDULE-CONFIG:')) {
+          return sourceData.replaceAll(
+            RegExp(r'X-SCHEDULE-CONFIG:[^\r\n]*'),
+            'X-SCHEDULE-CONFIG:$configStr',
+          );
+        } else if (sourceData.contains('BEGIN:VCALENDAR\r\n')) {
+          return sourceData.replaceFirst(
+            'BEGIN:VCALENDAR\r\n',
+            'BEGIN:VCALENDAR\r\nX-SCHEDULE-CONFIG:$configStr\r\n',
+          );
+        } else if (sourceData.contains('BEGIN:VCALENDAR\n')) {
+          return sourceData.replaceFirst(
+            'BEGIN:VCALENDAR\n',
+            'BEGIN:VCALENDAR\nX-SCHEDULE-CONFIG:$configStr\n',
+          );
+        }
+      }
+      return sourceData;
     } else if (sourceType == 'html') {
       // 如果是HTML导入的，需要重新生成ICS
       final courseDataStr = result.first['course_data'] as String;

@@ -175,6 +175,7 @@ class LiquidButton extends StatelessWidget {
   final bool isOutline;
   final double? width;
   final double? height;
+  final Color? textColor;
 
   const LiquidButton({
     super.key,
@@ -184,10 +185,18 @@ class LiquidButton extends StatelessWidget {
     this.isOutline = false,
     this.width,
     this.height,
+    this.textColor,
   });
 
   @override
   Widget build(BuildContext context) {
+    final isDark = globalDarkModeNotifier.value;
+    final lum = color.computeLuminance();
+    final Color effectiveTextColor = textColor ??
+        (isOutline
+            ? (isDark ? Colors.white70 : const Color(0xFF2D313A))
+            : (lum > 0.55 && !isDark ? const Color(0xFF1E2129) : Colors.white));
+
     return GlassButton.custom(
       onTap: onTap ?? () {},
       width: width,
@@ -195,7 +204,7 @@ class LiquidButton extends StatelessWidget {
       style: GlassButtonStyle.filled,
       settings: LiquidGlassSettings(
         glassColor: isOutline
-            ? Colors.white.withValues(alpha: 0.1)
+            ? (isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.06))
             : color.withValues(alpha: 0.7),
         blur: 2.0,
         thickness: 12.0,
@@ -207,12 +216,12 @@ class LiquidButton extends StatelessWidget {
         fresnelStrength: 0.05,
         specularSharpness: GlassSpecularSharpness.medium,
       ),
-      shape: LiquidRoundedSuperellipse(borderRadius: 16),
+      shape: const LiquidRoundedSuperellipse(borderRadius: 16),
       child: Center(
         child: Text(
           text,
           style: TextStyle(
-            color: isOutline ? Colors.white70 : Colors.white,
+            color: effectiveTextColor,
             fontWeight: FontWeight.bold,
             fontSize: 15,
           ),
@@ -489,6 +498,7 @@ class HyperOSCard extends StatelessWidget {
   final double blurRadius;
   final MiuixPressFeedbackType feedbackType;
   final BorderSide? border;
+  final List<BoxShadow>? shadows;
 
   const HyperOSCard({
     super.key,
@@ -503,6 +513,7 @@ class HyperOSCard extends StatelessWidget {
     this.blurRadius = 10.0,
     this.feedbackType = MiuixPressFeedbackType.sink,
     this.border,
+    this.shadows,
   });
 
   @override
@@ -532,24 +543,26 @@ class HyperOSCard extends StatelessWidget {
       side: effectiveBorderSide,
     );
 
+    // [v2.9.0] 增强浅色模式阴影可见度，赋予卡片清晰的物理层次与立体感
+    final effectiveShadows = shadows ?? [
+      BoxShadow(
+        color: Colors.black.withValues(alpha: isDark ? 0.36 : 0.20),
+        blurRadius: isDark ? 14 : 16,
+        spreadRadius: isDark ? 0 : 0.5,
+        offset: const Offset(0, 4),
+      ),
+      BoxShadow(
+        color: Colors.black.withValues(alpha: isDark ? 0.20 : 0.12),
+        blurRadius: 5,
+        offset: const Offset(0, 1.5),
+      ),
+    ];
+
     Widget cardBody = DecoratedBox(
       decoration: ShapeDecoration(
         color: effectiveColor,
         shape: shape,
-        shadows: [
-          // 第一层：轻柔弥散环境阴影（浅色模式加强对比界定物理边界，不依赖硬边框）
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.32 : 0.12),
-            blurRadius: 14,
-            offset: const Offset(0, 4),
-          ),
-          // 第二层：微立体轮廓阴影
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.18 : 0.07),
-            blurRadius: 4,
-            offset: const Offset(0, 1),
-          ),
-        ],
+        shadows: effectiveShadows,
       ),
       child: Padding(
         padding: padding,

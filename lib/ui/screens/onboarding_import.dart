@@ -27,6 +27,7 @@ class OnboardingImport extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Material(
@@ -144,7 +145,7 @@ class OnboardingImport extends StatelessWidget {
                               style: TextStyle(
                                 fontSize: 28,
                                 fontWeight: FontWeight.w900,
-                                color: GlassSettingsHelper.getTextColor(),
+                                color: GlassSettingsHelper.getTextColor(context),
                                 decoration: TextDecoration.none,
                               ),
                               textAlign: TextAlign.center,
@@ -154,7 +155,7 @@ class OnboardingImport extends StatelessWidget {
                               '选择一种方式导入你的课程数据',
                               style: TextStyle(
                                 fontSize: 14,
-                                color: GlassSettingsHelper.getSecondaryTextColor(),
+                                color: GlassSettingsHelper.getSecondaryTextColor(context),
                                 decoration: TextDecoration.none,
                               ),
                               textAlign: TextAlign.center,
@@ -182,7 +183,8 @@ class OnboardingImport extends StatelessWidget {
                           child: liquid.LiquidButton(
                             text: '上一步',
                             onTap: onBack,
-                            color: Colors.white.withValues(alpha: 0.2),
+                            color: isDark ? Colors.white.withValues(alpha: 0.18) : Colors.black.withValues(alpha: 0.08),
+                            textColor: isDark ? Colors.white : const Color(0xFF1E2129),
                           ),
                         ),
                         const SizedBox(width: 16),

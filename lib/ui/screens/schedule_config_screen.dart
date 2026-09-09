@@ -38,7 +38,7 @@ class _ScheduleConfigScreenState extends State<ScheduleConfigScreen> {
         '${_config.semesterStartDate.year}-${_config.semesterStartDate.month.toString().padLeft(2, '0')}-${_config.semesterStartDate.day.toString().padLeft(2, '0')}';
     _breakTimeController.text = _config.breakTime.toString();
 
-    for (int i = 1; i <= 12; i++) {
+    for (int i = 1; i <= 13; i++) {
       _startControllers.add(
         TextEditingController(
           text: _formatMinutes(_config.sectionStartTimes[i] ?? 480),
@@ -430,7 +430,7 @@ class _ScheduleConfigScreenState extends State<ScheduleConfigScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            ...List.generate(11, (index) => _buildSectionRow(index + 1)),
+            ...List.generate(13, (index) => _buildSectionRow(index + 1)),
           ],
         ),
       ),
@@ -641,6 +641,8 @@ class _ScheduleConfigScreenState extends State<ScheduleConfigScreen> {
         9: 870,
         10: 915,
         11: 960,
+        12: 1010,
+        13: 1060,
       },
       sectionDurations: {
         1: 45,
@@ -654,6 +656,8 @@ class _ScheduleConfigScreenState extends State<ScheduleConfigScreen> {
         9: 45,
         10: 45,
         11: 45,
+        12: 45,
+        13: 45,
       },
       breakTime: 5,
     );
@@ -676,6 +680,8 @@ class _ScheduleConfigScreenState extends State<ScheduleConfigScreen> {
         9: 1200,
         10: 1290,
         11: 1380,
+        12: 1470,
+        13: 1560,
       },
       sectionDurations: {
         1: 90,
@@ -689,6 +695,8 @@ class _ScheduleConfigScreenState extends State<ScheduleConfigScreen> {
         9: 90,
         10: 90,
         11: 90,
+        12: 90,
+        13: 90,
       },
       breakTime: 10,
     );
@@ -711,6 +719,8 @@ class _ScheduleConfigScreenState extends State<ScheduleConfigScreen> {
         9: 840,
         10: 885,
         11: 930,
+        12: 975,
+        13: 1020,
       },
       sectionDurations: {
         1: 40,
@@ -724,6 +734,8 @@ class _ScheduleConfigScreenState extends State<ScheduleConfigScreen> {
         9: 40,
         10: 40,
         11: 40,
+        12: 40,
+        13: 40,
       },
       breakTime: 5,
     );
@@ -737,7 +749,7 @@ class _ScheduleConfigScreenState extends State<ScheduleConfigScreen> {
           '${config.semesterStartDate.year}-${config.semesterStartDate.month.toString().padLeft(2, '0')}-${config.semesterStartDate.day.toString().padLeft(2, '0')}';
       _breakTimeController.text = config.breakTime.toString();
 
-      for (int i = 1; i <= 11; i++) {
+      for (int i = 1; i <= 13; i++) {
         _startControllers[i - 1].text = _formatMinutes(
           config.sectionStartTimes[i] ?? 480,
         );
@@ -771,7 +783,7 @@ class _ScheduleConfigScreenState extends State<ScheduleConfigScreen> {
       final sectionStartTimes = <int, int>{};
       final sectionDurations = <int, int>{};
 
-      for (int i = 1; i <= 12; i++) {
+      for (int i = 1; i <= 13; i++) {
         final startTime = _parseTimeToMinutes(_startControllers[i - 1].text);
         final duration = int.tryParse(_durationControllers[i - 1].text) ?? 50;
 

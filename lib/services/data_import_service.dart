@@ -32,13 +32,11 @@ class DataImportService {
       // 解析ICS内容
       final courses = IcsParser.parse(icsContent);
 
-      // [v2.7.0] 自动推断并全局保存最新配置
-      final config = IcsParser.deduceConfigFromCourses(courses, icsContent);
-      if (config != null) {
-        final storage = StorageService();
-        await storage.setString('schedule_config', jsonEncode(config.toJson()));
-        debugPrint('✅ 自动应用了推断的课时配置与开学日期');
-      }
+      // [v2.9.0] 智能应用配置：绝不覆盖用户自定义课时作息
+      await _applyImportedConfig(
+        courses: courses,
+        rawIcsContent: icsContent,
+      );
 
       // 保存到数据库
       await DatabaseHelper.instance.insertCourses(courses);
@@ -56,6 +54,63 @@ class DataImportService {
     } catch (e) {
       debugPrint('ICS导入失败: $e');
       return null;
+    }
+  }
+
+  /// [v2.9.0] 智能安全应用导入配置：
+  /// 若导入数据携带显式配置（如 ICS 中的 X-SCHEDULE-CONFIG 或 JSON 中的 config 字段），直接完整还原；
+  /// 若未携带显式配置，且用户已有自定义课时配置，绝对不覆盖用户的作息时间(仅更新开学日期)；
+  /// 仅在用户从未保存过任何配置时，才自动根据课程时间戳推断全量配置。
+  Future<void> _applyImportedConfig({
+    ScheduleConfigModel? explicitConfig,
+    required List<CourseEvent> courses,
+    String rawIcsContent = '',
+  }) async {
+    final storage = StorageService();
+    final savedConfigStr = storage.getString('schedule_config');
+
+    if (explicitConfig != null) {
+      await storage.setString('schedule_config', jsonEncode(explicitConfig.toJson()));
+      debugPrint('✅ 导入文件携带显式配置，已完整还原课时配置');
+      return;
+    }
+
+    // 检查 ICS 内容中是否含有 X-SCHEDULE-CONFIG
+    if (rawIcsContent.isNotEmpty && rawIcsContent.contains('X-SCHEDULE-CONFIG:')) {
+      final deduced = IcsParser.deduceConfigFromCourses(courses, rawIcsContent);
+      if (deduced != null) {
+        await storage.setString('schedule_config', jsonEncode(deduced.toJson()));
+        debugPrint('🎯 从 ICS X-SCHEDULE-CONFIG 标签还原课时配置');
+        return;
+      }
+    }
+
+    if (savedConfigStr != null) {
+      try {
+        final existingConfig = ScheduleConfigModel.fromJson(
+          jsonDecode(savedConfigStr) as Map<String, dynamic>,
+        );
+        // 用户已有自定义配置：绝对保留用户的作息时间、时长、节数、周末显示等
+        // 仅根据新导入课程自动对齐开学周一
+        final deduced = IcsParser.deduceConfigFromCourses(courses, '');
+        if (deduced != null) {
+          final updated = existingConfig.copyWith(
+            semesterStartDate: deduced.semesterStartDate,
+          );
+          await storage.setString('schedule_config', jsonEncode(updated.toJson()));
+          debugPrint('🛡️ 保留用户自定义课时作息，仅更新学期开学日期为: ${deduced.semesterStartDate}');
+        }
+        return;
+      } catch (e) {
+        debugPrint('⚠️ 读取现有配置失败: $e');
+      }
+    }
+
+    // 首次导入且无任何配置时，才推断新配置
+    final deduced = IcsParser.deduceConfigFromCourses(courses, rawIcsContent);
+    if (deduced != null) {
+      await storage.setString('schedule_config', jsonEncode(deduced.toJson()));
+      debugPrint('✅ 首次导入，自动初始化课时配置');
     }
   }
 
@@ -96,12 +151,11 @@ class DataImportService {
       // 解析ICS内容
       final courses = IcsParser.parse(icsContent);
 
-      // [v2.7.0] 自动推断并全局保存最新配置
-      final config = IcsParser.deduceConfigFromCourses(courses, icsContent);
-      if (config != null) {
-        final storage = StorageService();
-        await storage.setString('schedule_config', jsonEncode(config.toJson()));
-      }
+      // [v2.9.0] 智能应用配置：绝不覆盖用户自定义课时作息
+      await _applyImportedConfig(
+        courses: courses,
+        rawIcsContent: icsContent,
+      );
 
       // 保存到数据库
       await DatabaseHelper.instance.insertCourses(courses);
@@ -220,6 +274,12 @@ class DataImportService {
       }
       final courses = IcsParser.parse(icsContent);
       if (courses.isEmpty) return null;
+
+      // [v2.9.0] 智能应用配置：绝不覆盖用户自定义课时作息
+      await _applyImportedConfig(
+        courses: courses,
+        rawIcsContent: icsContent,
+      );
 
       await DatabaseHelper.instance.insertCourses(courses);
       await _saveToHistory(
@@ -656,14 +716,11 @@ class DataImportService {
         return null;
       }
 
-      // 如果未携带配置，自动根据课程时间戳聚类生成精细配置并对齐 1~13 节
-      config ??= IcsParser.deduceConfigFromCourses(courses, '');
-
-      if (config != null) {
-        final storage = StorageService();
-        await storage.setString('schedule_config', jsonEncode(config.toJson()));
-        debugPrint('✅ 自动应用并同步了 JSON 中的课时配置与开学日期');
-      }
+      // [v2.9.0] 智能应用配置：携带显式配置则完整恢复；未携带且已有配置则绝不覆盖自定义作息
+      await _applyImportedConfig(
+        explicitConfig: config,
+        courses: courses,
+      );
 
       // 保存到数据库
       await DatabaseHelper.instance.insertCourses(courses);

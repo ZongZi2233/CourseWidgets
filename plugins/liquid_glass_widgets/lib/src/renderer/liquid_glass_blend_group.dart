@@ -45,8 +45,8 @@ class LiquidGlassBlendGroup extends StatefulWidget {
   /// Can be used by child shapes to register themselves for blending.
   static GlassGroupLink of(BuildContext context) {
     final inherited = _InheritedLiquidGlassBlendGroup.of(context);
-    assert(inherited != null, 'No LiquidGlassBlendGroup found in context');
-    return inherited!.link;
+    if (inherited != null) return inherited.link;
+    return GlassGroupLink();
   }
 
   /// Retrieves the [GlassGroupLink] from the nearest ancestor

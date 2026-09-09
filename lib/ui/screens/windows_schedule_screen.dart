@@ -1,4 +1,3 @@
-import 'dart:ui' as ui;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -12,7 +11,6 @@ import '../../constants/theme_constants.dart';
 import '../widgets/liquid_components.dart' as liquid;
 import '../widgets/course_color_helper.dart';
 import '../widgets/glass_context_menu.dart';
-import '../widgets/weekly_schedule_grid.dart' show WeeklyCardsClipper;
 import 'course_edit_screen.dart';
 import '../transitions/smooth_slide_transitions.dart';
 
@@ -302,113 +300,62 @@ class _WindowsScheduleScreenState extends State<WindowsScheduleScreen> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final availableWidth = constraints.maxWidth - padding * 2;
-        final availableForDays = availableWidth - timeColWidth;
-        final colWidth = availableForDays / daysCount;
+        return Container(
+          padding: const EdgeInsets.all(padding),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 左侧时间轴 (1~13 节)
+              SizedBox(
+                width: timeColWidth,
+                child: Column(
+                  children: [
+                    const SizedBox(height: headerBottom),
+                    ...List.generate(kTotalSections, (i) {
+                      final section = i + 1;
+                      final startMin = config.sectionStartTimes[section] ?? (480 + (i < 5 ? i * 50 : 360 + i * 50));
+                      final hour = (startMin ~/ 60).toString().padLeft(2, '0');
+                      final min = (startMin % 60).toString().padLeft(2, '0');
+                      final timeStr = '$hour:$min';
 
-        // 计算本周所有课程卡片的精确 RRect 区域
-        final List<RRect> cardRRects = [];
-        final weekCourses = provider.getCurrentWeekCourses();
-        for (int dayIndex = 0; dayIndex < daysCount; dayIndex++) {
-          final day = dayIndex + 1;
-          final dayCourses = weekCourses.where((c) => c.weekday == day).toList();
-          final dayLeft = padding + timeColWidth + dayIndex * colWidth + 4.0;
-          final cardWidth = colWidth - 8.0;
-
-          for (final course in dayCourses) {
-            final startSec = _getSectionForTime(course.startTime, config);
-            final endSec = _getSectionForTime(course.endTime, config, isEnd: true);
-            final start = startSec > 0 ? startSec : 1;
-            final end = endSec >= start ? endSec : start;
-
-            final topOffset = padding + headerBottom + (start - 1) * kSectionRowHeight;
-            final courseHeight = (end - start + 1) * kSectionRowHeight - 4.0;
-
-            cardRRects.add(
-              RRect.fromRectAndRadius(
-                Rect.fromLTWH(dayLeft, topOffset, cardWidth, courseHeight),
-                const Radius.circular(14),
-              ),
-            );
-          }
-        }
-
-        return Stack(
-          children: [
-            // 视口级单层裁剪共享毛玻璃背景板：仅在活跃卡片轮廓内模糊
-            if (cardRRects.isNotEmpty)
-              Positioned.fill(
-                child: ClipPath(
-                  clipper: WeeklyCardsClipper(cardRRects),
-                  child: BackdropFilter(
-                    filter: ui.ImageFilter.blur(sigmaX: 14.0, sigmaY: 14.0),
-                    child: Container(
-                      color: isDark
-                          ? Colors.black.withValues(alpha: 0.18)
-                          : Colors.white.withValues(alpha: 0.15),
-                    ),
-                  ),
+                      return Container(
+                        height: kSectionRowHeight,
+                        alignment: Alignment.center,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              '$section',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: isDark ? Colors.white70 : const Color(0xFF1E2128),
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              timeStr,
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: isDark ? Colors.white.withValues(alpha: 0.4) : const Color(0xFF8E95A3),
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                  ],
                 ),
               ),
 
-            Container(
-              padding: const EdgeInsets.all(padding),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // 左侧时间轴 (1~13 节)
-                  SizedBox(
-                    width: timeColWidth,
-                    child: Column(
-                      children: [
-                        const SizedBox(height: headerBottom),
-                        ...List.generate(kTotalSections, (i) {
-                          final section = i + 1;
-                          final startMin = config.sectionStartTimes[section] ?? (480 + (i < 5 ? i * 50 : 360 + i * 50));
-                          final hour = (startMin ~/ 60).toString().padLeft(2, '0');
-                          final min = (startMin % 60).toString().padLeft(2, '0');
-                          final timeStr = '$hour:$min';
-
-                          return Container(
-                            height: kSectionRowHeight,
-                            alignment: Alignment.center,
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  '$section',
-                                  style: TextStyle(
-                                    color: isDark ? Colors.white70 : const Color(0xFF2D3139),
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(height: 1),
-                                Text(
-                                  timeStr,
-                                  style: TextStyle(
-                                    color: isDark ? Colors.white38 : const Color(0xFF8A909D),
-                                    fontSize: 9.5,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        }),
-                      ],
-                    ),
-                  ),
-
-                  // 5 天或 7 天单日列
-                  ...List.generate(daysCount, (index) {
-                    final day = index + 1;
-                    return Expanded(child: _buildDayColumn(provider, day, isDark));
-                  }),
-                ],
-              ),
-            ),
-          ],
+              // 5 天或 7 天单日列
+              ...List.generate(daysCount, (index) {
+                final day = index + 1;
+                return Expanded(child: _buildDayColumn(provider, day, isDark));
+              }),
+            ],
+          ),
         );
       },
     );
@@ -540,6 +487,7 @@ class _WindowsScheduleScreenState extends State<WindowsScheduleScreen> {
     final cardBgColor = CourseColorPalette.getCardColor(course.name, isDark);
     final titleColor = CourseColorPalette.getTitleTextColor(course.name, isDark);
     final subTextColor = CourseColorPalette.getSubTextColor(course.name, isDark);
+    final glowColor = CourseColorPalette.getCardGlowShadow(course.name, isDark);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
@@ -549,6 +497,24 @@ class _WindowsScheduleScreenState extends State<WindowsScheduleScreen> {
         padding: const EdgeInsets.all(10),
         color: cardBgColor,
         contentColor: titleColor,
+        shadows: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.36 : 0.20),
+            blurRadius: isDark ? 12 : 14,
+            spreadRadius: isDark ? 0 : 0.5,
+            offset: const Offset(0, 4),
+          ),
+          BoxShadow(
+            color: glowColor.withValues(alpha: isDark ? 0.25 : 0.22),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.20 : 0.12),
+            blurRadius: 4,
+            offset: const Offset(0, 1),
+          ),
+        ],
         onTap: null, // [v2.9.0] 移除主体直接展开详情，避免与底部三点操作条冲突
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

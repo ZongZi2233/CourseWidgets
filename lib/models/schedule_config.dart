@@ -60,6 +60,7 @@ class ScheduleConfigModel {
         10: 1160, // 19:20 (1110+45+5)
         11: 1220, // 20:20 (1160+45+15 大课间)
         12: 1270, // 21:10 (1220+45+5)
+        13: 1320, // 22:00 (1270+45+5)
       },
       sectionDurations: {
         1: 45,
@@ -74,6 +75,7 @@ class ScheduleConfigModel {
         10: 45,
         11: 45,
         12: 45,
+        13: 45,
       },
       breakTime: 5,
       useCustomConfig: false,

@@ -21,10 +21,19 @@ class PageBlurController extends ChangeNotifier {
   /// 从 RepaintBoundary 截图（异步版本，更安全）
   Future<bool> capture(GlobalKey boundaryKey) async {
     try {
-      final boundary =
-          boundaryKey.currentContext?.findRenderObject()
-              as RenderRepaintBoundary?;
+      var context = boundaryKey.currentContext;
+      if (context == null) return false;
+      var boundary = context.findRenderObject() as RenderRepaintBoundary?;
       if (boundary == null || !boundary.hasSize) return false;
+
+      // 如果当前渲染层处于等待重绘状态，等待本帧渲染结束再采样，杜绝 AssertionError
+      if (boundary.debugNeedsPaint) {
+        await WidgetsBinding.instance.endOfFrame;
+        context = boundaryKey.currentContext;
+        if (context == null) return false;
+        boundary = context.findRenderObject() as RenderRepaintBoundary?;
+        if (boundary == null || !boundary.hasSize) return false;
+      }
 
       // [v2.8.7] pixelRatio=0.50 最契合后续高斯模糊的降采样率，极大减轻 GPU 离屏开销同时保证平滑无颗粒
       final image = await boundary.toImage(pixelRatio: 0.50);

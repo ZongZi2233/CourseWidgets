@@ -52,7 +52,7 @@ class AndroidScheduleConfigScreenState
     _breakTimeController.text = _config.breakTime.toString();
     _showWeekends = _config.showWeekends;
 
-    for (int i = 1; i <= 12; i++) {
+    for (int i = 1; i <= 13; i++) {
       _startControllers.add(
         TextEditingController(
           text: _formatMinutes(_config.sectionStartTimes[i] ?? (480 + (i - 1) * 60)),
@@ -167,7 +167,7 @@ class AndroidScheduleConfigScreenState
     const bigBreak = 15; // 大课间15分钟
 
     int currentMin = firstStartMin;
-    for (int i = 0; i < 12; i++) {
+    for (int i = 0; i < 13; i++) {
       if (i == 0) {
         currentMin = firstStartMin;
       } else if (i == 1) {
@@ -203,6 +203,9 @@ class AndroidScheduleConfigScreenState
       } else if (i == 11) {
         // 第12节：与第11节同门课，中途小课间5分钟
         currentMin += duration + smallBreak;
+      } else if (i == 12) {
+        // 第13节：晚自习第4节，中途小课间5分钟
+        currentMin += duration + smallBreak;
       }
 
       _startControllers[i].text = _formatMinutes(currentMin);
@@ -229,7 +232,7 @@ class AndroidScheduleConfigScreenState
       );
 
       // 解析时间
-      for (int i = 1; i <= 12; i++) {
+      for (int i = 1; i <= 13; i++) {
         final timeStr = _startControllers[i - 1].text;
         final minutes = _parseTime(timeStr);
         if (minutes != null) {
@@ -283,7 +286,7 @@ class AndroidScheduleConfigScreenState
         sectionDurations: Map.from(_config.sectionDurations),
       );
 
-      for (int i = 1; i <= 12; i++) {
+      for (int i = 1; i <= 13; i++) {
         final timeStr = _startControllers[i - 1].text;
         final minutes = _parseTime(timeStr);
         if (minutes != null) {
@@ -625,7 +628,7 @@ class AndroidScheduleConfigScreenState
                         const SizedBox(height: 8),
                         // 课时列表
                         ...List.generate(
-                          12,
+                          13,
                           (index) => _buildSectionRow(index),
                         ),
                       ],

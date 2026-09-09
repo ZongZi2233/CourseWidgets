@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
-import 'dart:io' show Platform;
 import '../../constants/theme_constants.dart';
 
 /// [v2.2.9] 引导页面 - 欢迎页
@@ -20,7 +18,6 @@ class _OnboardingWelcomeState extends State<OnboardingWelcome>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _logoAnimation;
-  late Animation<double> _textAnimation;
   late Animation<double> _buttonAnimation;
 
   @override
@@ -37,14 +34,6 @@ class _OnboardingWelcomeState extends State<OnboardingWelcome>
       CurvedAnimation(
         parent: _controller,
         curve: const Interval(0.0, 0.5, curve: Curves.easeOutCubic),
-      ),
-    );
-
-    // 文字淡入动画
-    _textAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _controller,
-        curve: const Interval(0.4, 0.7, curve: Curves.easeOut),
       ),
     );
 
@@ -70,32 +59,47 @@ class _OnboardingWelcomeState extends State<OnboardingWelcome>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: AnimatedBuilder(
-        animation: _controller,
-        builder: (context, child) {
-          return Stack(
-            children: [
-              // Logo 玻璃块
-              Center(
-                child: Transform.translate(
-                  offset: Offset(0, _logoAnimation.value),
-                  child: _buildLogoGlass(),
+      body: AdaptiveLiquidGlassLayer(
+        quality: GlassQuality.premium,
+        settings: const LiquidGlassSettings(
+          blur: 4.0,
+          thickness: 20.0,
+          glassColor: Color(0x18FFFFFF),
+          lightIntensity: 0.70,
+          ambientStrength: 0.45,
+          ambientRim: 0.0,
+          edgeAbsorption: 0.0,
+          fresnelStrength: 0.05,
+          saturation: 1.20,
+          refractiveIndex: 1.40,
+        ),
+        child: AnimatedBuilder(
+          animation: _controller,
+          builder: (context, child) {
+            return Stack(
+              children: [
+                // Logo 玻璃块
+                Center(
+                  child: Transform.translate(
+                    offset: Offset(0, _logoAnimation.value),
+                    child: _buildLogoGlass(),
+                  ),
                 ),
-              ),
 
-              // "开始使用" 按钮
-              Positioned(
-                left: 40,
-                right: 40,
-                bottom: 100,
-                child: Opacity(
-                  opacity: _buttonAnimation.value,
-                  child: _buildStartButton(),
+                // "开始使用" 按钮
+                Positioned(
+                  left: 40,
+                  right: 40,
+                  bottom: 100,
+                  child: Opacity(
+                    opacity: _buttonAnimation.value,
+                    child: _buildStartButton(),
+                  ),
                 ),
-              ),
-            ],
-          );
-        },
+              ],
+            );
+          },
+        ),
       ),
     );
   }
@@ -129,6 +133,11 @@ class _OnboardingWelcomeState extends State<OnboardingWelcome>
               width: 90,
               height: 90,
               fit: BoxFit.contain,
+              errorBuilder: (ctx, err, st) => const Icon(
+                Icons.school_rounded,
+                size: 80,
+                color: Colors.white,
+              ),
             ),
             const SizedBox(height: 24),
 
@@ -169,16 +178,16 @@ class _OnboardingWelcomeState extends State<OnboardingWelcome>
       height: 60,
       style: GlassButtonStyle.filled,
       settings: LiquidGlassSettings(
-        glassColor: AppThemeColors.babyPink.withValues(alpha: 0.25),
-        blur: 2.0,
+        glassColor: AppThemeColors.babyPink.withValues(alpha: 0.35),
+        blur: 4.0,
         thickness: 20,
-        refractiveIndex: 1.45,
+        refractiveIndex: 1.35,
         lightIntensity: 0.70,
         ambientStrength: 0.45,
         ambientRim: 0.0, // [v2.8.9] 彻底消除暗边
         edgeAbsorption: 0.0, // [v2.8.9] 消除边缘吸光暗角
-        fresnelStrength: 0.05,
-        saturation: 1.20,
+        fresnelStrength: 0.0,
+        saturation: 1.25,
       ),
       shape: const LiquidRoundedSuperellipse(borderRadius: 24),
       child: const Center(

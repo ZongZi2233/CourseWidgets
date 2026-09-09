@@ -368,7 +368,8 @@ class _OnboardingThemeState extends State<OnboardingTheme> {
                           child: liquid.LiquidButton(
                             text: '上一步',
                             onTap: widget.onBack,
-                            color: Colors.white.withValues(alpha: 0.2),
+                            color: isDark ? Colors.white.withValues(alpha: 0.18) : Colors.black.withValues(alpha: 0.08),
+                            textColor: isDark ? Colors.white : const Color(0xFF1E2129),
                           ),
                         ),
                         const SizedBox(width: 16),
@@ -398,6 +399,7 @@ class _OnboardingThemeState extends State<OnboardingTheme> {
     String subtitle,
     IconData icon,
   ) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final isSelected = _selectedThemeMode == mode;
 
     return GestureDetector(
@@ -420,7 +422,6 @@ class _OnboardingThemeState extends State<OnboardingTheme> {
           await _themeService.applySystemTheme(context);
           debugPrint('✅ 系统主题已应用: ${_themeService.primaryColor}');
         } else if (mode == theme.ThemeMode.monet) {
-          final isDark = Theme.of(context).brightness == Brightness.dark;
           final defaultAsset = isDark ? 'asset:assets/Dark.png' : 'asset:assets/Light.png';
           final bgPath = globalBackgroundPath.value ?? defaultAsset;
           await _themeService.extractColorsFromImage(bgPath);
@@ -444,8 +445,8 @@ class _OnboardingThemeState extends State<OnboardingTheme> {
               : null,
           border: Border.all(
             color: isSelected
-                ? AppThemeColors.babyPink.withValues(alpha: 0.5)
-                : Colors.white.withValues(alpha: 0.1),
+                ? AppThemeColors.babyPink.withValues(alpha: 0.8)
+                : (isDark ? Colors.white.withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.08)),
             width: isSelected ? 2 : 1,
           ),
           borderRadius: BorderRadius.circular(16),
@@ -464,10 +465,18 @@ class _OnboardingThemeState extends State<OnboardingTheme> {
                         ],
                       )
                     : null,
-                color: isSelected ? null : Colors.white.withValues(alpha: 0.1),
+                color: isSelected
+                    ? null
+                    : (isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05)),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(icon, color: Colors.white, size: 24),
+              child: Icon(
+                icon,
+                color: isSelected
+                    ? Colors.white
+                    : (isDark ? Colors.white70 : const Color(0xFF2C303E)),
+                size: 24,
+              ),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -479,7 +488,7 @@ class _OnboardingThemeState extends State<OnboardingTheme> {
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
-                      color: GlassSettingsHelper.getTextColor(),
+                      color: GlassSettingsHelper.getTextColor(context),
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -487,7 +496,7 @@ class _OnboardingThemeState extends State<OnboardingTheme> {
                     subtitle,
                     style: TextStyle(
                       fontSize: 12,
-                      color: GlassSettingsHelper.getSecondaryTextColor(),
+                      color: GlassSettingsHelper.getSecondaryTextColor(context),
                     ),
                   ),
                 ],

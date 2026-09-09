@@ -1,4 +1,3 @@
-import 'dart:ui' as ui;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -16,32 +15,7 @@ import 'glass_context_menu.dart';
 import '../transitions/smooth_slide_transitions.dart';
 import 'package:smooth_scroll_multiplatform/smooth_scroll_multiplatform.dart';
 
-/// [v2.8.9] 视口级单层裁剪毛玻璃：仅在活跃卡片轮廓内执行 BackdropFilter，卡片间原始壁纸完全透出
-class WeeklyCardsClipper extends CustomClipper<Path> {
-  final List<RRect> cardRRects;
-
-  WeeklyCardsClipper(this.cardRRects);
-
-  @override
-  Path getClip(Size size) {
-    final path = Path();
-    for (final rrect in cardRRects) {
-      path.addRRect(rrect);
-    }
-    return path;
-  }
-
-  @override
-  bool shouldReclip(covariant WeeklyCardsClipper oldClipper) {
-    if (cardRRects.length != oldClipper.cardRRects.length) return true;
-    for (int i = 0; i < cardRRects.length; i++) {
-      if (cardRRects[i] != oldClipper.cardRRects[i]) return true;
-    }
-    return false;
-  }
-}
-
-/// 本周课程网格视图（支持平板与手机竖屏全看板）
+/// [v2.9.0] 本周课程网格视图（支持平板与手机竖屏全看板）
 class WeeklyScheduleGrid extends StatefulWidget {
   final bool showControlBar;
   final EdgeInsetsGeometry contentPadding;
@@ -315,68 +289,14 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
     final config = provider.currentConfig;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final timeColWidth = widget.isPhone ? 32.0 : 38.0;
-    const headerHeight = 36.0;
-    const headerBottom = headerHeight + 4.0 + 1.0 + 4.0; // 45.0
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final horizontalPadding = widget.contentPadding.horizontal;
-        final availableWidth = constraints.maxWidth - horizontalPadding;
-        final availableForDays = availableWidth - timeColWidth;
-        final colWidth = availableForDays / daysCount;
-
-        // 计算所有可见课程卡片的精确 RRect 区域
-        final List<RRect> cardRRects = [];
-        for (int dayIndex = 0; dayIndex < daysCount; dayIndex++) {
-          final day = dayIndex + 1;
-          final courses = provider.getCoursesForDay(day);
-          final dayLeft = timeColWidth + dayIndex * colWidth + 1.5;
-          final cardWidth = colWidth - 3.0;
-
-          for (final course in courses) {
-            final start = _getSectionForTime(course.startTime, config);
-            final end = _getSectionForTime(course.endTime, config, isEnd: true);
-            final finalStart = start > 0 ? start : 1;
-            final finalEnd = end >= finalStart ? end : finalStart;
-            final topOffset = headerBottom + (finalStart - 1) * kSectionRowHeight;
-            final courseHeight = (finalEnd - finalStart + 1) * kSectionRowHeight - 2.0;
-
-            cardRRects.add(
-              RRect.fromRectAndRadius(
-                Rect.fromLTWH(dayLeft, topOffset, cardWidth, courseHeight),
-                Radius.circular(widget.isPhone ? 10 : 12),
-              ),
-            );
-          }
-        }
-
-        return DynMouseScroll(
+    return DynMouseScroll(
           durationMS: 250,
           scrollSpeed: 1.2,
           builder: (context, controller, physics) => SingleChildScrollView(
             controller: controller,
             physics: physics,
             padding: widget.contentPadding,
-            child: Stack(
-              children: [
-                // 视口级单层裁剪共享毛玻璃背景板 (120 FPS 极速全周网格流畅渲染)
-                // 仅在卡片形状内部模糊采样，其余空余区域透出 100% 纯净原始壁纸！
-                if (cardRRects.isNotEmpty)
-                  Positioned.fill(
-                    child: ClipPath(
-                      clipper: WeeklyCardsClipper(cardRRects),
-                      child: BackdropFilter(
-                        filter: ui.ImageFilter.blur(sigmaX: 14.0, sigmaY: 14.0),
-                        child: Container(
-                          color: isDark
-                              ? Colors.black.withValues(alpha: 0.18)
-                              : Colors.white.withValues(alpha: 0.15),
-                        ),
-                      ),
-                    ),
-                  ),
-
-                Row(
+            child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // 左侧时间轴 (1~13 节课)
@@ -437,12 +357,8 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
                     }),
                   ],
                 ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
+              ),
+            );
   }
 
   /// 单日列
@@ -608,6 +524,7 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
     final cardBgColor = CourseColorPalette.getCardColor(course.name, isDark);
     final titleColor = CourseColorPalette.getTitleTextColor(course.name, isDark);
     final subTextColor = CourseColorPalette.getSubTextColor(course.name, isDark);
+    final glowColor = CourseColorPalette.getCardGlowShadow(course.name, isDark);
 
     return RepaintBoundary(
       child: liquid.HyperOSCard(
@@ -616,6 +533,25 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
         padding: EdgeInsets.all(widget.isPhone ? 6.0 : 8.0),
         color: cardBgColor,
         contentColor: titleColor,
+        // [v2.9.0] 增强浅色与深色模式立体弥散阴影，边界清晰物理浮起
+        shadows: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.36 : 0.20),
+            blurRadius: isDark ? 12 : 14,
+            spreadRadius: isDark ? 0 : 0.5,
+            offset: const Offset(0, 4),
+          ),
+          BoxShadow(
+            color: glowColor.withValues(alpha: isDark ? 0.25 : 0.22),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.20 : 0.12),
+            blurRadius: 4,
+            offset: const Offset(0, 1),
+          ),
+        ],
         // [v2.9.0] 移除主体直接展开详情，避免与底部三点操作条冲突
         onTap: null,
         child: Column(

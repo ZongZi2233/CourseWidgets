@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/onboarding_service.dart';
+import 'onboarding_welcome.dart';
+import 'onboarding_theme.dart';
 import 'onboarding_config.dart';
 import 'onboarding_import.dart';
-import 'onboarding_theme.dart';
 
 /// [v2.2.8/v2.9.0] 首次启动引导主框架
 class OnboardingScreen extends StatefulWidget {
@@ -28,7 +29,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   void _nextPage() {
-    if (_currentPage < 2) {
+    if (_currentPage < 3) {
       HapticFeedback.selectionClick();
       _pageController.animateToPage(
         _currentPage + 1,
@@ -76,23 +77,28 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           setState(() => _currentPage = index);
         },
         children: [
+          // 第零步：欢迎页面（高清应用图标 + 品牌介绍）
+          OnboardingWelcome(
+            onNext: _nextPage,
+          ),
+
           // 第一步：个性化主题设置
           OnboardingTheme(
             onComplete: _nextPage,
             onBack: _previousPage,
             isLastPage: false,
-            showBackButton: false,
+            showBackButton: true,
           ),
 
-          // 第二步：导入课表
-          OnboardingImport(
+          // 第二步：课时配置与时间自定义确认
+          OnboardingConfig(
             onNext: _nextPage,
             onBack: _previousPage,
             isLastPage: false,
           ),
 
-          // 第三步：课时配置与时间确认
-          OnboardingConfig(
+          // 第三步：导入课表
+          OnboardingImport(
             onNext: _completeOnboarding,
             onBack: _previousPage,
             isLastPage: true,

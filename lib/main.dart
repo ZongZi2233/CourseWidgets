@@ -5,6 +5,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:ui'; // [v2.4.8] PointerDeviceKind for Windows scroll behavior
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 // 引入超椭圆库
@@ -417,6 +418,17 @@ class _MyAppState extends State<MyApp> {
                   ? _SmoothWindowsScrollBehavior()
                   : null,
               builder: (context, child) {
+                // [v2.9.0] 智能视口物理分辨率自适应：根据屏幕尺寸与 devicePixelRatio 动态按需解码，杜绝无意义显存浪费
+                ImageProvider resolveAdaptiveImage(ImageProvider rawProvider) {
+                  final mq = MediaQuery.maybeOf(context);
+                  if (mq == null) return rawProvider;
+                  final dpr = mq.devicePixelRatio;
+                  final targetW = (mq.size.width * dpr).round();
+                  final targetH = (mq.size.height * dpr).round();
+                  final maxDim = math.max(targetW, targetH).clamp(720, 4096);
+                  return ResizeImage(rawProvider, width: maxDim, height: maxDim, policy: ResizeImagePolicy.fit);
+                }
+
                 // 构建背景组件
                 Widget backgroundWidget;
 
@@ -435,7 +447,7 @@ class _MyAppState extends State<MyApp> {
                       duration: const Duration(milliseconds: 500),
                       decoration: BoxDecoration(
                         image: DecorationImage(
-                          image: AssetImage(assetPath),
+                          image: resolveAdaptiveImage(AssetImage(assetPath)),
                           fit: BoxFit.cover,
                           alignment: Alignment.center,
                         ),
@@ -449,7 +461,7 @@ class _MyAppState extends State<MyApp> {
                       duration: const Duration(milliseconds: 500),
                       decoration: BoxDecoration(
                         image: DecorationImage(
-                          image: FileImage(File(backgroundPath)),
+                          image: resolveAdaptiveImage(FileImage(File(backgroundPath))),
                           fit: BoxFit.cover,
                           alignment: Alignment.center,
                           colorFilter: darkenAlpha > 0
@@ -469,7 +481,7 @@ class _MyAppState extends State<MyApp> {
                     duration: const Duration(milliseconds: 500),
                     decoration: BoxDecoration(
                       image: DecorationImage(
-                        image: AssetImage(defaultAsset),
+                        image: resolveAdaptiveImage(AssetImage(defaultAsset)),
                         fit: BoxFit.cover,
                         alignment: Alignment.center,
                       ),
