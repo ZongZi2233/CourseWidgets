@@ -6,6 +6,7 @@ import '../services/storage_service.dart'; // [v2.3.0] 用于清除配置数据
 import '../models/schedule_config.dart';
 import '../services/database_helper.dart';
 import '../services/onboarding_service.dart'; // [v2.5.9] 引入重置引导服务
+import '../services/ics_parser.dart'; // [v2.8.9] 引入课时推导算法
 
 /// 课表状态管理器 - 基于SQLite数据库
 class ScheduleProvider with ChangeNotifier {
@@ -247,6 +248,32 @@ class ScheduleProvider with ChangeNotifier {
       if (courses.isNotEmpty) {
         _courses = courses;
 
+        // [v2.8.9] 智能校准课时配置：根据实际课程起止时间智能推导，消除时间轴与课程卡片错位
+        try {
+          final deduced = IcsParser.deduceConfigFromCourses(_courses, '');
+          if (deduced != null) {
+            bool needUpdate = false;
+            if (_currentConfig.sectionStartTimes[1] != deduced.sectionStartTimes[1] ||
+                _currentConfig.sectionStartTimes.length < 12) {
+              needUpdate = true;
+            }
+            if (needUpdate) {
+              _currentConfig = _currentConfig.copyWith(
+                sectionStartTimes: deduced.sectionStartTimes,
+                sectionDurations: deduced.sectionDurations,
+                defaultDuration: deduced.defaultDuration,
+              );
+              await storage.setString(
+                'schedule_config',
+                jsonEncode(_currentConfig.toJson()),
+              );
+              debugPrint('🎯 课时配置已自动智能校准为真实课程起止时间！');
+            }
+          }
+        } catch (e) {
+          debugPrint('⚠️ 智能校准课时配置失败: $e');
+        }
+
         // [v2.8.2] 自动校准：如果课表首周与配置的目标开学周一不一致，自动平移对齐，彻底杜绝锁定在第2周
         final earliestMonday = getEarliestCourseMonday();
         final targetStartDate = _currentConfig.semesterStartDate;
@@ -316,6 +343,31 @@ class ScheduleProvider with ChangeNotifier {
     notifyListeners();
 
     debugPrint('✅ 所有数据已清除（包括数据库和配置）');
+  }
+
+  /// [v2.8.9] 删除单门课程
+  Future<void> deleteCourse(CourseEvent course) async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+      if (course.id != null) {
+        await db.delete('courses', where: 'id = ?', whereArgs: [course.id]);
+        _courses.removeWhere((c) => c.id == course.id);
+      } else {
+        await db.delete(
+          'courses',
+          where: 'startTime = ? AND name = ?',
+          whereArgs: [course.startTime, course.name],
+        );
+        _courses.removeWhere((c) => c.startTime == course.startTime && c.name == course.name);
+      }
+      _availableWeeks = await _importService.getAvailableWeeks(
+        _currentConfig.semesterStartDate,
+      );
+      notifyListeners();
+      debugPrint('🗑️ 已删除课程: ${course.name}');
+    } catch (e) {
+      debugPrint('❌ 删除课程失败: $e');
+    }
   }
 
   /// 设置当前周次

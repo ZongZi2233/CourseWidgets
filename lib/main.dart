@@ -31,8 +31,9 @@ import 'package:flutter_phoenix/flutter_phoenix.dart';
 
 import 'services/app_logger.dart';
 
-bool globalUseDarkMode = false;
 final ValueNotifier<bool> globalDarkModeNotifier = ValueNotifier<bool>(false);
+bool get globalUseDarkMode => globalDarkModeNotifier.value;
+set globalUseDarkMode(bool v) => globalDarkModeNotifier.value = v;
 final ValueNotifier<String?> globalBackgroundPath = ValueNotifier<String?>(
   null,
 );

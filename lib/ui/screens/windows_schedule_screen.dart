@@ -1,4 +1,5 @@
 import 'dart:ui' as ui;
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -10,16 +11,18 @@ import '../../models/schedule_config.dart';
 import '../../constants/theme_constants.dart';
 import '../widgets/liquid_components.dart' as liquid;
 import '../widgets/course_color_helper.dart';
+import '../widgets/glass_context_menu.dart';
+import '../widgets/weekly_schedule_grid.dart' show WeeklyCardsClipper;
 import 'course_edit_screen.dart';
 import '../transitions/smooth_slide_transitions.dart';
-import '../transitions/page_blur_controller.dart';
 
 /// [v2.8.9] 现代化 Windows 桌面端课表界面
 /// 1. 顶部真实光学折射周次切换器与周次胶囊（全玻璃折射）
-/// 2. 单日列星期标题采用独立 GlassContainer 折射底层壁纸
-/// 3. 全局共享视口级单层模糊背景板（120 FPS 流畅无卡顿）
+/// 2. 单日列星期标题采用优雅扁平横向胶囊（周一 3/10），杜绝狭窄竖胶囊
+/// 3. 视口级单层裁剪毛玻璃：仅在活跃卡片轮廓内执行模糊，空白区域纯净透露壁纸（120 FPS 零掉帧）
 /// 4. 课程整卡染色（CourseColorPalette）：整张卡片完全呈现课程主题色，文字黑白高对比自适应
-/// 5. 修复课程详情弹窗关闭时无法返回的问题（rootNavigator: true）
+/// 5. 课程卡片底部集成三点小横条 + Liquid Morph Engine (GlassContextMenu)
+/// 6. 官方 GlassSheet 课程详情底板，彻底修复关闭后无法返回的问题
 class WindowsScheduleScreen extends StatefulWidget {
   const WindowsScheduleScreen({super.key});
 
@@ -29,7 +32,7 @@ class WindowsScheduleScreen extends StatefulWidget {
 
 class _WindowsScheduleScreenState extends State<WindowsScheduleScreen> {
   static const double kSectionRowHeight = 60.0;
-  static const int kTotalSections = 12;
+  static const int kTotalSections = 13;
 
   /// 切换周次
   void _changeWeek(ScheduleProvider provider, int targetWeek) {
@@ -284,71 +287,134 @@ class _WindowsScheduleScreenState extends State<WindowsScheduleScreen> {
     );
   }
 
-  /// 本周课程网格：单层视口模糊共享背景板 + 星期和课程独立布局
+  /// 本周课程网格：视口级单层裁剪共享毛玻璃背景板 (120 FPS 极速全周网格渲染)
+  /// 仅在卡片形状内部模糊采样，其余空余区域透出 100% 纯净原始壁纸！
   Widget _buildWeekGrid(ScheduleProvider provider) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final showWeekends = provider.currentConfig.showWeekends;
     final daysCount = showWeekends ? 7 : 5;
+    final config = provider.currentConfig;
+    const timeColWidth = 44.0;
+    const headerHeight = 36.0;
+    const headerSpacing = 8.0;
+    const headerBottom = headerHeight + headerSpacing; // 44.0
+    const padding = 16.0;
 
-    return Stack(
-      children: [
-        // 视口级单层模糊共享背景板：仅做一次背景模糊离屏渲染，全部卡片共享
-        Positioned.fill(
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(20),
-            child: BackdropFilter(
-              filter: ui.ImageFilter.blur(sigmaX: 14.0, sigmaY: 14.0),
-              child: Container(
-                color: isDark
-                    ? Colors.black.withValues(alpha: 0.12)
-                    : Colors.white.withValues(alpha: 0.08),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final availableWidth = constraints.maxWidth - padding * 2;
+        final availableForDays = availableWidth - timeColWidth;
+        final colWidth = availableForDays / daysCount;
+
+        // 计算本周所有课程卡片的精确 RRect 区域
+        final List<RRect> cardRRects = [];
+        final weekCourses = provider.getCurrentWeekCourses();
+        for (int dayIndex = 0; dayIndex < daysCount; dayIndex++) {
+          final day = dayIndex + 1;
+          final dayCourses = weekCourses.where((c) => c.weekday == day).toList();
+          final dayLeft = padding + timeColWidth + dayIndex * colWidth + 4.0;
+          final cardWidth = colWidth - 8.0;
+
+          for (final course in dayCourses) {
+            final startSec = _getSectionForTime(course.startTime, config);
+            final endSec = _getSectionForTime(course.endTime, config, isEnd: true);
+            final start = startSec > 0 ? startSec : 1;
+            final end = endSec >= start ? endSec : start;
+
+            final topOffset = padding + headerBottom + (start - 1) * kSectionRowHeight;
+            final courseHeight = (end - start + 1) * kSectionRowHeight - 4.0;
+
+            cardRRects.add(
+              RRect.fromRectAndRadius(
+                Rect.fromLTWH(dayLeft, topOffset, cardWidth, courseHeight),
+                const Radius.circular(14),
               ),
-            ),
-          ),
-        ),
+            );
+          }
+        }
 
-        Container(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 左侧时间轴 (1~12 节)
-              SizedBox(
-                width: 44,
-                child: Column(
-                  children: [
-                    const SizedBox(height: 58), // 50 (标题) + 8 (间距) 确保对齐
-                    ...List.generate(kTotalSections, (i) {
-                      return Container(
-                        height: kSectionRowHeight,
-                        alignment: Alignment.center,
-                        child: Text(
-                          '${i + 1}',
-                          style: TextStyle(
-                            color: isDark ? Colors.white54 : const Color(0xFF6B7280),
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      );
-                    }),
-                  ],
+        return Stack(
+          children: [
+            // 视口级单层裁剪共享毛玻璃背景板：仅在活跃卡片轮廓内模糊
+            if (cardRRects.isNotEmpty)
+              Positioned.fill(
+                child: ClipPath(
+                  clipper: WeeklyCardsClipper(cardRRects),
+                  child: BackdropFilter(
+                    filter: ui.ImageFilter.blur(sigmaX: 14.0, sigmaY: 14.0),
+                    child: Container(
+                      color: isDark
+                          ? Colors.black.withValues(alpha: 0.18)
+                          : Colors.white.withValues(alpha: 0.15),
+                    ),
+                  ),
                 ),
               ),
 
-              // 5 天或 7 天单日列
-              ...List.generate(daysCount, (index) {
-                final day = index + 1;
-                return Expanded(child: _buildDayColumn(provider, day, isDark));
-              }),
-            ],
-          ),
-        ),
-      ],
+            Container(
+              padding: const EdgeInsets.all(padding),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 左侧时间轴 (1~13 节)
+                  SizedBox(
+                    width: timeColWidth,
+                    child: Column(
+                      children: [
+                        const SizedBox(height: headerBottom),
+                        ...List.generate(kTotalSections, (i) {
+                          final section = i + 1;
+                          final startMin = config.sectionStartTimes[section] ?? (480 + (i < 5 ? i * 50 : 360 + i * 50));
+                          final hour = (startMin ~/ 60).toString().padLeft(2, '0');
+                          final min = (startMin % 60).toString().padLeft(2, '0');
+                          final timeStr = '$hour:$min';
+
+                          return Container(
+                            height: kSectionRowHeight,
+                            alignment: Alignment.center,
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  '$section',
+                                  style: TextStyle(
+                                    color: isDark ? Colors.white70 : const Color(0xFF2D3139),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 1),
+                                Text(
+                                  timeStr,
+                                  style: TextStyle(
+                                    color: isDark ? Colors.white38 : const Color(0xFF8A909D),
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                      ],
+                    ),
+                  ),
+
+                  // 5 天或 7 天单日列
+                  ...List.generate(daysCount, (index) {
+                    final day = index + 1;
+                    return Expanded(child: _buildDayColumn(provider, day, isDark));
+                  }),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
-  /// 构建单天列：星期标题作为独立 GlassContainer 折射底层
+  /// 构建单天列：星期标题优雅扁平化（周一 3/10），杜绝竖胶囊
   Widget _buildDayColumn(ScheduleProvider provider, int day, bool isDark) {
     final isToday = DateTime.now().weekday == day;
     final weekCourses = provider.getCurrentWeekCourses();
@@ -363,45 +429,55 @@ class _WindowsScheduleScreenState extends State<WindowsScheduleScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 4),
       child: Column(
         children: [
-          // 星期标题 + 日期 - 独立的 GlassContainer 折射底层
-          GlassContainer(
-            useOwnLayer: true,
-            settings: LiquidGlassSettings(
-              glassColor: isToday
-                  ? AppThemeColors.babyPink.withValues(alpha: 0.35)
-                  : (isDark ? Colors.white.withValues(alpha: 0.06) : Colors.white.withValues(alpha: 0.35)),
-              blur: 8,
-              thickness: 16,
-              refractiveIndex: 1.35,
-              edgeAbsorption: 0.0,
-            ),
-            shape: const LiquidRoundedSuperellipse(borderRadius: 12),
-            height: 50,
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    ['周一', '周二', '周三', '周四', '周五', '周六', '周日'][day - 1],
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: isToday
-                          ? Colors.white
-                          : (isDark ? Colors.white : const Color(0xFF1E2128)),
-                      fontSize: 13,
+          // 星期标题 + 日期（精致扁平横向胶囊，杜绝狭窄竖胶囊）
+          Container(
+            height: 36,
+            decoration: isToday
+                ? BoxDecoration(
+                    color: AppThemeColors.babyPink.withValues(alpha: isDark ? 0.28 : 0.20),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: AppThemeColors.babyPink.withValues(alpha: 0.7),
+                      width: 1.0,
+                    ),
+                  )
+                : BoxDecoration(
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.05)
+                        : Colors.white.withValues(alpha: 0.30),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.08)
+                          : Colors.black.withValues(alpha: 0.04),
+                      width: 0.5,
                     ),
                   ),
-                  Text(
-                    dateLabel,
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: isToday
-                          ? Colors.white.withValues(alpha: 0.85)
-                          : (isDark ? Colors.white54 : const Color(0xFF757B88)),
-                    ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  ['周一', '周二', '周三', '周四', '周五', '周六', '周日'][day - 1],
+                  style: TextStyle(
+                    fontWeight: isToday ? FontWeight.bold : FontWeight.w600,
+                    color: isToday
+                        ? AppThemeColors.babyPink
+                        : (isDark ? Colors.white : const Color(0xFF1E2128)),
+                    fontSize: 13,
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  dateLabel,
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: isToday ? FontWeight.bold : FontWeight.w500,
+                    color: isToday
+                        ? AppThemeColors.babyPink
+                        : (isDark ? Colors.white60 : const Color(0xFF757B88)),
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 8),
@@ -453,7 +529,7 @@ class _WindowsScheduleScreenState extends State<WindowsScheduleScreen> {
     );
   }
 
-  /// 构建课程卡片：整卡染色 (CourseColorPalette) + 柔和通透质感
+  /// 构建课程卡片：整卡染色 (CourseColorPalette) + 柔和通透质感 + 底部三点小横条 Morph Engine
   Widget _buildCourseCard(CourseEvent course, bool isDark) {
     final showLocation = course.location.isNotEmpty &&
         !course.name.contains(course.location.split('（')[0].split('(')[0].trim());
@@ -468,7 +544,7 @@ class _WindowsScheduleScreenState extends State<WindowsScheduleScreen> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
       child: liquid.HyperOSCard(
-        useBlur: false, // 共享视口级背景单层模糊，零掉帧
+        useBlur: false, // 视口级裁剪单层模糊，零掉帧
         cornerRadius: 14,
         padding: const EdgeInsets.all(10),
         color: cardBgColor,
@@ -518,56 +594,197 @@ class _WindowsScheduleScreenState extends State<WindowsScheduleScreen> {
                 color: subTextColor,
               ),
             ),
+            const SizedBox(height: 4),
+
+            // [v2.8.9] 底部三点小横条 + Liquid Morph Engine (GlassContextMenu)
+            Center(
+              child: GlassContextMenu(
+                menuWidth: 170,
+                menuAlignment: GlassMenuAlignment.none,
+                items: [
+                  GlassContextMenuItem(
+                    title: '课程详情',
+                    icon: CupertinoIcons.info,
+                    onTap: () => _showCourseDetail(course),
+                  ),
+                  GlassContextMenuItem(
+                    title: '编辑课程',
+                    icon: CupertinoIcons.pencil,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        TransparentMaterialPageRoute(
+                          builder: (_) => CourseEditScreen(course: course),
+                        ),
+                      );
+                    },
+                  ),
+                  GlassContextMenuItem(
+                    title: '删除课程',
+                    icon: CupertinoIcons.trash,
+                    isDestructive: true,
+                    onTap: () async {
+                      final provider = Provider.of<ScheduleProvider>(context, listen: false);
+                      await provider.deleteCourse(course);
+                      if (mounted) {
+                        liquid.showLiquidToast(context, '已删除课程: ${course.name}');
+                      }
+                    },
+                  ),
+                ],
+                trigger: Container(
+                  height: 8.5,
+                  width: 38.0,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        width: 2.5,
+                        height: 2.5,
+                        decoration: BoxDecoration(
+                          color: subTextColor.withValues(alpha: 0.7),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 2.5),
+                      Container(
+                        width: 2.5,
+                        height: 2.5,
+                        decoration: BoxDecoration(
+                          color: subTextColor.withValues(alpha: 0.7),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 2.5),
+                      Container(
+                        width: 2.5,
+                        height: 2.5,
+                        decoration: BoxDecoration(
+                          color: subTextColor.withValues(alpha: 0.7),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  /// 显示课程详情（彻底修复 rootNavigator: true 关闭回不去的问题）
+  /// 显示课程详情（官方 GlassSheet 底部面板，彻底消除关闭无法返回的问题）
   void _showCourseDetail(CourseEvent course) {
-    liquid.showLiquidDialog(
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryTextColor = isDark ? Colors.white : const Color(0xFF1A1A2E);
+
+    showModalBottomSheet(
       context: context,
-      builder: Builder(
-        builder: (dialogContext) => liquid.LiquidGlassDialog(
-          title: '课程详情',
-          content: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _buildDetailRow('课程', course.name),
-              const SizedBox(height: 8),
-              _buildDetailRow('地点', course.location),
-              const SizedBox(height: 8),
-              _buildDetailRow('教师', course.teacher),
-              const SizedBox(height: 8),
-              _buildDetailRow('时间', course.timeStr),
-            ],
-          ),
-          actions: [
-            GlassDialogAction(
-              label: '编辑',
-              onPressed: () async {
-                Navigator.of(dialogContext, rootNavigator: true).pop();
-
-                await PageBlurController.instance.capture(
-                  TransparentMaterialPageRoute.contentBoundaryKey,
-                );
-
-                if (!mounted) return;
-                Navigator.of(context).push(
-                  TransparentMaterialPageRoute(
-                    builder: (_) => CourseEditScreen(course: course),
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => GlassSheet(
+        settings: LiquidGlassSettings(
+          glassColor: isDark
+              ? Colors.black.withValues(alpha: 0.45)
+              : Colors.white.withValues(alpha: 0.20),
+          blur: 4.0,
+          thickness: 20.0,
+        ),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
                   ),
-                );
-              },
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  course.name,
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: primaryTextColor,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _buildDetailRow('时间', course.timeStr),
+                const SizedBox(height: 10),
+                _buildDetailRow('地点', course.location.isEmpty ? '未指定地点' : course.location),
+                const SizedBox(height: 10),
+                _buildDetailRow('教师', course.teacher.isEmpty ? '未指定教师' : course.teacher),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Expanded(
+                      child: GlassButton.custom(
+                        onTap: () {
+                          Navigator.pop(sheetContext);
+                          Navigator.push(
+                            context,
+                            TransparentMaterialPageRoute(
+                              builder: (_) => CourseEditScreen(course: course),
+                            ),
+                          );
+                        },
+                        height: 44,
+                        settings: LiquidGlassSettings(
+                          glassColor: AppThemeColors.babyPink.withValues(alpha: 0.35),
+                          blur: 4,
+                          thickness: 14,
+                        ),
+                        shape: const LiquidRoundedSuperellipse(borderRadius: 14),
+                        child: const Center(
+                          child: Text(
+                            '编辑课程',
+                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: GlassButton.custom(
+                        onTap: () => Navigator.pop(sheetContext),
+                        height: 44,
+                        settings: LiquidGlassSettings(
+                          glassColor: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.10),
+                          blur: 4,
+                          thickness: 14,
+                        ),
+                        shape: const LiquidRoundedSuperellipse(borderRadius: 14),
+                        child: Center(
+                          child: Text(
+                            '关闭',
+                            style: TextStyle(
+                              color: isDark ? Colors.white70 : const Color(0xFF4A4E58),
+                              fontWeight: FontWeight.w600,
+                              fontSize: 15,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
-            GlassDialogAction(
-              label: '关闭',
-              isPrimary: true,
-              onPressed: () => Navigator.of(dialogContext, rootNavigator: true).pop(),
-            ),
-          ],
+          ),
         ),
       ),
     );

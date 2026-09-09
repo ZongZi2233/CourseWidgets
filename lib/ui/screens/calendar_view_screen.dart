@@ -620,7 +620,7 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
               decoration: BoxDecoration(
                 color: isDark
                     ? Colors.white.withValues(alpha: 0.08)
-                    : Colors.white.withValues(alpha: 0.16),
+                    : Colors.black.withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(14),
               ),
               alignment: Alignment.center,
@@ -629,8 +629,8 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
                 children: [
                   Text(
                     startTimeStr,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: isDark ? Colors.white : const Color(0xFF1A1A2E),
                       fontSize: 13,
                       fontWeight: FontWeight.w900,
                     ),
@@ -638,7 +638,7 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
                   Text(
                     endTimeStr,
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.8),
+                      color: isDark ? Colors.white70 : const Color(0xFF555B68),
                       fontSize: 10,
                       fontWeight: FontWeight.w600,
                     ),

@@ -24,8 +24,6 @@ import '../transitions/smooth_slide_transitions.dart';
 import '../widgets/glass_context_menu.dart';
 import '../widgets/tablet_sidebar.dart';
 import '../widgets/weekly_schedule_grid.dart';
-import '../transitions/page_blur_controller.dart';
-
 class AndroidLiquidGlassMain extends StatefulWidget {
   const AndroidLiquidGlassMain({super.key});
   @override
@@ -33,18 +31,13 @@ class AndroidLiquidGlassMain extends StatefulWidget {
 }
 
 class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
-    with SingleTickerProviderStateMixin, RouteAware {
+    with RouteAware {
   int _currentIndex = 0;
   late final PageController _pageController = PageController();
   bool _isLoading = true;
   bool _isBottomNavVisible = true;
-  bool _isCoveredBySubPage = false; // [v2.8.4] 二级页面覆盖状态，用于彻底离屏冻结前级页面 Ticker 与着色管线
-  bool _hasBlurSnapshot = false; // [v2.8.9] 景深快照就绪状态，控制模糊遮罩层在动画期间平滑交叉淡入淡出
   bool _isWeekPickerActive = false; // [v2.8.6] 周次选择器打开状态，用于挂起背景重绘保障 120 FPS
   final DataImportService _importService = DataImportService();
-
-  late final AnimationController _blurAnimationController;
-  late final Animation<double> _blurAnimation;
 
   void _onTabSelected(int index) {
     if (_currentIndex == index) return;
@@ -61,15 +54,6 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
   @override
   void initState() {
     super.initState();
-    _blurAnimationController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 260),
-    );
-    _blurAnimation = CurvedAnimation(
-      parent: _blurAnimationController,
-      curve: Curves.easeOutCubic,
-      reverseCurve: Curves.easeInCubic,
-    );
     _loadData();
   }
 
@@ -80,45 +64,22 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
     routeObserver.subscribe(this, ModalRoute.of(context) as PageRoute);
   }
 
-  // [v2.6.0/v2.8.9] 被其他页面覆盖时：在底层页面依然呈现的同时平滑淡入高斯模糊快照，待完全覆盖后再冻结底层，消除硬切
+  // [v2.8.9] 被其他页面覆盖时：仅隐藏底部导航栏，零 GPU 阻塞直出 120 FPS 丝滑滑入
   @override
   void didPushNext() {
     if (mounted) {
       setState(() {
         _isBottomNavVisible = false;
       });
-      PageBlurController.instance.capture(TransparentMaterialPageRoute.contentBoundaryKey).then((success) {
-        if (mounted && success) {
-          setState(() {
-            _hasBlurSnapshot = true;
-          });
-          _blurAnimationController.forward(from: 0.0).then((_) {
-            if (mounted && _hasBlurSnapshot && _blurAnimationController.isCompleted) {
-              setState(() {
-                _isCoveredBySubPage = true; // 完全模糊覆盖后离屏冻结底层 Ticker 与渲染，保 120 FPS
-              });
-            }
-          });
-        }
-      });
     }
   }
 
-  // [v2.6.0/v2.8.9] 上一层页面弹出：先立刻解除底层冻结让清晰页面就绪，再平滑淡出高斯模糊快照，完全消除生硬还原
+  // [v2.8.9] 上一层页面弹出：平滑恢复底部导航栏
   @override
   void didPopNext() {
     if (mounted) {
       setState(() {
         _isBottomNavVisible = true;
-        _isCoveredBySubPage = false; // 立刻解除离屏冻结，让清晰主页面在模糊淡出过程中平滑显露
-      });
-      _blurAnimationController.reverse().then((_) {
-        if (mounted) {
-          setState(() {
-            _hasBlurSnapshot = false;
-          });
-          PageBlurController.instance.clear();
-        }
       });
     }
   }
@@ -169,7 +130,6 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
     routeObserver.unsubscribe(this); // [v2.6.0] 卸载路由监听
     _scheduleProvider?.removeListener(_onScheduleChanged);
     _pageController.dispose();
-    _blurAnimationController.dispose();
     // 停止通知服务
     LiveNotificationServiceV2().dispose();
     super.dispose();
@@ -227,82 +187,28 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
           Expanded(
             child: RepaintBoundary(
               key: TransparentMaterialPageRoute.contentBoundaryKey,
-              child: Stack(
-                fit: StackFit.expand,
+              child: PageView(
+                controller: _pageController,
+                physics: const NeverScrollableScrollPhysics(),
                 children: [
-                  Offstage(
-                    offstage: _isCoveredBySubPage,
-                    child: TickerMode(
-                      enabled: !_isCoveredBySubPage,
-                      child: PageView(
-                        controller: _pageController,
-                        physics: const NeverScrollableScrollPhysics(),
-                        children: [
-                          TickerMode(
-                            enabled: _currentIndex == 0 && !_isCoveredBySubPage && !_isWeekPickerActive,
-                            child: RepaintBoundary(
-                              child: _buildTabletSchedulePage(),
-                            ),
-                          ),
-                          TickerMode(
-                            enabled: _currentIndex == 1 && !_isCoveredBySubPage,
-                            child: const RepaintBoundary(
-                              child: CalendarViewScreen(),
-                            ),
-                          ),
-                          TickerMode(
-                            enabled: _currentIndex == 2 && !_isCoveredBySubPage,
-                            child: const RepaintBoundary(
-                              child: SettingsMainScreen(),
-                            ),
-                          ),
-                        ],
-                      ),
+                  TickerMode(
+                    enabled: _currentIndex == 0 && !_isWeekPickerActive,
+                    child: RepaintBoundary(
+                      child: _buildTabletSchedulePage(),
                     ),
                   ),
-                  if (_hasBlurSnapshot)
-                    Positioned.fill(
-                      child: MediaQuery.removeViewInsets(
-                        removeBottom: true,
-                        removeTop: true,
-                        removeLeft: true,
-                        removeRight: true,
-                        context: context,
-                        child: RepaintBoundary(
-                          child: ListenableBuilder(
-                            listenable: PageBlurController.instance,
-                            builder: (context, _) {
-                              final img = PageBlurController.instance.capturedImage;
-                              if (img != null) {
-                                final isDark = Theme.of(context).brightness == Brightness.dark;
-                                return FadeTransition(
-                                  opacity: _blurAnimation,
-                                  child: Stack(
-                                    fit: StackFit.expand,
-                                    children: [
-                                      ImageFiltered(
-                                        imageFilter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                                        child: RawImage(
-                                          image: img,
-                                          fit: BoxFit.cover,
-                                          filterQuality: FilterQuality.medium,
-                                        ),
-                                      ),
-                                      Container(
-                                        color: isDark
-                                            ? Colors.black.withValues(alpha: 0.25)
-                                            : Colors.white.withValues(alpha: 0.12),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              }
-                              return const SizedBox.shrink();
-                            },
-                          ),
-                        ),
-                      ),
+                  TickerMode(
+                    enabled: _currentIndex == 1,
+                    child: const RepaintBoundary(
+                      child: CalendarViewScreen(),
                     ),
+                  ),
+                  TickerMode(
+                    enabled: _currentIndex == 2,
+                    child: const RepaintBoundary(
+                      child: SettingsMainScreen(),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -315,87 +221,33 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
   /// 手机布局
   Widget _buildPhoneLayout(BuildContext context) {
     return Scaffold(
-      resizeToAvoidBottomInset: false, // [v2.8.6] 软键盘弹出时防止底层背景与冻结快照被压缩或上移漂移
+      resizeToAvoidBottomInset: false, // [v2.8.6] 软键盘弹出时防止底层背景被压缩或上移漂移
       backgroundColor: Colors.transparent,
       extendBody: true,
       body: RepaintBoundary(
         key: TransparentMaterialPageRoute.contentBoundaryKey,
-        child: Stack(
-          fit: StackFit.expand,
+        child: PageView(
+          controller: _pageController,
+          physics: const NeverScrollableScrollPhysics(),
           children: [
-            Offstage(
-              offstage: _isCoveredBySubPage,
-              child: TickerMode(
-                enabled: !_isCoveredBySubPage,
-                child: PageView(
-                  controller: _pageController,
-                  physics: const NeverScrollableScrollPhysics(),
-                  children: [
-                    TickerMode(
-                      enabled: _currentIndex == 0 && !_isCoveredBySubPage && !_isWeekPickerActive,
-                      child: RepaintBoundary(
-                        child: _buildSchedulePage(),
-                      ),
-                    ),
-                    TickerMode(
-                      enabled: _currentIndex == 1 && !_isCoveredBySubPage,
-                      child: const RepaintBoundary(
-                        child: CalendarViewScreen(),
-                      ),
-                    ),
-                    TickerMode(
-                      enabled: _currentIndex == 2 && !_isCoveredBySubPage,
-                      child: RepaintBoundary(
-                        child: _buildPageWithHeader(2, const SettingsMainScreen(), '设置'),
-                      ),
-                    ),
-                  ],
-                ),
+            TickerMode(
+              enabled: _currentIndex == 0 && !_isWeekPickerActive,
+              child: RepaintBoundary(
+                child: _buildSchedulePage(),
               ),
             ),
-            if (_hasBlurSnapshot)
-              Positioned.fill(
-                child: MediaQuery.removeViewInsets(
-                  removeBottom: true,
-                  removeTop: true,
-                  removeLeft: true,
-                  removeRight: true,
-                  context: context,
-                  child: RepaintBoundary(
-                    child: ListenableBuilder(
-                      listenable: PageBlurController.instance,
-                      builder: (context, _) {
-                        final img = PageBlurController.instance.capturedImage;
-                        if (img != null) {
-                          final isDark = Theme.of(context).brightness == Brightness.dark;
-                          return FadeTransition(
-                            opacity: _blurAnimation,
-                            child: Stack(
-                              fit: StackFit.expand,
-                              children: [
-                                ImageFiltered(
-                                  imageFilter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                                  child: RawImage(
-                                    image: img,
-                                    fit: BoxFit.cover,
-                                    filterQuality: FilterQuality.medium,
-                                  ),
-                                ),
-                                Container(
-                                  color: isDark
-                                      ? Colors.black.withValues(alpha: 0.25)
-                                      : Colors.white.withValues(alpha: 0.12),
-                                ),
-                              ],
-                            ),
-                          );
-                        }
-                        return const SizedBox.shrink();
-                      },
-                    ),
-                  ),
-                ),
+            TickerMode(
+              enabled: _currentIndex == 1,
+              child: const RepaintBoundary(
+                child: CalendarViewScreen(),
               ),
+            ),
+            TickerMode(
+              enabled: _currentIndex == 2,
+              child: RepaintBoundary(
+                child: _buildPageWithHeader(2, const SettingsMainScreen(), '设置'),
+              ),
+            ),
           ],
         ),
       ),

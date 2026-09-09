@@ -71,7 +71,7 @@ class _SettingsNotificationScreenState
                     style: TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.bold,
-                      color: GlassSettingsHelper.getTextColor(),
+                      color: GlassSettingsHelper.getTextColor(context),
                     ),
                   ),
                 ],
@@ -183,7 +183,7 @@ class _SettingsNotificationScreenState
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    color: GlassSettingsHelper.getTextColor(),
+                    color: GlassSettingsHelper.getTextColor(context),
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -191,7 +191,7 @@ class _SettingsNotificationScreenState
                   subtitle,
                   style: TextStyle(
                     fontSize: 12,
-                    color: GlassSettingsHelper.getSecondaryTextColor(),
+                    color: GlassSettingsHelper.getSecondaryTextColor(context),
                   ),
                 ),
               ],
@@ -228,7 +228,7 @@ class _SettingsNotificationScreenState
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
-                  color: GlassSettingsHelper.getTextColor(),
+                  color: GlassSettingsHelper.getTextColor(context),
                 ),
               ),
             ],
@@ -240,7 +240,7 @@ class _SettingsNotificationScreenState
             '• 开启此功能后：若你的系统或 OEM 厂商支持，将优先展示动态面板。',
             style: TextStyle(
               fontSize: 13,
-              color: GlassSettingsHelper.getSecondaryTextColor(),
+              color: GlassSettingsHelper.getSecondaryTextColor(context),
               height: 1.5,
             ),
           ),

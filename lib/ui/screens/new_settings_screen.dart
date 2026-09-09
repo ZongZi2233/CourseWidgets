@@ -10,6 +10,7 @@ import 'course_edit_screen.dart';
 import '../widgets/liquid_components.dart' as liquid;
 import '../transitions/smooth_slide_transitions.dart';
 import '../widgets/liquid_glass_pickers.dart';
+import '../../utils/glass_settings_helper.dart';
 
 class NewSettingsScreen extends StatefulWidget {
   const NewSettingsScreen({super.key});
@@ -18,8 +19,8 @@ class NewSettingsScreen extends StatefulWidget {
 }
 
 class _NewSettingsScreenState extends State<NewSettingsScreen> {
-  Color get _textColor => Colors.white; // 强制白色文字，适应玻璃背景
-  Color get _textSecondaryColor => Colors.white70;
+  Color get _textColor => GlassSettingsHelper.getTextColor(context);
+  Color get _textSecondaryColor => GlassSettingsHelper.getSecondaryTextColor(context);
 
   @override
   Widget build(BuildContext context) {

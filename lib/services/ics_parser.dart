@@ -229,7 +229,7 @@ class IcsParser {
     return DateTime.now();
   }
 
-  /// [v2.7.0] 自动从解析出的课程列表中推导 ScheduleConfigModel
+  /// [v2.7.0/v2.8.9] 自动从解析出的课程列表中推导 ScheduleConfigModel
   /// 返回一个新的 ScheduleConfigModel 对象，如果无法推导则返回空
   static ScheduleConfigModel? deduceConfigFromCourses(
     List<CourseEvent> courses,
@@ -237,7 +237,7 @@ class IcsParser {
   ) {
     if (courses.isEmpty) return null;
 
-    // 1. 推断开学日期
+    // 1. 推断开学日期（取最早课程所在的周一）
     CourseEvent earliestCourse = courses.first;
     for (var course in courses) {
       if (course.startTime < earliestCourse.startTime) {
@@ -256,159 +256,157 @@ class IcsParser {
       icsMonday.day,
     );
 
-    // 2. 解析每节课对应的起止时间
-    final Map<int, int> extractedStartTimes = {};
-    final Map<int, int> extractedEndTimes = {};
-    final Map<int, int> sectionDurations = {};
     final Map<int, int> sectionStartTimes = {};
+    final Map<int, int> sectionDurations = {};
 
-    // 通过正则从原始 ICS 中匹配每个 VEVENT 的 description 提取 startSection 和 endSection
-    final List<String> events = rawIcsContent.split('BEGIN:VEVENT');
-    for (int i = 1; i < events.length; i++) {
-      final vEvent = events[i];
-      // 提取 DTSTART 和 DTEND
-      final RegExp dtStartReg = RegExp(r'DTSTART(?:;[^:]*)?:(\d{8}T\d{6}Z?)');
-      final RegExp dtEndReg = RegExp(r'DTEND(?:;[^:]*)?:(\d{8}T\d{6}Z?)');
-      final RegExp descReg = RegExp(
-        r'DESCRIPTION:.*?第\s*(\d+)\s*[-|到|~|～]\s*(\d+)\s*节',
-        dotAll: true,
-      );
-      // 或者匹配 "[1-2节]" 这种
-      final RegExp descReg2 = RegExp(
-        r'DESCRIPTION:.*?\[\s*(\d+)\s*[-|到|~|～]\s*(\d+)\s*节\]',
-        dotAll: true,
-      );
+    // 2. 尝试从原始 ICS 的 VEVENT 中正则匹配 [1-2节] 或 第1-2节 等
+    final Map<int, int> extractedStartTimes = {};
+    final Map<int, int> extractedDurations = {};
 
-      final dtStartMatch = dtStartReg.firstMatch(vEvent);
-      final dtEndMatch = dtEndReg.firstMatch(vEvent);
+    if (rawIcsContent.isNotEmpty) {
+      final List<String> events = rawIcsContent.split('BEGIN:VEVENT');
+      for (int i = 1; i < events.length; i++) {
+        final vEvent = events[i];
+        final RegExp dtStartReg = RegExp(r'DTSTART(?:;[^:]*)?:(\d{8}T\d{6}Z?)');
+        final RegExp dtEndReg = RegExp(r'DTEND(?:;[^:]*)?:(\d{8}T\d{6}Z?)');
+        final RegExp secReg = RegExp(
+          r'(?:第|\[|\(|节次[:：]?\s*)(\d{1,2})\s*[-~～到至]\s*(\d{1,2})\s*(?:节|\]|\))',
+          caseSensitive: false,
+        );
 
-      Match? secMatch = descReg.firstMatch(vEvent);
-      secMatch ??= descReg2.firstMatch(vEvent);
+        final dtStartMatch = dtStartReg.firstMatch(vEvent);
+        final dtEndMatch = dtEndReg.firstMatch(vEvent);
+        final secMatch = secReg.firstMatch(vEvent);
 
-      if (dtStartMatch != null && dtEndMatch != null && secMatch != null) {
-        final startSection = int.tryParse(secMatch.group(1)!);
-        final endSection = int.tryParse(secMatch.group(2)!);
-        if (startSection == null || endSection == null) continue;
+        if (dtStartMatch != null && dtEndMatch != null && secMatch != null) {
+          final startSec = int.tryParse(secMatch.group(1)!);
+          final endSec = int.tryParse(secMatch.group(2)!);
+          if (startSec == null || endSec == null || startSec > endSec || startSec < 1 || endSec > 13) continue;
 
-        final dtStartStr = dtStartMatch.group(1)!;
-        final dtEndStr = dtEndMatch.group(1)!;
+          final dtStart = _parseIcsDateTime(dtStartMatch.group(1)!).toLocal();
+          final dtEnd = _parseIcsDateTime(dtEndMatch.group(1)!).toLocal();
+          final startMin = dtStart.hour * 60 + dtStart.minute;
+          final endMin = dtEnd.hour * 60 + dtEnd.minute;
+          final totalSpan = endMin - startMin;
+          final count = endSec - startSec + 1;
 
-        DateTime startDt = _parseIcsDateTime(dtStartStr).toLocal();
-        DateTime endDt = _parseIcsDateTime(dtEndStr).toLocal();
+          if (totalSpan > 0 && count > 0) {
+            final singleDur = count == 1
+                ? totalSpan
+                : ((totalSpan - (count - 1) * 10) / count).round().clamp(40, 60);
 
-        final startMinutes = startDt.hour * 60 + startDt.minute;
-        final endMinutes = endDt.hour * 60 + endDt.minute;
-
-        // 保存此组合
-        extractedStartTimes[startSection] = startMinutes;
-        extractedEndTimes[endSection] = endMinutes;
-      }
-    }
-
-    // 3. 推算节次时间：若正则未提取到，自动聚类各门课程的真实起止时间并对齐 1~13 节
-    if (extractedStartTimes.isEmpty && courses.isNotEmpty) {
-      final Set<int> uniqueStarts = {};
-      final Set<int> uniqueEnds = {};
-      for (final c in courses) {
-        final startDt = DateTime.fromMillisecondsSinceEpoch(c.startTime).toLocal();
-        final endDt = DateTime.fromMillisecondsSinceEpoch(c.endTime).toLocal();
-        uniqueStarts.add(startDt.hour * 60 + startDt.minute);
-        uniqueEnds.add(endDt.hour * 60 + endDt.minute);
-      }
-      final sortedStarts = uniqueStarts.toList()..sort();
-      final sortedEnds = uniqueEnds.toList()..sort();
-      for (int i = 0; i < sortedStarts.length && i < 13; i++) {
-        extractedStartTimes[i + 1] = sortedStarts[i];
-      }
-      for (int i = 0; i < sortedEnds.length && i < 13; i++) {
-        extractedEndTimes[i + 1] = sortedEnds[i];
-      }
-    }
-
-    if (extractedStartTimes.isEmpty) {
-      return ScheduleConfigModel.defaultConfig().copyWith(
-        semesterStartDate: semesterStartDate,
-      );
-    }
-
-    // 假设等长时间
-    int totalClassDuration = 0;
-    int classesCount = 0;
-
-    extractedStartTimes.forEach((startSec, startMin) {
-      if (extractedEndTimes.containsKey(startSec)) {
-        totalClassDuration += (extractedEndTimes[startSec]! - startMin);
-        classesCount++;
-      } else {
-        int? matchingEndSec;
-        for (int endSec = startSec; endSec <= 13; endSec++) {
-          if (extractedEndTimes.containsKey(endSec)) {
-            matchingEndSec = endSec;
-            break;
+            for (int s = startSec; s <= endSec; s++) {
+              final offsetInBlock = s - startSec;
+              final secStart = startMin + offsetInBlock * (singleDur + 10);
+              extractedStartTimes[s] = secStart;
+              extractedDurations[s] = singleDur;
+            }
           }
         }
-        if (matchingEndSec != null && matchingEndSec >= startSec) {
-          totalClassDuration +=
-              ((extractedEndTimes[matchingEndSec]! - startMin) /
-                      (matchingEndSec - startSec + 1))
-                  .round();
-          classesCount++;
-        }
       }
-    });
-
-    final int defaultDuration = classesCount > 0
-        ? (totalClassDuration / classesCount).round().clamp(30, 120)
-        : 45;
-
-    // 如果找不到指定的 section，用前后的推断
-    for (int i = 1; i <= 13; i++) {
-      sectionDurations[i] = defaultDuration;
     }
 
-    // 补全 sectionStartTimes (1~13 节)
-    final List<int> sortedSections = extractedStartTimes.keys.toList()..sort();
-
-    if (sortedSections.isNotEmpty) {
+    // 3. 若通过正则成功提取到了部分节次
+    if (extractedStartTimes.isNotEmpty) {
       for (int i = 1; i <= 13; i++) {
         if (extractedStartTimes.containsKey(i)) {
           sectionStartTimes[i] = extractedStartTimes[i]!;
-        } else {
-          // 往前找最近的已知起点
-          int prevAnc = -1;
-          for (int j = i - 1; j >= 1; j--) {
-            if (extractedStartTimes.containsKey(j)) {
-              prevAnc = j;
-              break;
-            }
-          }
-          if (prevAnc != -1) {
-            int gap = i - prevAnc;
-            sectionStartTimes[i] =
-                extractedStartTimes[prevAnc]! + gap * (defaultDuration + 10);
-          } else {
-            // 往后找最近的起点
-            int nextAnc = -1;
-            for (int j = i + 1; j <= 13; j++) {
-              if (extractedStartTimes.containsKey(j)) {
-                nextAnc = j;
-                break;
-              }
-            }
-            if (nextAnc != -1) {
-              int gap = nextAnc - i;
-              sectionStartTimes[i] =
-                  extractedStartTimes[nextAnc]! - gap * (defaultDuration + 10);
-            } else {
-              sectionStartTimes[i] = 480 + (i - 1) * (defaultDuration + 10);
-            }
+          sectionDurations[i] = extractedDurations[i] ?? 45;
+        }
+      }
+    }
+
+    // 4. 若正则未能提取或未完全覆盖，通过实际课程的时间戳智能聚类
+    final Map<int, List<int>> startToDurations = {};
+    for (final c in courses) {
+      final sDt = DateTime.fromMillisecondsSinceEpoch(c.startTime).toLocal();
+      final eDt = DateTime.fromMillisecondsSinceEpoch(c.endTime).toLocal();
+      final sMin = sDt.hour * 60 + sDt.minute;
+      final eMin = eDt.hour * 60 + eDt.minute;
+      final dur = eMin - sMin;
+      if (dur > 0) {
+        startToDurations.putIfAbsent(sMin, () => []).add(dur);
+      }
+    }
+
+    final sortedCourseStarts = startToDurations.keys.toList()..sort();
+
+    for (final sMin in sortedCourseStarts) {
+      final durs = startToDurations[sMin]!;
+      durs.sort();
+      final medDur = durs[durs.length ~/ 2];
+
+      int spanSections = 1;
+      if (medDur >= 75 && medDur <= 115) {
+        spanSections = 2; // 常见 2 节大课（如 90~100 分钟）
+      } else if (medDur > 115 && medDur <= 165) {
+        spanSections = 3; // 3 节大课（如 135~150 分钟）
+      } else if (medDur > 165) {
+        spanSections = 4;
+      }
+
+      int targetStartSection;
+      if (sMin < 9 * 60 + 15) {
+        targetStartSection = 1; // 上午第 1 节（通常 8:00 或 8:30）
+      } else if (sMin < 11 * 60 + 45) {
+        targetStartSection = 3; // 上午第 3 节（通常 9:55 或 10:00）
+      } else if (sMin < 13 * 60 + 30) {
+        targetStartSection = 5; // 中午/下午首节
+      } else if (sMin < 15 * 60 + 30) {
+        targetStartSection = 5; // 下午第 5 节（通常 13:30 或 14:00）
+      } else if (sMin < 17 * 60 + 45) {
+        targetStartSection = 7; // 下午第 7 节（通常 15:40 或 16:00）
+      } else if (sMin < 19 * 60 + 45) {
+        targetStartSection = 9; // 晚间第 9 节（通常 18:30 或 19:00）
+      } else {
+        targetStartSection = 11; // 晚间第 11 节（通常 20:00 或 20:30）
+      }
+
+      if (!sectionStartTimes.containsKey(targetStartSection)) {
+        final singleDur = spanSections > 1
+            ? ((medDur - (spanSections - 1) * 10) / spanSections).round().clamp(40, 50)
+            : medDur.clamp(40, 60);
+
+        for (int k = 0; k < spanSections && (targetStartSection + k) <= 13; k++) {
+          final sec = targetStartSection + k;
+          if (!sectionStartTimes.containsKey(sec)) {
+            sectionStartTimes[sec] = sMin + k * (singleDur + 10);
+            sectionDurations[sec] = singleDur;
           }
         }
       }
-    } else {
-      for (int i = 1; i <= 13; i++) {
-        sectionStartTimes[i] = 480 + (i - 1) * (defaultDuration + 10);
+    }
+
+    // 5. 补全未命中的其余节次（使用大学标准推算，确保 1~13 节完整且时间单调递增）
+    const defaultStarts = {
+      1: 480,
+      2: 535,
+      3: 600,
+      4: 655,
+      5: 840,
+      6: 895,
+      7: 960,
+      8: 1015,
+      9: 1110,
+      10: 1165,
+      11: 1220,
+      12: 1275,
+      13: 1330,
+    };
+
+    for (int i = 1; i <= 13; i++) {
+      if (!sectionStartTimes.containsKey(i)) {
+        if (i > 1 && sectionStartTimes.containsKey(i - 1)) {
+          final prevStart = sectionStartTimes[i - 1]!;
+          final prevDur = sectionDurations[i - 1] ?? 45;
+          final isBigBreak = (i == 3 || i == 5 || i == 7 || i == 9 || i == 11);
+          final gap = isBigBreak ? 20 : 10;
+          sectionStartTimes[i] = prevStart + prevDur + gap;
+        } else {
+          sectionStartTimes[i] = defaultStarts[i] ?? (480 + (i - 1) * 55);
+        }
       }
+      sectionDurations.putIfAbsent(i, () => 45);
     }
 
     return ScheduleConfigModel(
@@ -419,7 +417,7 @@ class IcsParser {
       useCustomConfig: true,
       showWeekends: true,
       isEqualDuration: true,
-      defaultDuration: defaultDuration,
+      defaultDuration: 45,
     );
   }
 }

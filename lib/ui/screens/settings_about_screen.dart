@@ -8,6 +8,7 @@ import 'dart:io';
 import 'dart:convert';
 import '../widgets/liquid_components.dart' as liquid;
 import '../widgets/liquid_toast.dart';
+import '../../utils/glass_settings_helper.dart';
 
 /// [修复7] iOS 26 液态玻璃风格关于软件页面
 class SettingsAboutScreen extends StatefulWidget {
@@ -48,6 +49,11 @@ class _SettingsAboutScreenState extends State<SettingsAboutScreen>
 
   @override
   Widget build(BuildContext context) {
+    final isDark = GlassSettingsHelper.isDark(context);
+    final primaryTextColor = isDark ? Colors.white : const Color(0xFF1A1A2E);
+    final secondaryTextColor = isDark ? Colors.white70 : const Color(0xFF555B68);
+    final tertiaryTextColor = isDark ? Colors.white54 : const Color(0xFF8A909E);
+
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: AdaptiveLiquidGlassLayer(
@@ -77,12 +83,12 @@ class _SettingsAboutScreenState extends State<SettingsAboutScreen>
                   children: [
                     const liquid.LiquidBackButton(),
                     const SizedBox(width: 12),
-                    const Text(
+                    Text(
                       '关于软件',
                       style: TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                        color: primaryTextColor,
                       ),
                     ),
                   ],
@@ -132,12 +138,12 @@ class _SettingsAboutScreenState extends State<SettingsAboutScreen>
                           const SizedBox(height: 24),
 
                           // App Name
-                          const Text(
+                          Text(
                             'CourseWidgets',
                             style: TextStyle(
                               fontSize: 32,
                               fontWeight: FontWeight.w900,
-                              color: Colors.white,
+                              color: primaryTextColor,
                               letterSpacing: 0.5,
                             ),
                           ),
@@ -183,23 +189,23 @@ class _SettingsAboutScreenState extends State<SettingsAboutScreen>
                           ),
                           const SizedBox(height: 12),
                           // [v2.1.8修复5] 修改copyright为开发者名称
-                          const Text(
+                          Text(
                             'Copyright © 2025-2026 ZongZi',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               fontSize: 12,
-                              color: Colors.white70,
+                              color: secondaryTextColor,
                               height: 1.5,
                             ),
                           ),
                           const SizedBox(height: 8),
                           // [v2.2.1] 修改为 Apache 2.0 License
-                          const Text(
+                          Text(
                             'Open Source under Apache 2.0 License',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               fontSize: 11,
-                              color: Colors.white54,
+                              color: tertiaryTextColor,
                             ),
                           ),
                           const SizedBox(height: 4),
@@ -208,7 +214,7 @@ class _SettingsAboutScreenState extends State<SettingsAboutScreen>
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               fontSize: 11,
-                              color: Colors.white.withValues(alpha: 0.4),
+                              color: tertiaryTextColor.withValues(alpha: 0.7),
                             ),
                           ),
                         ],

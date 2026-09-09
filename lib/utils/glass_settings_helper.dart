@@ -109,7 +109,7 @@ class GlassSettingsHelper {
 
   /// 获取输入框玻璃设置
   static LiquidGlassSettings getInputSettings() {
-    final glassColor = globalUseDarkMode
+    final glassColor = globalDarkModeNotifier.value
         ? Colors.white.withValues(alpha: 0.12)
         : Colors.white.withValues(alpha: 0.05);
 
@@ -125,7 +125,7 @@ class GlassSettingsHelper {
 
   /// 获取底部导航栏玻璃设置
   static LiquidGlassSettings getBottomBarSettings() {
-    final glassColor = globalUseDarkMode
+    final glassColor = globalDarkModeNotifier.value
         ? Colors.black.withValues(alpha: 0.50)
         : Colors.black.withValues(alpha: 0.35);
 
@@ -141,7 +141,7 @@ class GlassSettingsHelper {
 
   /// 获取侧边栏玻璃设置
   static LiquidGlassSettings getSidebarSettings() {
-    final glassColor = globalUseDarkMode
+    final glassColor = globalDarkModeNotifier.value
         ? Colors.black.withValues(alpha: 0.40)
         : Colors.white.withValues(alpha: 0.05);
 
@@ -155,33 +155,43 @@ class GlassSettingsHelper {
     );
   }
 
+  /// 判断是否为深色模式（优先检查 context 主题，兜底使用全局通知器）
+  static bool isDark([BuildContext? context]) {
+    if (context != null) {
+      try {
+        if (Theme.of(context).brightness == Brightness.dark) return true;
+      } catch (_) {}
+    }
+    return globalDarkModeNotifier.value;
+  }
+
   /// 获取文本颜色（根据深色模式）
-  static Color getTextColor() {
-    return globalUseDarkMode ? Colors.white : const Color(0xFF1A1A2E);
+  static Color getTextColor([BuildContext? context]) {
+    return isDark(context) ? Colors.white : const Color(0xFF1A1A2E);
   }
 
   /// 获取次要文本颜色（根据深色模式）
-  static Color getSecondaryTextColor() {
-    return globalUseDarkMode ? Colors.white70 : const Color(0xFF666666);
+  static Color getSecondaryTextColor([BuildContext? context]) {
+    return isDark(context) ? Colors.white70 : const Color(0xFF555B68);
   }
 
   /// 获取禁用文本颜色（根据深色模式）
-  static Color getDisabledTextColor() {
-    return globalUseDarkMode
+  static Color getDisabledTextColor([BuildContext? context]) {
+    return isDark(context)
         ? Colors.white.withValues(alpha: 0.3)
         : Colors.black.withValues(alpha: 0.3);
   }
 
   /// 获取背景叠加颜色（根据深色模式，用于降低背景亮度）
-  static Color getBackgroundOverlay() {
-    return globalUseDarkMode
+  static Color getBackgroundOverlay([BuildContext? context]) {
+    return isDark(context)
         ? Colors.black.withValues(alpha: 0.4)
         : Colors.black.withValues(alpha: 0.15);
   }
 
   /// 获取分隔线颜色（根据深色模式）
-  static Color getDividerColor() {
-    return globalUseDarkMode
+  static Color getDividerColor([BuildContext? context]) {
+    return isDark(context)
         ? Colors.white.withValues(alpha: 0.1)
         : Colors.black.withValues(alpha: 0.1);
   }
