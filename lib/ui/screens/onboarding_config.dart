@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
-import '../../constants/theme_constants.dart';
+import '../../services/theme_service.dart';
 import '../../utils/glass_settings_helper.dart';
 import '../widgets/liquid_components.dart' as liquid;
 import 'android_schedule_config_screen.dart';
@@ -28,90 +28,90 @@ class OnboardingConfig extends StatelessWidget {
       backgroundColor: Colors.transparent,
       body: Material(
         type: MaterialType.transparency,
-        child: AdaptiveLiquidGlassLayer(
-          quality: GlassQuality.premium,
-          settings: const LiquidGlassSettings(
-            blur: 3.0,
-            thickness: 20.0,
-            glassColor: Color(0x12FFFFFF),
-            lightIntensity: 0.70,
-            ambientStrength: 0.45,
-            ambientRim: 0.0,
-            fresnelStrength: 0.05,
-            saturation: 1.20,
-            refractiveIndex: 1.46,
-          ),
-          child: Stack(
-            children: [
-              // 嵌入课时配置页面内容 (全幅滚动，穿透到顶部与底部)
-              Positioned.fill(
-                child: AndroidScheduleConfigScreen(
-                  key: _configKey,
-                  showNavigation: false,
-                  contentPadding: EdgeInsets.only(
-                    top: MediaQuery.of(context).padding.top + 130,
-                    bottom: MediaQuery.of(context).padding.bottom + 110,
-                    left: 20,
-                    right: 20,
-                  ),
+        child: Stack(
+          children: [
+            // 1. 嵌入课时配置页面内容 (底层全幅滚动，穿透到顶部与底部，接受折射)
+            Positioned.fill(
+              child: AndroidScheduleConfigScreen(
+                key: _configKey,
+                showNavigation: false,
+                contentPadding: EdgeInsets.only(
+                  top: MediaQuery.of(context).padding.top + 140,
+                  bottom: MediaQuery.of(context).padding.bottom + 120,
+                  left: 20,
+                  right: 20,
                 ),
               ),
+            ),
 
-              // Header (浮动折射)
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                child: SafeArea(
-                  bottom: false,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
-                    child: Center(
-                      child: liquid.LiquidCard(
-                        borderRadius: 24,
-                        padding: 20,
-                        quality: GlassQuality.premium,
-                        styleType: liquid.LiquidStyleType.standard,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            Text(
-                              '课时配置',
-                              style: TextStyle(
-                                fontSize: 28,
-                                fontWeight: FontWeight.w900,
-                                color: GlassSettingsHelper.getTextColor(context),
-                                decoration: TextDecoration.none,
-                              ),
-                              textAlign: TextAlign.center,
+            // 2. 顶部浮动液态玻璃 Header (置于顶层，穿透折射)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
+                  child: Center(
+                    child: liquid.LiquidCard(
+                      borderRadius: 24,
+                      padding: 20,
+                      quality: GlassQuality.premium,
+                      styleType: liquid.LiquidStyleType.standard,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Text(
+                            '课时配置',
+                            style: TextStyle(
+                              fontSize: 28,
+                              fontWeight: FontWeight.w900,
+                              color: GlassSettingsHelper.getTextColor(context),
+                              decoration: TextDecoration.none,
                             ),
-                            const SizedBox(height: 6),
-                            Text(
-                              '设置开学日期和课程时间',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: GlassSettingsHelper.getSecondaryTextColor(context),
-                                decoration: TextDecoration.none,
-                              ),
-                              textAlign: TextAlign.center,
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            '设置开学日期和课程时间',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: GlassSettingsHelper.getSecondaryTextColor(context),
+                              decoration: TextDecoration.none,
                             ),
-                          ],
-                        ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
                       ),
                     ),
                   ),
                 ),
               ),
+            ),
 
-              // Navigation (纯透光液态按钮栏，无厚重不透明底托)
-              Positioned(
-                bottom: 0,
-                left: 0,
-                right: 0,
-                child: SafeArea(
-                  top: false,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
+            // 3. 底部浮动 Navigation 按钮栏（置于顶层，独立液态玻璃折射下方滑动卡片）
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
+                  child: AdaptiveLiquidGlassLayer(
+                    quality: GlassQuality.premium,
+                    settings: const LiquidGlassSettings(
+                      blur: 3.0,
+                      thickness: 16.0,
+                      glassColor: Color(0x18FFFFFF),
+                      lightIntensity: 0.70,
+                      ambientStrength: 0.45,
+                      ambientRim: 0.0,
+                      fresnelStrength: 0.05,
+                      saturation: 1.20,
+                      refractiveIndex: 1.40,
+                    ),
                     child: Row(
                       children: [
                         Expanded(
@@ -131,7 +131,7 @@ class OnboardingConfig extends StatelessWidget {
                               _configKey.currentState?.saveConfigFromParent();
                               onNext();
                             },
-                            color: AppThemeColors.babyPink,
+                            color: ThemeService().primaryColor,
                           ),
                         ),
                       ],
@@ -139,8 +139,8 @@ class OnboardingConfig extends StatelessWidget {
                   ),
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

@@ -105,13 +105,15 @@ class _OnboardingWelcomeState extends State<OnboardingWelcome>
   }
 
   Widget _buildLogoGlass() {
-    // [v2.8.6] 升级至 Liquid Glass 1.4.1 Premium 纯净光学折射，消除暗角吸光与边缘泛白
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return GlassContainer(
       width: 280, // [v2.3.2修复] 增加宽度防止文字换行
       height: 240,
       shape: const LiquidRoundedSuperellipse(borderRadius: 48),
       settings: LiquidGlassSettings(
-        glassColor: Colors.white.withValues(alpha: 0.16),
+        glassColor: isDark
+            ? Colors.white.withValues(alpha: 0.16)
+            : const Color(0x22000000),
         blur: 2.0,
         thickness: 20,
         refractiveIndex: 1.40,
@@ -133,21 +135,21 @@ class _OnboardingWelcomeState extends State<OnboardingWelcome>
               width: 90,
               height: 90,
               fit: BoxFit.contain,
-              errorBuilder: (ctx, err, st) => const Icon(
+              errorBuilder: (ctx, err, st) => Icon(
                 Icons.school_rounded,
                 size: 80,
-                color: Colors.white,
+                color: isDark ? Colors.white : const Color(0xFF1E2129),
               ),
             ),
             const SizedBox(height: 24),
 
             // App Name - [v2.3.0修复] 缩小字号避免换行
-            const Text(
+            Text(
               'CourseWidgets',
               style: TextStyle(
                 fontSize: 24, // 从 28 缩小到 24 避免换行
                 fontWeight: FontWeight.bold,
-                color: Colors.white,
+                color: isDark ? Colors.white : const Color(0xFF1E2129),
                 letterSpacing: 1.0,
               ),
             ),
@@ -158,7 +160,9 @@ class _OnboardingWelcomeState extends State<OnboardingWelcome>
               '新一代全平台液态玻璃课程表',
               style: TextStyle(
                 fontSize: 12,
-                color: Colors.white.withValues(alpha: 0.6),
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.7)
+                    : const Color(0x991E2129),
                 letterSpacing: 1.5,
               ),
             ),

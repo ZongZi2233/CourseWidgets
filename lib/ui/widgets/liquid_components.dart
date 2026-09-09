@@ -6,6 +6,7 @@ import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:flutter_miuix/miuix.dart';
 import '../../constants/theme_constants.dart';
 import '../../utils/glass_settings_helper.dart';
+import '../../services/theme_service.dart' as theme;
 import '../../main.dart';
 
 enum LiquidStyleType { standard, micro, active }
@@ -176,6 +177,7 @@ class LiquidButton extends StatelessWidget {
   final double? width;
   final double? height;
   final Color? textColor;
+  final bool? useOwnLayer;
 
   const LiquidButton({
     super.key,
@@ -186,10 +188,12 @@ class LiquidButton extends StatelessWidget {
     this.width,
     this.height,
     this.textColor,
+    this.useOwnLayer,
   });
 
   @override
   Widget build(BuildContext context) {
+    final inLayer = context.dependOnInheritedWidgetOfExactType<InheritedLiquidGlass>() != null;
     final isDark = globalDarkModeNotifier.value;
     final lum = color.computeLuminance();
     final Color effectiveTextColor = textColor ??
@@ -202,6 +206,8 @@ class LiquidButton extends StatelessWidget {
       width: width,
       height: height ?? 48,
       style: GlassButtonStyle.filled,
+      useOwnLayer: useOwnLayer ?? !inLayer,
+      quality: GlassQuality.premium,
       settings: LiquidGlassSettings(
         glassColor: isOutline
             ? (isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.06))
@@ -519,12 +525,12 @@ class HyperOSCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = globalDarkModeNotifier.value;
-    final primary = AppThemeColors.babyPink;
+    final primary = theme.ThemeService().primaryColor;
 
-    // [v2.9.0] HyperOS 混色半透明丙烯酸质感：通透柔和，透出背景壁纸
+    // [v2.9.0] HyperOS 混色半透明丙烯酸质感：通透柔和，透出背景壁纸与主题色融合
     final defaultBgColor = isDark
-        ? Color.alphaBlend(primary.withValues(alpha: 0.10), const Color(0xB81C2028))
-        : Color.alphaBlend(primary.withValues(alpha: 0.08), const Color(0xC4FFFFFF));
+        ? Color.alphaBlend(primary.withValues(alpha: 0.14), const Color(0x991C2028))
+        : Color.alphaBlend(primary.withValues(alpha: 0.12), const Color(0xB8FFFFFF));
 
     // 如果指定了自定义颜色（例如课程卡片自定义整卡染色），直接应用；否则使用默认半透明丙烯酸底色
     final effectiveColor = color ?? defaultBgColor;

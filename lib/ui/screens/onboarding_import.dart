@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import '../../constants/theme_constants.dart';
+import '../../services/theme_service.dart';
 import '../../providers/schedule_provider.dart';
 import '../../services/test_data_generator.dart';
 import '../../services/database_helper.dart';
@@ -32,32 +33,19 @@ class OnboardingImport extends StatelessWidget {
       backgroundColor: Colors.transparent,
       body: Material(
         type: MaterialType.transparency,
-        child: AdaptiveLiquidGlassLayer(
-          quality: GlassQuality.premium,
-          settings: const LiquidGlassSettings(
-            blur: 3.0,
-            thickness: 20.0,
-            glassColor: Color(0x12FFFFFF),
-            lightIntensity: 0.70,
-            ambientStrength: 0.45,
-            ambientRim: 0.0,
-            fresnelStrength: 0.05,
-            saturation: 1.20,
-            refractiveIndex: 1.46,
-          ),
-          child: Stack(
-            children: [
-              // Content (全幅穿透滚动)
-              Positioned.fill(
-                child: ListView(
-                  padding: EdgeInsets.fromLTRB(
-                    20,
-                    MediaQuery.of(context).padding.top + 130,
-                    20,
-                    MediaQuery.of(context).padding.bottom + 110,
-                  ),
-                  physics: const BouncingScrollPhysics(),
-                  children: [
+        child: Stack(
+          children: [
+            // 1. Content (全幅穿透滚动，置于底层，接收折射)
+            Positioned.fill(
+              child: ListView(
+                padding: EdgeInsets.fromLTRB(
+                  20,
+                  MediaQuery.of(context).padding.top + 140,
+                  20,
+                  MediaQuery.of(context).padding.bottom + 120,
+                ),
+                physics: const BouncingScrollPhysics(),
+                children: [
                     _buildImportOption(
                       context,
                       icon: Icons.language_rounded,
@@ -168,15 +156,28 @@ class OnboardingImport extends StatelessWidget {
                 ),
               ),
 
-              // Navigation (纯透光液态按钮栏，无厚重不透明底托)
-              Positioned(
-                bottom: 0,
-                left: 0,
-                right: 0,
-                child: SafeArea(
-                  top: false,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
+            // 3. 底部浮动 Navigation 按钮栏（置于顶层，独立液态玻璃折射下方滑动卡片）
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
+                  child: AdaptiveLiquidGlassLayer(
+                    quality: GlassQuality.premium,
+                    settings: const LiquidGlassSettings(
+                      blur: 3.0,
+                      thickness: 16.0,
+                      glassColor: Color(0x18FFFFFF),
+                      lightIntensity: 0.70,
+                      ambientStrength: 0.45,
+                      ambientRim: 0.0,
+                      fresnelStrength: 0.05,
+                      saturation: 1.20,
+                      refractiveIndex: 1.40,
+                    ),
                     child: Row(
                       children: [
                         Expanded(
@@ -192,7 +193,7 @@ class OnboardingImport extends StatelessWidget {
                           child: liquid.LiquidButton(
                             text: isLastPage ? '开始使用' : '完成',
                             onTap: onNext,
-                            color: AppThemeColors.babyPink,
+                            color: ThemeService().primaryColor,
                           ),
                         ),
                       ],
@@ -200,8 +201,8 @@ class OnboardingImport extends StatelessWidget {
                   ),
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -245,7 +246,7 @@ class OnboardingImport extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 17,
                     fontWeight: FontWeight.bold,
-                    color: GlassSettingsHelper.getTextColor(),
+                    color: GlassSettingsHelper.getTextColor(context),
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -253,7 +254,7 @@ class OnboardingImport extends StatelessWidget {
                   subtitle,
                   style: TextStyle(
                     fontSize: 13,
-                    color: GlassSettingsHelper.getSecondaryTextColor(),
+                    color: GlassSettingsHelper.getSecondaryTextColor(context),
                   ),
                 ),
               ],
@@ -261,7 +262,7 @@ class OnboardingImport extends StatelessWidget {
           ),
           Icon(
             Icons.chevron_right_rounded,
-            color: GlassSettingsHelper.getDisabledTextColor(),
+            color: GlassSettingsHelper.getDisabledTextColor(context),
           ),
         ],
       ),
@@ -389,16 +390,17 @@ class OnboardingImport extends StatelessWidget {
       // 重新加载数据
       if (context.mounted) {
         await context.read<ScheduleProvider>().loadSavedData();
-
-        LiquidToast.success(context, '已导入 ${testCourses.length} 节测试课程');
-
-        // 延迟后进入下一页
-        Future.delayed(const Duration(milliseconds: 800), () {
-          if (context.mounted) {
-            onNext();
-          }
-        });
       }
+      if (!context.mounted) return;
+
+      LiquidToast.success(context, '已导入 ${testCourses.length} 节测试课程');
+
+      // 延迟后进入下一页
+      Future.delayed(const Duration(milliseconds: 800), () {
+        if (context.mounted) {
+          onNext();
+        }
+      });
     } catch (e) {
       if (context.mounted) {
         LiquidToast.error(context, '导入失败: $e');

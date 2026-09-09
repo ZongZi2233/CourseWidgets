@@ -58,30 +58,17 @@ class _OnboardingThemeState extends State<OnboardingTheme> {
       backgroundColor: Colors.transparent,
       body: Material(
         type: MaterialType.transparency,
-        child: AdaptiveLiquidGlassLayer(
-          quality: GlassQuality.premium,
-          settings: const LiquidGlassSettings(
-            blur: 3.0,
-            thickness: 20.0,
-            glassColor: Color(0x12FFFFFF),
-            lightIntensity: 0.70,
-            ambientStrength: 0.45,
-            ambientRim: 0.0,
-            fresnelStrength: 0.05,
-            saturation: 1.20,
-            refractiveIndex: 1.46,
-          ),
-          child: Stack(
-            children: [
-              // 1. 底层全屏全幅流式滚动区域 (穿透到屏幕顶部和底部，折射完全可见)
-              Positioned.fill(
-                child: ListView(
-                  padding: EdgeInsets.only(
-                    top: MediaQuery.of(context).padding.top + 130, // 避让顶部浮动玻璃卡片
-                    bottom: MediaQuery.of(context).padding.bottom + 160, // 避让底部操作栏
-                    left: 20,
-                    right: 20,
-                  ),
+        child: Stack(
+          children: [
+            // 1. 底层全屏全幅流式滚动区域 (穿透到屏幕顶部和底部，折射完全可见)
+            Positioned.fill(
+              child: ListView(
+                padding: EdgeInsets.only(
+                  top: MediaQuery.of(context).padding.top + 140, // 避让顶部浮动玻璃卡片
+                  bottom: MediaQuery.of(context).padding.bottom + 120, // 避让底部操作栏
+                  left: 20,
+                  right: 20,
+                ),
                 physics: const BouncingScrollPhysics(),
                 children: [
                   // 主题色模式选择 -> HyperOSCard
@@ -96,7 +83,7 @@ class _OnboardingThemeState extends State<OnboardingTheme> {
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
-                            color: GlassSettingsHelper.getTextColor(),
+                            color: GlassSettingsHelper.getTextColor(context),
                             decoration: TextDecoration.none,
                           ),
                         ),
@@ -180,7 +167,7 @@ class _OnboardingThemeState extends State<OnboardingTheme> {
                                 style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold,
-                                  color: GlassSettingsHelper.getTextColor(),
+                                  color: GlassSettingsHelper.getTextColor(context),
                                 ),
                               ),
                               const SizedBox(height: 4),
@@ -189,7 +176,7 @@ class _OnboardingThemeState extends State<OnboardingTheme> {
                                 style: TextStyle(
                                   fontSize: 12,
                                   color:
-                                      GlassSettingsHelper.getSecondaryTextColor(),
+                                      GlassSettingsHelper.getSecondaryTextColor(context),
                                 ),
                               ),
                             ],
@@ -197,7 +184,7 @@ class _OnboardingThemeState extends State<OnboardingTheme> {
                         ),
                         Switch(
                           value: _liveActivitiesEnabled,
-                          activeColor: AppThemeColors.babyPink,
+                          activeTrackColor: AppThemeColors.babyPink,
                           onChanged: (val) {
                             setState(() => _liveActivitiesEnabled = val);
                             NotificationManager().setLiveActivitiesEnabled(val);
@@ -221,7 +208,7 @@ class _OnboardingThemeState extends State<OnboardingTheme> {
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
-                            color: GlassSettingsHelper.getTextColor(),
+                            color: GlassSettingsHelper.getTextColor(context),
                             decoration: TextDecoration.none,
                           ),
                         ),
@@ -274,7 +261,7 @@ class _OnboardingThemeState extends State<OnboardingTheme> {
                                             style: TextStyle(
                                               fontSize: 15,
                                               fontWeight: FontWeight.w600,
-                                              color: GlassSettingsHelper.getTextColor(),
+                                              color: GlassSettingsHelper.getTextColor(context),
                                             ),
                                           ),
                                           const SizedBox(height: 2),
@@ -282,7 +269,7 @@ class _OnboardingThemeState extends State<OnboardingTheme> {
                                             hasCustomBg ? '点击更换相册壁纸' : '点击选择相册或本地壁纸',
                                             style: TextStyle(
                                               fontSize: 12,
-                                              color: GlassSettingsHelper.getSecondaryTextColor(),
+                                              color: GlassSettingsHelper.getSecondaryTextColor(context),
                                             ),
                                           ),
                                         ],
@@ -290,7 +277,7 @@ class _OnboardingThemeState extends State<OnboardingTheme> {
                                     ),
                                     Icon(
                                       Icons.chevron_right_rounded,
-                                      color: GlassSettingsHelper.getSecondaryTextColor(),
+                                      color: GlassSettingsHelper.getSecondaryTextColor(context),
                                       size: 22,
                                     ),
                                   ],
@@ -329,7 +316,7 @@ class _OnboardingThemeState extends State<OnboardingTheme> {
                             style: TextStyle(
                               fontSize: 28,
                               fontWeight: FontWeight.w900,
-                              color: GlassSettingsHelper.getTextColor(),
+                              color: GlassSettingsHelper.getTextColor(context),
                               decoration: TextDecoration.none,
                             ),
                             textAlign: TextAlign.center,
@@ -339,7 +326,7 @@ class _OnboardingThemeState extends State<OnboardingTheme> {
                             '选择你喜欢的主题色和背景',
                             style: TextStyle(
                               fontSize: 14,
-                              color: GlassSettingsHelper.getSecondaryTextColor(),
+                              color: GlassSettingsHelper.getSecondaryTextColor(context),
                               decoration: TextDecoration.none,
                             ),
                             textAlign: TextAlign.center,
@@ -352,7 +339,7 @@ class _OnboardingThemeState extends State<OnboardingTheme> {
               ),
             ),
 
-            // 3. 底部浮动 Navigation 按钮栏（纯透光液态按钮 Row 布局）
+            // 3. 底部浮动 Navigation 按钮栏（置于顶层，纯透光液态按钮 Row 布局，折射下方滑动内容）
             Positioned(
               bottom: 0,
               left: 0,
@@ -361,27 +348,41 @@ class _OnboardingThemeState extends State<OnboardingTheme> {
                 top: false,
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
-                  child: Row(
-                    children: [
-                      if (widget.showBackButton) ...[
+                  child: AdaptiveLiquidGlassLayer(
+                    quality: GlassQuality.premium,
+                    settings: const LiquidGlassSettings(
+                      blur: 3.0,
+                      thickness: 16.0,
+                      glassColor: Color(0x18FFFFFF),
+                      lightIntensity: 0.70,
+                      ambientStrength: 0.45,
+                      ambientRim: 0.0,
+                      fresnelStrength: 0.05,
+                      saturation: 1.20,
+                      refractiveIndex: 1.40,
+                    ),
+                    child: Row(
+                      children: [
+                        if (widget.showBackButton) ...[
+                          Expanded(
+                            child: liquid.LiquidButton(
+                              text: '上一步',
+                              onTap: widget.onBack,
+                              color: isDark ? Colors.white.withValues(alpha: 0.18) : Colors.black.withValues(alpha: 0.08),
+                              textColor: isDark ? Colors.white : const Color(0xFF1E2129),
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                        ],
                         Expanded(
                           child: liquid.LiquidButton(
-                            text: '上一步',
-                            onTap: widget.onBack,
-                            color: isDark ? Colors.white.withValues(alpha: 0.18) : Colors.black.withValues(alpha: 0.08),
-                            textColor: isDark ? Colors.white : const Color(0xFF1E2129),
+                            text: widget.isLastPage ? '完成设置' : '下一步',
+                            onTap: _completeOnboarding,
+                            color: _themeService.primaryColor,
                           ),
                         ),
-                        const SizedBox(width: 16),
                       ],
-                      Expanded(
-                        child: liquid.LiquidButton(
-                          text: widget.isLastPage ? '完成设置' : '下一步',
-                          onTap: _completeOnboarding,
-                          color: AppThemeColors.babyPink,
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
               ),
@@ -389,9 +390,8 @@ class _OnboardingThemeState extends State<OnboardingTheme> {
           ],
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   Widget _buildThemeModeOption(
     theme.ThemeMode mode,
