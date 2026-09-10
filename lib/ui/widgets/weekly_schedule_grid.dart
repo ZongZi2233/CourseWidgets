@@ -12,6 +12,7 @@ import '../../providers/schedule_provider.dart';
 import '../screens/course_edit_screen.dart';
 import 'liquid_components.dart' as liquid;
 import 'course_color_helper.dart';
+import 'course_name_formatter.dart';
 import 'glass_context_menu.dart';
 import '../transitions/smooth_slide_transitions.dart';
 import 'package:smooth_scroll_multiplatform/smooth_scroll_multiplatform.dart';
@@ -311,21 +312,35 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
 
     return Stack(
       children: [
-        // 1. 纵向滚动内容区：全屏铺满，从固定星期栏下方平滑穿过（类似 Excel 表格主体从首行下方滚过）
+        // 1. 纵向滚动内容区：全屏铺满，从固定星期栏下方平滑穿过，顶部加入渐进平滑消隐滤镜
         Positioned.fill(
-          child: DynMouseScroll(
-            durationMS: 250,
-            scrollSpeed: 1.2,
-            builder: (context, controller, physics) => SingleChildScrollView(
-              controller: controller,
-              physics: physics,
-              padding: EdgeInsets.only(
-                top: topPadding + headerHeight + 6,
-                bottom: resolvedPadding.bottom,
-                left: resolvedPadding.left,
-                right: resolvedPadding.right,
-              ),
-              child: Row(
+          child: ShaderMask(
+            shaderCallback: (Rect bounds) {
+              return const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.transparent,
+                  Colors.white,
+                  Colors.white,
+                ],
+                stops: [0.0, 0.05, 1.0],
+              ).createShader(bounds);
+            },
+            blendMode: BlendMode.dstIn,
+            child: DynMouseScroll(
+              durationMS: 250,
+              scrollSpeed: 1.2,
+              builder: (context, controller, physics) => SingleChildScrollView(
+                controller: controller,
+                physics: physics,
+                padding: EdgeInsets.only(
+                  top: topPadding + headerHeight + 6,
+                  bottom: resolvedPadding.bottom,
+                  left: resolvedPadding.left,
+                  right: resolvedPadding.right,
+                ),
+                child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // 左侧时间轴 (1~13 节课，不含头部，直接对齐课程网格)
@@ -384,6 +399,7 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
               ),
             ),
           ),
+        ),
         ),
 
         // 2. [Excel 冻结窗格] 固定置顶的星期行（周一~周日），通透磨砂底色，卡片从下方穿过
@@ -659,49 +675,52 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 课程名称：字号加大
-            Text(
-              course.name,
-              style: TextStyle(
-                color: titleColor,
-                fontSize: widget.isPhone ? 12.0 : 13.5,
-                fontWeight: FontWeight.bold,
-                height: 1.18,
+            // [v2.9.5] 课程名称：自然语义智能排版（中英文换行、中文词组保持完整），留出边缘安全距离
+            Padding(
+              padding: const EdgeInsets.only(bottom: 2),
+              child: Text(
+                CourseNameFormatter.format(course.name, isPhone: widget.isPhone),
+                style: TextStyle(
+                  color: titleColor,
+                  fontSize: widget.isPhone ? 12.0 : 13.5,
+                  fontWeight: FontWeight.bold,
+                  height: 1.16,
+                ),
+                maxLines: widget.isPhone ? 5 : 6,
+                overflow: TextOverflow.ellipsis,
               ),
-              maxLines: widget.isPhone ? 3 : 4,
-              overflow: TextOverflow.ellipsis,
             ),
             const Spacer(),
 
-            // 老师与地点：字号加大，若无教室则直接留空，不显示“未知地点”
+            // [v2.9.5] 老师与地点：字号加大至 11.0pt（清晰易读杜绝过小），若无教室则直接留空
             if (course.teacher.isNotEmpty || hasLocation) ...[
               if (course.teacher.isNotEmpty)
                 Text(
                   course.teacher,
                   style: TextStyle(
                     color: subTextColor,
-                    fontSize: widget.isPhone ? 9.5 : 10.5,
-                    height: 1.15,
+                    fontSize: widget.isPhone ? 11.0 : 12.0,
+                    fontWeight: FontWeight.w600,
+                    height: 1.20,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
               if (hasLocation)
                 Text(
-                  course.location,
+                  '📍 ${course.location}',
                   style: TextStyle(
                     color: subTextColor,
-                    fontSize: widget.isPhone ? 9.5 : 10.5,
-                    height: 1.15,
+                    fontSize: widget.isPhone ? 11.0 : 12.0,
+                    fontWeight: FontWeight.w600,
+                    height: 1.20,
                   ),
                   maxLines: 2,
-                  overflow: TextOverflow.fade,
+                  overflow: TextOverflow.ellipsis,
                 ),
             ],
 
-            const SizedBox(height: 2),
-
-            // [v2.8.9] 底部三点小横条 + Liquid Morph Engine (GlassContextMenu)
+            // [v2.9.5] 底部三点小横条：调粗至 12.0pt，加大圆点，留出充足安全距离
             Center(
               child: GlassContextMenu(
                 menuWidth: 170,
@@ -738,39 +757,40 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
                   ),
                 ],
                 trigger: Container(
-                  height: widget.isPhone ? 7.0 : 8.5,
-                  width: widget.isPhone ? 32.0 : 38.0,
+                  height: widget.isPhone ? 12.0 : 14.0,
+                  width: widget.isPhone ? 36.0 : 42.0,
+                  margin: const EdgeInsets.only(top: 6, bottom: 2),
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(4),
+                    color: (isDark ? Colors.white : Colors.black).withValues(alpha: isDark ? 0.16 : 0.09),
+                    borderRadius: BorderRadius.circular(6),
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Container(
-                        width: 2.5,
-                        height: 2.5,
+                        width: 3.2,
+                        height: 3.2,
                         decoration: BoxDecoration(
-                          color: subTextColor.withValues(alpha: 0.7),
+                          color: subTextColor.withValues(alpha: 0.8),
                           shape: BoxShape.circle,
                         ),
                       ),
-                      const SizedBox(width: 2.5),
+                      const SizedBox(width: 3.5),
                       Container(
-                        width: 2.5,
-                        height: 2.5,
+                        width: 3.2,
+                        height: 3.2,
                         decoration: BoxDecoration(
-                          color: subTextColor.withValues(alpha: 0.7),
+                          color: subTextColor.withValues(alpha: 0.8),
                           shape: BoxShape.circle,
                         ),
                       ),
-                      const SizedBox(width: 2.5),
+                      const SizedBox(width: 3.5),
                       Container(
-                        width: 2.5,
-                        height: 2.5,
+                        width: 3.2,
+                        height: 3.2,
                         decoration: BoxDecoration(
-                          color: subTextColor.withValues(alpha: 0.7),
+                          color: subTextColor.withValues(alpha: 0.8),
                           shape: BoxShape.circle,
                         ),
                       ),

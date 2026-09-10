@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -10,6 +11,7 @@ import '../../models/schedule_config.dart';
 import '../../constants/theme_constants.dart';
 import '../widgets/liquid_components.dart' as liquid;
 import '../widgets/course_color_helper.dart';
+import '../widgets/course_name_formatter.dart';
 import '../widgets/glass_context_menu.dart';
 import 'course_edit_screen.dart';
 import '../transitions/smooth_slide_transitions.dart';
@@ -141,15 +143,7 @@ class _WindowsScheduleScreenState extends State<WindowsScheduleScreen> {
               _buildWeekSelector(provider),
               const SizedBox(height: 12),
               Expanded(
-                child: DynMouseScroll(
-                  durationMS: 250,
-                  scrollSpeed: 1.2,
-                  builder: (context, controller, physics) => SingleChildScrollView(
-                    controller: controller,
-                    physics: physics,
-                    child: _buildWeekGrid(provider),
-                  ),
-                ),
+                child: _buildWeekGrid(provider),
               ),
             ],
           ),
@@ -285,193 +279,293 @@ class _WindowsScheduleScreenState extends State<WindowsScheduleScreen> {
     );
   }
 
-  /// 本周课程网格：视口级单层裁剪共享毛玻璃背景板 (120 FPS 极速全周网格渲染)
-  /// 仅在卡片形状内部模糊采样，其余空余区域透出 100% 纯净原始壁纸！
+  /// [v2.9.5] 本周课程网格：Excel 冻结窗格架构 + 视口级单层裁剪共享毛玻璃背景板 (120 FPS 极速渲染)
+  /// 1. 星期栏固定置顶，通透磨砂底色，卡片与横线从底部平滑穿过
+  /// 2. 顶部 ShaderMask 渐进平滑消隐滤镜
+  /// 3. 课程卡片中英文/语义自然换行排版、大字号教师地点、粗体三点横条
   Widget _buildWeekGrid(ScheduleProvider provider) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final showWeekends = provider.currentConfig.showWeekends;
     final daysCount = showWeekends ? 7 : 5;
     final config = provider.currentConfig;
     const timeColWidth = 44.0;
-    const headerHeight = 36.0;
-    const headerSpacing = 8.0;
-    const headerBottom = headerHeight + headerSpacing; // 44.0
+    const headerHeight = 38.0;
     const padding = 16.0;
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        return Container(
-          padding: const EdgeInsets.all(padding),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 左侧时间轴 (1~13 节)
-              SizedBox(
-                width: timeColWidth,
-                child: Column(
-                  children: [
-                    const SizedBox(height: headerBottom),
-                    ...List.generate(kTotalSections, (i) {
-                      final section = i + 1;
-                      final startMin = config.sectionStartTimes[section] ?? (480 + (i < 5 ? i * 50 : 360 + i * 50));
-                      final hour = (startMin ~/ 60).toString().padLeft(2, '0');
-                      final min = (startMin % 60).toString().padLeft(2, '0');
-                      final timeStr = '$hour:$min';
+        return Stack(
+          children: [
+            // 1. 纵向平滑滚动课程内容区（从固定星期栏下方平滑穿过，顶部加入渐变消隐）
+            Positioned.fill(
+              child: ShaderMask(
+                shaderCallback: (Rect bounds) {
+                  return const LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.transparent,
+                      Colors.white,
+                      Colors.white,
+                    ],
+                    stops: [0.0, 0.04, 1.0],
+                  ).createShader(bounds);
+                },
+                blendMode: BlendMode.dstIn,
+                child: DynMouseScroll(
+                  durationMS: 250,
+                  scrollSpeed: 1.2,
+                  builder: (context, controller, physics) => SingleChildScrollView(
+                    controller: controller,
+                    physics: physics,
+                    padding: const EdgeInsets.only(
+                      top: headerHeight + 10,
+                      left: padding,
+                      right: padding,
+                      bottom: padding,
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // 左侧时间轴 (1~13 节)
+                        SizedBox(
+                          width: timeColWidth,
+                          child: Column(
+                            children: List.generate(kTotalSections, (i) {
+                              final section = i + 1;
+                              final startMin = config.sectionStartTimes[section] ?? (480 + (i < 5 ? i * 50 : 360 + i * 50));
+                              final hour = (startMin ~/ 60).toString().padLeft(2, '0');
+                              final min = (startMin % 60).toString().padLeft(2, '0');
+                              final timeStr = '$hour:$min';
 
-                      return Container(
-                        height: kSectionRowHeight,
-                        alignment: Alignment.center,
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              '$section',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.bold,
-                                color: isDark ? Colors.white70 : const Color(0xFF1E2128),
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              timeStr,
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: isDark ? Colors.white.withValues(alpha: 0.4) : const Color(0xFF8E95A3),
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
+                              return Container(
+                                height: kSectionRowHeight,
+                                alignment: Alignment.center,
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(
+                                      '$section',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.bold,
+                                        color: isDark ? Colors.white70 : const Color(0xFF1E2128),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      timeStr,
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: isDark ? Colors.white.withValues(alpha: 0.4) : const Color(0xFF8E95A3),
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }),
+                          ),
                         ),
-                      );
-                    }),
-                  ],
+
+                        // 5 天或 7 天单日课程列
+                        ...List.generate(daysCount, (index) {
+                          final day = index + 1;
+                          return Expanded(child: _buildDayColumn(provider, day, isDark));
+                        }),
+                      ],
+                    ),
+                  ),
                 ),
               ),
+            ),
 
-              // 5 天或 7 天单日列
-              ...List.generate(daysCount, (index) {
-                final day = index + 1;
-                return Expanded(child: _buildDayColumn(provider, day, isDark));
-              }),
-            ],
-          ),
+            // 2. [Excel 冻结窗格] 固定置顶的星期行（周一~周日），通透磨砂底色，卡片从下方穿过
+            Positioned(
+              top: 0,
+              left: padding,
+              right: padding,
+              height: headerHeight,
+              child: RepaintBoundary(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? const Color(0x66101216)
+                            : const Color(0x77FFFFFF),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: isDark
+                              ? Colors.white.withValues(alpha: 0.12)
+                              : Colors.black.withValues(alpha: 0.06),
+                          width: 0.8,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: isDark ? 0.20 : 0.06),
+                            blurRadius: 10,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 2),
+                      child: Row(
+                        children: [
+                          // 左侧占位对齐时间轴
+                          const SizedBox(width: timeColWidth),
+                          // 星期各列胶囊
+                          ...List.generate(daysCount, (index) {
+                            final day = index + 1;
+                            return Expanded(
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 4),
+                                child: _buildDayHeaderCell(provider, day, isDark),
+                              ),
+                            );
+                          }),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         );
       },
     );
   }
 
-  /// 构建单天列：星期标题优雅扁平化（周一 3/10），杜绝竖胶囊
-  Widget _buildDayColumn(ScheduleProvider provider, int day, bool isDark) {
-    final isToday = DateTime.now().weekday == day;
-    final weekCourses = provider.getCurrentWeekCourses();
-    final dayCourses = weekCourses.where((c) => c.weekday == day).toList();
-
+  /// 单日星期标题胶囊（固定在冻结栏中）
+  Widget _buildDayHeaderCell(ScheduleProvider provider, int day, bool isDark) {
     final semesterStart = provider.semesterStartDate;
     final weekOffset = (provider.currentWeek - 1) * 7;
     final dayDate = semesterStart.add(Duration(days: weekOffset + day - 1));
     final dateLabel = '${dayDate.month}/${dayDate.day}';
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      child: Column(
-        children: [
-          // 星期标题 + 日期（精致扁平横向胶囊，杜绝狭窄竖胶囊）
-          Container(
-            height: 36,
-            decoration: isToday
-                ? BoxDecoration(
-                    color: AppThemeColors.babyPink.withValues(alpha: isDark ? 0.28 : 0.20),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: AppThemeColors.babyPink.withValues(alpha: 0.7),
-                      width: 1.0,
-                    ),
-                  )
-                : BoxDecoration(
-                    color: isDark
-                        ? Colors.white.withValues(alpha: 0.05)
-                        : Colors.white.withValues(alpha: 0.30),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: isDark
-                          ? Colors.white.withValues(alpha: 0.08)
-                          : Colors.black.withValues(alpha: 0.04),
-                      width: 0.5,
-                    ),
-                  ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  ['周一', '周二', '周三', '周四', '周五', '周六', '周日'][day - 1],
-                  style: TextStyle(
-                    fontWeight: isToday ? FontWeight.bold : FontWeight.w600,
-                    color: isToday
-                        ? AppThemeColors.babyPink
-                        : (isDark ? Colors.white : const Color(0xFF1E2128)),
-                    fontSize: 13,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  dateLabel,
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: isToday ? FontWeight.bold : FontWeight.w500,
-                    color: isToday
-                        ? AppThemeColors.babyPink
-                        : (isDark ? Colors.white60 : const Color(0xFF757B88)),
-                  ),
+    final now = DateTime.now();
+    final isToday = now.year == dayDate.year &&
+        now.month == dayDate.month &&
+        now.day == dayDate.day;
+
+    return Container(
+      height: 34,
+      decoration: isToday
+          ? BoxDecoration(
+              color: AppThemeColors.babyPink.withValues(alpha: isDark ? 0.35 : 0.25),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: AppThemeColors.babyPink.withValues(alpha: 0.85),
+                width: 1.2,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: AppThemeColors.babyPink.withValues(alpha: isDark ? 0.25 : 0.18),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
                 ),
               ],
+            )
+          : BoxDecoration(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.05)
+                  : Colors.white.withValues(alpha: 0.30),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.08)
+                    : Colors.black.withValues(alpha: 0.04),
+                width: 0.5,
+              ),
+            ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            ['周一', '周二', '周三', '周四', '周五', '周六', '周日'][day - 1],
+            style: TextStyle(
+              fontWeight: isToday ? FontWeight.bold : FontWeight.w600,
+              color: isToday
+                  ? (isDark ? AppThemeColors.babyPink : const Color(0xFFC84B66))
+                  : (isDark ? Colors.white : const Color(0xFF1E2128)),
+              fontSize: 13,
             ),
           ),
-          const SizedBox(height: 8),
-
-          // 课程列表：绝对定位 Stack
-          SizedBox(
-            height: kTotalSections * kSectionRowHeight,
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                // 辅助参考线
-                ...List.generate(kTotalSections, (i) {
-                  return Positioned(
-                    top: (i + 1) * kSectionRowHeight - 1,
-                    left: 0,
-                    right: 0,
-                    child: Container(
-                      height: 0.6,
-                      color: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.03),
-                    ),
-                  );
-                }),
-
-                // 课程卡片列表
-                ...dayCourses.map((course) {
-                  final config = provider.currentConfig;
-                  final startSec = _getSectionForTime(course.startTime, config);
-                  final endSec = _getSectionForTime(course.endTime, config, isEnd: true);
-
-                  final start = startSec > 0 ? startSec : 1;
-                  final end = endSec >= start ? endSec : start;
-
-                  final topOffset = (start - 1) * kSectionRowHeight;
-                  final courseHeight = (end - start + 1) * kSectionRowHeight - 4.0;
-
-                  return Positioned(
-                    top: topOffset,
-                    left: 0,
-                    right: 0,
-                    height: courseHeight,
-                    child: _buildCourseCard(course, isDark),
-                  );
-                }),
-              ],
+          const SizedBox(width: 6),
+          Text(
+            dateLabel,
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: isToday ? FontWeight.bold : FontWeight.w500,
+              color: isToday
+                  ? (isDark ? AppThemeColors.babyPink : const Color(0xFFC84B66))
+                  : (isDark ? Colors.white60 : const Color(0xFF757B88)),
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// 构建单天列（课程绝对定位 Stack，星期标题已冻结置顶）
+  Widget _buildDayColumn(ScheduleProvider provider, int day, bool isDark) {
+    final weekCourses = provider.getCurrentWeekCourses();
+    final dayCourses = weekCourses.where((c) => c.weekday == day).toList();
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: SizedBox(
+        height: kTotalSections * kSectionRowHeight,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            // 辅助参考线
+            ...List.generate(kTotalSections, (i) {
+              return Positioned(
+                top: (i + 1) * kSectionRowHeight - 1,
+                left: 0,
+                right: 0,
+                child: Container(
+                  height: 0.6,
+                  color: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.03),
+                ),
+              );
+            }),
+
+            // 课程卡片列表
+            ...dayCourses.map((course) {
+              final config = provider.currentConfig;
+              int startSec = _getSectionForTime(course.startTime, config);
+              int endSec = _getSectionForTime(course.endTime, config, isEnd: true);
+
+              // [v2.9.0 修复] 严格禁止单卡片跨越午休（4->5）与跨越晚餐（8->9）
+              if (startSec <= 4) {
+                endSec = endSec.clamp(startSec, 4);
+              } else if (startSec <= 8) {
+                endSec = endSec.clamp(startSec, 8);
+              } else {
+                endSec = endSec.clamp(startSec, 13);
+              }
+
+              final start = startSec > 0 ? startSec : 1;
+              final end = endSec >= start ? endSec : start;
+
+              final topOffset = (start - 1) * kSectionRowHeight;
+              final courseHeight = (end - start + 1) * kSectionRowHeight - 4.0;
+
+              return Positioned(
+                top: topOffset,
+                left: 0,
+                right: 0,
+                height: courseHeight,
+                child: _buildCourseCard(course, isDark),
+              );
+            }),
+          ],
+        ),
       ),
     );
   }
@@ -521,50 +615,49 @@ class _WindowsScheduleScreenState extends State<WindowsScheduleScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              course.name,
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 12.5,
-                color: titleColor,
-                fontWeight: FontWeight.bold,
-                height: 1.2,
+            // [v2.9.5] 课程名称：自然语义智能排版（中英文换行、中文词组保持完整），留出边缘安全距离
+            Padding(
+              padding: const EdgeInsets.only(bottom: 2),
+              child: Text(
+                CourseNameFormatter.format(course.name, isPhone: false),
+                maxLines: 4,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 13.0,
+                  color: titleColor,
+                  fontWeight: FontWeight.bold,
+                  height: 1.18,
+                ),
               ),
             ),
             const Spacer(),
-            if (showLocation)
-              Text(
-                course.location,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 10.5,
-                  color: subTextColor,
-                  height: 1.15,
-                ),
-              ),
             if (showTeacher)
               Text(
                 course.teacher,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontSize: 10,
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
                   color: subTextColor,
-                  height: 1.15,
+                  height: 1.20,
                 ),
               ),
-            Text(
-              course.timeStr,
-              style: TextStyle(
-                fontSize: 9.5,
-                color: subTextColor,
+            if (showLocation)
+              Text(
+                '📍 ${course.location}',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                  color: subTextColor,
+                  height: 1.20,
+                ),
               ),
-            ),
             const SizedBox(height: 4),
 
-            // [v2.8.9] 底部三点小横条 + Liquid Morph Engine (GlassContextMenu)
+            // [v2.9.5] 底部三点小横条：调粗至 14.0pt，加大圆点，留出充足安全距离
             Center(
               child: GlassContextMenu(
                 menuWidth: 170,
@@ -601,39 +694,40 @@ class _WindowsScheduleScreenState extends State<WindowsScheduleScreen> {
                   ),
                 ],
                 trigger: Container(
-                  height: 8.5,
-                  width: 38.0,
+                  height: 14.0,
+                  width: 42.0,
+                  margin: const EdgeInsets.only(top: 4, bottom: 2),
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(4),
+                    color: (isDark ? Colors.white : Colors.black).withValues(alpha: isDark ? 0.16 : 0.09),
+                    borderRadius: BorderRadius.circular(6),
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Container(
-                        width: 2.5,
-                        height: 2.5,
+                        width: 3.2,
+                        height: 3.2,
                         decoration: BoxDecoration(
-                          color: subTextColor.withValues(alpha: 0.7),
+                          color: subTextColor.withValues(alpha: 0.8),
                           shape: BoxShape.circle,
                         ),
                       ),
-                      const SizedBox(width: 2.5),
+                      const SizedBox(width: 3.5),
                       Container(
-                        width: 2.5,
-                        height: 2.5,
+                        width: 3.2,
+                        height: 3.2,
                         decoration: BoxDecoration(
-                          color: subTextColor.withValues(alpha: 0.7),
+                          color: subTextColor.withValues(alpha: 0.8),
                           shape: BoxShape.circle,
                         ),
                       ),
-                      const SizedBox(width: 2.5),
+                      const SizedBox(width: 3.5),
                       Container(
-                        width: 2.5,
-                        height: 2.5,
+                        width: 3.2,
+                        height: 3.2,
                         decoration: BoxDecoration(
-                          color: subTextColor.withValues(alpha: 0.7),
+                          color: subTextColor.withValues(alpha: 0.8),
                           shape: BoxShape.circle,
                         ),
                       ),
@@ -793,10 +887,25 @@ class _WindowsScheduleScreenState extends State<WindowsScheduleScreen> {
     final dt = DateTime.fromMillisecondsSinceEpoch(timestamp);
     final totalMinutes = dt.hour * 60 + dt.minute;
 
-    int bestSection = 1;
+    // [v2.9.0 修复] 严格按时段范围限制候选节次，彻底杜绝跨午休/跨晚饭吸附
+    int minSec = 1;
+    int maxSec = 13;
+    if (totalMinutes < 12 * 60 + 30) {
+      minSec = 1;
+      maxSec = 4;
+    } else if (totalMinutes < 17 * 60 + 45) {
+      minSec = 5;
+      maxSec = 8;
+    } else {
+      minSec = 9;
+      maxSec = 13;
+    }
+
+    int bestSection = minSec;
     int minDiff = 10000;
 
     for (var entry in config.sectionStartTimes.entries) {
+      if (entry.key < minSec || entry.key > maxSec) continue;
       int sectionMin = entry.value;
       if (isEnd) {
         int duration = config.isEqualDuration

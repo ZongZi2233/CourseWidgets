@@ -10,6 +10,7 @@ import '../../utils/responsive_utils.dart';
 import '../widgets/liquid_components.dart' as liquid;
 import '../widgets/glass_context_menu.dart';
 import '../widgets/unified_backdrop_panel.dart';
+import '../widgets/app_background_layer.dart';
 import '../transitions/smooth_slide_transitions.dart';
 import 'course_edit_screen.dart';
 
@@ -90,20 +91,28 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
         ? _buildTabletLayout(provider)
         : _buildPhoneLayout(provider);
 
-    return AdaptiveLiquidGlassLayer(
-      quality: GlassQuality.premium,
-      settings: const LiquidGlassSettings(
-        blur: 3.0,
-        thickness: 24.0,
-        glassColor: Color(0x0EFFFFFF),
-        lightIntensity: 0.70,
-        ambientStrength: 0.45,
-        ambientRim: 0.0,
-        fresnelStrength: 0.05,
-        saturation: 1.20,
-        refractiveIndex: 1.46,
-      ),
-      child: content,
+    return Stack(
+      children: [
+        // [v2.9.5] 视口级单层预模糊壁纸采样：全屏静态壁纸高斯模糊，卡片仅在上方滚动，0 重复 BackdropFilter
+        const Positioned.fill(
+          child: AppBackgroundLayer(blur: 16.0),
+        ),
+        AdaptiveLiquidGlassLayer(
+          quality: GlassQuality.premium,
+          settings: const LiquidGlassSettings(
+            blur: 3.0,
+            thickness: 24.0,
+            glassColor: Color(0x0EFFFFFF),
+            lightIntensity: 0.70,
+            ambientStrength: 0.45,
+            ambientRim: 0.0,
+            fresnelStrength: 0.05,
+            saturation: 1.20,
+            refractiveIndex: 1.46,
+          ),
+          child: content,
+        ),
+      ],
     );
   }
 

@@ -543,8 +543,14 @@ class HyperOSCard extends StatelessWidget {
     final autoTextColor = lum > 0.45 ? const Color(0xFF1B1D24) : const Color(0xFFF2F5FA);
     final effectiveTextColor = contentColor ?? autoTextColor;
 
-    // [v2.9.0] 用户明确要求：彻底移除生硬边框（默认 BorderSide.none），纯靠柔和投影界定边界
-    final effectiveBorderSide = border ?? BorderSide.none;
+    // [v2.9.5] 纯净双通道静态玻璃材质：
+    // 通道 1：透镜边缘微高光 (Glass Specular Rim)，清晰勾勒超椭圆轮廓；
+    // 通道 2：高透丙烯酸微染底色，透出由底层 AppBackgroundLayer 单次静态采样的真实高斯模糊壁纸
+    final defaultGlassRim = BorderSide(
+      color: isDark ? Colors.white.withValues(alpha: 0.12) : Colors.white.withValues(alpha: 0.52),
+      width: 0.75,
+    );
+    final effectiveBorderSide = border ?? defaultGlassRim;
 
     // 采用与 liquid_glass_widgets 内部一致的 RoundedSuperellipseBorder，保证曲率完全对齐统一
     final shape = RoundedSuperellipseBorder(
@@ -555,13 +561,13 @@ class HyperOSCard extends StatelessWidget {
     // [v2.9.0] 增强浅色模式阴影可见度，赋予卡片清晰的物理层次与立体感
     final effectiveShadows = shadows ?? [
       BoxShadow(
-        color: Colors.black.withValues(alpha: isDark ? 0.36 : 0.20),
+        color: Colors.black.withValues(alpha: isDark ? 0.36 : 0.18),
         blurRadius: isDark ? 14 : 16,
         spreadRadius: isDark ? 0 : 0.5,
         offset: const Offset(0, 4),
       ),
       BoxShadow(
-        color: Colors.black.withValues(alpha: isDark ? 0.20 : 0.12),
+        color: Colors.black.withValues(alpha: isDark ? 0.20 : 0.10),
         blurRadius: 5,
         offset: const Offset(0, 1.5),
       ),
@@ -573,9 +579,23 @@ class HyperOSCard extends StatelessWidget {
         shape: shape,
         shadows: effectiveShadows,
       ),
-      child: Padding(
-        padding: padding,
-        child: child,
+      child: ClipPath(
+        clipper: ShapeBorderClipper(shape: shape),
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Colors.white.withValues(alpha: isDark ? 0.08 : 0.22),
+                Colors.transparent,
+              ],
+              stops: const [0.0, 0.45],
+            ),
+          ),
+          padding: padding,
+          child: child,
+        ),
       ),
     );
 

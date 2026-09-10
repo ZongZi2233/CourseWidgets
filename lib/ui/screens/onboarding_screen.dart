@@ -5,6 +5,7 @@ import 'onboarding_welcome.dart';
 import 'onboarding_theme.dart';
 import 'onboarding_config.dart';
 import 'onboarding_import.dart';
+import '../widgets/app_background_layer.dart';
 
 /// [v2.2.8/v2.9.0] 首次启动引导主框架
 class OnboardingScreen extends StatefulWidget {
@@ -70,38 +71,47 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: PageView(
-        controller: _pageController,
-        physics: const NeverScrollableScrollPhysics(), // 禁用手势滑动
-        onPageChanged: (index) {
-          setState(() => _currentPage = index);
-        },
+      body: Stack(
+        fit: StackFit.expand,
         children: [
-          // 第零步：欢迎页面（高清应用图标 + 品牌介绍）
-          OnboardingWelcome(
-            onNext: _nextPage,
+          // [v2.9.5] 视口级单层预模糊壁纸采样
+          const Positioned.fill(
+            child: AppBackgroundLayer(blur: 16.0),
           ),
+          PageView(
+            controller: _pageController,
+            physics: const NeverScrollableScrollPhysics(), // 禁用手势滑动
+            onPageChanged: (index) {
+              setState(() => _currentPage = index);
+            },
+            children: [
+              // 第零步：欢迎页面（高清应用图标 + 品牌介绍）
+              OnboardingWelcome(
+                onNext: _nextPage,
+              ),
 
-          // 第一步：个性化主题设置
-          OnboardingTheme(
-            onComplete: _nextPage,
-            onBack: _previousPage,
-            isLastPage: false,
-            showBackButton: true,
-          ),
+              // 第一步：个性化主题设置
+              OnboardingTheme(
+                onComplete: _nextPage,
+                onBack: _previousPage,
+                isLastPage: false,
+                showBackButton: true,
+              ),
 
-          // 第二步：导入课表
-          OnboardingImport(
-            onNext: _nextPage,
-            onBack: _previousPage,
-            isLastPage: false,
-          ),
+              // 第二步：导入课表
+              OnboardingImport(
+                onNext: _nextPage,
+                onBack: _previousPage,
+                isLastPage: false,
+              ),
 
-          // 第三步：课时配置与时间自定义确认
-          OnboardingConfig(
-            onNext: _completeOnboarding,
-            onBack: _previousPage,
-            isLastPage: true,
+              // 第三步：课时配置与时间自定义确认
+              OnboardingConfig(
+                onNext: _completeOnboarding,
+                onBack: _previousPage,
+                isLastPage: true,
+              ),
+            ],
           ),
         ],
       ),

@@ -45,11 +45,43 @@ class ThemeService extends ChangeNotifier {
     globalDarkModeNotifier.value = dark;
     globalUseDarkMode = dark;
     GlassOpacityManager().setDarkMode(dark);
+    if (_themeMode == ThemeMode.monet) {
+      refreshMonetColors();
+    }
     notifyListeners();
+  }
+
+  /// [v2.9.5] 监听壁纸路径或深色模式变动并动态更新莫奈色彩
+  void _onBackgroundOrThemeChanged() {
+    if (_themeMode == ThemeMode.monet) {
+      refreshMonetColors();
+    }
+  }
+
+  /// [v2.9.5] 动态刷新莫奈取色（根据当前背景壁纸与深浅色模式自动重新取色并广播）
+  Future<void> refreshMonetColors() async {
+    if (_themeMode != ThemeMode.monet) return;
+    final dark = isDarkMode;
+    String? bgPath = globalBackgroundPath.value;
+    if (bgPath == null || bgPath.isEmpty) {
+      bgPath = dark ? 'asset:assets/Dark.png' : 'asset:assets/Light.png';
+    } else if (bgPath.startsWith('asset:')) {
+      final raw = bgPath.substring(6);
+      if (raw == 'assets/Dark.png' || raw == 'assets/Light.png') {
+        bgPath = dark ? 'asset:assets/Dark.png' : 'asset:assets/Light.png';
+      }
+    }
+    await extractColorsFromImage(bgPath, brightness: dark ? Brightness.dark : Brightness.light);
   }
 
   /// 初始化主题服务
   Future<void> initialize() async {
+    // 监听壁纸和深色模式全局广播，自动触发动态莫奈重新取色
+    globalBackgroundPath.removeListener(_onBackgroundOrThemeChanged);
+    globalBackgroundPath.addListener(_onBackgroundOrThemeChanged);
+    globalDarkModeNotifier.removeListener(_onBackgroundOrThemeChanged);
+    globalDarkModeNotifier.addListener(_onBackgroundOrThemeChanged);
+
     // 加载保存的主题模式
     final savedMode = _storage.getString(StorageService.keyThemeMode);
     if (savedMode != null) {
@@ -61,17 +93,16 @@ class ThemeService extends ChangeNotifier {
       _themeMode = ThemeMode.monet;
     }
 
-    // [v2.9.0] 恢复颜色或从壁纸提取默认莫奈色调
+    // [v2.9.5] 恢复颜色或从壁纸提取默认莫奈色调
     if (_themeMode == ThemeMode.monet) {
       final savedColor = _storage.getInt(StorageService.keyCustomThemeColor);
       if (savedColor != null) {
         _primaryColor = Color(savedColor);
         _secondaryColor = _generateSecondaryColor(_primaryColor);
         debugPrint('✅ 恢复莫奈取色: $_primaryColor');
-      } else {
-        final bgPath = globalBackgroundPath.value ?? (isDarkMode ? 'asset:assets/Dark.png' : 'asset:assets/Light.png');
-        await extractColorsFromImage(bgPath);
       }
+      // 启动后异步自动校准当前壁纸与深浅色模式色彩
+      refreshMonetColors();
     } else if (_themeMode == ThemeMode.defaultMode) {
       _primaryColor = defaultPrimaryColor;
       _secondaryColor = defaultSecondaryColor;
@@ -191,9 +222,10 @@ class ThemeService extends ChangeNotifier {
     }
   }
 
-  /// 从图片提取莫奈颜色（背景图片取色）
-  Future<void> extractColorsFromImage(String imagePath) async {
+  /// 从图片提取莫奈颜色（背景图片取色，自适应深浅色模式）
+  Future<void> extractColorsFromImage(String imagePath, {Brightness? brightness}) async {
     try {
+      final effectiveBrightness = brightness ?? (isDarkMode ? Brightness.dark : Brightness.light);
       ImageProvider provider;
       if (imagePath.startsWith('asset:')) {
         provider = AssetImage(imagePath.substring(6));
@@ -206,10 +238,10 @@ class ThemeService extends ChangeNotifier {
         provider = FileImage(imageFile);
       }
 
-      // [v2.5.5修复] 支持从 Asset 或 File 中提取原生 Material You 色系
+      // [v2.5.5修复/v2.9.5升级] 根据传入或当前界面的明度提取原生 Material You 色系
       final colorScheme = await ColorScheme.fromImageProvider(
         provider: provider,
-        brightness: Brightness.light,
+        brightness: effectiveBrightness,
       );
 
       _primaryColor = colorScheme.primary;
@@ -220,7 +252,7 @@ class ThemeService extends ChangeNotifier {
         _primaryColor.toARGB32(),
       );
       notifyListeners();
-      debugPrint('✅ 莫奈取色原生提取完成: $_primaryColor');
+      debugPrint('✅ 莫奈取色原生提取完成: $_primaryColor (亮度: $effectiveBrightness)');
     } catch (e) {
       debugPrint('莫奈取色失败: $e');
       _primaryColor = defaultPrimaryColor;

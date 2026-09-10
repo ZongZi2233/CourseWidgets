@@ -9,7 +9,7 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Flutter](https://img.shields.io/badge/Flutter-3.44.0+-02569B?logo=flutter)](https://flutter.dev)
 [![Dart](https://img.shields.io/badge/Dart-3.12.0+-0175C2?logo=dart)](https://dart.dev)
-[![Version](https://img.shields.io/badge/Version-2.9.3-FF9BAE)](https://github.com/ZongZi2233AI/CourseWidgets/releases/)
+[![Version](https://img.shields.io/badge/Version-2.9.5-FF9BAE)](https://github.com/ZongZi2233AI/CourseWidgets/releases/)
 
 English | [简体中文](README.md)
 
@@ -17,9 +17,9 @@ English | [简体中文](README.md)
 
 > **Statement**: This project was developed entirely through human-AI collaborative Vibe Coding. Core architecture by [MiMo-V2-Flash](https://github.com/XiaomiMiMo/MiMo-V2-Flash) and Gemini 3.1 Pro, with Windows desktop integration engineered in collaboration with Claude Opus 4.6.
 
-### 📦 Latest Release: [v2.9.3 (Build 10008063)](https://github.com/ZongZi2233AI/CourseWidgets/releases)
-* **Android Standalone**: `CourseWidgets-v2.9.3-android-arm64-v8a.apk` — Built with R8 code shrinking and Dart AOT obfuscation.
-* **Windows Client**: `CourseWidgets-v2.9.3-windows-x64.zip` — Borderless acrylic desktop app with tray support and high-DPI scaling.
+### 📦 Latest Release: [v2.9.5 (Build 10008065)](https://github.com/ZongZi2233AI/CourseWidgets/releases)
+* **Android Standalone**: `CourseWidgets-v2.9.5-android-arm64-v8a.apk` — Built with R8 code shrinking and Dart AOT obfuscation.
+* **Windows Client**: `CourseWidgets-v2.9.5-windows-x64.zip` — Borderless acrylic desktop app with tray support and high-DPI scaling.
 
 ---
 
