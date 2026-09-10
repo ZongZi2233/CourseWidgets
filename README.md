@@ -9,7 +9,7 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Flutter](https://img.shields.io/badge/Flutter-3.44.0+-02569B?logo=flutter)](https://flutter.dev)
 [![Dart](https://img.shields.io/badge/Dart-3.12.0+-0175C2?logo=dart)](https://dart.dev)
-[![Version](https://img.shields.io/badge/Version-2.9.5-FF9BAE)](https://github.com/ZongZi2233AI/CourseWidgets/releases/)
+[![Version](https://img.shields.io/badge/Version-2.9.6-FF9BAE)](https://github.com/ZongZi2233AI/CourseWidgets/releases/)
 
 [English](README_EN.md) | 简体中文
 
@@ -17,9 +17,18 @@
 
 > **声明**：本软件除开源代码外完全使用 AI 辅助协同开发。核心架构由 [MiMo-V2-Flash](https://github.com/XiaomiMiMo/MiMo-V2-Flash) 与 Gemini 3.1 Pro 深度构建，Windows 桌面部分协同 Claude Opus 4.6 深度定制。
 
-### 📦 最新版本：[v2.9.5 (Build 10008065)](https://github.com/ZongZi2233AI/CourseWidgets/releases)
-* **Android 单包**：`CourseWidgets-v2.9.5-android-arm64-v8a.apk` —— 全面开启 R8 压缩与 Dart AOT 源码混淆。
-* **Windows 客户端**：`CourseWidgets-v2.9.5-windows-x64.zip` —— 纯净亚克力无边框桌面端，支持托盘驻留与高分屏。
+### 📦 最新版本：[v2.9.6 (Build 10008066)](https://github.com/ZongZi2233AI/CourseWidgets/releases)
+* **Android 单包**：`CourseWidgets-v2.9.6-android-arm64-v8a.apk` —— 全面开启 R8 压缩与 Dart AOT 源码混淆。
+* **Windows 客户端**：`CourseWidgets-v2.9.6-windows-x64.zip` —— 纯净亚克力无边框桌面端，支持托盘驻留与高分屏。
+
+#### 🆕 v2.9.6 本次更新内容 (CHANGELOG)
+1. **纯色混色卡片全面回归**：彻底移除 `HyperOSCard` 内部上黑下白渐变与课表主网格顶部 `ShaderMask` 遮罩，全面恢复通透温润的纯色半透明混色卡片（日间莫兰迪 28% Alpha、夜间马卡龙 32% Alpha）。
+2. **去除教室地点 Emoji**：去除课程卡片地点文字前的 `'📍 '` emoji 前缀，纯净文本利落排版。
+3. **三点操作胶囊再度放大**：移动端高度增大至 15.0pt、宽度 46.0pt、圆点 3.8pt（桌面端 17.0pt / 52.0pt / 4.0pt），触控靶区更宽敞顺手。
+4. **星期栏增高与主页悬浮切换器右移抬高**：星期栏高度增至 50.0pt（桌面端 48.0pt），日期排版更舒展；底部悬浮周次切换器抬高至 `bottom: 106` 与导航栏拉开舒适间距，并靠右对齐放置（`right: 16`）契合单手大屏盲操。
+5. **浮出选择菜单离屏渲染冻结满帧优化**：周次管理底部弹窗与课程详情面板在打开瞬间通过 `ValueNotifier` 冻结背景控件（禁用 `TickerMode` 且启用 GPU Raster Cache 离屏缓存），退出动画完成后平滑解锁，达成 120 FPS 丝滑转场。
+6. **悬浮切换器内部卡片去除黑描边**：移除切换器内部各按钮的浅色黑边，改用同系加深色（`#CDD3DE`、`#E56A85`）清晰界定轮廓，清爽干净无脏色。
+7. **Windows 桌面端深度对齐**：全量对齐纯色混色卡片、去除地点 emoji、17.0pt 加大三点按钮与 48.0pt 星期冻结栏。
 
 ---
 

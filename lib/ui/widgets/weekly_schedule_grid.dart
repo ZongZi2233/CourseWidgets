@@ -37,6 +37,13 @@ class WeeklyScheduleGrid extends StatefulWidget {
 class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
   static const double kSectionRowHeight = 68.0; // [v2.9.0] 适当增加卡片高度与字体空间
   static const int kTotalSections = 13;
+  final ValueNotifier<bool> _isBackgroundFrozen = ValueNotifier<bool>(false);
+
+  @override
+  void dispose() {
+    _isBackgroundFrozen.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -52,7 +59,19 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
                     _changeWeek(provider, provider.currentWeek + 1);
                   }
                 },
-          child: _buildWeekGrid(context, provider),
+          child: ValueListenableBuilder<bool>(
+            valueListenable: _isBackgroundFrozen,
+            builder: (context, isFrozen, child) {
+              return IgnorePointer(
+                ignoring: isFrozen,
+                child: TickerMode(
+                  enabled: !isFrozen,
+                  child: child!,
+                ),
+              );
+            },
+            child: _buildWeekGrid(context, provider),
+          ),
         );
 
         if (!widget.showControlBar) {
@@ -80,86 +99,93 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
     }
   }
 
-  void _showWeekPicker(BuildContext context, ScheduleProvider provider) {
+  void _showWeekPicker(BuildContext context, ScheduleProvider provider) async {
     final weeks = provider.availableWeeks;
     if (weeks.isEmpty || !context.mounted) return;
 
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => GlassSheet(
-        settings: LiquidGlassSettings(
-          glassColor: Colors.black.withValues(alpha: 0.4),
-          blur: 2.0,
-          thickness: 18.0,
-        ),
-        child: SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: const Text(
-                  '选择周次',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
+    _isBackgroundFrozen.value = true;
+    try {
+      await showModalBottomSheet(
+        context: context,
+        backgroundColor: Colors.transparent,
+        builder: (context) => GlassSheet(
+          settings: LiquidGlassSettings(
+            glassColor: Colors.black.withValues(alpha: 0.4),
+            blur: 2.0,
+            thickness: 18.0,
+          ),
+          child: SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: const Text(
+                    '选择周次',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
-              ),
-              Container(
-                height: 280,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: GridView.builder(
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 4,
-                    mainAxisSpacing: 8,
-                    crossAxisSpacing: 8,
-                    childAspectRatio: 1.5,
-                  ),
-                  itemCount: weeks.length,
-                  itemBuilder: (context, index) {
-                    final week = weeks[index];
-                    final isSelected = week == provider.currentWeek;
+                Container(
+                  height: 280,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: GridView.builder(
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 4,
+                      mainAxisSpacing: 8,
+                      crossAxisSpacing: 8,
+                      childAspectRatio: 1.5,
+                    ),
+                    itemCount: weeks.length,
+                    itemBuilder: (context, index) {
+                      final week = weeks[index];
+                      final isSelected = week == provider.currentWeek;
 
-                    return GlassButton.custom(
-                      onTap: () {
-                        HapticFeedback.selectionClick();
-                        provider.setCurrentWeek(week);
-                        Navigator.pop(context);
-                      },
-                      width: double.infinity,
-                      height: double.infinity,
-                      style: GlassButtonStyle.filled,
-                      settings: LiquidGlassSettings(
-                        glassColor: isSelected
-                            ? AppThemeColors.babyPink.withValues(alpha: 0.3)
-                            : Colors.white.withValues(alpha: 0.05),
-                        blur: 4,
-                        thickness: 14,
-                      ),
-                      shape: const LiquidRoundedSuperellipse(borderRadius: 12),
-                      child: Center(
-                        child: Text(
-                          '第$week周',
-                          style: TextStyle(
-                            color: isSelected ? Colors.white : Colors.white70,
-                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                            fontSize: 13,
+                      return GlassButton.custom(
+                        onTap: () {
+                          HapticFeedback.selectionClick();
+                          provider.setCurrentWeek(week);
+                          Navigator.pop(context);
+                        },
+                        width: double.infinity,
+                        height: double.infinity,
+                        style: GlassButtonStyle.filled,
+                        settings: LiquidGlassSettings(
+                          glassColor: isSelected
+                              ? AppThemeColors.babyPink.withValues(alpha: 0.3)
+                              : Colors.white.withValues(alpha: 0.05),
+                          blur: 4,
+                          thickness: 14,
+                        ),
+                        shape: const LiquidRoundedSuperellipse(borderRadius: 12),
+                        child: Center(
+                          child: Text(
+                            '第$week周',
+                            style: TextStyle(
+                              color: isSelected ? Colors.white : Colors.white70,
+                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                              fontSize: 13,
+                            ),
                           ),
                         ),
-                      ),
-                    );
-                  },
+                      );
+                    },
+                  ),
                 ),
-              ),
-              const SizedBox(height: 16),
-            ],
+                const SizedBox(height: 16),
+              ],
+            ),
           ),
         ),
-      ),
-    );
+      );
+    } finally {
+      if (mounted) {
+        _isBackgroundFrozen.value = false;
+      }
+    }
   }
 
   Widget _buildWeekControl(BuildContext context, ScheduleProvider provider) {
@@ -306,41 +332,27 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
     final config = provider.currentConfig;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final timeColWidth = widget.isPhone ? 32.0 : 38.0;
-    const headerHeight = 44.0;
+    const headerHeight = 50.0;
     final resolvedPadding = widget.contentPadding.resolve(Directionality.of(context));
     final topPadding = resolvedPadding.top;
 
     return Stack(
       children: [
-        // 1. 纵向滚动内容区：全屏铺满，从固定星期栏下方平滑穿过，顶部加入渐进平滑消隐滤镜
+        // 1. 纵向滚动内容区：全屏铺满，从固定星期栏下方平滑穿过
         Positioned.fill(
-          child: ShaderMask(
-            shaderCallback: (Rect bounds) {
-              return const LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.transparent,
-                  Colors.white,
-                  Colors.white,
-                ],
-                stops: [0.0, 0.05, 1.0],
-              ).createShader(bounds);
-            },
-            blendMode: BlendMode.dstIn,
-            child: DynMouseScroll(
-              durationMS: 250,
-              scrollSpeed: 1.2,
-              builder: (context, controller, physics) => SingleChildScrollView(
-                controller: controller,
-                physics: physics,
-                padding: EdgeInsets.only(
-                  top: topPadding + headerHeight + 6,
-                  bottom: resolvedPadding.bottom,
-                  left: resolvedPadding.left,
-                  right: resolvedPadding.right,
-                ),
-                child: Row(
+          child: DynMouseScroll(
+            durationMS: 250,
+            scrollSpeed: 1.2,
+            builder: (context, controller, physics) => SingleChildScrollView(
+              controller: controller,
+              physics: physics,
+              padding: EdgeInsets.only(
+                top: topPadding + headerHeight + 8,
+                bottom: resolvedPadding.bottom,
+                left: resolvedPadding.left,
+                right: resolvedPadding.right,
+              ),
+              child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // 左侧时间轴 (1~13 节课，不含头部，直接对齐课程网格)
@@ -399,7 +411,6 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
               ),
             ),
           ),
-        ),
         ),
 
         // 2. [Excel 冻结窗格] 固定置顶的星期行（周一~周日），通透磨砂底色，卡片从下方穿过
@@ -479,7 +490,7 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
         now.day == dayDate.day;
 
     return Container(
-      height: 38,
+      height: 44,
       width: double.infinity,
       decoration: isToday
           ? BoxDecoration(
@@ -708,7 +719,7 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
                 ),
               if (hasLocation)
                 Text(
-                  '📍 ${course.location}',
+                  course.location,
                   style: TextStyle(
                     color: subTextColor,
                     fontSize: widget.isPhone ? 11.0 : 12.0,
@@ -720,7 +731,7 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
                 ),
             ],
 
-            // [v2.9.5] 底部三点小横条：调粗至 12.0pt，加大圆点，留出充足安全距离
+            // [v2.9.6] 底部三点横条：加大至 15.0pt 高度、46.0pt 宽度、3.8pt 圆点，留出充足安全距离
             Center(
               child: GlassContextMenu(
                 menuWidth: 170,
@@ -757,40 +768,40 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
                   ),
                 ],
                 trigger: Container(
-                  height: widget.isPhone ? 12.0 : 14.0,
-                  width: widget.isPhone ? 36.0 : 42.0,
-                  margin: const EdgeInsets.only(top: 6, bottom: 2),
+                  height: widget.isPhone ? 15.0 : 17.0,
+                  width: widget.isPhone ? 46.0 : 52.0,
+                  margin: const EdgeInsets.only(top: 6, bottom: 3),
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
                     color: (isDark ? Colors.white : Colors.black).withValues(alpha: isDark ? 0.16 : 0.09),
-                    borderRadius: BorderRadius.circular(6),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Container(
-                        width: 3.2,
-                        height: 3.2,
+                        width: widget.isPhone ? 3.8 : 4.0,
+                        height: widget.isPhone ? 3.8 : 4.0,
                         decoration: BoxDecoration(
-                          color: subTextColor.withValues(alpha: 0.8),
+                          color: subTextColor.withValues(alpha: 0.85),
                           shape: BoxShape.circle,
                         ),
                       ),
-                      const SizedBox(width: 3.5),
+                      const SizedBox(width: 4.0),
                       Container(
-                        width: 3.2,
-                        height: 3.2,
+                        width: widget.isPhone ? 3.8 : 4.0,
+                        height: widget.isPhone ? 3.8 : 4.0,
                         decoration: BoxDecoration(
-                          color: subTextColor.withValues(alpha: 0.8),
+                          color: subTextColor.withValues(alpha: 0.85),
                           shape: BoxShape.circle,
                         ),
                       ),
-                      const SizedBox(width: 3.5),
+                      const SizedBox(width: 4.0),
                       Container(
-                        width: 3.2,
-                        height: 3.2,
+                        width: widget.isPhone ? 3.8 : 4.0,
+                        height: widget.isPhone ? 3.8 : 4.0,
                         decoration: BoxDecoration(
-                          color: subTextColor.withValues(alpha: 0.8),
+                          color: subTextColor.withValues(alpha: 0.85),
                           shape: BoxShape.circle,
                         ),
                       ),
@@ -805,111 +816,118 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
     );
   }
 
-  /// 官方 Liquid Glass 风格课程详情底板
-  void _showCourseDetail(BuildContext context, CourseEvent course) {
+  /// 官方 Liquid Glass 风格课程详情底板（离屏冻结背景加速）
+  void _showCourseDetail(BuildContext context, CourseEvent course) async {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primaryTextColor = isDark ? Colors.white : const Color(0xFF1A1A2E);
     final secondaryTextColor = isDark ? Colors.white70 : const Color(0xFF555B68);
 
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      useRootNavigator: true,
-      builder: (sheetContext) => GlassSheet(
-        settings: LiquidGlassSettings(
-          glassColor: isDark
-              ? Colors.black.withValues(alpha: 0.45)
-              : Colors.white.withValues(alpha: 0.20),
-          blur: 4.0,
-          thickness: 20.0,
-        ),
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 36,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(2),
+    _isBackgroundFrozen.value = true;
+    try {
+      await showModalBottomSheet(
+        context: context,
+        backgroundColor: Colors.transparent,
+        useRootNavigator: true,
+        builder: (sheetContext) => GlassSheet(
+          settings: LiquidGlassSettings(
+            glassColor: isDark
+                ? Colors.black.withValues(alpha: 0.45)
+                : Colors.white.withValues(alpha: 0.20),
+            blur: 4.0,
+            thickness: 20.0,
+          ),
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 36,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  course.name,
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: primaryTextColor,
+                  const SizedBox(height: 16),
+                  Text(
+                    course.name,
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: primaryTextColor,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 16),
-                _buildDetailRow(sheetContext, '时间', course.timeStr),
-                const SizedBox(height: 10),
-                _buildDetailRow(sheetContext, '地点', (course.location.isEmpty || course.location.contains('未知')) ? '未指定地点' : course.location),
-                const SizedBox(height: 10),
-                _buildDetailRow(sheetContext, '教师', course.teacher.isEmpty ? '未指定教师' : course.teacher),
-                const SizedBox(height: 20),
-                Row(
-                  children: [
-                    Expanded(
-                      child: GlassButton.custom(
-                        onTap: () {
-                          Navigator.pop(sheetContext);
-                          Navigator.push(
-                            context,
-                            TransparentMaterialPageRoute(
-                              builder: (_) => CourseEditScreen(course: course),
+                  const SizedBox(height: 16),
+                  _buildDetailRow(sheetContext, '时间', course.timeStr),
+                  const SizedBox(height: 10),
+                  _buildDetailRow(sheetContext, '地点', (course.location.isEmpty || course.location.contains('未知')) ? '未指定地点' : course.location),
+                  const SizedBox(height: 10),
+                  _buildDetailRow(sheetContext, '教师', course.teacher.isEmpty ? '未指定教师' : course.teacher),
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: GlassButton.custom(
+                          onTap: () {
+                            Navigator.pop(sheetContext);
+                            Navigator.push(
+                              context,
+                              TransparentMaterialPageRoute(
+                                builder: (_) => CourseEditScreen(course: course),
+                              ),
+                            );
+                          },
+                          height: 44,
+                          settings: LiquidGlassSettings(
+                            glassColor: AppThemeColors.babyPink.withValues(alpha: 0.35),
+                            blur: 4,
+                            thickness: 14,
+                          ),
+                          shape: const LiquidRoundedSuperellipse(borderRadius: 14),
+                          child: const Center(
+                            child: Text(
+                              '编辑课程',
+                              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                             ),
-                          );
-                        },
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      GlassButton.custom(
+                        onTap: () => Navigator.pop(sheetContext),
+                        width: 80,
                         height: 44,
                         settings: LiquidGlassSettings(
-                          glassColor: AppThemeColors.babyPink.withValues(alpha: 0.35),
+                          glassColor: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.08),
                           blur: 4,
                           thickness: 14,
                         ),
                         shape: const LiquidRoundedSuperellipse(borderRadius: 14),
-                        child: const Center(
+                        child: Center(
                           child: Text(
-                            '编辑课程',
-                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                            '关闭',
+                            style: TextStyle(color: secondaryTextColor),
                           ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    GlassButton.custom(
-                      onTap: () => Navigator.pop(sheetContext),
-                      width: 80,
-                      height: 44,
-                      settings: LiquidGlassSettings(
-                        glassColor: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.08),
-                        blur: 4,
-                        thickness: 14,
-                      ),
-                      shape: const LiquidRoundedSuperellipse(borderRadius: 14),
-                      child: Center(
-                        child: Text(
-                          '关闭',
-                          style: TextStyle(color: secondaryTextColor),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         ),
-      ),
-    );
+      );
+    } finally {
+      if (mounted) {
+        _isBackgroundFrozen.value = false;
+      }
+    }
   }
 
   Widget _buildDetailRow(BuildContext context, String label, String value) {

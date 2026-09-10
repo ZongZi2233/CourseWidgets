@@ -289,92 +289,77 @@ class _WindowsScheduleScreenState extends State<WindowsScheduleScreen> {
     final daysCount = showWeekends ? 7 : 5;
     final config = provider.currentConfig;
     const timeColWidth = 44.0;
-    const headerHeight = 38.0;
+    const headerHeight = 48.0;
     const padding = 16.0;
 
     return LayoutBuilder(
       builder: (context, constraints) {
         return Stack(
           children: [
-            // 1. 纵向平滑滚动课程内容区（从固定星期栏下方平滑穿过，顶部加入渐变消隐）
+            // 1. 纵向平滑滚动课程内容区（从固定星期栏下方平滑穿过）
             Positioned.fill(
-              child: ShaderMask(
-                shaderCallback: (Rect bounds) {
-                  return const LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.transparent,
-                      Colors.white,
-                      Colors.white,
-                    ],
-                    stops: [0.0, 0.04, 1.0],
-                  ).createShader(bounds);
-                },
-                blendMode: BlendMode.dstIn,
-                child: DynMouseScroll(
-                  durationMS: 250,
-                  scrollSpeed: 1.2,
-                  builder: (context, controller, physics) => SingleChildScrollView(
-                    controller: controller,
-                    physics: physics,
-                    padding: const EdgeInsets.only(
-                      top: headerHeight + 10,
-                      left: padding,
-                      right: padding,
-                      bottom: padding,
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // 左侧时间轴 (1~13 节)
-                        SizedBox(
-                          width: timeColWidth,
-                          child: Column(
-                            children: List.generate(kTotalSections, (i) {
-                              final section = i + 1;
-                              final startMin = config.sectionStartTimes[section] ?? (480 + (i < 5 ? i * 50 : 360 + i * 50));
-                              final hour = (startMin ~/ 60).toString().padLeft(2, '0');
-                              final min = (startMin % 60).toString().padLeft(2, '0');
-                              final timeStr = '$hour:$min';
+              child: DynMouseScroll(
+                durationMS: 250,
+                scrollSpeed: 1.2,
+                builder: (context, controller, physics) => SingleChildScrollView(
+                  controller: controller,
+                  physics: physics,
+                  padding: const EdgeInsets.only(
+                    top: headerHeight + 10,
+                    left: padding,
+                    right: padding,
+                    bottom: padding,
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // 左侧时间轴 (1~13 节)
+                      SizedBox(
+                        width: timeColWidth,
+                        child: Column(
+                          children: List.generate(kTotalSections, (i) {
+                            final section = i + 1;
+                            final startMin = config.sectionStartTimes[section] ?? (480 + (i < 5 ? i * 50 : 360 + i * 50));
+                            final hour = (startMin ~/ 60).toString().padLeft(2, '0');
+                            final min = (startMin % 60).toString().padLeft(2, '0');
+                            final timeStr = '$hour:$min';
 
-                              return Container(
-                                height: kSectionRowHeight,
-                                alignment: Alignment.center,
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Text(
-                                      '$section',
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.bold,
-                                        color: isDark ? Colors.white70 : const Color(0xFF1E2128),
-                                      ),
+                            return Container(
+                              height: kSectionRowHeight,
+                              alignment: Alignment.center,
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    '$section',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.bold,
+                                      color: isDark ? Colors.white70 : const Color(0xFF1E2128),
                                     ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      timeStr,
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        color: isDark ? Colors.white.withValues(alpha: 0.4) : const Color(0xFF8E95A3),
-                                        fontWeight: FontWeight.w500,
-                                      ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    timeStr,
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: isDark ? Colors.white.withValues(alpha: 0.4) : const Color(0xFF8E95A3),
+                                      fontWeight: FontWeight.w500,
                                     ),
-                                  ],
-                                ),
-                              );
-                            }),
-                          ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }),
                         ),
+                      ),
 
-                        // 5 天或 7 天单日课程列
-                        ...List.generate(daysCount, (index) {
-                          final day = index + 1;
-                          return Expanded(child: _buildDayColumn(provider, day, isDark));
-                        }),
-                      ],
-                    ),
+                      // 5 天或 7 天单日课程列
+                      ...List.generate(daysCount, (index) {
+                        final day = index + 1;
+                        return Expanded(child: _buildDayColumn(provider, day, isDark));
+                      }),
+                    ],
                   ),
                 ),
               ),
@@ -452,7 +437,7 @@ class _WindowsScheduleScreenState extends State<WindowsScheduleScreen> {
         now.day == dayDate.day;
 
     return Container(
-      height: 34,
+      height: 40,
       decoration: isToday
           ? BoxDecoration(
               color: AppThemeColors.babyPink.withValues(alpha: isDark ? 0.35 : 0.25),
@@ -645,7 +630,7 @@ class _WindowsScheduleScreenState extends State<WindowsScheduleScreen> {
               ),
             if (showLocation)
               Text(
-                '📍 ${course.location}',
+                course.location,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
@@ -657,7 +642,7 @@ class _WindowsScheduleScreenState extends State<WindowsScheduleScreen> {
               ),
             const SizedBox(height: 4),
 
-            // [v2.9.5] 底部三点小横条：调粗至 14.0pt，加大圆点，留出充足安全距离
+            // [v2.9.6] 底部三点横条：调粗至 17.0pt，加大圆点至 4.0pt，留出充足安全距离
             Center(
               child: GlassContextMenu(
                 menuWidth: 170,
@@ -694,40 +679,40 @@ class _WindowsScheduleScreenState extends State<WindowsScheduleScreen> {
                   ),
                 ],
                 trigger: Container(
-                  height: 14.0,
-                  width: 42.0,
-                  margin: const EdgeInsets.only(top: 4, bottom: 2),
+                  height: 17.0,
+                  width: 52.0,
+                  margin: const EdgeInsets.only(top: 6, bottom: 3),
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
                     color: (isDark ? Colors.white : Colors.black).withValues(alpha: isDark ? 0.16 : 0.09),
-                    borderRadius: BorderRadius.circular(6),
+                    borderRadius: BorderRadius.circular(8.5),
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Container(
-                        width: 3.2,
-                        height: 3.2,
+                        width: 4.0,
+                        height: 4.0,
                         decoration: BoxDecoration(
-                          color: subTextColor.withValues(alpha: 0.8),
+                          color: subTextColor.withValues(alpha: 0.85),
                           shape: BoxShape.circle,
                         ),
                       ),
-                      const SizedBox(width: 3.5),
+                      const SizedBox(width: 4.5),
                       Container(
-                        width: 3.2,
-                        height: 3.2,
+                        width: 4.0,
+                        height: 4.0,
                         decoration: BoxDecoration(
-                          color: subTextColor.withValues(alpha: 0.8),
+                          color: subTextColor.withValues(alpha: 0.85),
                           shape: BoxShape.circle,
                         ),
                       ),
-                      const SizedBox(width: 3.5),
+                      const SizedBox(width: 4.5),
                       Container(
-                        width: 3.2,
-                        height: 3.2,
+                        width: 4.0,
+                        height: 4.0,
                         decoration: BoxDecoration(
-                          color: subTextColor.withValues(alpha: 0.8),
+                          color: subTextColor.withValues(alpha: 0.85),
                           shape: BoxShape.circle,
                         ),
                       ),

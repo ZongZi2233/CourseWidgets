@@ -9,7 +9,7 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Flutter](https://img.shields.io/badge/Flutter-3.44.0+-02569B?logo=flutter)](https://flutter.dev)
 [![Dart](https://img.shields.io/badge/Dart-3.12.0+-0175C2?logo=dart)](https://dart.dev)
-[![Version](https://img.shields.io/badge/Version-2.9.5-FF9BAE)](https://github.com/ZongZi2233AI/CourseWidgets/releases/)
+[![Version](https://img.shields.io/badge/Version-2.9.6-FF9BAE)](https://github.com/ZongZi2233AI/CourseWidgets/releases/)
 
 English | [简体中文](README.md)
 
@@ -17,9 +17,18 @@ English | [简体中文](README.md)
 
 > **Statement**: This project was developed entirely through human-AI collaborative Vibe Coding. Core architecture by [MiMo-V2-Flash](https://github.com/XiaomiMiMo/MiMo-V2-Flash) and Gemini 3.1 Pro, with Windows desktop integration engineered in collaboration with Claude Opus 4.6.
 
-### 📦 Latest Release: [v2.9.5 (Build 10008065)](https://github.com/ZongZi2233AI/CourseWidgets/releases)
-* **Android Standalone**: `CourseWidgets-v2.9.5-android-arm64-v8a.apk` — Built with R8 code shrinking and Dart AOT obfuscation.
-* **Windows Client**: `CourseWidgets-v2.9.5-windows-x64.zip` — Borderless acrylic desktop app with tray support and high-DPI scaling.
+### 📦 Latest Release: [v2.9.6 (Build 10008066)](https://github.com/ZongZi2233AI/CourseWidgets/releases)
+* **Android Standalone**: `CourseWidgets-v2.9.6-android-arm64-v8a.apk` — Built with R8 code shrinking and Dart AOT obfuscation.
+* **Windows Client**: `CourseWidgets-v2.9.6-windows-x64.zip` — Borderless acrylic desktop app with tray support and high-DPI scaling.
+
+#### 🆕 What's New in v2.9.6 (CHANGELOG)
+1. **Pure Solid Translucent Color Cards**: Completely removed internal top-black/bottom-white linear gradients and borders from `HyperOSCard` and eliminated the top `ShaderMask` on schedule grids. Restored 100% uniform translucent solid Morandi (day, 28% alpha) and Macaron (night, 32% alpha) color palettes.
+2. **Pure Location Typography**: Eliminated `'📍 '` emoji prefix before classroom location strings; rendered in crisp, clean typography.
+3. **Further Enlarged 3-Dots Action Pill**: Increased pill height to 15.0pt, width to 46.0pt, dot size to 3.8pt on mobile (17.0pt / 52.0pt / 4.0pt on desktop) with generous safe breathing padding.
+4. **Elevated Weekday Header & Right-Aligned Floating Dock**: Raised weekday row height to 50.0pt (desktop 48.0pt); lifted floating bottom week dock to `bottom: 106` and docked to the right (`right: 16`) for seamless one-handed thumb reachability.
+5. **Selection Menu Raster Freeze Optimization**: Froze background widgets into GPU raster cache (`ValueNotifier`, `TickerMode(enabled: false)`, `IgnorePointer`) upon opening modal sheets (`_showWeekPickerSheet`, `_showCourseDetail`), unlocking smoothly upon animation completion for fluid 120 FPS transitions.
+6. **Eliminated Black Strokes in Floating Switcher**: Replaced black semi-transparent borders with deepened element tones (`#CDD3DE`, `#E56A85`) for crisp, pure boundaries without dirtiness.
+7. **Cross-Platform Alignment**: Fully synchronized pure translucent cards, emoji removal, 17.0pt action pills, and 48.0pt frozen weekday header on Windows desktop.
 
 ---
 

@@ -32,7 +32,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
   int _currentIndex = 0;
   late final PageController _pageController = PageController();
   bool _isBottomNavVisible = true;
-  bool _isWeekPickerActive = false; // [v2.8.6] 周次选择器打开状态，用于挂起背景重绘保障 120 FPS
+  final ValueNotifier<bool> _isBackgroundFrozen = ValueNotifier<bool>(false);
   final DataImportService _importService = DataImportService();
 
   void _onTabSelected(int index) {
@@ -59,6 +59,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
     // 注册路由监听
     routeObserver.subscribe(this, ModalRoute.of(context) as PageRoute);
   }
+
 
   // [v2.8.9] 被其他页面覆盖时：仅隐藏底部导航栏，零 GPU 阻塞直出 120 FPS 丝滑滑入
   @override
@@ -124,6 +125,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
   @override
   void dispose() {
     routeObserver.unsubscribe(this); // [v2.6.0] 卸载路由监听
+    _isBackgroundFrozen.dispose();
     _scheduleProvider?.removeListener(_onScheduleChanged);
     _pageController.dispose();
     // 停止通知服务
@@ -188,7 +190,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                 physics: const NeverScrollableScrollPhysics(),
                 children: [
                   TickerMode(
-                    enabled: _currentIndex == 0 && !_isWeekPickerActive,
+                    enabled: _currentIndex == 0,
                     child: RepaintBoundary(
                       child: _buildTabletSchedulePage(),
                     ),
@@ -227,7 +229,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
           physics: const NeverScrollableScrollPhysics(),
           children: [
             TickerMode(
-              enabled: _currentIndex == 0 && !_isWeekPickerActive,
+              enabled: _currentIndex == 0,
               child: RepaintBoundary(
                 child: _buildSchedulePage(),
               ),
@@ -455,16 +457,31 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
           return Stack(
             children: [
               // 课程网格本周看板：全屏铺满，上下纵向滚动，平滑穿过顶栏与底栏
+              // [v2.9.6] 课程网格本周看板：支持背景控件离屏冻结优化，全周贯通穿透
               Positioned.fill(
-                child: WeeklyScheduleGrid(
-                  key: ValueKey('weekly_grid_${provider.currentWeek}'),
-                  showControlBar: false,
-                  isPhone: true,
-                  contentPadding: EdgeInsets.only(
-                    top: topPadding,
-                    bottom: 146, // 为底部浮动胶囊 Dock 留出安全滚动距离
-                    left: 2,
-                    right: 2,
+                child: ValueListenableBuilder<bool>(
+                  valueListenable: _isBackgroundFrozen,
+                  builder: (context, isFrozen, child) {
+                    return RepaintBoundary(
+                      child: IgnorePointer(
+                        ignoring: isFrozen,
+                        child: TickerMode(
+                          enabled: !isFrozen,
+                          child: child!,
+                        ),
+                      ),
+                    );
+                  },
+                  child: WeeklyScheduleGrid(
+                    key: ValueKey('weekly_grid_${provider.currentWeek}'),
+                    showControlBar: false,
+                    isPhone: true,
+                    contentPadding: EdgeInsets.only(
+                      top: topPadding,
+                      bottom: 168, // 为底部靠右抬高的浮动胶囊 Dock 留出安全滚动距离
+                      left: 2,
+                      right: 2,
+                    ),
                   ),
                 ),
               ),
@@ -485,10 +502,9 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                 ),
               ),
 
-              // [v2.9.5] 底部悬浮横向胶囊玻璃控制 Dock（黄金操作区，单手随心触达）
+              // [v2.9.6] 底部悬浮横向胶囊控制 Dock：抬高至 bottom: 106，靠右对齐放置与底栏保持舒适距离
               Positioned(
-                bottom: 84,
-                left: 16,
+                bottom: 106,
                 right: 16,
                 child: RepaintBoundary(
                   child: _buildFloatingBottomActionDock(provider),
@@ -592,7 +608,8 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
     );
   }
 
-  /// [v2.9.5] 底部悬浮横向胶囊玻璃控制块（黄金操作区，单手随心触达）
+
+  /// [v2.9.6] 底部悬浮横向胶囊控制 Dock：靠右布局，加深同系色描边，杜绝任何黑描边
   /// 布局：（（+）（＜）（第 X 周 ▾）（＞）（…））
   Widget _buildFloatingBottomActionDock(ScheduleProvider provider) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -600,235 +617,245 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
     final canPrev = weeks.isNotEmpty && provider.currentWeek > weeks.first;
     final canNext = weeks.isNotEmpty && provider.currentWeek < weeks.last;
 
-    return Center(
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(26),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.16),
-              blurRadius: 18,
-              spreadRadius: 1,
-              offset: const Offset(0, 6),
-            ),
-          ],
-        ),
-        child: GlassContainer(
-          useOwnLayer: true,
-          quality: GlassQuality.premium,
-          shape: const LiquidRoundedSuperellipse(borderRadius: 26),
-          settings: LiquidGlassSettings(
-            glassColor: isDark
-                ? const Color(0x35101216)
-                : const Color(0x30FFFFFF),
-            blur: 5.0,
-            thickness: 20.0,
-            refractiveIndex: 1.45,
-            lightIntensity: 0.75,
-            ambientStrength: 0.45,
-            ambientRim: 0.0,
-            fresnelStrength: 0.06,
-            edgeAbsorption: 0.0,
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(26),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.14),
+            blurRadius: 18,
+            spreadRadius: 1,
+            offset: const Offset(0, 6),
           ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // 1. (+) 添加课程按钮
-                GestureDetector(
-                  onTap: () {
-                    HapticFeedback.selectionClick();
-                    Navigator.push(
-                      context,
-                      TransparentMaterialPageRoute(
-                        builder: (_) => const CourseEditScreen(),
-                      ),
-                    );
-                  },
-                  behavior: HitTestBehavior.opaque,
-                  child: Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: AppThemeColors.babyPink.withValues(alpha: 0.22),
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(
-                        color: AppThemeColors.babyPink.withValues(alpha: 0.45),
-                        width: 1.0,
-                      ),
+        ],
+      ),
+      child: GlassContainer(
+        useOwnLayer: true,
+        quality: GlassQuality.premium,
+        shape: const LiquidRoundedSuperellipse(borderRadius: 26),
+        settings: LiquidGlassSettings(
+          glassColor: isDark
+              ? const Color(0x35101216)
+              : const Color(0x30FFFFFF),
+          blur: 5.0,
+          thickness: 20.0,
+          refractiveIndex: 1.45,
+          lightIntensity: 0.75,
+          ambientStrength: 0.45,
+          ambientRim: 0.0,
+          fresnelStrength: 0.06,
+          edgeAbsorption: 0.0,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // 1. (+) 添加课程按钮
+              GestureDetector(
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  Navigator.push(
+                    context,
+                    TransparentMaterialPageRoute(
+                      builder: (_) => const CourseEditScreen(),
                     ),
-                    child: Icon(
-                      CupertinoIcons.add,
-                      size: 16,
-                      color: isDark ? Colors.white : AppThemeColors.babyPink,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 6),
-
-                // 2. (＜) 上一周按钮
-                GestureDetector(
-                  onTap: canPrev
-                      ? () {
-                          HapticFeedback.selectionClick();
-                          provider.setCurrentWeek(provider.currentWeek - 1);
-                        }
-                      : null,
-                  behavior: HitTestBehavior.opaque,
-                  child: Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: (isDark ? Colors.white : Colors.black).withValues(alpha: canPrev ? 0.09 : 0.03),
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(
-                        color: (isDark ? Colors.white : Colors.black).withValues(alpha: canPrev ? 0.12 : 0.05),
-                        width: 0.8,
-                      ),
-                    ),
-                    child: Icon(
-                      CupertinoIcons.chevron_left,
-                      size: 15,
-                      color: canPrev
-                          ? (isDark ? Colors.white : const Color(0xFF1E2128))
-                          : (isDark ? Colors.white24 : Colors.black26),
+                  );
+                },
+                behavior: HitTestBehavior.opaque,
+                child: Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: AppThemeColors.babyPink.withValues(alpha: isDark ? 0.25 : 0.18),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(
+                      color: const Color(0xFFE56A85).withValues(alpha: isDark ? 0.55 : 0.40),
+                      width: 1.0,
                     ),
                   ),
-                ),
-                const SizedBox(width: 6),
-
-                // 3. (第 X 周 ▾) 核心选择胶囊
-                GestureDetector(
-                  onTap: () => _showWeekPickerSheet(context, provider),
-                  behavior: HitTestBehavior.opaque,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-                    height: 36,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: AppThemeColors.babyPink.withValues(alpha: 0.24),
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(
-                        color: AppThemeColors.babyPink.withValues(alpha: 0.50),
-                        width: 1.0,
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          '第 ${provider.currentWeek} 周',
-                          style: TextStyle(
-                            color: isDark ? Colors.white : const Color(0xFF1E2128),
-                            fontSize: 13.5,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 0.2,
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        Icon(
-                          CupertinoIcons.chevron_down,
-                          size: 11,
-                          color: isDark ? Colors.white70 : const Color(0xFF555B68),
-                        ),
-                      ],
-                    ),
+                  child: Icon(
+                    CupertinoIcons.add,
+                    size: 16,
+                    color: isDark ? Colors.white : AppThemeColors.babyPink,
                   ),
                 ),
-                const SizedBox(width: 6),
+              ),
+              const SizedBox(width: 6),
 
-                // 4. (＞) 下一周按钮
-                GestureDetector(
-                  onTap: canNext
-                      ? () {
-                          HapticFeedback.selectionClick();
-                          provider.setCurrentWeek(provider.currentWeek + 1);
-                        }
-                      : null,
-                  behavior: HitTestBehavior.opaque,
-                  child: Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: (isDark ? Colors.white : Colors.black).withValues(alpha: canNext ? 0.09 : 0.03),
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(
-                        color: (isDark ? Colors.white : Colors.black).withValues(alpha: canNext ? 0.12 : 0.05),
-                        width: 0.8,
-                      ),
-                    ),
-                    child: Icon(
-                      CupertinoIcons.chevron_right,
-                      size: 15,
-                      color: canNext
-                          ? (isDark ? Colors.white : const Color(0xFF1E2128))
-                          : (isDark ? Colors.white24 : Colors.black26),
+              // 2. (＜) 上一周按钮（加深同系色描边，无黑边）
+              GestureDetector(
+                onTap: canPrev
+                    ? () {
+                        HapticFeedback.selectionClick();
+                        provider.setCurrentWeek(provider.currentWeek - 1);
+                      }
+                    : null,
+                behavior: HitTestBehavior.opaque,
+                child: Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? Colors.white.withValues(alpha: canPrev ? 0.10 : 0.04)
+                        : (canPrev ? const Color(0xFFEFF1F5) : const Color(0xFFF7F8FA)),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(
+                      color: isDark
+                          ? Colors.white.withValues(alpha: canPrev ? 0.18 : 0.06)
+                          : (canPrev ? const Color(0xFFCDD3DE) : const Color(0xFFE4E7ED)),
+                      width: 0.9,
                     ),
                   ),
+                  child: Icon(
+                    CupertinoIcons.chevron_left,
+                    size: 15,
+                    color: canPrev
+                        ? (isDark ? Colors.white : const Color(0xFF1E2128))
+                        : (isDark ? Colors.white24 : Colors.black26),
+                  ),
                 ),
-                const SizedBox(width: 6),
+              ),
+              const SizedBox(width: 6),
 
-                // 5. (⋯) 变形多功能菜单
-                GlassMenu(
-                  menuWidth: 170,
-                  menuBorderRadius: 20,
-                  triggerBuilder: (context, toggleMenu) {
-                    return GestureDetector(
-                      onTap: toggleMenu,
-                      behavior: HitTestBehavior.opaque,
-                      child: Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.09),
-                          borderRadius: BorderRadius.circular(18),
-                          border: Border.all(
-                            color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.12),
-                            width: 0.8,
-                          ),
-                        ),
-                        child: Icon(
-                          CupertinoIcons.ellipsis,
-                          size: 15,
+              // 3. (第 X 周 ▾) 核心选择胶囊（加深柔粉描边）
+              GestureDetector(
+                onTap: () => _showWeekPickerSheet(context, provider),
+                behavior: HitTestBehavior.opaque,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                  height: 36,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: AppThemeColors.babyPink.withValues(alpha: isDark ? 0.26 : 0.18),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(
+                      color: const Color(0xFFE56A85).withValues(alpha: isDark ? 0.55 : 0.42),
+                      width: 1.0,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '第 ${provider.currentWeek} 周',
+                        style: TextStyle(
                           color: isDark ? Colors.white : const Color(0xFF1E2128),
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.2,
                         ),
                       ),
-                    );
-                  },
-                  items: [
-                    GlassMenuItem(
-                      icon: const Icon(CupertinoIcons.calendar_today, size: 18, color: Colors.white),
-                      title: '回到本周',
-                      onTap: () {
-                        final now = DateTime.now();
-                        final start = provider.currentConfig.semesterStartDate;
-                        final week = (now.difference(start).inDays ~/ 7) + 1;
-                        provider.setCurrentWeek(week);
-                        provider.setCurrentDay(now.weekday);
-                      },
-                    ),
-                    GlassMenuItem(
-                      icon: const Icon(CupertinoIcons.slider_horizontal_3, size: 18, color: Colors.white),
-                      title: '课时设置',
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          TransparentMaterialPageRoute(
-                            builder: (_) => const AndroidScheduleConfigScreen(),
-                          ),
-                        );
-                      },
-                    ),
-                    GlassMenuItem(
-                      icon: const Icon(CupertinoIcons.square_grid_2x2, size: 18, color: Colors.white),
-                      title: '周次管理',
-                      onTap: () => _showWeekPickerSheet(context, provider),
-                    ),
-                  ],
+                      const SizedBox(width: 4),
+                      Icon(
+                        CupertinoIcons.chevron_down,
+                        size: 11,
+                        color: isDark ? Colors.white70 : const Color(0xFF555B68),
+                      ),
+                    ],
+                  ),
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 6),
+
+              // 4. (＞) 下一周按钮（加深同系色描边，无黑边）
+              GestureDetector(
+                onTap: canNext
+                    ? () {
+                        HapticFeedback.selectionClick();
+                        provider.setCurrentWeek(provider.currentWeek + 1);
+                      }
+                    : null,
+                behavior: HitTestBehavior.opaque,
+                child: Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? Colors.white.withValues(alpha: canNext ? 0.10 : 0.04)
+                        : (canNext ? const Color(0xFFEFF1F5) : const Color(0xFFF7F8FA)),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(
+                      color: isDark
+                          ? Colors.white.withValues(alpha: canNext ? 0.18 : 0.06)
+                          : (canNext ? const Color(0xFFCDD3DE) : const Color(0xFFE4E7ED)),
+                      width: 0.9,
+                    ),
+                  ),
+                  child: Icon(
+                    CupertinoIcons.chevron_right,
+                    size: 15,
+                    color: canNext
+                        ? (isDark ? Colors.white : const Color(0xFF1E2128))
+                        : (isDark ? Colors.white24 : Colors.black26),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+
+              // 5. (⋯) 变形多功能菜单（加深同系色描边，无黑边）
+              GlassMenu(
+                menuWidth: 170,
+                menuBorderRadius: 20,
+                triggerBuilder: (context, toggleMenu) {
+                  return GestureDetector(
+                    onTap: toggleMenu,
+                    behavior: HitTestBehavior.opaque,
+                    child: Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? Colors.white.withValues(alpha: 0.10)
+                            : const Color(0xFFEFF1F5),
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(
+                          color: isDark
+                              ? Colors.white.withValues(alpha: 0.18)
+                              : const Color(0xFFCDD3DE),
+                          width: 0.9,
+                        ),
+                      ),
+                      child: Icon(
+                        CupertinoIcons.ellipsis,
+                        size: 15,
+                        color: isDark ? Colors.white : const Color(0xFF1E2128),
+                      ),
+                    ),
+                  );
+                },
+                items: [
+                  GlassMenuItem(
+                    icon: const Icon(CupertinoIcons.calendar_today, size: 18, color: Colors.white),
+                    title: '回到本周',
+                    onTap: () {
+                      final now = DateTime.now();
+                      final start = provider.currentConfig.semesterStartDate;
+                      final week = (now.difference(start).inDays ~/ 7) + 1;
+                      provider.setCurrentWeek(week);
+                      provider.setCurrentDay(now.weekday);
+                    },
+                  ),
+                  GlassMenuItem(
+                    icon: const Icon(CupertinoIcons.slider_horizontal_3, size: 18, color: Colors.white),
+                    title: '课时设置',
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        TransparentMaterialPageRoute(
+                          builder: (_) => const AndroidScheduleConfigScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  GlassMenuItem(
+                    icon: const Icon(CupertinoIcons.square_grid_2x2, size: 18, color: Colors.white),
+                    title: '周次管理',
+                    onTap: () => _showWeekPickerSheet(context, provider),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
       ),
@@ -1294,132 +1321,134 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
     );
   }
 
-  /// 优雅的周次选择浮层
-  void _showWeekPickerSheet(BuildContext context, ScheduleProvider provider) {
+  /// [v2.9.6] 优雅的周次选择浮层（打开瞬间冻结背景控件离屏渲染提升帧率，退出动画完成后平滑解锁）
+  Future<void> _showWeekPickerSheet(BuildContext context, ScheduleProvider provider) async {
     final weeks = provider.availableWeeks;
     if (weeks.isEmpty) return;
 
-    setState(() => _isWeekPickerActive = true);
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (ctx) {
-        return GlassSheet(
-          quality: GlassQuality.premium,
-          settings: LiquidGlassSettings(
-            glassColor: Colors.black.withValues(alpha: 0.40),
-            blur: 4.0,
-            thickness: 22.0,
-            refractiveIndex: 1.45,
-            ambientRim: 0.0,
-            fresnelStrength: 0.05,
-          ),
-          child: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Text(
-                        '选择学期周次',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const Spacer(),
-                      GestureDetector(
-                        onTap: () => Navigator.pop(ctx),
-                        child: Container(
-                          padding: const EdgeInsets.all(6),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.1),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            CupertinoIcons.xmark,
-                            size: 14,
-                            color: Colors.white70,
+    _isBackgroundFrozen.value = true;
+    try {
+      await showModalBottomSheet(
+        context: context,
+        backgroundColor: Colors.transparent,
+        isScrollControlled: true,
+        builder: (ctx) {
+          return GlassSheet(
+            quality: GlassQuality.standard,
+            settings: LiquidGlassSettings(
+              glassColor: Colors.black.withValues(alpha: 0.40),
+              blur: 3.0,
+              thickness: 18.0,
+              refractiveIndex: 1.45,
+              ambientRim: 0.0,
+              fresnelStrength: 0.05,
+            ),
+            child: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Text(
+                          '选择学期周次',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  ConstrainedBox(
-                    constraints: BoxConstraints(
-                      maxHeight: MediaQuery.of(context).size.height * 0.4,
-                    ),
-                    child: GridView.builder(
-                      shrinkWrap: true,
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 4,
-                        mainAxisSpacing: 10,
-                        crossAxisSpacing: 10,
-                        childAspectRatio: 1.8,
-                      ),
-                      itemCount: weeks.length,
-                      itemBuilder: (context, idx) {
-                        final week = weeks[idx];
-                        final isCur = week == provider.currentWeek;
-                        return GestureDetector(
-                          onTap: () {
-                            HapticFeedback.selectionClick();
-                            provider.setCurrentWeek(week);
-                            Navigator.pop(ctx);
-                          },
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 150),
+                        const Spacer(),
+                        GestureDetector(
+                          onTap: () => Navigator.pop(ctx),
+                          child: Container(
+                            padding: const EdgeInsets.all(6),
                             decoration: BoxDecoration(
-                              gradient: isCur
-                                  ? LinearGradient(
-                                      colors: [
-                                        AppThemeColors.babyPink.withValues(alpha: 0.5),
-                                        AppThemeColors.softCoral.withValues(alpha: 0.4),
-                                      ],
-                                    )
-                                  : null,
-                              color: isCur
-                                  ? null
-                                  : Colors.white.withValues(alpha: 0.08),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: isCur
-                                    ? Colors.white.withValues(alpha: 0.6)
-                                    : Colors.white.withValues(alpha: 0.1),
-                                width: 0.8,
-                              ),
+                              color: Colors.white.withValues(alpha: 0.1),
+                              shape: BoxShape.circle,
                             ),
-                            alignment: Alignment.center,
-                            child: Text(
-                              '第$week周',
-                              style: TextStyle(
-                                color: isCur ? Colors.white : Colors.white70,
-                                fontSize: 13,
-                                fontWeight: isCur ? FontWeight.w700 : FontWeight.w500,
-                              ),
+                            child: const Icon(
+                              CupertinoIcons.xmark,
+                              size: 14,
+                              color: Colors.white70,
                             ),
                           ),
-                        );
-                      },
+                        ),
+                      ],
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 16),
+                    ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxHeight: MediaQuery.of(context).size.height * 0.4,
+                      ),
+                      child: GridView.builder(
+                        shrinkWrap: true,
+                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 4,
+                          mainAxisSpacing: 10,
+                          crossAxisSpacing: 10,
+                          childAspectRatio: 1.8,
+                        ),
+                        itemCount: weeks.length,
+                        itemBuilder: (context, idx) {
+                          final week = weeks[idx];
+                          final isCur = week == provider.currentWeek;
+                          return GestureDetector(
+                            onTap: () {
+                              HapticFeedback.selectionClick();
+                              provider.setCurrentWeek(week);
+                              Navigator.pop(ctx);
+                            },
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 150),
+                              decoration: BoxDecoration(
+                                gradient: isCur
+                                    ? LinearGradient(
+                                        colors: [
+                                          AppThemeColors.babyPink.withValues(alpha: 0.5),
+                                          AppThemeColors.softCoral.withValues(alpha: 0.4),
+                                        ],
+                                      )
+                                    : null,
+                                color: isCur
+                                    ? null
+                                    : Colors.white.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: isCur
+                                      ? Colors.white.withValues(alpha: 0.6)
+                                      : Colors.white.withValues(alpha: 0.1),
+                                  width: 0.8,
+                                ),
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                '第$week周',
+                                style: TextStyle(
+                                  color: isCur ? Colors.white : Colors.white70,
+                                  fontSize: 13,
+                                  fontWeight: isCur ? FontWeight.w700 : FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-        );
-      },
-    ).whenComplete(() {
+          );
+        },
+      );
+    } finally {
       if (mounted) {
-        setState(() => _isWeekPickerActive = false);
+        _isBackgroundFrozen.value = false;
       }
-    });
+    }
   }
 }
 

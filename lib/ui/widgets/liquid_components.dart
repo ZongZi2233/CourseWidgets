@@ -543,14 +543,8 @@ class HyperOSCard extends StatelessWidget {
     final autoTextColor = lum > 0.45 ? const Color(0xFF1B1D24) : const Color(0xFFF2F5FA);
     final effectiveTextColor = contentColor ?? autoTextColor;
 
-    // [v2.9.5] 纯净双通道静态玻璃材质：
-    // 通道 1：透镜边缘微高光 (Glass Specular Rim)，清晰勾勒超椭圆轮廓；
-    // 通道 2：高透丙烯酸微染底色，透出由底层 AppBackgroundLayer 单次静态采样的真实高斯模糊壁纸
-    final defaultGlassRim = BorderSide(
-      color: isDark ? Colors.white.withValues(alpha: 0.12) : Colors.white.withValues(alpha: 0.52),
-      width: 0.75,
-    );
-    final effectiveBorderSide = border ?? defaultGlassRim;
+    // [v2.9.6] 纯色混色超椭圆质感：彻底废除顶部白光与暗面渐变，呈现温润均匀的纯色混色微透卡片
+    final effectiveBorderSide = border ?? BorderSide.none;
 
     // 采用与 liquid_glass_widgets 内部一致的 RoundedSuperellipseBorder，保证曲率完全对齐统一
     final shape = RoundedSuperellipseBorder(
@@ -579,23 +573,9 @@ class HyperOSCard extends StatelessWidget {
         shape: shape,
         shadows: effectiveShadows,
       ),
-      child: ClipPath(
-        clipper: ShapeBorderClipper(shape: shape),
-        child: Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                Colors.white.withValues(alpha: isDark ? 0.08 : 0.22),
-                Colors.transparent,
-              ],
-              stops: const [0.0, 0.45],
-            ),
-          ),
-          padding: padding,
-          child: child,
-        ),
+      child: Padding(
+        padding: padding,
+        child: child,
       ),
     );
 

@@ -2,9 +2,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import '../main.dart' show globalDarkModeNotifier;
 
-/// 当前版本：[v2.9.5] 官方正式版 - 底部悬浮玻璃胶囊Dock、莫兰迪/马卡龙双模调色板、语义断句排版、顶部渐进模糊、动态莫奈自适应与极速共享静态景深
-const String appVersion = '2.9.5';
-const int buildNumber = 10008065;
+/// 当前版本：[v2.9.6] 官方正式版 - 纯色混色卡片质感、右侧抬高悬浮切换器、去教室Emoji、三点按钮进一步放大、星期栏增高与离屏冻结极速渲染
+const String appVersion = '2.9.6';
+const int buildNumber = 10008066;
 const String copyright = '© 2025-2026 CourseWidgets. All rights reserved.';
 
 // 全局状态
