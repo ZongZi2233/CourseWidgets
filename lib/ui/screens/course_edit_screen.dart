@@ -10,6 +10,7 @@ import '../../constants/theme_constants.dart';
 import '../widgets/liquid_components.dart';
 import '../widgets/liquid_glass_pickers.dart';
 import '../widgets/liquid_toast.dart';
+import '../../utils/glass_settings_helper.dart';
 import 'package:smooth_scroll_multiplatform/smooth_scroll_multiplatform.dart';
 
 class CourseEditScreen extends StatefulWidget {
@@ -72,46 +73,42 @@ class _CourseEditScreenState extends State<CourseEditScreen> {
       resizeToAvoidBottomInset: true, // 允许自身表单根据输入法滚动避让
       body: Stack(
         children: [
-          LiquidGlassLayer(
-        settings: LiquidGlassSettings(
-          thickness: 0.8,
-          blur: 12.0,
-          glassColor: Colors.white.withOpacity(0.1),
-        ),
-        child: Column(
-          children: [
-            // Header
-            SafeArea(
-              bottom: false,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-                child: Row(
-                  children: [
-                    const LiquidBackButton(),
-                    const SizedBox(width: 12),
-                    Text(
-                      widget.course == null ? '添加课程' : '编辑课程',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: textColor,
-                      ),
+          AdaptiveLiquidGlassLayer(
+            quality: GlassQuality.standard,
+            settings: GlassSettingsHelper.getStandardSettings(),
+            child: Column(
+              children: [
+                // Header
+                SafeArea(
+                  bottom: false,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 14,
                     ),
-                  ],
+                    child: Row(
+                      children: [
+                        Text(
+                          widget.course == null ? '添加课程' : '编辑课程',
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: textColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
-            ),
 
-            // Content
-            Expanded(
-              child: DynMouseScroll(
-                durationMS: 250,
-                scrollSpeed: 1.2,
-                builder: (context, controller, physics) =>
-                    SingleChildScrollView(
+                // Content - 注入 RepaintBoundary 确保转场 120 FPS 满帧
+                Expanded(
+                  child: RepaintBoundary(
+                    child: DynMouseScroll(
+                      durationMS: 250,
+                      scrollSpeed: 1.2,
+                      builder: (context, controller, physics) =>
+                          SingleChildScrollView(
                       controller: controller,
                       padding: const EdgeInsets.all(20),
                       physics: physics,
@@ -214,9 +211,10 @@ class _CourseEditScreenState extends State<CourseEditScreen> {
                             ),
                             const SizedBox(height: 40),
                           ],
-                        ),
                       ),
                     ),
+                  ),
+                ),
               ),
             ),
           ],

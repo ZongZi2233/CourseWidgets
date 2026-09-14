@@ -26,8 +26,8 @@ class _SettingsMainScreenState extends State<SettingsMainScreen> {
     final isDark = ThemeService().isDarkMode;
     final isTablet = ResponsiveUtils.isTabletMode(context);
 
-    // [v2.2.8] 自适应顶部间距：平板16，手机8
-    final topPadding = isTablet ? 16.0 : 8.0;
+    // [v2.9.8] 自适应顶部间距：平板16，手机80（避开悬浮毛玻璃顶栏64pt并保留16pt呼吸距离，彻底消除重叠）
+    final topPadding = isTablet ? 16.0 : 80.0;
 
     return Scaffold(
       backgroundColor: Colors.transparent,

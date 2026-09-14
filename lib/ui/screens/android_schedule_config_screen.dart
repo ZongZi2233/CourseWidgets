@@ -352,17 +352,15 @@ class AndroidScheduleConfigScreenState
                 bottom: false,
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
+                    horizontal: 20,
+                    vertical: 12,
                   ),
                   child: Row(
                     children: [
-                      const liquid.LiquidBackButton(),
-                      const SizedBox(width: 12),
                       Text(
                         '课时配置',
                         style: TextStyle(
-                          fontSize: 20,
+                          fontSize: 22,
                           fontWeight: FontWeight.bold,
                           color: textColor,
                         ),

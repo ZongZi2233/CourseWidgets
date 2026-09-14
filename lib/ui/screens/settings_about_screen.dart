@@ -78,13 +78,11 @@ class _SettingsAboutScreenState extends State<SettingsAboutScreen>
               bottom: false,
               child: Padding(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
+                  horizontal: 20,
+                  vertical: 14,
                 ),
                 child: Row(
                   children: [
-                    const liquid.LiquidBackButton(),
-                    const SizedBox(width: 12),
                     Text(
                       '关于软件',
                       style: TextStyle(

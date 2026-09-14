@@ -111,80 +111,96 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
         barrierColor: Colors.black.withValues(alpha: 0.20),
         builder: (sheetCtx) {
           final sheetDark = Theme.of(sheetCtx).brightness == Brightness.dark;
-          return GlassSheet(
-            settings: LiquidGlassSettings(
-              glassColor: sheetDark
-                  ? const Color(0x99181B24)
-                  : Colors.white.withValues(alpha: 0.85),
-              blur: 16.0,
-              thickness: 18.0,
-            ),
-          child: SafeArea(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: const Text(
-                    '选择周次',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
+          return ClipRRect(
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 20.0, sigmaY: 20.0),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: sheetDark
+                      ? const Color(0xB8161922)
+                      : Colors.white.withValues(alpha: 0.85),
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+                  border: Border(
+                    top: BorderSide(
+                      color: sheetDark
+                          ? Colors.white.withValues(alpha: 0.16)
+                          : Colors.white.withValues(alpha: 0.70),
+                      width: 0.8,
                     ),
                   ),
                 ),
-                Container(
-                  height: 280,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: GridView.builder(
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 4,
-                      mainAxisSpacing: 8,
-                      crossAxisSpacing: 8,
-                      childAspectRatio: 1.5,
-                    ),
-                    itemCount: weeks.length,
-                    itemBuilder: (context, index) {
-                      final week = weeks[index];
-                      final isSelected = week == provider.currentWeek;
-
-                      return GlassButton.custom(
-                        onTap: () {
-                          HapticFeedback.selectionClick();
-                          provider.setCurrentWeek(week);
-                          Navigator.pop(context);
-                        },
-                        width: double.infinity,
-                        height: double.infinity,
-                        style: GlassButtonStyle.filled,
-                        settings: LiquidGlassSettings(
-                          glassColor: isSelected
-                              ? AppThemeColors.babyPink.withValues(alpha: 0.3)
-                              : Colors.white.withValues(alpha: 0.05),
-                          blur: 4,
-                          thickness: 14,
-                        ),
-                        shape: const LiquidRoundedSuperellipse(borderRadius: 12),
-                        child: Center(
-                          child: Text(
-                            '第$week周',
-                            style: TextStyle(
-                              color: isSelected ? Colors.white : Colors.white70,
-                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                              fontSize: 13,
-                            ),
+                child: SafeArea(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: const Text(
+                          '选择周次',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
-                      );
-                    },
+                      ),
+                      Container(
+                        height: 280,
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: GridView.builder(
+                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 5,
+                            mainAxisSpacing: 10,
+                            crossAxisSpacing: 10,
+                            childAspectRatio: 1.3,
+                          ),
+                          itemCount: weeks.length,
+                          itemBuilder: (context, index) {
+                            final w = weeks[index];
+                            final isCur = w == provider.currentWeek;
+                            return GestureDetector(
+                              onTap: () {
+                                HapticFeedback.selectionClick();
+                                _changeWeek(provider, w);
+                                Navigator.pop(sheetCtx);
+                              },
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: isCur
+                                      ? AppThemeColors.babyPink
+                                      : (sheetDark ? Colors.white : Colors.black).withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: isCur
+                                      ? null
+                                      : Border.all(
+                                          color: (sheetDark ? Colors.white : Colors.black).withValues(alpha: 0.12),
+                                          width: 0.6,
+                                        ),
+                                ),
+                                alignment: Alignment.center,
+                                child: Text(
+                                  '第$w周',
+                                  style: TextStyle(
+                                    color: isCur
+                                        ? Colors.white
+                                        : (sheetDark ? Colors.white70 : Colors.black87),
+                                    fontWeight: isCur ? FontWeight.bold : FontWeight.normal,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 16),
-              ],
+              ),
             ),
-          ),
-        );
+          );
         },
       );
     } finally {
@@ -774,18 +790,18 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
                   ),
                 ],
                 trigger: Container(
-                  height: widget.isPhone ? 20.0 : 22.0,
-                  width: widget.isPhone ? 54.0 : 60.0,
-                  margin: const EdgeInsets.only(top: 6, bottom: 3),
+                  height: widget.isPhone ? 16.0 : 18.0,
+                  width: widget.isPhone ? 46.0 : 50.0,
+                  margin: const EdgeInsets.only(top: 4, bottom: 2),
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color: (isDark ? Colors.white : Colors.black).withValues(alpha: isDark ? 0.20 : 0.11),
-                    borderRadius: BorderRadius.circular(10),
+                    color: (isDark ? Colors.white : Colors.black).withValues(alpha: isDark ? 0.18 : 0.09),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(
-                    CupertinoIcons.slider_horizontal_3,
-                    size: widget.isPhone ? 13.5 : 15.0,
-                    color: subTextColor.withValues(alpha: 0.90),
+                    Icons.more_horiz_rounded,
+                    size: widget.isPhone ? 16.0 : 18.0,
+                    color: subTextColor.withValues(alpha: 0.85),
                   ),
                 ),
               ),
@@ -796,7 +812,7 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
     );
   }
 
-  /// 官方 Liquid Glass 风格课程详情底板（离屏冻结背景加速）
+  /// 官方 Liquid Glass 风格课程详情底板（离屏冻结背景加速，BackdropFilter 确保课表网格清晰微透）
   void _showCourseDetail(BuildContext context, CourseEvent course) async {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primaryTextColor = isDark ? Colors.white : const Color(0xFF1A1A2E);
@@ -809,19 +825,30 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
         backgroundColor: Colors.transparent,
         barrierColor: Colors.black.withValues(alpha: 0.20),
         useRootNavigator: true,
-        builder: (sheetContext) => GlassSheet(
-          settings: LiquidGlassSettings(
-            glassColor: isDark
-                ? const Color(0x99181B24)
-                : Colors.white.withValues(alpha: 0.85),
-            blur: 16.0,
-            thickness: 20.0,
-          ),
-          child: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
+        builder: (sheetContext) => ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 20.0, sigmaY: 20.0),
+            child: Container(
+              decoration: BoxDecoration(
+                color: isDark
+                    ? const Color(0xB8161922)
+                    : Colors.white.withValues(alpha: 0.85),
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+                border: Border(
+                  top: BorderSide(
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.16)
+                        : Colors.white.withValues(alpha: 0.70),
+                    width: 0.8,
+                  ),
+                ),
+              ),
+              child: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Center(
@@ -903,7 +930,9 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
             ),
           ),
         ),
-      );
+      ),
+    ),
+  );
     } finally {
       if (mounted) {
         _isBackgroundFrozen.value = false;

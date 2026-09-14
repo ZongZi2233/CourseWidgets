@@ -46,17 +46,15 @@ class SettingsDataScreen extends StatelessWidget {
               bottom: false,
               child: Padding(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
+                  horizontal: 20,
+                  vertical: 14,
                 ),
                 child: Row(
                   children: [
-                    const liquid.LiquidBackButton(),
-                    const SizedBox(width: 8),
                     Text(
                       '数据管理',
                       style: TextStyle(
-                        fontSize: 20,
+                        fontSize: 22,
                         fontWeight: FontWeight.bold,
                         color: isDark ? Colors.white : Colors.black87,
                       ),

@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -1375,23 +1376,30 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
         isScrollControlled: true,
         builder: (ctx) {
           final isDark = Theme.of(ctx).brightness == Brightness.dark;
-          return GlassSheet(
-            quality: GlassQuality.standard,
-            settings: LiquidGlassSettings(
-              glassColor: isDark
-                  ? const Color(0x99181B24)
-                  : Colors.white.withValues(alpha: 0.85),
-              blur: 16.0,
-              thickness: 18.0,
-              refractiveIndex: 1.45,
-              ambientRim: 0.0,
-              fresnelStrength: 0.05,
-            ),
-            child: SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
+          return ClipRRect(
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 20.0, sigmaY: 20.0),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? const Color(0xB8161922)
+                      : Colors.white.withValues(alpha: 0.85),
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+                  border: Border(
+                    top: BorderSide(
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.16)
+                          : Colors.white.withValues(alpha: 0.70),
+                      width: 0.8,
+                    ),
+                  ),
+                ),
+                child: SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
@@ -1485,9 +1493,11 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                 ),
               ),
             ),
-          );
-        },
+          ),
+        ),
       );
+    },
+  );
     } finally {
       if (mounted) {
         _isBackgroundFrozen.value = false;

@@ -2,9 +2,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import '../main.dart' show globalDarkModeNotifier;
 
-/// 当前版本：[v2.9.7] 官方正式版 - Android 16 实况活动通知与胶囊彻底纯净重构、系统日程 ICS 同步、右下角悬浮单手返回、顶底边缘渐进过渡带、全域超椭圆大圆角与通透纯色混色微透升级
-const String appVersion = '2.9.7';
-const int buildNumber = 10008067;
+/// 当前版本：[v2.9.8] 官方正式版 - 设置页顶栏安全间隙纠正、纯净磨砂底板网格透显、优雅右下角无锯齿返回胶囊、课程卡片圆润操作钮、增粗上下文菜单字体与 120 FPS 课程编辑
+const String appVersion = '2.9.8';
+const int buildNumber = 10008068;
 const String copyright = '© 2025-2026 CourseWidgets. All rights reserved.';
 
 // 全局状态

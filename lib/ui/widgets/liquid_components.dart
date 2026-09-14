@@ -394,59 +394,60 @@ class LiquidInput extends StatelessWidget {
         GestureDetector(
           onTap: onTap,
           behavior: HitTestBehavior.opaque,
-          child: GlassContainer(
-            shape: LiquidRoundedSuperellipse(borderRadius: 18),
-            settings: LiquidGlassSettings(
-              glassColor: Colors.black.withValues(alpha: 0.3),
-              blur: 0,
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.30),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.12),
+                width: 0.8,
+              ),
             ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              child: Row(
-                children: [
-                  Icon(icon, color: AppThemeColors.babyPink, size: 20),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: controller != null
-                        ? IgnorePointer(
-                            ignoring: isReadOnly,
-                            child: CupertinoTextField(
-                              controller: controller,
-                              readOnly: isReadOnly,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
-                                color: Colors.white,
-                                fontSize: 16,
-                              ),
-                              cursorColor: AppThemeColors.babyPink,
-                              decoration: null,
-                              placeholder: placeholder ?? '请输入$label',
-                              placeholderStyle: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.4),
-                              ),
-                              padding: const EdgeInsets.symmetric(vertical: 14),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+            child: Row(
+              children: [
+                Icon(icon, color: AppThemeColors.babyPink, size: 20),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: controller != null
+                      ? IgnorePointer(
+                          ignoring: isReadOnly,
+                          child: CupertinoTextField(
+                            controller: controller,
+                            readOnly: isReadOnly,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                              fontSize: 16,
                             ),
-                          )
-                        : Padding(
+                            cursorColor: AppThemeColors.babyPink,
+                            decoration: null,
+                            placeholder: placeholder ?? '请输入$label',
+                            placeholderStyle: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.4),
+                            ),
                             padding: const EdgeInsets.symmetric(vertical: 14),
-                            child: Text(
-                              valueText ?? placeholder ?? '',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
-                                color: Colors.white,
-                                fontSize: 16,
-                              ),
+                          ),
+                        )
+                      : Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          child: Text(
+                            valueText ?? placeholder ?? '',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                              fontSize: 16,
                             ),
                           ),
+                        ),
+                ),
+                if (isReadOnly || controller == null)
+                  Icon(
+                    CupertinoIcons.chevron_down,
+                    color: Colors.white.withValues(alpha: 0.5),
+                    size: 16,
                   ),
-                  if (isReadOnly || controller == null)
-                    Icon(
-                      CupertinoIcons.chevron_down,
-                      color: Colors.white.withValues(alpha: 0.5),
-                      size: 16,
-                    ),
-                ],
-              ),
+              ],
             ),
           ),
         ),
@@ -487,7 +488,7 @@ class LiquidBackButton extends StatelessWidget {
   }
 }
 
-/// [v2.9.7] 悬浮在屏幕右下角的单手操作毛玻璃返回胶囊
+/// [v2.9.8] 悬浮在屏幕右下角的单手操作高质感微透返回胶囊（彻底消除锯齿与透空壁纸Bug）
 class FloatingLiquidBackButton extends StatelessWidget {
   final VoidCallback? onBack;
   const FloatingLiquidBackButton({super.key, this.onBack});
@@ -495,58 +496,69 @@ class FloatingLiquidBackButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? Colors.white : const Color(0xFF1E2128);
+    final themePrimary = theme.ThemeService().primaryColor;
+
+    // 优雅半透明丙烯酸底色，与当前主题色自然融合
+    final capsuleColor = isDark
+        ? Color.alphaBlend(themePrimary.withValues(alpha: 0.16), const Color(0xD9181C26))
+        : Color.alphaBlend(themePrimary.withValues(alpha: 0.10), const Color(0xEEF8FAFD));
+
     return Positioned(
       bottom: 24,
       right: 20,
       child: SafeArea(
         top: false,
         left: false,
-        child: GestureDetector(
-          onTap: onBack ?? () => Navigator.maybePop(context),
-          behavior: HitTestBehavior.opaque,
-          child: LiquidStretch(
-            stretch: 0.15,
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.18),
-                    blurRadius: 14,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: GlassContainer(
-                shape: const LiquidRoundedSuperellipse(borderRadius: 24),
-                settings: LiquidGlassSettings(
-                  glassColor: isDark
-                      ? const Color(0x66161922)
-                      : Colors.white.withValues(alpha: 0.75),
-                  blur: 12.0,
-                  thickness: 18.0,
-                  refractiveIndex: 1.45,
-                  lightIntensity: 0.70,
-                  ambientStrength: 0.30,
-                  fresnelStrength: 0.05,
+        child: MiuixPressable(
+          onPressed: onBack ?? () => Navigator.maybePop(context),
+          feedbackType: MiuixPressFeedbackType.sink,
+          sinkAmount: 0.94,
+          overlayColor: Colors.transparent,
+          borderRadius: BorderRadius.circular(22),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(22),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.12),
+                  blurRadius: 16,
+                  offset: const Offset(0, 4),
                 ),
-                child: Padding(
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(22),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 16.0, sigmaY: 16.0),
+                child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: capsuleColor,
+                    borderRadius: BorderRadius.circular(22),
+                    border: Border.all(
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.18)
+                          : Colors.white.withValues(alpha: 0.75),
+                      width: 0.8,
+                    ),
+                  ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
                         CupertinoIcons.chevron_back,
                         size: 18,
-                        color: isDark ? Colors.white : const Color(0xFF1E2128),
+                        color: textColor,
                       ),
                       const SizedBox(width: 4),
                       Text(
                         '返回',
                         style: TextStyle(
                           fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: isDark ? Colors.white : const Color(0xFF1E2128),
+                          fontWeight: FontWeight.w700,
+                          color: textColor,
+                          letterSpacing: 0.2,
                         ),
                       ),
                     ],

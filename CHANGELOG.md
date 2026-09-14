@@ -2,6 +2,27 @@
 
 本文档记录 CourseWidgets 各版本更新的动态活动演进，重点关注架构改进、渲染优化、故障诊断与教务抓取能力提升。
 
+## [v2.9.8] - 2026-09-14
+
+### 1. 设置主页安全距离与顶栏UI完全避让 (Settings Top Bar Safe Clearance)
+- **消除顶栏与内容堆叠重叠**：修复 `SettingsMainScreen` 手机端顶部列表间距问题，由 8.0 扩充至 80.0（平板端保持 16.0），彻底消除一级设置项与 64pt 悬浮毛玻璃顶栏（“设置”标题栏）重叠堆叠的严重 UI 缺陷，保留充足的 16pt 呼吸安全空间。
+
+### 2. 课程卡片圆润操作钮与上下文菜单字体增粗 (Course Card Action Pill & Bold Morph Engine Menu)
+- **温润内敛操作胶囊**：移除突兀的设置滑块图标，重构为温润内敛的高清椭圆胶囊与 `Icons.more_horiz_rounded` 专属圆角三点符号，与卡片整体流体感浑然一体；
+- **Morph Engine 字体加粗升级**：强化 Liquid Morph Engine 上下文菜单文本字重，将 `GlassMenuItem` 标题升级为 `FontWeight.w700` 并辅以 `0.3` 字符间距，在各类复杂壁纸背景下皆清晰易读。
+
+### 3. 返回按钮单手位移与去锯齿纯净磨砂重构 (Ergonomic Back Pill Relocation & Anti-Aliased Frost)
+- **彻底移除左上角冗余按钮**：完全移除所有二级/三级界面左上角历史残留的 `<` 返回按钮（通用设置、课程通知设置、数据管理、关于软件、课时配置、课程编辑），将返回控制权完全交予右下角人体工学拇指热区；
+- **消除锯齿与透空壁纸缺陷**：彻底重构右下角悬浮返回胶囊，废除使用单层壁纸缓冲区的 `GlassContainer` 与易产生锯齿的 `LiquidRoundedSuperellipse`，全面采用原生抗锯齿圆角 `ClipRRect(borderRadius: 22)` + 纯正实时 `BackdropFilter`（sigma 16）+ 主题色混色微透丙烯酸容器，彻底消除锯齿边缘，实现对底层实际界面内容的真实毛玻璃透射。
+
+### 4. 周次选择器与课程详情面板网格清晰透显 (Translucent Bottom Sheets with Grid Visibility)
+- **底层课表网格清晰微透**：彻底废止周次选择抽屉（`_showWeekPickerSheet` / `_showWeekPicker`）与课程详情弹窗（`_showCourseDetail`）中强制采样底层壁纸的 `GlassSheet`，改用标准 Flutter 视口级 `ClipRRect` + `BackdropFilter`（sigma 20）架构；
+- **杜绝穿帮壁纸**：呼出周次菜单与课程详情时，底层的课程表网格线、已排课程卡片与彩色色块清晰通透微透可见，彻底杜绝“只透明看到壁纸”的视觉穿帮。
+
+### 5. 添加课程页面 120 FPS 丝滑启动与滚动优化 (120 FPS Course Edit Launch & Scroll Optimization)
+- **消除输入框着色器离屏爆炸**：根除 `LiquidInput` 内嵌嵌套着色器玻璃容器（`GlassContainer`）导致的着色器过度绘制（Overdraw）与每帧 5+ 次离屏 Pass 损耗，将其重构为轻量纯净的 `BoxDecoration` 亚克力输入框；
+- **转场滚动隔离**：在 `CourseEditScreen` 滚动视图外层注入 `RepaintBoundary`，阻断输入与滚动重绘蔓延，让进入与退出添加/编辑课程页面瞬间达到满血 120 FPS。
+
 ## [v2.9.7] - 2026-09-14
 
 ### 1. Android 16 Live Updates 实况活动与胶囊全面纯净化重构 (Live Updates Overhaul)

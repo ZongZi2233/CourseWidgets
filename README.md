@@ -9,7 +9,7 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Flutter](https://img.shields.io/badge/Flutter-3.44.0+-02569B?logo=flutter)](https://flutter.dev)
 [![Dart](https://img.shields.io/badge/Dart-3.12.0+-0175C2?logo=dart)](https://dart.dev)
-[![Version](https://img.shields.io/badge/Version-2.9.7-FF9BAE)](https://github.com/ZongZi2233AI/CourseWidgets/releases/)
+[![Version](https://img.shields.io/badge/Version-2.9.8-FF9BAE)](https://github.com/ZongZi2233AI/CourseWidgets/releases/)
 
 [English](README_EN.md) | 简体中文
 
@@ -17,20 +17,16 @@
 
 > **声明**：本软件除开源代码外完全使用 AI 辅助协同开发。核心架构由 [MiMo-V2-Flash](https://github.com/XiaomiMiMo/MiMo-V2-Flash) 与 Gemini 3.1 Pro 深度构建，Windows 桌面部分协同 Claude Opus 4.6 深度定制。
 
-### 📦 最新版本：[v2.9.7 (Build 10008067)](https://github.com/ZongZi2233AI/CourseWidgets/releases)
-* **Android 单包**：`CourseWidgets-v2.9.7-android-arm64-v8a.apk` —— 全面开启 R8 压缩与 Dart AOT 源码混淆。
-* **Windows 客户端**：`CourseWidgets-v2.9.7-windows-x64.zip` —— 纯净亚克力无边框桌面端，支持托盘驻留与高分屏。
+### 📦 最新版本：[v2.9.8 (Build 10008068)](https://github.com/ZongZi2233AI/CourseWidgets/releases)
+* **Android 单包**：`CourseWidgets-v2.9.8-android-arm64-v8a.apk` —— 全面开启 R8 压缩与 Dart AOT 源码混淆。
+* **Windows 客户端**：`CourseWidgets-v2.9.8-windows-x64.zip` —— 纯净亚克力无边框桌面端，支持托盘驻留与高分屏。
 
-#### 🆕 v2.9.7 本次更新内容 (CHANGELOG)
-1. **Android 16 Live Updates 实况活动与胶囊全面纯净化重构**：彻底移除 Dart 层伪静态倒计时文本，由 Android 原生 `Chronometer` 接管秒级实时倒计时；胶囊副标题优先显示具体教室位置或清晰状态；新增原生纯白单色矢量图标 `ic_stat_course.xml`，消除粉黑畸变小图标；移除展开通知右侧重复 LargeIcon，腾出完整展示空间；废除手绘 ASCII 进度条，换用 Android 官方实时进度条并搭配精确时间区间标识。
-2. **同步课表到系统日程 (ICS) 功能**：设置中新增一键同步入口，配置 Android 原生 `FileProvider` 与 `text/calendar` Intent，一键将当前课表导出并拉起系统自带日历（小米日历、华为日历、Google Calendar 等），完美支持系统日程自动提醒。
-3. **全局二级/三级界面右下角悬浮单手返回胶囊**：在通用设置、课程通知设置、数据管理、关于应用、课时配置、课程编辑界面右下角统一集成 `FloatingLiquidBackButton`（`Positioned(bottom: 24, right: 20)`），大屏单手大拇指触手可得。
-4. **统一通用设置界面视觉规范**：移除 `SettingsGeneralScreen` 中生硬独立的 Material `AppBar`，全面替换为晶透玻璃 Header，风格无缝对齐。
-5. **课程卡片操作胶囊升级为设置滑块图标**：操作横条触控尺寸增至 20x54pt（桌面端 22x60pt），内部升级为精致高阶的 `CupertinoIcons.slider_horizontal_3`（选项/设置滑块）图标。
-6. **星期冻结栏抬高与主页悬浮控制 Dock 提升**：星期栏高度增至 54.0pt，课表主网格顶部间距精简至 `top + 54`，紧贴顶栏；底部悬浮 Dock 进一步抬升至 `bottom: 120`，远离导航栏并加入顶部/底部边缘渐进过渡带，杜绝生硬截断。
-7. **浮层菜单背景通透性与转场流畅度全面提级**：周次选择浮层与课程详情面板背景遮罩由 54% 调整为优雅微透的 20%，弹窗唤出时课表网格清润可见；转场引入 `RepaintBoundary` 杜绝全树重绘；动态混入 `WidgetsBindingObserver` 实时监听深浅色切换无需冷重启。
-8. **新手引导退出平滑过渡**：根除新手引导完成时调用 `SystemNavigator.pop()` 杀后台进程的 Bug，采用 600ms 缓动平滑淡入课表主界面。
-9. **全域超椭圆大圆角与通透纯色混色微透升级**：`HyperOSCard` 基础圆角提升至 28.0，课程卡片圆角提升至 16.0（桌面端 18.0）；大幅提升卡片混色透光度，自然透出背景壁纸。
+#### 🆕 v2.9.8 本次更新内容 (CHANGELOG)
+1. **设置主页安全距离与顶栏UI完全避让**：修复 `SettingsMainScreen` 手机端顶部列表间距问题，由 8.0 扩充至 80.0（平板端 16.0），彻底消除一级设置项与 64pt 悬浮毛玻璃顶栏重叠堆叠的严重 UI 缺陷，保留充足的 16pt 呼吸安全空间。
+2. **课程卡片圆润操作钮与上下文菜单字体增粗**：移除突兀的设置滑块图标，重构为温润内敛的高清椭圆胶囊与 `Icons.more_horiz_rounded` 专属圆角三点符号；强化 Liquid Morph Engine 上下文菜单字重（`FontWeight.w700`，字距 `0.3`），高透背景下清晰易读。
+3. **返回按钮单手位移与去锯齿纯净磨砂重构**：彻底移除所有二级/三级界面左上角历史残留的 `<` 返回按钮，返回控制权完全交予右下角人体工学拇指热区；右下角悬浮返回胶囊废除单层壁纸缓冲区的 `GlassContainer` 与易锯齿的 `LiquidRoundedSuperellipse`，全面采用原生抗锯齿圆角 `ClipRRect(borderRadius: 22)` + 纯正实时 `BackdropFilter`（sigma 16）+ 主题色微透丙烯酸容器，彻底消除锯齿边缘，实现真实毛玻璃透射。
+4. **周次选择器与课程详情面板网格清晰透显**：彻底废止周次选择抽屉与课程详情弹窗中强制采样底层壁纸的 `GlassSheet`，改用标准 Flutter 视口级 `ClipRRect` + `BackdropFilter`（sigma 20）架构；呼出菜单时底层的课表网格线、已排课程卡片清晰微透可见，彻底杜绝“只透明看到壁纸”的视觉穿帮。
+5. **添加课程页面 120 FPS 丝滑启动与滚动优化**：根除 `LiquidInput` 内嵌嵌套着色器玻璃容器导致的过度绘制与每帧 5+ 次离屏 Pass 损耗，重构为轻量纯净的 `BoxDecoration` 亚克力输入框；在 `CourseEditScreen` 滚动视图外层注入 `RepaintBoundary`，阻断重绘蔓延，进入退出秒级 120 FPS。
 
 ---
 

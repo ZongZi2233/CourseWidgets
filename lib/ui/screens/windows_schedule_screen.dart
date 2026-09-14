@@ -57,30 +57,40 @@ class _WindowsScheduleScreenState extends State<WindowsScheduleScreen> {
       barrierColor: Colors.black.withValues(alpha: 0.20),
       builder: (context) {
         final isDark = Theme.of(context).brightness == Brightness.dark;
-        return GlassSheet(
-          settings: LiquidGlassSettings(
-            glassColor: isDark
-                ? const Color(0x99181B24)
-                : Colors.white.withValues(alpha: 0.85),
-            blur: 16,
-            thickness: 15,
-            edgeAbsorption: 0.0,
-          ),
-        child: SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Padding(
-                padding: EdgeInsets.all(16),
-                child: Text(
-                  '选择周次',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
+        return ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+            child: Container(
+              decoration: BoxDecoration(
+                color: isDark
+                    ? const Color(0xB8161922)
+                    : Colors.white.withValues(alpha: 0.85),
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+                border: Border(
+                  top: BorderSide(
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.16)
+                        : Colors.white.withValues(alpha: 0.70),
+                    width: 0.8,
                   ),
                 ),
               ),
+              child: SafeArea(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Text(
+                        '选择周次',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
               Container(
                 height: 300,
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -132,9 +142,11 @@ class _WindowsScheduleScreenState extends State<WindowsScheduleScreen> {
             ],
           ),
         ),
-      );
-      },
-    );
+      ),
+    ),
+  );
+},
+);
   }
 
   @override
@@ -685,18 +697,18 @@ class _WindowsScheduleScreenState extends State<WindowsScheduleScreen> {
                   ),
                 ],
                 trigger: Container(
-                  height: 22.0,
-                  width: 60.0,
-                  margin: const EdgeInsets.only(top: 6, bottom: 3),
+                  height: 18.0,
+                  width: 50.0,
+                  margin: const EdgeInsets.only(top: 4, bottom: 2),
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color: (isDark ? Colors.white : Colors.black).withValues(alpha: isDark ? 0.20 : 0.11),
-                    borderRadius: BorderRadius.circular(10),
+                    color: (isDark ? Colors.white : Colors.black).withValues(alpha: isDark ? 0.18 : 0.09),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(
-                    CupertinoIcons.slider_horizontal_3,
-                    size: 15.0,
-                    color: subTextColor.withValues(alpha: 0.90),
+                    Icons.more_horiz_rounded,
+                    size: 18.0,
+                    color: subTextColor.withValues(alpha: 0.85),
                   ),
                 ),
               ),
@@ -707,7 +719,7 @@ class _WindowsScheduleScreenState extends State<WindowsScheduleScreen> {
     );
   }
 
-  /// 显示课程详情（官方 GlassSheet 底部面板，彻底消除关闭无法返回的问题）
+  /// 显示课程详情（BackdropFilter 底部面板，透见清晰课表网格）
   void _showCourseDetail(CourseEvent course) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primaryTextColor = isDark ? Colors.white : const Color(0xFF1A1A2E);
@@ -716,19 +728,30 @@ class _WindowsScheduleScreenState extends State<WindowsScheduleScreen> {
       context: context,
       backgroundColor: Colors.transparent,
       barrierColor: Colors.black.withValues(alpha: 0.20),
-      builder: (sheetContext) => GlassSheet(
-        settings: LiquidGlassSettings(
-          glassColor: isDark
-              ? const Color(0x99181B24)
-              : Colors.white.withValues(alpha: 0.85),
-          blur: 16.0,
-          thickness: 20.0,
-        ),
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
+      builder: (sheetContext) => ClipRRect(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 20.0, sigmaY: 20.0),
+          child: Container(
+            decoration: BoxDecoration(
+              color: isDark
+                  ? const Color(0xB8161922)
+                  : Colors.white.withValues(alpha: 0.85),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+              border: Border(
+                top: BorderSide(
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.16)
+                      : Colors.white.withValues(alpha: 0.70),
+                  width: 0.8,
+                ),
+              ),
+            ),
+            child: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Center(
@@ -815,7 +838,9 @@ class _WindowsScheduleScreenState extends State<WindowsScheduleScreen> {
           ),
         ),
       ),
-    );
+    ),
+  ),
+);
   }
 
   Widget _buildDetailRow(String label, String value) {

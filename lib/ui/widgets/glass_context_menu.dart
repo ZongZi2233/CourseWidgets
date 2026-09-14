@@ -38,6 +38,12 @@ class GlassContextMenu extends StatelessWidget {
       items: items.map((item) {
         return GlassMenuItem(
           title: item.title,
+          titleStyle: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.3,
+            color: item.isDestructive ? Colors.redAccent : Colors.white,
+          ),
           icon: Icon(
             item.icon,
             size: 20,

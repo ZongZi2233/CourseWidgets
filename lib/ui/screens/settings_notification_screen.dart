@@ -65,11 +65,9 @@ class _SettingsNotificationScreenState
                 SafeArea(
                   bottom: false,
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                     child: Row(
                       children: [
-                        const liquid.LiquidBackButton(),
-                        const SizedBox(width: 12),
                         Text(
                           '课程通知',
                           style: TextStyle(
