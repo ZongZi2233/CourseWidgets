@@ -529,8 +529,8 @@ class AndroidScheduleConfigScreenState
                               const SizedBox(height: 8),
                               Text(
                                 diffDays == 0
-                                    ? '✅ 当前课表首周与开学日期 (${targetMonday.month}月${targetMonday.day}日) 已对齐。'
-                                    : '⚠️ 检测到已导入课表首周 (${earliestMonday.month}月${earliestMonday.day}日) 与设置的开学日期 (${targetMonday.month}月${targetMonday.day}日) 相差 ${(diffDays.abs() / 7).round()} 周。点击下方一键智能平移，可将全学期课表对齐至开学第 1 周！',
+                                    ? '当前课表首周与开学日期 (${targetMonday.month}月${targetMonday.day}日) 已对齐。'
+                                    : '检测到已导入课表首周 (${earliestMonday.month}月${earliestMonday.day}日) 与设置的开学日期 (${targetMonday.month}月${targetMonday.day}日) 相差 ${(diffDays.abs() / 7).round()} 周。点击下方一键智能平移，可将全学期课表对齐至开学第 1 周！',
                                 style: TextStyle(
                                   fontSize: 13,
                                   color: isDark ? Colors.white70 : const Color(0x991A1A2E),

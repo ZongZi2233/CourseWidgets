@@ -38,6 +38,7 @@ class LiveNotificationServiceV2 {
   CourseEvent? _currentCourse;
   List<CourseEvent> _allCourses = [];
   bool _hasShownReminder = false; // [v2.2.9] 是否已显示提醒
+  String? _lastNotifiedPayloadKey; // [v2.9.9] 通知负载缓存，杜绝重复 IPC 渲染
 
   // 通知 ID
   static const int _liveNotificationId = 1000;
@@ -190,8 +191,8 @@ class LiveNotificationServiceV2 {
     // 立即显示一次
     await _updateNotification();
 
-    // [v2.8.8] 优化通知定时器刷新频率（每 10 秒更新一次，确保胶囊分秒倒计时精准跟手）
-    _updateTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+    // [v2.9.9] 优化通知定时器刷新频率至 30 秒（原生 Chronometer 实时秒级跳动，减少 66% 冗余唤醒）
+    _updateTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
       _updateNotification();
     });
 
@@ -206,6 +207,7 @@ class LiveNotificationServiceV2 {
   /// [v2.8.5] 更新课程列表数据（当课表数据变动时被调用）
   void updateCourses(List<CourseEvent> courses, {CourseEvent? nextCourse}) {
     _allCourses = courses;
+    _lastNotifiedPayloadKey = null;
     if (nextCourse != null) {
       _currentCourse = nextCourse;
     }
@@ -247,8 +249,8 @@ class LiveNotificationServiceV2 {
       priority: Priority.high,
       playSound: true,
       enableVibration: true,
-      color: const Color(0xFFFF9A9E),
       icon: '@mipmap/ic_launcher',
+      largeIcon: const DrawableResourceAndroidBitmap('@mipmap/ic_launcher'),
       styleInformation: BigTextStyleInformation(
         '${_currentCourse!.location}\n${start.hour}:${start.minute.toString().padLeft(2, '0')} 开始',
         contentTitle: '10 分钟后上课',
@@ -367,10 +369,9 @@ class LiveNotificationServiceV2 {
         final count = _getCoursesForDate(nextDt).length;
         final startStr = '${nextDt.hour}:${nextDt.minute.toString().padLeft(2, '0')}';
         final loc = nextFirst.location.trim().isNotEmpty && !nextFirst.location.contains('未知')
-            ? ' 📍 ${nextFirst.location}'
+            ? ' (${nextFirst.location})'
             : '';
-        // [v2.9.3] 富文本状态标题与清晰信息密度排版
-        title = '<b>📅 $relDay</b> · <b>共$count节课</b>';
+        title = '<b>$relDay</b> · <b>共$count节课</b>';
         subLocation = '$relDay$count节课';
         body = '首节 $startStr <b>${nextFirst.name}</b>$loc';
       } else {
@@ -393,18 +394,17 @@ class LiveNotificationServiceV2 {
         final durationMin = (totalMs / 60000).round();
 
         if (remainingSec > 0) {
-          title = '<b><font color="#FF5252">● 正在上课</font></b> · <b>${_currentCourse!.name}</b>';
+          title = '<b><font color="#FF5252">正在上课</font></b> · <b>${_currentCourse!.name}</b>';
           final courseLoc = _currentCourse!.location.trim();
           final hasLoc = courseLoc.isNotEmpty && !courseLoc.contains('未知');
-          // [v2.9.7] 胶囊副标题优先显示具体教室位置，倒计时由原生 Chronometer 实时秒级跳动
-          subLocation = hasLoc ? courseLoc.replaceAll('📍', '').trim() : '正在上课';
+          subLocation = hasLoc ? courseLoc : '正在上课';
 
           if (totalMs > 0) {
             progressPercent = ((elapsedMs / totalMs) * 100).clamp(0, 100).toInt();
             showProgress = true;
           }
-          final loc = hasLoc ? ' 📍 $courseLoc' : '';
-          body = '<b>${_currentCourse!.name}</b>$loc\n🕒 $startStr - $endStr (共${durationMin}分钟)';
+          final loc = hasLoc ? ' ($courseLoc)' : '';
+          body = '<b>${_currentCourse!.name}</b>$loc\n时间: $startStr - $endStr (共${durationMin}分钟)';
           eventTime = end;
           isCountingDown = true;
 
@@ -421,7 +421,7 @@ class LiveNotificationServiceV2 {
           }
         } else {
           // 刚刚下课过渡
-          title = '<b><font color="#4CAF50">✓ 已下课</font></b> · 休息中';
+          title = '<b><font color="#4CAF50">已下课</font></b> · 休息中';
           body = '<b>${_currentCourse!.name}</b> 刚刚结束';
           subLocation = '课间休息';
         }
@@ -434,23 +434,22 @@ class LiveNotificationServiceV2 {
         final isToday = start.year == now.year && start.month == now.month && start.day == now.day;
         final courseLoc = _currentCourse!.location.trim();
         final hasLoc = courseLoc.isNotEmpty && !courseLoc.contains('未知');
-        final loc = hasLoc ? ' 📍 $courseLoc' : '';
+        final loc = hasLoc ? ' ($courseLoc)' : '';
 
         if (isToday) {
           if (m <= 45) {
-            // [v2.9.7] 课前胶囊显示教室位置或状态，原生 Chronometer 执行倒计时
-            subLocation = hasLoc ? courseLoc.replaceAll('📍', '').trim() : (m <= 10 ? '马上开始' : '即将上课');
+            subLocation = hasLoc ? courseLoc : (m <= 10 ? '马上开始' : '即将上课');
             progressPercent = (((45 - m) / 45) * 100).clamp(0, 100).toInt();
             showProgress = true;
 
             final statusTag = m <= 10 ? '马上开始' : '即将上课';
-            title = '<b><font color="#FFA000">⏳ $statusTag</font></b> · <b>${_currentCourse!.name}</b>';
-            body = '<b>${_currentCourse!.name}</b>$loc · $startStr 开课\n🕒 $startStr - $endStr · 请提前入座准备';
+            title = '<b><font color="#FFA000">$statusTag</font></b> · <b>${_currentCourse!.name}</b>';
+            body = '<b>${_currentCourse!.name}</b>$loc · $startStr 开课\n时间: $startStr - $endStr · 请提前入座准备';
           } else {
             // 课前45分钟以上
             title = '<b>下节课 ($startStr)</b> · <b>${_currentCourse!.name}</b>';
-            body = '<b>${_currentCourse!.name}</b>$loc\n🕒 $startStr - $endStr';
-            subLocation = hasLoc ? courseLoc.replaceAll('📍', '').trim() : startStr;
+            body = '<b>${_currentCourse!.name}</b>$loc\n时间: $startStr - $endStr';
+            subLocation = hasLoc ? courseLoc : startStr;
             showProgress = false;
           }
         } else {
@@ -459,7 +458,7 @@ class LiveNotificationServiceV2 {
           final targetCourses = _getCoursesForDate(startDate);
           final count = targetCourses.isNotEmpty ? targetCourses.length : 1;
           final relDay = _formatRelativeDate(start, now);
-          title = '<b>📅 $relDay</b> · <b>共$count节课</b>';
+          title = '<b>$relDay</b> · <b>共$count节课</b>';
           subLocation = '$relDay$count节课';
           body = '首节 $startStr <b>${_currentCourse!.name}</b>$loc';
           showProgress = false;
@@ -470,18 +469,27 @@ class LiveNotificationServiceV2 {
       }
     }
 
+    // [v2.9.9] 负载防抖缓存：如果通知内容、进度和状态完全未发生改变，跳过 IPC 与通知重刷，避免耗电与微卡
+    final String currentPayloadKey = '$title|$body|$subLocation|$progressPercent|$showProgress|$isCountingDown';
+    if (_lastNotifiedPayloadKey == currentPayloadKey) {
+      return;
+    }
+    _lastNotifiedPayloadKey = currentPayloadKey;
+
     // [v2.5.1反馈/v2.8.3升级] 严格遵循 Android 16 Live Updates (ProgressStyle) 规范构建实时活动通知
     final bool useLiveUpdate = NotificationManager().isLiveActivitiesEnabled;
 
     AndroidNotificationDetails androidDetails;
 
     if (useLiveUpdate) {
-      // [v2.8.3/v2.9.7] 符合 Android 16 ProgressStyle 规范的 Promoted Live Update 通知
+      // [v2.8.3/v2.9.9] 符合 Android 16 ProgressStyle 规范的 Promoted Live Update 通知
+      // 使用应用专属新 Logo (ic_launcher) 并移除强制粉色底色
       androidDetails = AndroidNotificationDetails(
         _channelId,
         _channelName,
         channelDescription: _channelDesc,
-        icon: '@drawable/ic_stat_course',
+        icon: '@mipmap/ic_launcher',
+        largeIcon: const DrawableResourceAndroidBitmap('@mipmap/ic_launcher'),
         importance: Importance.max,
         priority: Priority.max,
         ongoing: true, // Live Updates 必须是 ongoing 常驻
@@ -496,7 +504,6 @@ class LiveNotificationServiceV2 {
         chronometerCountDown: isCountingDown,
         when: eventTime?.millisecondsSinceEpoch,
         visibility: NotificationVisibility.public,
-        color: const Color(0xFFFF9A9E),
         subText: subLocation,
         styleInformation: BigTextStyleInformation(
           body,
@@ -528,7 +535,8 @@ class LiveNotificationServiceV2 {
         _channelId,
         _channelName,
         channelDescription: _channelDesc,
-        icon: '@drawable/ic_stat_course',
+        icon: '@mipmap/ic_launcher',
+        largeIcon: const DrawableResourceAndroidBitmap('@mipmap/ic_launcher'),
         importance: Importance.defaultImportance,
         priority: Priority.defaultPriority,
         ongoing: false,
@@ -536,7 +544,6 @@ class LiveNotificationServiceV2 {
         onlyAlertOnce: true,
         category: AndroidNotificationCategory.status,
         visibility: NotificationVisibility.public,
-        color: const Color(0xFFFF9A9E),
         subText: subLocation,
         styleInformation: BigTextStyleInformation(
           body,

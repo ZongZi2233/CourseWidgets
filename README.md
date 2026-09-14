@@ -9,7 +9,7 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Flutter](https://img.shields.io/badge/Flutter-3.44.0+-02569B?logo=flutter)](https://flutter.dev)
 [![Dart](https://img.shields.io/badge/Dart-3.12.0+-0175C2?logo=dart)](https://dart.dev)
-[![Version](https://img.shields.io/badge/Version-2.9.8-FF9BAE)](https://github.com/ZongZi2233AI/CourseWidgets/releases/)
+[![Version](https://img.shields.io/badge/Version-2.9.9-FF9BAE)](https://github.com/ZongZi2233AI/CourseWidgets/releases/)
 
 [English](README_EN.md) | 简体中文
 
@@ -17,16 +17,14 @@
 
 > **声明**：本软件除开源代码外完全使用 AI 辅助协同开发。核心架构由 [MiMo-V2-Flash](https://github.com/XiaomiMiMo/MiMo-V2-Flash) 与 Gemini 3.1 Pro 深度构建，Windows 桌面部分协同 Claude Opus 4.6 深度定制。
 
-### 📦 最新版本：[v2.9.8 (Build 10008068)](https://github.com/ZongZi2233AI/CourseWidgets/releases)
-* **Android 单包**：`CourseWidgets-v2.9.8-android-arm64-v8a.apk` —— 全面开启 R8 压缩与 Dart AOT 源码混淆。
-* **Windows 客户端**：`CourseWidgets-v2.9.8-windows-x64.zip` —— 纯净亚克力无边框桌面端，支持托盘驻留与高分屏。
+### 📦 最新版本：[v2.9.9 (Build 10008069)](https://github.com/ZongZi2233AI/CourseWidgets/releases)
+* **Android 单包**：`CourseWidgets-v2.9.9-android-arm64-v8a.apk` —— 全面开启 R8 压缩与 Dart AOT 源码混淆。
+* **Windows 客户端**：`CourseWidgets-v2.9.9-windows-x64.zip` —— 纯净亚克力无边框桌面端，支持托盘驻留与高分屏。
 
-#### 🆕 v2.9.8 本次更新内容 (CHANGELOG)
-1. **设置主页安全距离与顶栏UI完全避让**：修复 `SettingsMainScreen` 手机端顶部列表间距问题，由 8.0 扩充至 80.0（平板端 16.0），彻底消除一级设置项与 64pt 悬浮毛玻璃顶栏重叠堆叠的严重 UI 缺陷，保留充足的 16pt 呼吸安全空间。
-2. **课程卡片圆润操作钮与上下文菜单字体增粗**：移除突兀的设置滑块图标，重构为温润内敛的高清椭圆胶囊与 `Icons.more_horiz_rounded` 专属圆角三点符号；强化 Liquid Morph Engine 上下文菜单字重（`FontWeight.w700`，字距 `0.3`），高透背景下清晰易读。
-3. **返回按钮单手位移与去锯齿纯净磨砂重构**：彻底移除所有二级/三级界面左上角历史残留的 `<` 返回按钮，返回控制权完全交予右下角人体工学拇指热区；右下角悬浮返回胶囊废除单层壁纸缓冲区的 `GlassContainer` 与易锯齿的 `LiquidRoundedSuperellipse`，全面采用原生抗锯齿圆角 `ClipRRect(borderRadius: 22)` + 纯正实时 `BackdropFilter`（sigma 16）+ 主题色微透丙烯酸容器，彻底消除锯齿边缘，实现真实毛玻璃透射。
-4. **周次选择器与课程详情面板网格清晰透显**：彻底废止周次选择抽屉与课程详情弹窗中强制采样底层壁纸的 `GlassSheet`，改用标准 Flutter 视口级 `ClipRRect` + `BackdropFilter`（sigma 20）架构；呼出菜单时底层的课表网格线、已排课程卡片清晰微透可见，彻底杜绝“只透明看到壁纸”的视觉穿帮。
-5. **添加课程页面 120 FPS 丝滑启动与滚动优化**：根除 `LiquidInput` 内嵌嵌套着色器玻璃容器导致的过度绘制与每帧 5+ 次离屏 Pass 损耗，重构为轻量纯净的 `BoxDecoration` 亚克力输入框；在 `CourseEditScreen` 滚动视图外层注入 `RepaintBoundary`，阻断重绘蔓延，进入退出秒级 120 FPS。
+#### 🆕 v2.9.9 本次更新内容 (CHANGELOG)
+1. **Live Update 胶囊与通知图标全面采用官方新 Logo**：在 Android 原生端与 Flutter 端全面恢复使用应用高清官方新 Logo（`@mipmap/ic_launcher` / `R.mipmap.ic_launcher`），彻底移除 `builder.setColor(0xFFFF9A9E)` 及通知通道中的粉色强制底色配置，杜绝“粉色底+Emoji”异常视觉，完整呈现官方高清大图标与胶囊状态。
+2. **彻底剔除通知与排班全链路 Emoji**：全面移除 Live Update 实时通知正文中的所有 Emoji（`📍`、`📅`、`🕒`、`⏳`、`●`、`✓`），升级为规范的括注与时间区间说明；清除 `notification_manager.dart` 中的 `☀️`、`🌙`、`🔔`、`🚨`、`⚡`、`⏰` 等 Emoji 字符；全面移除 Android、通用移动端、macOS 三端排班课程列表项中的 `📍`、`👨‍🏫`、`⏰` Emoji，升级为细腻的矢量图标行布局。
+3. **通知能效优化与 IPC 防抖去重**：后台刷新定时器频率由 10 秒优化为 30 秒，降低 66% 冗余后台唤醒，秒级倒计时由系统底层 Chronometer 硬件级独立调度；引入 `_lastNotifiedPayloadKey` 负载比对，在通知内容、进度和计时状态未变动时直接拦截重复的 MethodChannel IPC 通信，避免频繁与系统 `NotificationManager` 交互，彻底根治潜在的发热与微卡顿。
 
 ---
 

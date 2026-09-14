@@ -467,22 +467,48 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           children: [
             if (course.location.isNotEmpty) ...[
               const SizedBox(height: 4),
-              Text(
-                '📍 ${course.location}',
-                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+              Row(
+                children: [
+                  Icon(Icons.location_on_outlined, size: 13, color: Colors.grey[600]),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      course.location,
+                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
               ),
             ],
             if (course.teacher.isNotEmpty) ...[
               const SizedBox(height: 2),
-              Text(
-                '👨‍🏫 ${course.teacher}',
-                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+              Row(
+                children: [
+                  Icon(Icons.person_outline, size: 13, color: Colors.grey[600]),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      course.teacher,
+                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
               ),
             ],
             const SizedBox(height: 2),
-            Text(
-              '⏰ ${course.timeStr}',
-              style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+            Row(
+              children: [
+                Icon(Icons.access_time, size: 12, color: Colors.grey[500]),
+                const SizedBox(width: 4),
+                Text(
+                  course.timeStr,
+                  style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                ),
+              ],
             ),
           ],
         ),

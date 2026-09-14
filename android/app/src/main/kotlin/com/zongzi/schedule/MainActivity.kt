@@ -247,14 +247,19 @@ class MainActivity : FlutterActivity() {
         builder.setContentTitle(titleSpan)
         builder.setContentText(bodySpan)
         builder.setStyle(android.app.Notification.BigTextStyle().bigText(bodySpan))
-        // [v2.9.7] 采用专用纯白单色镂空矢量图标作为 SmallIcon，彻底消灭强制着色引起的粉色中黑畸形图标
-        // 同时移除 LargeIcon，杜绝左右双重 Logo 混乱，让文本与进度条占据全宽
-        builder.setSmallIcon(R.drawable.ic_stat_course)
+        // [v2.9.9] 严格采用应用专属新 Logo (R.mipmap.ic_launcher) 作为胶囊与通知图标
+        // 彻底移除强制粉色 setColor，消除"粉色底+Emoji"问题，展现纯正高清官方新 Logo
+        builder.setSmallIcon(R.mipmap.ic_launcher)
+        try {
+            val appIconBitmap = android.graphics.BitmapFactory.decodeResource(resources, R.mipmap.ic_launcher)
+            if (appIconBitmap != null) {
+                builder.setLargeIcon(appIconBitmap)
+            }
+        } catch (_: Exception) {}
         builder.setOngoing(true)
         builder.setOnlyAlertOnce(true)
         builder.setAutoCancel(false)
         builder.setCategory(android.app.Notification.CATEGORY_PROGRESS)
-        builder.setColor(0xFFFF9A9E.toInt())
 
         if (subLocation != null && subLocation.isNotEmpty()) {
             builder.setSubText(subLocation)

@@ -1145,31 +1145,69 @@ class _AndroidScheduleScreenState extends State<AndroidScheduleScreen> {
                   ),
                   if (showLocation) ...[
                     const SizedBox(height: 4),
-                    Text(
-                      '📍 ${course.location}',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: CupertinoColors.secondaryLabel,
-                      ),
+                    Row(
+                      children: [
+                        const Icon(
+                          CupertinoIcons.location_solid,
+                          size: 13,
+                          color: CupertinoColors.secondaryLabel,
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            course.location,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: CupertinoColors.secondaryLabel,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                   if (showTeacher) ...[
                     const SizedBox(height: 2),
-                    Text(
-                      '👨‍🏫 ${course.teacher}',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: CupertinoColors.secondaryLabel,
-                      ),
+                    Row(
+                      children: [
+                        const Icon(
+                          CupertinoIcons.person_fill,
+                          size: 13,
+                          color: CupertinoColors.secondaryLabel,
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            course.teacher,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: CupertinoColors.secondaryLabel,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                   const SizedBox(height: 2),
-                  Text(
-                    '⏰ ${course.timeStr}',
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: CupertinoColors.systemGrey,
-                    ),
+                  Row(
+                    children: [
+                      const Icon(
+                        CupertinoIcons.clock,
+                        size: 12,
+                        color: CupertinoColors.systemGrey,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        course.timeStr,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: CupertinoColors.systemGrey,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),

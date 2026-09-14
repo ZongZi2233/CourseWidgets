@@ -9,7 +9,7 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Flutter](https://img.shields.io/badge/Flutter-3.44.0+-02569B?logo=flutter)](https://flutter.dev)
 [![Dart](https://img.shields.io/badge/Dart-3.12.0+-0175C2?logo=dart)](https://dart.dev)
-[![Version](https://img.shields.io/badge/Version-2.9.8-FF9BAE)](https://github.com/ZongZi2233AI/CourseWidgets/releases/)
+[![Version](https://img.shields.io/badge/Version-2.9.9-FF9BAE)](https://github.com/ZongZi2233AI/CourseWidgets/releases/)
 
 English | [简体中文](README.md)
 
@@ -17,16 +17,14 @@ English | [简体中文](README.md)
 
 > **Statement**: This project was developed entirely through human-AI collaborative Vibe Coding. Core architecture by [MiMo-V2-Flash](https://github.com/XiaomiMiMo/MiMo-V2-Flash) and Gemini 3.1 Pro, with Windows desktop integration engineered in collaboration with Claude Opus 4.6.
 
-### 📦 Latest Release: [v2.9.8 (Build 10008068)](https://github.com/ZongZi2233AI/CourseWidgets/releases)
-* **Android Standalone**: `CourseWidgets-v2.9.8-android-arm64-v8a.apk` — Built with R8 code shrinking and Dart AOT obfuscation.
-* **Windows Client**: `CourseWidgets-v2.9.8-windows-x64.zip` — Borderless acrylic desktop app with tray support and high-DPI scaling.
+### 📦 Latest Release: [v2.9.9 (Build 10008069)](https://github.com/ZongZi2233AI/CourseWidgets/releases)
+* **Android Standalone**: `CourseWidgets-v2.9.9-android-arm64-v8a.apk` — Built with R8 code shrinking and Dart AOT obfuscation.
+* **Windows Client**: `CourseWidgets-v2.9.9-windows-x64.zip` — Borderless acrylic desktop app with tray support and high-DPI scaling.
 
-#### 🆕 What's New in v2.9.8 (CHANGELOG)
-1. **Settings Top Bar Safe Clearance & Overlap Fix**: Fixed list top padding on `SettingsMainScreen` from 8.0 to 80.0 (16.0 on tablets), fully eliminating content stacking underneath the 64pt floating glass top header while retaining 16pt clean breathing space.
-2. **Refined Course Card Action Pill & Bold Context Menu Fonts**: Replaced the awkward slider icon on course cards with a smooth rounded action pill featuring `Icons.more_horiz_rounded`; boosted Liquid Morph Engine context menu font weight to `FontWeight.w700` with `0.3` letter spacing for crystal-clear readability.
-3. **Ergonomic Back Pill Relocation & Anti-Aliased Frosted Glass**: Completely removed redundant top-left `<` back buttons across all sub-screens, centering navigation onto the ergonomic bottom-right thumb zone; redesigned the floating back pill using native anti-aliased `ClipRRect(borderRadius: 22)` + real-time `BackdropFilter` (sigma 16) + tinted acrylic container, eliminating aliasing and wallpaper pass-through bugs.
-4. **Transparent Bottom Sheets with Preserved Grid Visibility**: Deprecated wallpaper-restricted `GlassSheet` in week pickers and course detail sheets in favor of composited `ClipRRect` + `BackdropFilter` (sigma 20); underlying course grid lines and colored cards remain cleanly visible through the frosted blur.
-5. **120 FPS Course Edit Launch & Overdraw Optimization**: Replaced nested shader glass inputs (`LiquidInput`) with clean `BoxDecoration` acrylic fields, eliminating 5+ redundant GPU offscreen passes per frame; wrapped `CourseEditScreen` content in `RepaintBoundary` for fluid 120 FPS entrance and scrolling.
+#### 🆕 What's New in v2.9.9 (CHANGELOG)
+1. **Official App Logo for Live Updates**: Restored the authentic high-resolution app icon (`@mipmap/ic_launcher` / `R.mipmap.ic_launcher`) for both small and large notification icons on Android, completely stripping forced pink background tints (`builder.setColor(0xFFFF9A9E)`).
+2. **Zero Emoji Across Notifications & Scheduling**: Eliminated all emojis (`📍`, `📅`, `🕒`, `⏳`, `●`, `✓`) from Live Updates in favor of clean structured text; wiped all emojis (`☀️`, `🌙`, `🔔`, `🚨`, `⚡`, `⏰`) from system notification manager; replaced emojis in Android, Mobile, and macOS schedule lists with crisp vector icons.
+3. **Power Efficiency & Notification IPC Deduplication**: Reduced background timer frequency from 10s to 30s (-66% wakeups) while keeping native hardware-level second counting on Android Chronometer; introduced payload caching (`_lastNotifiedPayloadKey`) to skip redundant IPC calls when content has not changed.
 
 ---
 

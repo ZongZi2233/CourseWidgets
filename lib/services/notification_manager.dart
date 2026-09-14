@@ -417,7 +417,7 @@ class NotificationManager {
       String body;
 
       if (todayCourses.isNotEmpty) {
-        title = '欢迎使用 CourseWidgets ☀️';
+        title = '欢迎使用 CourseWidgets';
         final courseList = todayCourses
             .map((c) {
               final t = DateTime.fromMillisecondsSinceEpoch(c.startTime);
@@ -432,7 +432,7 @@ class NotificationManager {
           return courseTime.isAfter(todayEnd) &&
               courseTime.isBefore(tomorrowEnd);
         }).toList()..sort((a, b) => a.startTime.compareTo(b.startTime));
-        title = '欢迎使用 CourseWidgets 🌙';
+        title = '欢迎使用 CourseWidgets';
         if (tomorrowCourses.isNotEmpty) {
           final courseList = tomorrowCourses
               .map((c) {
@@ -487,7 +487,7 @@ class NotificationManager {
 
       await _sendWindowsNotification(
         id: 99002,
-        title: 'CourseWidgets 后台运行中 🔔',
+        title: 'CourseWidgets 后台运行中',
         body: body,
       );
       debugPrint('🔕 已发送后台通知');
@@ -506,7 +506,7 @@ class NotificationManager {
     });
     // 立即检查一次
     _enhancedCheckUpcomingCourses(getCourses());
-    debugPrint('🔔 增强型课程检查定时器已启动（20/15/10/5 分钟分级提醒）');
+    debugPrint('增强型课程检查定时器已启动（20/15/10/5 分钟分级提醒）');
   }
 
   void _enhancedCheckUpcomingCourses(List<CourseEvent> courses) {
@@ -529,14 +529,9 @@ class NotificationManager {
           if (!_notifiedCourses.contains(notifKey)) {
             final timeStr =
                 '${courseTime.hour.toString().padLeft(2, '0')}:${courseTime.minute.toString().padLeft(2, '0')}';
-            final emoji = threshold <= 5
-                ? '🚨'
-                : threshold <= 10
-                ? '⚡'
-                : '⏰';
             _sendWindowsNotification(
               id: notifKey % 100000,
-              title: '$emoji 课程 $threshold 分钟后开始',
+              title: '课程 $threshold 分钟后开始',
               body:
                   '${course.name}\n$timeStr · ${course.location}${course.teacher.isNotEmpty ? ' · ${course.teacher}' : ''}',
             );

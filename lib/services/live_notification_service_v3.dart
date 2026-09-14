@@ -242,8 +242,8 @@ class LiveUpdateTaskHandler extends TaskHandler {
         when: start.millisecondsSinceEpoch, // 课程开始时间
         subText: _courseLocation, // 副标题显示地点
         styleInformation: BigTextStyleInformation(
-          '$timeText\n📍 $_courseLocation',
-          contentTitle: '📚 $_courseName',
+          _courseLocation.isNotEmpty ? '$timeText\n($_courseLocation)' : timeText,
+          contentTitle: _courseName,
           summaryText: '课程实时更新',
         ),
       );

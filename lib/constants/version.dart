@@ -2,9 +2,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import '../main.dart' show globalDarkModeNotifier;
 
-/// 当前版本：[v2.9.8] 官方正式版 - 设置页顶栏安全间隙纠正、纯净磨砂底板网格透显、优雅右下角无锯齿返回胶囊、课程卡片圆润操作钮、增粗上下文菜单字体与 120 FPS 课程编辑
-const String appVersion = '2.9.8';
-const int buildNumber = 10008068;
+/// 当前版本：[v2.9.9] 官方正式版 - 严格采用应用官方新 Logo、彻底剔除通知与排班所有 Emoji、通知定时器能效与 IPC 防抖去重优化
+const String appVersion = '2.9.9';
+const int buildNumber = 10008069;
 const String copyright = '© 2025-2026 CourseWidgets. All rights reserved.';
 
 // 全局状态

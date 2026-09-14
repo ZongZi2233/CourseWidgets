@@ -2,6 +2,21 @@
 
 本文档记录 CourseWidgets 各版本更新的动态活动演进，重点关注架构改进、渲染优化、故障诊断与教务抓取能力提升。
 
+## [v2.9.9] - 2026-09-15
+
+### 1. Live Update 胶囊与通知图标全面采用官方新 Logo (Official App Logo for Live Updates)
+- **恢复官方纯正品牌标识**：针对部分设备将小矢量误判为 Emoji 或叠加粉色背景的问题，在 Android 原生端与 Flutter 端全面恢复使用应用高清官方新 Logo（`@mipmap/ic_launcher` / `R.mipmap.ic_launcher`）；
+- **移除强制粉色着色**：完全移除 `builder.setColor(0xFFFF9A9E)` 及通知通道中的粉色强制底色配置，彻底根除“粉色底+Emoji”异常视觉，并在通知中完整呈现官方高清大图标与胶囊状态。
+
+### 2. 彻底剔除通知与排班全链路 Emoji (Zero Emoji in Notifications & Scheduling)
+- **Live Update 纯净专业文本**：彻底移除实况通知中的 `📍`、`📅`、`🕒`、`⏳`、`●`、`✓` 等所有 Emoji，升级为规范的括注与时间区间说明（例如 `时间: 08:00 - 09:35 (共95分钟)`、`(主楼201)`）；
+- **系统通知纯净重构**：全面清除 `notification_manager.dart` 中的 `☀️`、`🌙`、`🔔`、`🚨`、`⚡`、`⏰` 等 Emoji 字符，呈现干净专业的系统通知体验；
+- **排班列表矢量化升级**：全面移除 Android、通用移动端、macOS 三端排班课程列表项中的 `📍`、`👨‍🏫`、`⏰` Emoji 前缀，采用精细微距的矢量图标（`CupertinoIcons` / `Material Icons`）配合优雅文本流，大幅提升排班界面的质感与信息层级。
+
+### 3. 通知能效优化与 IPC 防抖去重 (Performance & IPC Deduplication)
+- **定时器唤醒大幅精简**：后台刷新定时器频率由 10 秒优化为 30 秒，降低 66% 冗余后台唤醒，秒级倒计时由系统底层 Chronometer 硬件级独立调度；
+- **负载防抖缓存机制**：引入 `_lastNotifiedPayloadKey` 负载比对，在通知内容、进度和计时状态未变动时直接拦截重复的 MethodChannel IPC 通信，避免频繁与系统 `NotificationManager` 交互，彻底根治潜在的发热与微卡顿。
+
 ## [v2.9.8] - 2026-09-14
 
 ### 1. 设置主页安全距离与顶栏UI完全避让 (Settings Top Bar Safe Clearance)
