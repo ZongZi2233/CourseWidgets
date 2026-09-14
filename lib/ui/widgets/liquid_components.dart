@@ -487,6 +487,80 @@ class LiquidBackButton extends StatelessWidget {
   }
 }
 
+/// [v2.9.7] 悬浮在屏幕右下角的单手操作毛玻璃返回胶囊
+class FloatingLiquidBackButton extends StatelessWidget {
+  final VoidCallback? onBack;
+  const FloatingLiquidBackButton({super.key, this.onBack});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Positioned(
+      bottom: 24,
+      right: 20,
+      child: SafeArea(
+        top: false,
+        left: false,
+        child: GestureDetector(
+          onTap: onBack ?? () => Navigator.maybePop(context),
+          behavior: HitTestBehavior.opaque,
+          child: LiquidStretch(
+            stretch: 0.15,
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.18),
+                    blurRadius: 14,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: GlassContainer(
+                shape: const LiquidRoundedSuperellipse(borderRadius: 24),
+                settings: LiquidGlassSettings(
+                  glassColor: isDark
+                      ? const Color(0x66161922)
+                      : Colors.white.withValues(alpha: 0.75),
+                  blur: 12.0,
+                  thickness: 18.0,
+                  refractiveIndex: 1.45,
+                  lightIntensity: 0.70,
+                  ambientStrength: 0.30,
+                  fresnelStrength: 0.05,
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        CupertinoIcons.chevron_back,
+                        size: 18,
+                        color: isDark ? Colors.white : const Color(0xFF1E2128),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '返回',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.white : const Color(0xFF1E2128),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// [v2.8.9] 基于 Flutter MiuiX 与 Liquid Glass 规范的 HyperOS 超椭圆混色无边框卡片
 ///
 /// 特性：
@@ -514,7 +588,7 @@ class HyperOSCard extends StatelessWidget {
     required this.child,
     this.onTap,
     this.onLongPress,
-    this.cornerRadius = 24, // [v2.9.0] 超椭圆 24，对齐 LiquidRoundedSuperellipse
+    this.cornerRadius = 28, // [v2.9.7] 超椭圆 28，对齐全新旗舰大圆角
     this.padding = const EdgeInsets.all(12),
     this.color,
     this.contentColor,
@@ -530,10 +604,10 @@ class HyperOSCard extends StatelessWidget {
     final isDark = globalDarkModeNotifier.value;
     final primary = theme.ThemeService().primaryColor;
 
-    // [v2.9.0] HyperOS 混色半透明丙烯酸质感：通透柔和，透出背景壁纸与主题色融合
+    // [v2.9.7] HyperOS 混色半透明丙烯酸质感：通透柔和，透出背景壁纸与主题色融合
     final defaultBgColor = isDark
-        ? Color.alphaBlend(primary.withValues(alpha: 0.14), const Color(0x991C2028))
-        : Color.alphaBlend(primary.withValues(alpha: 0.12), const Color(0xB8FFFFFF));
+        ? Color.alphaBlend(primary.withValues(alpha: 0.14), const Color(0x5514171E))
+        : Color.alphaBlend(primary.withValues(alpha: 0.12), const Color(0x60FFFFFF));
 
     // 如果指定了自定义颜色（例如课程卡片自定义整卡染色），直接应用；否则使用默认半透明丙烯酸底色
     final effectiveColor = color ?? defaultBgColor;

@@ -1,8 +1,10 @@
 import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:path/path.dart';
+import 'package:path_provider/path_provider.dart';
 import 'ics_parser.dart';
 import 'database_helper.dart';
 import 'html_to_ics_converter.dart';
@@ -842,6 +844,103 @@ class DataImportService {
       return true;
     } catch (e) {
       debugPrint('删除所有课程失败: $e');
+      return false;
+    }
+  }
+
+  /// [v2.9.7] 导出当前激活的课表为临时 ICS 文件
+  Future<File?> exportActiveScheduleToIcsFile({ScheduleConfig? config}) async {
+    try {
+      final active = await DatabaseHelper.instance.getActiveSchedule();
+      String? icsContent;
+
+      if (active != null) {
+        icsContent = await DatabaseHelper.instance.exportScheduleToIcs(active['id'] as int);
+      }
+
+      if (icsContent == null || icsContent.trim().isEmpty) {
+        final courses = await DatabaseHelper.instance.getAllCourses();
+        if (courses.isEmpty) return null;
+
+        final sb = StringBuffer();
+        String fmt(DateTime dt) {
+          String td(int n) => n >= 10 ? '$n' : '0$n';
+          return '${dt.year}${td(dt.month)}${td(dt.day)}T${td(dt.hour)}${td(dt.minute)}${td(dt.second)}';
+        }
+
+        final nowStr = fmt(DateTime.now());
+        sb.write('BEGIN:VCALENDAR\r\n');
+        sb.write('VERSION:2.0\r\n');
+        sb.write('PRODID:-//CourseWidgets//Schedule//CN\r\n');
+        sb.write('BEGIN:VTIMEZONE\r\n');
+        sb.write('TZID:Asia/Shanghai\r\n');
+        sb.write('BEGIN:STANDARD\r\n');
+        sb.write('TZNAME:CST\r\n');
+        sb.write('TZOFFSETFROM:+0800\r\n');
+        sb.write('TZOFFSETTO:+0800\r\n');
+        sb.write('DTSTART:19700101T000000\r\n');
+        sb.write('END:STANDARD\r\n');
+        sb.write('END:VTIMEZONE\r\n');
+
+        int uid = 0;
+        for (final evt in courses) {
+          final start = DateTime.fromMillisecondsSinceEpoch(evt.startTime);
+          final end = DateTime.fromMillisecondsSinceEpoch(evt.endTime);
+          sb.write('BEGIN:VEVENT\r\n');
+          sb.write('DTSTAMP:${nowStr}Z\r\n');
+          sb.write('UID:CW-ACTIVE-${++uid}-$nowStr@coursewidgets\r\n');
+          sb.write('SUMMARY:${evt.name}\r\n');
+          sb.write('DTSTART;TZID=Asia/Shanghai:${fmt(start)}\r\n');
+          sb.write('DTEND;TZID=Asia/Shanghai:${fmt(end)}\r\n');
+          if (evt.location.isNotEmpty) {
+            sb.write('LOCATION:${evt.location}\r\n');
+          }
+          if (evt.teacher.isNotEmpty) {
+            sb.write('DESCRIPTION:任课教师: ${evt.teacher}\r\n');
+          }
+          sb.write('STATUS:CONFIRMED\r\n');
+          sb.write('END:VEVENT\r\n');
+        }
+        sb.write('END:VCALENDAR\r\n');
+        icsContent = sb.toString();
+      }
+
+      final tempDir = await getTemporaryDirectory();
+      final file = File('${tempDir.path}/schedule_active_calendar.ics');
+      await file.writeAsString(icsContent, flush: true);
+      debugPrint('✅ 已生成系统日历导入文件: ${file.path}');
+      return file;
+    } catch (e) {
+      debugPrint('导出临时 ICS 文件失败: $e');
+      return null;
+    }
+  }
+
+  /// [v2.9.7] 一键调起系统日历应用导入课表
+  Future<bool> openIcsInSystemCalendar({ScheduleConfig? config}) async {
+    try {
+      final file = await exportActiveScheduleToIcsFile(config: config);
+      if (file == null || !await file.exists()) {
+        debugPrint('⚠️ 未能生成 ICS 文件');
+        return false;
+      }
+
+      if (Platform.isAndroid) {
+        const MethodChannel liveChannel = MethodChannel('com.zongzi.schedule/live_update');
+        final bool? success = await liveChannel.invokeMethod('openIcsInCalendar', {
+          'filePath': file.path,
+        });
+        return success ?? false;
+      } else if (Platform.isWindows) {
+        await Process.run('cmd', ['/c', 'start', '', file.path]);
+        return true;
+      } else if (Platform.isMacOS) {
+        await Process.run('open', [file.path]);
+        return true;
+      }
+      return false;
+    } catch (e) {
+      debugPrint('调用系统日历失败: $e');
       return false;
     }
   }

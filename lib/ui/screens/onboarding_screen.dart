@@ -57,13 +57,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     if (mounted) {
       HapticFeedback.heavyImpact();
 
-      // 直接调用 onComplete 回调
+      // 直接调用 onComplete 回调平滑过渡进入主页
       widget.onComplete();
-
-      // [v2.6.0] 引导结束后直接彻底关闭应用
-      Future.delayed(const Duration(milliseconds: 300), () {
-        SystemNavigator.pop(); // 完全关闭 App
-      });
     }
   }
 

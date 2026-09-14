@@ -343,108 +343,130 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.transparent,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: Text(
-          '通用设置',
-          style: TextStyle(color: _textColor, fontWeight: FontWeight.bold),
-        ),
-        // [v2.3.0修复] 恢复返回按钮，使用统一样式
-        leading: const Padding(
-          padding: EdgeInsets.only(left: 8.0, top: 4.0, bottom: 4.0),
-          child: liquid.LiquidBackButton(),
-        ),
-      ),
-      body: AdaptiveLiquidGlassLayer(
-        quality: GlassQuality.premium,
-        settings: const LiquidGlassSettings(
-          blur: 3.0,
-          thickness: 24.0,
-          glassColor: Color(0x0EFFFFFF),
-          lightIntensity: 0.70,
-          ambientStrength: 0.45,
-          ambientRim: 0.0,
-          fresnelStrength: 0.05,
-          saturation: 1.20,
-          refractiveIndex: 1.46,
-        ),
-        child: DynMouseScroll(
-          durationMS: 250,
-          scrollSpeed: 1.2,
-          builder: (context, controller, physics) => SingleChildScrollView(
-            controller: controller,
-            physics: physics,
-            padding: const EdgeInsets.all(16),
+      body: Stack(
+        children: [
+          AdaptiveLiquidGlassLayer(
+            quality: GlassQuality.premium,
+            settings: const LiquidGlassSettings(
+              blur: 3.0,
+              thickness: 24.0,
+              glassColor: Color(0x0EFFFFFF),
+              lightIntensity: 0.70,
+              ambientStrength: 0.45,
+              ambientRim: 0.0,
+              fresnelStrength: 0.05,
+              saturation: 1.20,
+              refractiveIndex: 1.46,
+            ),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildSection('外观'),
-                // [v2.9.0] Windows 端未适配深色模式，隐藏相关设置
-                if (!Platform.isWindows) ...[
-                  _buildSwitchCard(
-                    '自适应深色模式',
-                    '跟随系统设置',
-                    _adaptiveDarkMode,
-                    _toggleAdaptiveMode,
-                  ),
-                  const SizedBox(height: 12),
-
-                  IgnorePointer(
-                    ignoring: _adaptiveDarkMode,
-                    child: _buildSwitchCard(
-                      '强制深色模式',
-                      '手动覆盖系统设置',
-                      globalUseDarkMode,
-                      _toggleDarkMode,
-                      disabled: _adaptiveDarkMode,
+                // Header
+                SafeArea(
+                  bottom: false,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    child: Row(
+                      children: [
+                        const liquid.LiquidBackButton(),
+                        const SizedBox(width: 12),
+                        Text(
+                          '通用设置',
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: GlassSettingsHelper.getTextColor(context),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
-
-                const SizedBox(height: 20),
-                _buildSection('主题色'),
-                _buildActionCard(
-                  '主题色设置',
-                  CupertinoIcons.color_filter,
-                  _showThemeModeBottomSheet,
-                  subtitle: _getThemeModeText(),
                 ),
 
-                const SizedBox(height: 20),
-                _buildSection('个性化'),
-                _buildActionCard(
-                  '更换背景图片',
-                  CupertinoIcons.photo,
-                  _pickBackgroundImage,
-                ),
-                const SizedBox(height: 10),
-                _buildActionCard(
-                  '恢复默认背景',
-                  CupertinoIcons.arrow_counterclockwise,
-                  () async {
-                    globalBackgroundPath.value = null;
-                    await _storage.remove(StorageService.keyBackgroundPath);
-                    _showAlert('已恢复', '背景已恢复默认渐变');
-                  },
-                ),
+                // Content
+                Expanded(
+                  child: DynMouseScroll(
+                    durationMS: 250,
+                    scrollSpeed: 1.2,
+                    builder: (context, controller, physics) => SingleChildScrollView(
+                      controller: controller,
+                      physics: physics,
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildSection('外观'),
+                          // [v2.9.0] Windows 端未适配深色模式，隐藏相关设置
+                          if (!Platform.isWindows) ...[
+                            _buildSwitchCard(
+                              '自适应深色模式',
+                              '跟随系统设置',
+                              _adaptiveDarkMode,
+                              _toggleAdaptiveMode,
+                            ),
+                            const SizedBox(height: 12),
 
-                const SizedBox(height: 20),
-                _buildSection('性能'),
-                _buildActionCard(
-                  '着色器质量',
-                  CupertinoIcons.speedometer,
-                  _toggleShaderQuality,
-                  subtitle: GlassEffect.useHighPerformanceShader
-                      ? '当前：高性能模式（切换后需重启）'
-                      : '当前：高质量模式（切换后需重启）',
-                ),
+                            IgnorePointer(
+                              ignoring: _adaptiveDarkMode,
+                              child: _buildSwitchCard(
+                                '强制深色模式',
+                                '手动覆盖系统设置',
+                                globalUseDarkMode,
+                                _toggleDarkMode,
+                                disabled: _adaptiveDarkMode,
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                          ],
 
-                const SizedBox(height: 50),
+                          _buildSection('主题色'),
+                          _buildActionCard(
+                            '主题色设置',
+                            CupertinoIcons.color_filter,
+                            _showThemeModeBottomSheet,
+                            subtitle: _getThemeModeText(),
+                          ),
+
+                          const SizedBox(height: 20),
+                          _buildSection('个性化'),
+                          _buildActionCard(
+                            '更换背景图片',
+                            CupertinoIcons.photo,
+                            _pickBackgroundImage,
+                          ),
+                          const SizedBox(height: 10),
+                          _buildActionCard(
+                            '恢复默认背景',
+                            CupertinoIcons.arrow_counterclockwise,
+                            () async {
+                              globalBackgroundPath.value = null;
+                              await _storage.remove(StorageService.keyBackgroundPath);
+                              _showAlert('已恢复', '背景已恢复默认渐变');
+                            },
+                          ),
+
+                          const SizedBox(height: 20),
+                          _buildSection('性能'),
+                          _buildActionCard(
+                            '着色器质量',
+                            CupertinoIcons.speedometer,
+                            _toggleShaderQuality,
+                            subtitle: GlassEffect.useHighPerformanceShader
+                                ? '当前：高性能模式（切换后需重启）'
+                                : '当前：高质量模式（切换后需重启）',
+                          ),
+
+                          const SizedBox(height: 100),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
-        ),
+          // [v2.9.7] 悬浮右下角返回按钮
+          const liquid.FloatingLiquidBackButton(),
+        ],
       ),
     );
   }

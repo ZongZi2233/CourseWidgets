@@ -48,16 +48,16 @@ class CourseColorPalette {
   static Color getCardColor(String courseName, bool isDark) {
     final base = getBaseColor(courseName, isDark);
     if (isDark) {
-      // 深色模式：暗夜曜石基底 + 32% 活力马卡龙纯色注入，纯色混色通透深邃
+      // [v2.9.7] 深色模式：40% 暗夜曜石基底 + 35% 活力马卡龙纯色注入，纯色混色通透深邃透出壁纸
       return Color.alphaBlend(
-        base.withValues(alpha: 0.32),
-        const Color(0xD9181B22),
+        base.withValues(alpha: 0.35),
+        const Color(0x66141720),
       );
     } else {
-      // 浅色模式：晶透乳白基底 + 28% 莫兰迪纯色注入，温润纯色混色微透卡片
+      // [v2.9.7] 浅色模式：46% 晶透乳白基底 + 35% 莫兰迪纯色注入，温润纯色混色微透卡片透出壁纸
       return Color.alphaBlend(
-        base.withValues(alpha: 0.28),
-        const Color(0xEEFFFFFF),
+        base.withValues(alpha: 0.35),
+        const Color(0x75FFFFFF),
       );
     }
   }

@@ -54,13 +54,18 @@ class _WindowsScheduleScreenState extends State<WindowsScheduleScreen> {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (context) => GlassSheet(
-        settings: LiquidGlassSettings(
-          glassColor: Colors.black.withValues(alpha: 0.4),
-          blur: 16,
-          thickness: 15,
-          edgeAbsorption: 0.0,
-        ),
+      barrierColor: Colors.black.withValues(alpha: 0.20),
+      builder: (context) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        return GlassSheet(
+          settings: LiquidGlassSettings(
+            glassColor: isDark
+                ? const Color(0x99181B24)
+                : Colors.white.withValues(alpha: 0.85),
+            blur: 16,
+            thickness: 15,
+            edgeAbsorption: 0.0,
+          ),
         child: SafeArea(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -127,7 +132,8 @@ class _WindowsScheduleScreenState extends State<WindowsScheduleScreen> {
             ],
           ),
         ),
-      ),
+      );
+      },
     );
   }
 
@@ -574,7 +580,7 @@ class _WindowsScheduleScreenState extends State<WindowsScheduleScreen> {
       padding: const EdgeInsets.only(bottom: 4),
       child: liquid.HyperOSCard(
         useBlur: false, // 视口级裁剪单层模糊，零掉帧
-        cornerRadius: 14,
+        cornerRadius: 18,
         padding: const EdgeInsets.all(10),
         color: cardBgColor,
         contentColor: titleColor,
@@ -679,44 +685,18 @@ class _WindowsScheduleScreenState extends State<WindowsScheduleScreen> {
                   ),
                 ],
                 trigger: Container(
-                  height: 17.0,
-                  width: 52.0,
+                  height: 22.0,
+                  width: 60.0,
                   margin: const EdgeInsets.only(top: 6, bottom: 3),
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color: (isDark ? Colors.white : Colors.black).withValues(alpha: isDark ? 0.16 : 0.09),
-                    borderRadius: BorderRadius.circular(8.5),
+                    color: (isDark ? Colors.white : Colors.black).withValues(alpha: isDark ? 0.20 : 0.11),
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        width: 4.0,
-                        height: 4.0,
-                        decoration: BoxDecoration(
-                          color: subTextColor.withValues(alpha: 0.85),
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 4.5),
-                      Container(
-                        width: 4.0,
-                        height: 4.0,
-                        decoration: BoxDecoration(
-                          color: subTextColor.withValues(alpha: 0.85),
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 4.5),
-                      Container(
-                        width: 4.0,
-                        height: 4.0,
-                        decoration: BoxDecoration(
-                          color: subTextColor.withValues(alpha: 0.85),
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                    ],
+                  child: Icon(
+                    CupertinoIcons.slider_horizontal_3,
+                    size: 15.0,
+                    color: subTextColor.withValues(alpha: 0.90),
                   ),
                 ),
               ),
@@ -735,12 +715,13 @@ class _WindowsScheduleScreenState extends State<WindowsScheduleScreen> {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withValues(alpha: 0.20),
       builder: (sheetContext) => GlassSheet(
         settings: LiquidGlassSettings(
           glassColor: isDark
-              ? Colors.black.withValues(alpha: 0.45)
-              : Colors.white.withValues(alpha: 0.20),
-          blur: 4.0,
+              ? const Color(0x99181B24)
+              : Colors.white.withValues(alpha: 0.85),
+          blur: 16.0,
           thickness: 20.0,
         ),
         child: SafeArea(

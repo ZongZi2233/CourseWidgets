@@ -83,7 +83,7 @@ class SmoothSlideTransitionsBuilder extends PageTransitionsBuilder {
           position: secondarySlide,
           child: ScaleTransition(
             scale: secondaryScale,
-            child: pageContent,
+            child: RepaintBoundary(child: pageContent),
           ),
         ),
       ),

@@ -355,10 +355,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
     return Stack(
       children: [
         Positioned.fill(
-          child: Padding(
-            padding: const EdgeInsets.only(top: 88),
-            child: child,
-          ),
+          child: child,
         ),
         Positioned(
           top: 0,
@@ -451,8 +448,9 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
       ),
       child: Consumer<ScheduleProvider>(
         builder: (context, provider, _) {
-          // [v2.9.5 星期栏抬高] 顶部安全留白提升至 top + 64，布局更紧凑，告别空旷
-          final topPadding = MediaQuery.of(context).padding.top + 64;
+          // [v2.9.7 星期栏抬高接近顶栏] 顶部安全留白调整至 top + 54，布局更紧致
+          final topPadding = MediaQuery.of(context).padding.top + 54;
+          final isDark = Theme.of(context).brightness == Brightness.dark;
 
           return Stack(
             children: [
@@ -478,9 +476,51 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                     isPhone: true,
                     contentPadding: EdgeInsets.only(
                       top: topPadding,
-                      bottom: 168, // 为底部靠右抬高的浮动胶囊 Dock 留出安全滚动距离
+                      bottom: 186, // [v2.9.7] 为进一步抬高的浮动胶囊 Dock 留出安全滚动距离
                       left: 2,
                       right: 2,
+                    ),
+                  ),
+                ),
+              ),
+
+              // [v2.9.7] 课表网格进入屏幕顶底边缘的渐进柔和渐变过渡带
+              Positioned(
+                top: topPadding + 54.0, // 紧跟星期栏下方
+                left: 0,
+                right: 0,
+                height: 18,
+                child: IgnorePointer(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          (isDark ? const Color(0x55101216) : Colors.white.withValues(alpha: 0.30)),
+                          Colors.transparent,
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                bottom: 64, // 导航栏上方
+                left: 0,
+                right: 0,
+                height: 56,
+                child: IgnorePointer(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.transparent,
+                          (isDark ? Colors.black.withValues(alpha: 0.28) : Colors.white.withValues(alpha: 0.25)),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -502,9 +542,9 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                 ),
               ),
 
-              // [v2.9.6] 底部悬浮横向胶囊控制 Dock：抬高至 bottom: 106，靠右对齐放置与底栏保持舒适距离
+              // [v2.9.7] 底部悬浮横向胶囊控制 Dock：抬高至 bottom: 120，靠右对齐放置与底栏保持舒适距离
               Positioned(
-                bottom: 106,
+                bottom: 120,
                 right: 16,
                 child: RepaintBoundary(
                   child: _buildFloatingBottomActionDock(provider),
@@ -1331,13 +1371,17 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
       await showModalBottomSheet(
         context: context,
         backgroundColor: Colors.transparent,
+        barrierColor: Colors.black.withValues(alpha: 0.20),
         isScrollControlled: true,
         builder: (ctx) {
+          final isDark = Theme.of(ctx).brightness == Brightness.dark;
           return GlassSheet(
             quality: GlassQuality.standard,
             settings: LiquidGlassSettings(
-              glassColor: Colors.black.withValues(alpha: 0.40),
-              blur: 3.0,
+              glassColor: isDark
+                  ? const Color(0x99181B24)
+                  : Colors.white.withValues(alpha: 0.85),
+              blur: 16.0,
               thickness: 18.0,
               refractiveIndex: 1.45,
               ambientRim: 0.0,

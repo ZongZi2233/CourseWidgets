@@ -72,9 +72,14 @@ class MainActivity : FlutterActivity() {
                         result.error("CANCEL_ERROR", e.message, null)
                     }
                 }
-                "canPostPromotedNotifications" -> {
-                    val canPost = checkCanPostPromotedNotifications()
-                    result.success(canPost)
+                "openIcsInCalendar" -> {
+                    val filePath = call.argument<String>("filePath")
+                    if (filePath != null) {
+                        val success = openIcsInCalendar(filePath)
+                        result.success(success)
+                    } else {
+                        result.error("INVALID_PATH", "filePath is null", null)
+                    }
                 }
                 else -> result.notImplemented()
             }
@@ -242,13 +247,9 @@ class MainActivity : FlutterActivity() {
         builder.setContentTitle(titleSpan)
         builder.setContentText(bodySpan)
         builder.setStyle(android.app.Notification.BigTextStyle().bigText(bodySpan))
-        builder.setSmallIcon(R.mipmap.ic_launcher)
-        try {
-            val appIconBitmap = android.graphics.BitmapFactory.decodeResource(resources, R.mipmap.ic_launcher)
-            if (appIconBitmap != null) {
-                builder.setLargeIcon(appIconBitmap)
-            }
-        } catch (_: Exception) {}
+        // [v2.9.7] 采用专用纯白单色镂空矢量图标作为 SmallIcon，彻底消灭强制着色引起的粉色中黑畸形图标
+        // 同时移除 LargeIcon，杜绝左右双重 Logo 混乱，让文本与进度条占据全宽
+        builder.setSmallIcon(R.drawable.ic_stat_course)
         builder.setOngoing(true)
         builder.setOnlyAlertOnce(true)
         builder.setAutoCancel(false)
@@ -318,6 +319,30 @@ class MainActivity : FlutterActivity() {
             method.invoke(notificationManager) as Boolean
         } catch (e: Throwable) {
             true // 默认开启或旧系统兼容
+        }
+    }
+
+    private fun openIcsInCalendar(filePath: String): Boolean {
+        return try {
+            val file = File(filePath)
+            if (!file.exists()) return false
+
+            val uri = androidx.core.content.FileProvider.getUriForFile(
+                this,
+                "${packageName}.fileprovider",
+                file
+            )
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "text/calendar")
+                flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            val chooser = Intent.createChooser(intent, "导入课程表到系统日程")
+            chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(chooser)
+            true
+        } catch (e: Exception) {
+            android.util.Log.e("CourseWidgets", "打开系统日历失败: ${e.message}", e)
+            false
         }
     }
 }

@@ -70,7 +70,9 @@ class _CourseEditScreenState extends State<CourseEditScreen> {
     return Scaffold(
       backgroundColor: Colors.transparent, // 必须透明
       resizeToAvoidBottomInset: true, // 允许自身表单根据输入法滚动避让
-      body: LiquidGlassLayer(
+      body: Stack(
+        children: [
+          LiquidGlassLayer(
         settings: LiquidGlassSettings(
           thickness: 0.8,
           blur: 12.0,
@@ -220,7 +222,11 @@ class _CourseEditScreenState extends State<CourseEditScreen> {
           ],
         ),
       ),
-    );
+      // [v2.9.7] 悬浮右下角返回按钮
+      const FloatingLiquidBackButton(),
+    ],
+  ),
+);
   }
 
   Widget _buildSectionTitle(String title, Color textColor) {

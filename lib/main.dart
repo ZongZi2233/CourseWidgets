@@ -265,7 +265,7 @@ class MyApp extends StatefulWidget {
   State<MyApp> createState() => _MyAppState();
 }
 
-class _MyAppState extends State<MyApp> {
+class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   final OnboardingService _onboardingService = OnboardingService();
   bool _showOnboarding = false;
   bool _isChecking = true;
@@ -273,7 +273,34 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _checkOnboarding();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangePlatformBrightness() {
+    super.didChangePlatformBrightness();
+    // [v2.9.7] 响应系统深浅色切换：无缝动态响应，无需冷重启
+    final storage = StorageService();
+    final adaptiveMode =
+        storage.getBool(StorageService.keyAdaptiveDarkMode) ?? false;
+    if (adaptiveMode) {
+      final brightness =
+          WidgetsBinding.instance.platformDispatcher.platformBrightness;
+      final isDark = brightness == Brightness.dark;
+      GlassOpacityManager().setDarkMode(isDark);
+      globalUseDarkMode = isDark;
+      globalDarkModeNotifier.value = isDark;
+      if (mounted) {
+        setState(() {});
+      }
+    }
   }
 
   Future<void> _checkOnboarding() async {
@@ -583,9 +610,26 @@ class _MyAppState extends State<MyApp> {
 
                 return coreStack;
               },
-              home: _showOnboarding
-                  ? OnboardingScreen(onComplete: _completeOnboarding)
-                  : _getHomeParams(),
+              home: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 600),
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                transitionBuilder: (child, animation) {
+                  return FadeTransition(
+                    opacity: animation,
+                    child: child,
+                  );
+                },
+                child: _showOnboarding
+                    ? OnboardingScreen(
+                        key: const ValueKey('onboarding_screen'),
+                        onComplete: _completeOnboarding,
+                      )
+                    : KeyedSubtree(
+                        key: const ValueKey('home_screen'),
+                        child: _getHomeParams(),
+                      ),
+              ),
               );
             },
           );

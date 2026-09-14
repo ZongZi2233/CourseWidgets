@@ -57,6 +57,17 @@
             android:foregroundServiceType="dataSync"
             android:exported="false"
             android:stopWithTask="true" />
+
+        <!-- [v2.9.7] FileProvider 用于向系统日历应用安全共享 ICS 课表文件 -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/provider_paths" />
+        </provider>
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

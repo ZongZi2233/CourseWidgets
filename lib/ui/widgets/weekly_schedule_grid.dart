@@ -108,12 +108,17 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
       await showModalBottomSheet(
         context: context,
         backgroundColor: Colors.transparent,
-        builder: (context) => GlassSheet(
-          settings: LiquidGlassSettings(
-            glassColor: Colors.black.withValues(alpha: 0.4),
-            blur: 2.0,
-            thickness: 18.0,
-          ),
+        barrierColor: Colors.black.withValues(alpha: 0.20),
+        builder: (sheetCtx) {
+          final sheetDark = Theme.of(sheetCtx).brightness == Brightness.dark;
+          return GlassSheet(
+            settings: LiquidGlassSettings(
+              glassColor: sheetDark
+                  ? const Color(0x99181B24)
+                  : Colors.white.withValues(alpha: 0.85),
+              blur: 16.0,
+              thickness: 18.0,
+            ),
           child: SafeArea(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -179,7 +184,8 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
               ],
             ),
           ),
-        ),
+        );
+        },
       );
     } finally {
       if (mounted) {
@@ -332,7 +338,7 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
     final config = provider.currentConfig;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final timeColWidth = widget.isPhone ? 32.0 : 38.0;
-    const headerHeight = 50.0;
+    const headerHeight = 54.0;
     final resolvedPadding = widget.contentPadding.resolve(Directionality.of(context));
     final topPadding = resolvedPadding.top;
 
@@ -490,7 +496,7 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
         now.day == dayDate.day;
 
     return Container(
-      height: 44,
+      height: 46,
       width: double.infinity,
       decoration: isToday
           ? BoxDecoration(
@@ -658,7 +664,7 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
     return RepaintBoundary(
       child: liquid.HyperOSCard(
         useBlur: false, // 视口级单层裁剪模糊共享，彻底根除 FBO 叠加导致的卡顿
-        cornerRadius: widget.isPhone ? 12 : 14,
+        cornerRadius: widget.isPhone ? 16 : 18,
         padding: EdgeInsets.all(widget.isPhone ? 6.0 : 8.0),
         color: cardBgColor,
         contentColor: titleColor,
@@ -768,44 +774,18 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
                   ),
                 ],
                 trigger: Container(
-                  height: widget.isPhone ? 15.0 : 17.0,
-                  width: widget.isPhone ? 46.0 : 52.0,
+                  height: widget.isPhone ? 20.0 : 22.0,
+                  width: widget.isPhone ? 54.0 : 60.0,
                   margin: const EdgeInsets.only(top: 6, bottom: 3),
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color: (isDark ? Colors.white : Colors.black).withValues(alpha: isDark ? 0.16 : 0.09),
-                    borderRadius: BorderRadius.circular(8),
+                    color: (isDark ? Colors.white : Colors.black).withValues(alpha: isDark ? 0.20 : 0.11),
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        width: widget.isPhone ? 3.8 : 4.0,
-                        height: widget.isPhone ? 3.8 : 4.0,
-                        decoration: BoxDecoration(
-                          color: subTextColor.withValues(alpha: 0.85),
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 4.0),
-                      Container(
-                        width: widget.isPhone ? 3.8 : 4.0,
-                        height: widget.isPhone ? 3.8 : 4.0,
-                        decoration: BoxDecoration(
-                          color: subTextColor.withValues(alpha: 0.85),
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 4.0),
-                      Container(
-                        width: widget.isPhone ? 3.8 : 4.0,
-                        height: widget.isPhone ? 3.8 : 4.0,
-                        decoration: BoxDecoration(
-                          color: subTextColor.withValues(alpha: 0.85),
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                    ],
+                  child: Icon(
+                    CupertinoIcons.slider_horizontal_3,
+                    size: widget.isPhone ? 13.5 : 15.0,
+                    color: subTextColor.withValues(alpha: 0.90),
                   ),
                 ),
               ),
@@ -827,13 +807,14 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
       await showModalBottomSheet(
         context: context,
         backgroundColor: Colors.transparent,
+        barrierColor: Colors.black.withValues(alpha: 0.20),
         useRootNavigator: true,
         builder: (sheetContext) => GlassSheet(
           settings: LiquidGlassSettings(
             glassColor: isDark
-                ? Colors.black.withValues(alpha: 0.45)
-                : Colors.white.withValues(alpha: 0.20),
-            blur: 4.0,
+                ? const Color(0x99181B24)
+                : Colors.white.withValues(alpha: 0.85),
+            blur: 16.0,
             thickness: 20.0,
           ),
           child: SafeArea(

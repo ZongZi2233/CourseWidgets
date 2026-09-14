@@ -388,25 +388,23 @@ class LiveNotificationServiceV2 {
         final totalMs = end.millisecondsSinceEpoch - start.millisecondsSinceEpoch;
         final elapsedMs = nowMs - start.millisecondsSinceEpoch;
         final remainingSec = ((end.millisecondsSinceEpoch - nowMs) / 1000).ceil();
-        final m = remainingSec ~/ 60;
-        final s = remainingSec % 60;
-        final countdownStr = '$m:${s.toString().padLeft(2, '0')}';
+        final startStr = '${start.hour}:${start.minute.toString().padLeft(2, '0')}';
+        final endStr = '${end.hour}:${end.minute.toString().padLeft(2, '0')}';
+        final durationMin = (totalMs / 60000).round();
 
         if (remainingSec > 0) {
           title = '<b><font color="#FF5252">● 正在上课</font></b> · <b>${_currentCourse!.name}</b>';
-          // [v2.9.3] 胶囊形态显示剩余分秒（例如 1:20），不再是生硬百分比
-          subLocation = '剩 $countdownStr';
+          final courseLoc = _currentCourse!.location.trim();
+          final hasLoc = courseLoc.isNotEmpty && !courseLoc.contains('未知');
+          // [v2.9.7] 胶囊副标题优先显示具体教室位置，倒计时由原生 Chronometer 实时秒级跳动
+          subLocation = hasLoc ? courseLoc.replaceAll('📍', '').trim() : '正在上课';
 
           if (totalMs > 0) {
             progressPercent = ((elapsedMs / totalMs) * 100).clamp(0, 100).toInt();
             showProgress = true;
           }
-          final loc = _currentCourse!.location.trim().isNotEmpty &&
-                  !_currentCourse!.location.contains('未知')
-              ? ' 📍 ${_currentCourse!.location}'
-              : '';
-          final progressBar = _renderTextProgressBar(progressPercent, countdownStr, prefix: '剩');
-          body = '<b>${_currentCourse!.name}</b>$loc\n$progressBar';
+          final loc = hasLoc ? ' 📍 $courseLoc' : '';
+          body = '<b>${_currentCourse!.name}</b>$loc\n🕒 $startStr - $endStr (共${durationMin}分钟)';
           eventTime = end;
           isCountingDown = true;
 
@@ -431,35 +429,28 @@ class LiveNotificationServiceV2 {
         // 即将上课
         final diffSec = ((start.millisecondsSinceEpoch - nowMs) / 1000).ceil();
         final m = diffSec ~/ 60;
-        final s = diffSec % 60;
-        final countdownStr = '$m:${s.toString().padLeft(2, '0')}';
         final startStr = '${start.hour}:${start.minute.toString().padLeft(2, '0')}';
+        final endStr = '${end.hour}:${end.minute.toString().padLeft(2, '0')}';
         final isToday = start.year == now.year && start.month == now.month && start.day == now.day;
+        final courseLoc = _currentCourse!.location.trim();
+        final hasLoc = courseLoc.isNotEmpty && !courseLoc.contains('未知');
+        final loc = hasLoc ? ' 📍 $courseLoc' : '';
 
         if (isToday) {
           if (m <= 45) {
-            // [v2.9.3] 课前胶囊形态显示剩余分秒（例如 12:45）
-            subLocation = '倒计时 $countdownStr';
+            // [v2.9.7] 课前胶囊显示教室位置或状态，原生 Chronometer 执行倒计时
+            subLocation = hasLoc ? courseLoc.replaceAll('📍', '').trim() : (m <= 10 ? '马上开始' : '即将上课');
             progressPercent = (((45 - m) / 45) * 100).clamp(0, 100).toInt();
             showProgress = true;
 
             final statusTag = m <= 10 ? '马上开始' : '即将上课';
             title = '<b><font color="#FFA000">⏳ $statusTag</font></b> · <b>${_currentCourse!.name}</b>';
-            final loc = _currentCourse!.location.trim().isNotEmpty &&
-                    !_currentCourse!.location.contains('未知')
-                ? ' 📍 ${_currentCourse!.location}'
-                : '';
-            final progressBar = _renderTextProgressBar(progressPercent, countdownStr, prefix: '距上课');
-            body = '<b>${_currentCourse!.name}</b>$loc · $startStr 开课\n$progressBar';
+            body = '<b>${_currentCourse!.name}</b>$loc · $startStr 开课\n🕒 $startStr - $endStr · 请提前入座准备';
           } else {
             // 课前45分钟以上
             title = '<b>下节课 ($startStr)</b> · <b>${_currentCourse!.name}</b>';
-            final loc = _currentCourse!.location.trim().isNotEmpty &&
-                    !_currentCourse!.location.contains('未知')
-                ? ' 📍 ${_currentCourse!.location}'
-                : '';
-            body = '<b>${_currentCourse!.name}</b>$loc';
-            subLocation = startStr;
+            body = '<b>${_currentCourse!.name}</b>$loc\n🕒 $startStr - $endStr';
+            subLocation = hasLoc ? courseLoc.replaceAll('📍', '').trim() : startStr;
             showProgress = false;
           }
         } else {
@@ -470,10 +461,6 @@ class LiveNotificationServiceV2 {
           final relDay = _formatRelativeDate(start, now);
           title = '<b>📅 $relDay</b> · <b>共$count节课</b>';
           subLocation = '$relDay$count节课';
-          final loc = _currentCourse!.location.trim().isNotEmpty &&
-                  !_currentCourse!.location.contains('未知')
-              ? ' 📍 ${_currentCourse!.location}'
-              : '';
           body = '首节 $startStr <b>${_currentCourse!.name}</b>$loc';
           showProgress = false;
         }
@@ -489,13 +476,12 @@ class LiveNotificationServiceV2 {
     AndroidNotificationDetails androidDetails;
 
     if (useLiveUpdate) {
-      // [v2.8.3] 符合 Android 16 ProgressStyle 规范的 Promoted Live Update 通知
+      // [v2.8.3/v2.9.7] 符合 Android 16 ProgressStyle 规范的 Promoted Live Update 通知
       androidDetails = AndroidNotificationDetails(
         _channelId,
         _channelName,
         channelDescription: _channelDesc,
-        icon: '@mipmap/ic_launcher',
-        largeIcon: const DrawableResourceAndroidBitmap('@mipmap/ic_launcher'),
+        icon: '@drawable/ic_stat_course',
         importance: Importance.max,
         priority: Priority.max,
         ongoing: true, // Live Updates 必须是 ongoing 常驻
@@ -542,6 +528,7 @@ class LiveNotificationServiceV2 {
         _channelId,
         _channelName,
         channelDescription: _channelDesc,
+        icon: '@drawable/ic_stat_course',
         importance: Importance.defaultImportance,
         priority: Priority.defaultPriority,
         ongoing: false,
@@ -627,15 +614,6 @@ class LiveNotificationServiceV2 {
         payload: _currentCourse != null ? 'course_${_currentCourse!.startTime}' : 'course_general',
       );
     }
-  }
-
-  /// [v2.9.3] 渲染紧凑高质感字符倒计时进度条（支持 1:20 剩余分秒）
-  String _renderTextProgressBar(int percent, String remainText, {String prefix = '剩'}) {
-    const totalBars = 10;
-    final filledCount = ((percent / 100) * totalBars).round().clamp(0, totalBars);
-    final emptyCount = totalBars - filledCount;
-    final bar = '█' * filledCount + '░' * emptyCount;
-    return '[$bar] $prefix $remainText';
   }
 
   /// 取消通知

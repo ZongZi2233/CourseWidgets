@@ -25,7 +25,9 @@ class SettingsDataScreen extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: AdaptiveLiquidGlassLayer(
+      body: Stack(
+        children: [
+          AdaptiveLiquidGlassLayer(
         quality: GlassQuality.premium,
         settings: const LiquidGlassSettings(
           blur: 3.0,
@@ -238,7 +240,11 @@ class SettingsDataScreen extends StatelessWidget {
           ],
         ),
       ),
-    );
+      // [v2.9.7] 悬浮右下角返回按钮
+      const liquid.FloatingLiquidBackButton(),
+    ],
+  ),
+);
   }
 
   // [v2.2.2] 历史记录对话框

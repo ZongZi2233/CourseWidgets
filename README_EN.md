@@ -9,7 +9,7 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Flutter](https://img.shields.io/badge/Flutter-3.44.0+-02569B?logo=flutter)](https://flutter.dev)
 [![Dart](https://img.shields.io/badge/Dart-3.12.0+-0175C2?logo=dart)](https://dart.dev)
-[![Version](https://img.shields.io/badge/Version-2.9.6-FF9BAE)](https://github.com/ZongZi2233AI/CourseWidgets/releases/)
+[![Version](https://img.shields.io/badge/Version-2.9.7-FF9BAE)](https://github.com/ZongZi2233AI/CourseWidgets/releases/)
 
 English | [简体中文](README.md)
 
@@ -17,18 +17,20 @@ English | [简体中文](README.md)
 
 > **Statement**: This project was developed entirely through human-AI collaborative Vibe Coding. Core architecture by [MiMo-V2-Flash](https://github.com/XiaomiMiMo/MiMo-V2-Flash) and Gemini 3.1 Pro, with Windows desktop integration engineered in collaboration with Claude Opus 4.6.
 
-### 📦 Latest Release: [v2.9.6 (Build 10008066)](https://github.com/ZongZi2233AI/CourseWidgets/releases)
-* **Android Standalone**: `CourseWidgets-v2.9.6-android-arm64-v8a.apk` — Built with R8 code shrinking and Dart AOT obfuscation.
-* **Windows Client**: `CourseWidgets-v2.9.6-windows-x64.zip` — Borderless acrylic desktop app with tray support and high-DPI scaling.
+### 📦 Latest Release: [v2.9.7 (Build 10008067)](https://github.com/ZongZi2233AI/CourseWidgets/releases)
+* **Android Standalone**: `CourseWidgets-v2.9.7-android-arm64-v8a.apk` — Built with R8 code shrinking and Dart AOT obfuscation.
+* **Windows Client**: `CourseWidgets-v2.9.7-windows-x64.zip` — Borderless acrylic desktop app with tray support and high-DPI scaling.
 
-#### 🆕 What's New in v2.9.6 (CHANGELOG)
-1. **Pure Solid Translucent Color Cards**: Completely removed internal top-black/bottom-white linear gradients and borders from `HyperOSCard` and eliminated the top `ShaderMask` on schedule grids. Restored 100% uniform translucent solid Morandi (day, 28% alpha) and Macaron (night, 32% alpha) color palettes.
-2. **Pure Location Typography**: Eliminated `'📍 '` emoji prefix before classroom location strings; rendered in crisp, clean typography.
-3. **Further Enlarged 3-Dots Action Pill**: Increased pill height to 15.0pt, width to 46.0pt, dot size to 3.8pt on mobile (17.0pt / 52.0pt / 4.0pt on desktop) with generous safe breathing padding.
-4. **Elevated Weekday Header & Right-Aligned Floating Dock**: Raised weekday row height to 50.0pt (desktop 48.0pt); lifted floating bottom week dock to `bottom: 106` and docked to the right (`right: 16`) for seamless one-handed thumb reachability.
-5. **Selection Menu Raster Freeze Optimization**: Froze background widgets into GPU raster cache (`ValueNotifier`, `TickerMode(enabled: false)`, `IgnorePointer`) upon opening modal sheets (`_showWeekPickerSheet`, `_showCourseDetail`), unlocking smoothly upon animation completion for fluid 120 FPS transitions.
-6. **Eliminated Black Strokes in Floating Switcher**: Replaced black semi-transparent borders with deepened element tones (`#CDD3DE`, `#E56A85`) for crisp, pure boundaries without dirtiness.
-7. **Cross-Platform Alignment**: Fully synchronized pure translucent cards, emoji removal, 17.0pt action pills, and 48.0pt frozen weekday header on Windows desktop.
+#### 🆕 What's New in v2.9.7 (CHANGELOG)
+1. **Android 16 Live Updates & Capsule Pure Refactor**: Eliminated duplicate/conflicting Dart-generated static countdown strings (`'剩 1:20'`); delegated second-by-second live countdown strictly to Android native `Chronometer`. Subtitles now display classroom locations or course states. Added dedicated pure-white 24x24dp monochrome vector icon `ic_stat_course.xml` to eliminate pink-black silhouette bugs. Removed redundant `largeIcon` to reclaim full width for content and native progress bars with explicit time intervals.
+2. **Sync Schedule to System Calendar (ICS)**: Added native system calendar synchronization in notification settings. Backed by Android `FileProvider` and `ACTION_VIEW` (`text/calendar`), users can export and sync the entire semester schedule directly into Xiaomi/Huawei/Google Calendar with automatic system alerts.
+3. **Ergonomic Bottom-Right Floating Back Button**: Integrated `FloatingLiquidBackButton` (`Positioned(bottom: 24, right: 20)`) across all secondary and tertiary screens (General Settings, Notifications, Data, About, Bell Schedule, Course Edit) for effortless one-handed thumb navigation.
+4. **Unified Settings Glass Header**: Removed legacy Material `AppBar` in `SettingsGeneralScreen` in favor of the signature translucent glass header, ensuring consistent cross-page aesthetics.
+5. **Course Card Options Pill with Slider Icon**: Expanded touch target dimensions to 20x54pt (22x60pt on desktop) and upgraded to the refined `CupertinoIcons.slider_horizontal_3` glyph.
+6. **Elevated Weekday Header & Higher Floating Dock**: Increased weekday header height to 54.0pt with grid offset `top + 54` for a snug top alignment. Elevated floating week dock to `bottom: 120` to avoid system navigation bars, supplemented by top/bottom progressive edge blur masks.
+7. **Sheet Backdrop Clarity & 120 FPS Transitions**: Reduced modal sheet barrier opacity from 54% to a delicate 20% so background schedule grids remain clearly visible. Transition containers wrapped with `RepaintBoundary`, and live dark/light mode switching hooked via `WidgetsBindingObserver` without restarting.
+8. **Seamless Onboarding Exit**: Removed `SystemNavigator.pop()` process termination; onboarded users transition smoothly via 600ms cubic ease-out fade directly into the home schedule.
+9. **Superellipse 28 & Enhanced Translucency**: `HyperOSCard` base corner radius elevated to 28.0; course card corners increased to 16.0 (mobile) / 18.0 (desktop). Boosted card translucency allows subtle background wallpaper textures to shine through gracefully.
 
 ---
 

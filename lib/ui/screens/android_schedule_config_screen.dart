@@ -342,7 +342,9 @@ class AndroidScheduleConfigScreenState
       },
       child: Scaffold(
         backgroundColor: Colors.transparent,
-        body: Column(
+        body: Stack(
+          children: [
+            Column(
           children: [
             // Custom Header - [v2.3.0] 根据 showNavigation 参数决定是否显示
             if (widget.showNavigation)
@@ -641,9 +643,13 @@ class AndroidScheduleConfigScreenState
             ),
           ],
         ),
-      ),
-    );
-  }
+        // [v2.9.7] 悬浮右下角返回按钮
+        if (widget.showNavigation) const liquid.FloatingLiquidBackButton(),
+      ],
+    ),
+  ),
+);
+}
 
   Widget _buildSectionRow(int index) {
     final isDark = Theme.of(context).brightness == Brightness.dark;

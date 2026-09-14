@@ -1,18 +1,18 @@
-# CourseWidgets v2.9.6 (Build 10008066) Release 产物发布归档
+# CourseWidgets v2.9.7 (Build 10008067) Release 产物发布归档
 
-> **生成时间**: 2026-09-10 12:24:13  
-> **版本号**: `2.9.6` (`10008066`)  
+> **生成时间**: 2026-09-14 22:43:26  
+> **版本号**: `2.9.7` (`10008067`)  
 
 ## 产物下载与校验列表
 
 | 平台 | 文件名 | 体积 | SHA256 校验和 |
 | :--- | :--- | :--- | :--- |
-| Android | `CourseWidgets-v2.9.6-android-arm64-v8a.apk` | 54.58 MB | `f53a1ed337464f27...fc0c005e` |
-| Windows | `CourseWidgets-v2.9.6-windows-x64.zip` | 53.88 MB | `3d3a80cc2e3a5d73...e5f74a48` |
+| Android | `CourseWidgets-v2.9.7-android-arm64-v8a.apk` | 54.58 MB | `dbf6d68967011933...0bbf0596` |
+| Windows | `CourseWidgets-v2.9.7-windows-x64.zip` | 53.88 MB | `be060e4277cd0560...fcb58bca` |
 
 ## 完整校验和 (SHA-256)
 
 ```text
-f53a1ed337464f2728605cf4c4ea5fcffb1fc15b93476fc9db93daa3fc0c005e  CourseWidgets-v2.9.6-android-arm64-v8a.apk
-3d3a80cc2e3a5d738b1195910dac9b6a31969e86102d058ab0ef6eb0e5f74a48  CourseWidgets-v2.9.6-windows-x64.zip
+dbf6d689670119331545e20799844906883363c9e94cfb7dcdc953b90bbf0596  CourseWidgets-v2.9.7-android-arm64-v8a.apk
+be060e4277cd0560c6913919cec1434b51079fe8d9d8822b4a097fa6fcb58bca  CourseWidgets-v2.9.7-windows-x64.zip
 ```
