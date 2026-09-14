@@ -457,23 +457,36 @@ class LiquidInput extends StatelessWidget {
 }
 
 class LiquidBackButton extends StatelessWidget {
-  const LiquidBackButton({super.key});
+  final VoidCallback? onTap;
+  const LiquidBackButton({super.key, this.onTap});
+
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () => Navigator.pop(context),
+      onTap: () {
+        HapticFeedback.lightImpact();
+        if (onTap != null) {
+          onTap!();
+        } else {
+          Navigator.maybePop(context);
+        }
+      },
       behavior: HitTestBehavior.opaque,
       child: LiquidStretch(
         stretch: 0.15,
         child: GlassContainer(
-          shape: LiquidRoundedSuperellipse(borderRadius: 22),
+          useOwnLayer: true,
+          quality: GlassQuality.premium,
+          shape: const LiquidRoundedSuperellipse(borderRadius: 22),
           settings: LiquidGlassSettings(
-            glassColor: Colors.white.withValues(alpha: 0.1),
+            glassColor: Colors.white.withValues(alpha: 0.12),
             blur: 2.0,
             thickness: 12.0,
             refractiveIndex: 1.25,
             lightIntensity: 0.65,
             ambientStrength: 0.15,
+            ambientRim: 0.0,
+            edgeAbsorption: 0.0,
           ),
           child: const SizedBox(
             width: 44,
@@ -488,80 +501,54 @@ class LiquidBackButton extends StatelessWidget {
   }
 }
 
-/// [v2.9.8] 悬浮在屏幕右下角的单手操作高质感微透返回胶囊（彻底消除锯齿与透空壁纸Bug）
+/// [v2.9.8] 悬浮在屏幕右下角的人体工学圆形液态玻璃返回按钮（原汁原味圆形液态玻璃质感，单手舒适操作）
 class FloatingLiquidBackButton extends StatelessWidget {
   final VoidCallback? onBack;
   const FloatingLiquidBackButton({super.key, this.onBack});
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textColor = isDark ? Colors.white : const Color(0xFF1E2128);
-    final themePrimary = theme.ThemeService().primaryColor;
-
-    // 优雅半透明丙烯酸底色，与当前主题色自然融合
-    final capsuleColor = isDark
-        ? Color.alphaBlend(themePrimary.withValues(alpha: 0.16), const Color(0xD9181C26))
-        : Color.alphaBlend(themePrimary.withValues(alpha: 0.10), const Color(0xEEF8FAFD));
-
     return Positioned(
       bottom: 24,
       right: 20,
       child: SafeArea(
         top: false,
         left: false,
-        child: MiuixPressable(
-          onPressed: onBack ?? () => Navigator.maybePop(context),
-          feedbackType: MiuixPressFeedbackType.sink,
-          sinkAmount: 0.94,
-          overlayColor: Colors.transparent,
-          borderRadius: BorderRadius.circular(22),
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(22),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.12),
-                  blurRadius: 16,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(22),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 16.0, sigmaY: 16.0),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: capsuleColor,
-                    borderRadius: BorderRadius.circular(22),
-                    border: Border.all(
-                      color: isDark
-                          ? Colors.white.withValues(alpha: 0.18)
-                          : Colors.white.withValues(alpha: 0.75),
-                      width: 0.8,
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        CupertinoIcons.chevron_back,
-                        size: 18,
-                        color: textColor,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        '返回',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          color: textColor,
-                          letterSpacing: 0.2,
-                        ),
-                      ),
-                    ],
+        child: GestureDetector(
+          onTap: () {
+            HapticFeedback.lightImpact();
+            if (onBack != null) {
+              onBack!();
+            } else {
+              Navigator.maybePop(context);
+            }
+          },
+          behavior: HitTestBehavior.opaque,
+          child: LiquidStretch(
+            stretch: 0.15,
+            child: GlassContainer(
+              useOwnLayer: true,
+              quality: GlassQuality.premium,
+              shape: const LiquidRoundedSuperellipse(borderRadius: 24),
+              settings: LiquidGlassSettings(
+                glassColor: Colors.white.withValues(alpha: 0.15),
+                blur: 3.0,
+                thickness: 16.0,
+                refractiveIndex: 1.35,
+                lightIntensity: 0.70,
+                ambientStrength: 0.30,
+                ambientRim: 0.0,
+                edgeAbsorption: 0.0,
+                fresnelStrength: 0.08,
+              ),
+              child: const SizedBox(
+                width: 48,
+                height: 48,
+                child: Center(
+                  child: Icon(
+                    CupertinoIcons.back,
+                    size: 24,
+                    color: Colors.white,
                   ),
                 ),
               ),
