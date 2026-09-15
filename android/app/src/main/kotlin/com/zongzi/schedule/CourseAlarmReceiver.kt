@@ -12,10 +12,12 @@ import java.util.Locale
 
 class CourseAlarmReceiver : BroadcastReceiver() {
     companion object {
-        const val ACTION_COURSE_WAKEUP = "com.zongzi.schedule.ACTION_COURSE_WAKEUP"
+        const val ACTION_SUFFIX = ".ACTION_COURSE_WAKEUP"
+        fun getAction(context: Context): String = "${context.packageName}$ACTION_SUFFIX"
     }
 
     override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action?.endsWith(ACTION_SUFFIX) != true) return
         Log.d("CourseWidgets", "🔔 CourseAlarmReceiver 收到课表定时唤醒广播: ${intent.action}")
 
         val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager

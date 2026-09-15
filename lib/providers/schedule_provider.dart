@@ -8,6 +8,7 @@ import '../services/database_helper.dart';
 import '../services/onboarding_service.dart'; // [v2.5.9] 引入重置引导服务
 import '../services/ics_parser.dart'; // [v2.8.9] 引入课时推导算法
 import '../services/live_notification_service_v2.dart'; // [v2.10.1] 作息配置联动刷新通知与胶囊
+import '../services/time_alignment_engine.dart';
 
 /// 课表状态管理器 - 基于SQLite数据库
 class ScheduleProvider with ChangeNotifier {
@@ -387,28 +388,35 @@ class ScheduleProvider with ChangeNotifier {
 
   /// 获取当前周次的所有课程
   List<CourseEvent> getCurrentWeekCourses() {
-    final weekCourses = _courses.where((course) {
-      final week = course.getWeekNumber(_currentConfig.semesterStartDate);
-      return week == _currentWeek;
-    }).toList();
+    final weekCourses = TimeAlignmentEngine.filterCoursesForWeek(
+      _courses,
+      _currentWeek,
+      _currentConfig.semesterStartDate,
+    );
     debugPrint('📚 第 $_currentWeek 周共有 ${weekCourses.length} 节课');
     return weekCourses;
   }
 
   /// 获取当前选中日期的课程
   List<CourseEvent> getCurrentDayCourses() {
-    final weekCourses = getCurrentWeekCourses();
-    final dayCourses = weekCourses
-        .where((course) => course.weekday == _currentDay)
-        .toList();
+    final dayCourses = TimeAlignmentEngine.filterCoursesForDay(
+      _courses,
+      _currentWeek,
+      _currentDay,
+      _currentConfig.semesterStartDate,
+    );
     debugPrint('📚 星期 $_currentDay 共有 ${dayCourses.length} 节课');
     return dayCourses;
   }
 
   /// 获取指定星期的课程（用于平板模式的周视图）
   List<CourseEvent> getCoursesForDay(int day) {
-    final weekCourses = getCurrentWeekCourses();
-    return weekCourses.where((course) => course.weekday == day).toList();
+    return TimeAlignmentEngine.filterCoursesForDay(
+      _courses,
+      _currentWeek,
+      day,
+      _currentConfig.semesterStartDate,
+    );
   }
 
   /// 获取下一个课程
@@ -418,60 +426,18 @@ class ScheduleProvider with ChangeNotifier {
 
   /// [v2.8.0] 获取当前正在进行或未来的下一节课程（全时段保活，支持跨天、跨周查找）
   CourseEvent? getCurrentOrNextCourse() {
-    if (_courses.isEmpty) return null;
-
-    final nowMs = DateTime.now().millisecondsSinceEpoch;
-
-    // 1. 优先查找当前正在进行中的课程
-    for (final course in _courses) {
-      if (course.startTime <= nowMs && course.endTime > nowMs) {
-        return course;
-      }
-    }
-
-    // 2. 查找未来即将开始的最早一门课程（包括今日后续、明天或下周课程）
-    CourseEvent? nextUpcoming;
-    for (final course in _courses) {
-      if (course.startTime > nowMs) {
-        if (nextUpcoming == null || course.startTime < nextUpcoming.startTime) {
-          nextUpcoming = course;
-        }
-      }
-    }
-
-    if (nextUpcoming != null) {
-      return nextUpcoming;
-    }
-
-    // 3. 如果所有课程都已结束，返回最后一门课程以保持状态胶囊
-    CourseEvent? lastCourse;
-    for (final course in _courses) {
-      if (lastCourse == null || course.endTime > lastCourse.endTime) {
-        lastCourse = course;
-      }
-    }
-    return lastCourse;
+    return TimeAlignmentEngine.findCurrentOrNextCourse(_courses);
   }
 
   /// [v2.8.0] 获取现有课表中最早课程所在的周一（用于智能检测是否对齐开学首周）
   DateTime? getEarliestCourseMonday() {
-    if (_courses.isEmpty) return null;
-    DateTime? earliest;
-    for (final c in _courses) {
-      final dt = DateTime.fromMillisecondsSinceEpoch(c.startTime);
-      if (earliest == null || dt.isBefore(earliest)) {
-        earliest = dt;
-      }
-    }
-    if (earliest == null) return null;
-    final dateOnly = DateTime(earliest.year, earliest.month, earliest.day);
-    return dateOnly.subtract(Duration(days: dateOnly.weekday - 1));
+    return TimeAlignmentEngine.getEarliestCourseMonday(_courses);
   }
 
   /// [v2.8.0] 智能课表平移：将整个课表基准平移至目标开学日期首周，并按当前课时重算
   Future<void> alignScheduleToStartDate(DateTime targetStartDate) async {
     if (_courses.isEmpty) return;
-    final earliestMonday = getEarliestCourseMonday();
+    final earliestMonday = TimeAlignmentEngine.getEarliestCourseMonday(_courses);
     if (earliestMonday == null) return;
 
     final targetMonday = DateTime(targetStartDate.year, targetStartDate.month, targetStartDate.day)
@@ -479,27 +445,9 @@ class ScheduleProvider with ChangeNotifier {
 
     final offsetDays = targetMonday.difference(earliestMonday).inDays;
     
-    // 如果存在整周偏移，进行全局平移
+    // 如果存在整周偏移，通过 TimeAlignmentEngine 进行全局平移
     if (offsetDays != 0) {
-      final newCourses = <CourseEvent>[];
-      for (final course in _courses) {
-        final originalStart = DateTime.fromMillisecondsSinceEpoch(course.startTime);
-        final originalEnd = DateTime.fromMillisecondsSinceEpoch(course.endTime);
-
-        final shiftedStart = originalStart.add(Duration(days: offsetDays));
-        final shiftedEnd = originalEnd.add(Duration(days: offsetDays));
-
-        newCourses.add(
-          CourseEvent(
-            id: course.id,
-            name: course.name,
-            location: course.location,
-            teacher: course.teacher,
-            startTime: shiftedStart.millisecondsSinceEpoch,
-            endTime: shiftedEnd.millisecondsSinceEpoch,
-          ),
-        );
-      }
+      final newCourses = TimeAlignmentEngine.alignCoursesToTargetStartDate(_courses, targetStartDate);
       _courses = newCourses;
       await DatabaseHelper.instance.insertCourses(newCourses);
       debugPrint('✅ 课表首周已从 ${earliestMonday.toString().substring(0, 10)} 平移 $offsetDays 天至 ${targetMonday.toString().substring(0, 10)}');

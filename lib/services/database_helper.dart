@@ -7,6 +7,7 @@ import '../models/course_event.dart';
 import 'html_to_ics_converter.dart';
 import 'storage_service.dart';
 import 'app_logger.dart';
+import 'migration_runner.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
@@ -60,39 +61,9 @@ class DatabaseHelper {
     return _database!;
   }
 
-  /// 确保所有必要的表都存在
+  /// 确保所有必要的表都存在并执行版本迁移
   Future<void> _ensureTablesExist(Database db) async {
-    // 检查 courses 表是否有 teacher 字段
-    try {
-      final result = await db.rawQuery('PRAGMA table_info(courses)');
-      final hasTeacherField = result.any(
-        (column) => column['name'] == 'teacher',
-      );
-
-      if (!hasTeacherField) {
-        // 添加 teacher 字段
-        await db.execute('ALTER TABLE courses ADD COLUMN teacher TEXT');
-        debugPrint('✅ 已添加 teacher 字段到 courses 表');
-      }
-    } catch (e) {
-      debugPrint('检查 teacher 字段失败: $e');
-    }
-
-    // 检查并创建历史记录表
-    final historyTableExists = await db.rawQuery(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name='schedule_history'",
-    );
-    if (historyTableExists.isEmpty) {
-      await _createScheduleHistoryTable(db);
-    }
-
-    // 检查并创建配置表
-    final configTableExists = await db.rawQuery(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name='schedule_config'",
-    );
-    if (configTableExists.isEmpty) {
-      await _createScheduleConfigTable(db);
-    }
+    await MigrationRunner.runMigrations(db);
   }
 
   Future<Database> _initDB(String filePath) async {
@@ -135,22 +106,7 @@ class DatabaseHelper {
   }
 
   Future _createDB(Database db, int version) async {
-    await db.execute('''
-    CREATE TABLE courses (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      location TEXT,
-      teacher TEXT,
-      startTime INTEGER NOT NULL,
-      endTime INTEGER NOT NULL
-    )
-    ''');
-
-    // 创建历史记录表
-    await _createScheduleHistoryTable(db);
-
-    // 创建配置表
-    await _createScheduleConfigTable(db);
+    await MigrationRunner.runMigrations(db);
   }
 
   /// 批量插入课程
@@ -285,35 +241,7 @@ class DatabaseHelper {
 
   // ==================== 课程表历史记录管理 ====================
 
-  /// 创建课程表历史记录表
-  Future<void> _createScheduleHistoryTable(Database db) async {
-    await db.execute('''
-    CREATE TABLE IF NOT EXISTS schedule_history (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      source_type TEXT NOT NULL, -- 'ics' 或 'html'
-      source_data TEXT, -- 原始数据（ICS内容或HTML JSON）
-      course_data TEXT NOT NULL, -- 课程数据（JSON格式）
-      created_at INTEGER NOT NULL,
-      is_active INTEGER DEFAULT 0,
-      semester TEXT, -- 学期信息
-      config_data TEXT -- 课时配置数据（JSON格式）
-    )
-    ''');
-  }
 
-  /// 创建课时配置表
-  Future<void> _createScheduleConfigTable(Database db) async {
-    await db.execute('''
-    CREATE TABLE IF NOT EXISTS schedule_config (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      config_data TEXT NOT NULL,
-      is_default INTEGER DEFAULT 0,
-      created_at INTEGER NOT NULL
-    )
-    ''');
-  }
 
   /// 保存新的课程表历史记录
   Future<int> saveScheduleHistory({

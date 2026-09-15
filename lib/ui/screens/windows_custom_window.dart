@@ -247,7 +247,7 @@ class _WindowsCustomWindowState extends State<WindowsCustomWindow>
             Icon(Icons.school, color: Theme.of(context).primaryColor, size: 15),
             const SizedBox(width: 8),
             const Text(
-              "CourseWidgets",
+              "CourseWidgets Beta",
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 13,
