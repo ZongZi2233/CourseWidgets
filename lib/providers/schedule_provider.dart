@@ -7,6 +7,7 @@ import '../models/schedule_config.dart';
 import '../services/database_helper.dart';
 import '../services/onboarding_service.dart'; // [v2.5.9] 引入重置引导服务
 import '../services/ics_parser.dart'; // [v2.8.9] 引入课时推导算法
+import '../services/live_notification_service_v2.dart'; // [v2.10.1] 作息配置联动刷新通知与胶囊
 
 /// 课表状态管理器 - 基于SQLite数据库
 class ScheduleProvider with ChangeNotifier {
@@ -590,18 +591,36 @@ class ScheduleProvider with ChangeNotifier {
 
     await _refreshAvailableWeeks();
 
+    // [v2.10.1] 每次配置变更落盘后，立即联动通知服务同步课表数据与时间戳，彻底消除作息脱节
+    final nextCourse = getCurrentOrNextCourse();
+    LiveNotificationServiceV2().updateCourses(_courses, nextCourse: nextCourse);
+
     notifyListeners();
     debugPrint(
       '✅ 配置已保存: showWeekends=${newConfig.showWeekends}, start=${newConfig.semesterStartDate}',
     );
   }
 
-  /// 检测课时时间是否发生变化
+  /// [v2.10.1] 主动按指定或当前课时配置全量重新计算所有课程时间戳，并同步通知服务与课表视图
+  Future<void> recalculateAllCourseTimes([ScheduleConfigModel? targetConfig]) async {
+    final config = targetConfig ?? _currentConfig;
+    if (_courses.isNotEmpty) {
+      await _recalculateAllTimestamps(_currentConfig, config);
+      await _jumpToCurrentDate();
+      await _refreshAvailableWeeks();
+      final nextCourse = getCurrentOrNextCourse();
+      LiveNotificationServiceV2().updateCourses(_courses, nextCourse: nextCourse);
+      notifyListeners();
+      debugPrint('✅ 已主动触发全量课程时间戳与作息配置严格对齐');
+    }
+  }
+
+  /// 检测课时时间是否发生变化 (覆盖全部 1~13 节)
   bool _sectionTimesChanged(
     ScheduleConfigModel oldConfig,
     ScheduleConfigModel newConfig,
   ) {
-    for (int i = 1; i <= 12; i++) {
+    for (int i = 1; i <= 13; i++) {
       if ((oldConfig.sectionStartTimes[i] ?? 0) !=
           (newConfig.sectionStartTimes[i] ?? 0)) {
         return true;
@@ -614,8 +633,8 @@ class ScheduleProvider with ChangeNotifier {
     return false;
   }
 
-  /// [v2.9.0 彻底修复] 重新计算所有课程的绝对时间戳
-  /// 采用严格的节次时段边界锁定法，按时长精确推导节数跨度，并严禁跨越午休与晚餐
+  /// [v2.10.1 彻底修复] 重新计算所有课程的绝对时间戳
+  /// 动态基于原有课时配置匹配真实节次，按时长精准推导节数跨度，并严禁跨越午休与晚餐
   Future<void> _recalculateAllTimestamps(
     ScheduleConfigModel oldConfig,
     ScheduleConfigModel newConfig,
@@ -626,10 +645,11 @@ class ScheduleProvider with ChangeNotifier {
     for (final course in _courses) {
       final startDt = DateTime.fromMillisecondsSinceEpoch(course.startTime);
 
-      // 反推 week 和 dayOfWeek (按年月日纯日期计算，防时差与夏令时)
+      // 反推 week 和 dayOfWeek (按年月日纯日期计算，防时差与夏令时，严格以周一为锚点)
       final startDayOnly = DateTime(startDt.year, startDt.month, startDt.day);
       final oldStartDayOnly = DateTime(oldStartDate.year, oldStartDate.month, oldStartDate.day);
-      final daysSinceStart = startDayOnly.difference(oldStartDayOnly).inDays;
+      final oldStartMonday = oldStartDayOnly.subtract(Duration(days: oldStartDayOnly.weekday - 1));
+      final daysSinceStart = startDayOnly.difference(oldStartMonday).inDays;
       final week = (daysSinceStart >= 0) ? ((daysSinceStart ~/ 7) + 1) : 1;
       final dayOfWeek = startDt.weekday; // 1=Monday..7=Sunday
 
@@ -654,35 +674,56 @@ class ScheduleProvider with ChangeNotifier {
         spanSections = 4;
       }
 
-      // 2. 根据起课时间所属的时段，结合大学标准作息区间锁定起始节次
-      // 08:30 锚定第 1 节（绝不吸附至第 2 节 08:50/09:20）
-      // 10:30 锚定第 3 节（绝不吸附至第 4 节 10:40/11:10）
-      // 13:40 锚定第 5 节
-      // 15:40 锚定第 7 节
-      // 18:30 锚定第 9 节
-      int startSection;
-      if (timeMinutes < 9 * 60 + 15) {
-        startSection = 1; // 上午第 1 节 (08:00~09:15)
-      } else if (timeMinutes < 10 * 60) {
-        startSection = 2; // 上午第 2 节 (09:15~10:00)
-      } else if (timeMinutes < 11 * 60 + 30) {
-        startSection = 3; // 上午第 3 节 (10:00~11:30)
-      } else if (timeMinutes < 12 * 60 + 30) {
-        startSection = 4; // 上午第 4 节 (11:30~12:30)
-      } else if (timeMinutes < 14 * 60 + 20) {
-        startSection = 5; // 下午第 5 节 (13:00~14:20)
-      } else if (timeMinutes < 15 * 60) {
-        startSection = 6; // 下午第 6 节 (14:20~15:00)
-      } else if (timeMinutes < 16 * 60 + 20) {
-        startSection = 7; // 下午第 7 节 (15:00~16:20)
-      } else if (timeMinutes < 17 * 60 + 30) {
-        startSection = 8; // 下午第 8 节 (16:20~17:30)
-      } else if (timeMinutes < 19 * 60 + 20) {
-        startSection = 9; // 晚间第 9 节 (18:00~19:20)
-      } else if (timeMinutes < 20 * 60) {
-        startSection = 10; // 晚间第 10 节 (19:20~20:00)
+      // 2. [v2.10.1 核心自适应节次匹配] 依据旧配置作息表匹配最接近的起始节次，绝不死板硬编码
+      int minSec = 1;
+      int maxSec = 13;
+      if (timeMinutes < 12 * 60 + 30) {
+        minSec = 1;
+        maxSec = 4;
+      } else if (timeMinutes < 17 * 60 + 45) {
+        minSec = 5;
+        maxSec = 8;
       } else {
-        startSection = 11; // 晚间第 11 节
+        minSec = 9;
+        maxSec = 13;
+      }
+
+      int startSection = minSec;
+      int minDiff = 100000;
+      for (var entry in oldConfig.sectionStartTimes.entries) {
+        if (entry.key < minSec || entry.key > maxSec) continue;
+        final diff = (entry.value - timeMinutes).abs();
+        if (diff < minDiff) {
+          minDiff = diff;
+          startSection = entry.key;
+        }
+      }
+
+      // 容错兜底：若旧配置与当前时间偏差过大（例如首次导入无旧配置），使用时段标准吸附
+      if (minDiff > 90) {
+        if (timeMinutes < 9 * 60 + 15) {
+          startSection = 1; // 上午第 1 节 (08:00~09:15)
+        } else if (timeMinutes < 10 * 60) {
+          startSection = 2; // 上午第 2 节 (09:15~10:00)
+        } else if (timeMinutes < 11 * 60 + 30) {
+          startSection = 3; // 上午第 3 节 (10:00~11:30)
+        } else if (timeMinutes < 12 * 60 + 30) {
+          startSection = 4; // 上午第 4 节 (11:30~12:30)
+        } else if (timeMinutes < 14 * 60 + 20) {
+          startSection = 5; // 下午第 5 节 (13:00~14:20)
+        } else if (timeMinutes < 15 * 60) {
+          startSection = 6; // 下午第 6 节 (14:20~15:00)
+        } else if (timeMinutes < 16 * 60 + 20) {
+          startSection = 7; // 下午第 7 节 (15:00~16:20)
+        } else if (timeMinutes < 17 * 60 + 30) {
+          startSection = 8; // 下午第 8 节 (16:20~17:30)
+        } else if (timeMinutes < 19 * 60 + 20) {
+          startSection = 9; // 晚间第 9 节 (18:00~19:20)
+        } else if (timeMinutes < 20 * 60) {
+          startSection = 10; // 晚间第 10 节 (19:20~20:00)
+        } else {
+          startSection = 11; // 晚间第 11 节
+        }
       }
 
       // 3. 【核心保护】绝对禁止单门课程跨越午休与晚餐！
@@ -724,6 +765,10 @@ class ScheduleProvider with ChangeNotifier {
     _courses = newCourses;
     await DatabaseHelper.instance.insertCourses(newCourses);
     debugPrint('✅ 已重新计算 ${newCourses.length} 个课程的时间戳，杜绝午休穿透与跨时段重叠');
+
+    // [v2.10.1] 立即同步通知服务中的课程时间，确保 Live Update 胶囊与通知时间与作息配置 100% 对齐
+    final nextCourse = getCurrentOrNextCourse();
+    LiveNotificationServiceV2().updateCourses(_courses, nextCourse: nextCourse);
   }
 
   /// 使用默认配置

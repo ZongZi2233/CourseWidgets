@@ -124,7 +124,10 @@ class ScheduleConfigModel {
   // 获取某节课的具体开始时间
   DateTime getStartTime(int week, int dayOfWeek, int section) {
     final startDate = semesterStartDate;
-    final targetDate = startDate.add(
+    // 严格锚定开学首周周一，杜绝因开学日非周一导致的星期与日期偏离
+    final startMonday = DateTime(startDate.year, startDate.month, startDate.day)
+        .subtract(Duration(days: startDate.weekday - 1));
+    final targetDate = startMonday.add(
       Duration(days: (week - 1) * 7 + (dayOfWeek - 1)),
     );
 

@@ -51,12 +51,32 @@
             android:name="flutterEmbedding"
             android:value="2" />
         
-        <!-- [v2.2.9] 前台服务 - 用于 Live Update 后台保活 -->
+        <!-- [v2.2.9/v2.10.1] 前台服务 - 用于 Live Update 后台保活 (stopWithTask=false 保证任务卡片划掉后不被操作系统强制终止) -->
         <service
             android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
             android:foregroundServiceType="dataSync"
             android:exported="false"
-            android:stopWithTask="true" />
+            android:stopWithTask="false" />
+
+        <!-- [v2.10.1] 课表精确闹钟广播接收器：基于 AlarmManager 根据课表准时唤醒并更新通知 -->
+        <receiver
+            android:name=".CourseAlarmReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.zongzi.schedule.ACTION_COURSE_WAKEUP" />
+            </intent-filter>
+        </receiver>
+
+        <!-- [v2.10.1] 开机自启动与应用更新接收器：恢复课表监控与定时唤醒任务 -->
+        <receiver
+            android:name=".BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+            </intent-filter>
+        </receiver>
 
         <!-- [v2.9.7] FileProvider 用于向系统日历应用安全共享 ICS 课表文件 -->
         <provider

@@ -260,13 +260,16 @@ class AndroidScheduleConfigScreenState
       // 1. 保存配置并重算节次时间
       await provider.updateConfig(savedConfig);
 
-      // 2. 若课表首周与设置的目标开学日不同步，执行首周课表平移对齐
+      // 2. [v2.10.1] 显式确保所有已存在课程时间戳按照新配置全量重算并对齐
+      await provider.recalculateAllCourseTimes(savedConfig);
+
+      // 3. 若课表首周与设置的目标开学日不同步，执行首周课表平移对齐
       if (earliestMonday != null && earliestMonday != targetMonday) {
         await provider.alignScheduleToStartDate(targetMonday);
       }
 
       if (mounted) {
-        liquid.showLiquidToast(context, '配置已保存并智能重算课表');
+        liquid.showLiquidToast(context, '配置已保存并智能重算对齐全部课表');
         Navigator.pop(context);
       }
     } catch (e) {
@@ -307,7 +310,9 @@ class AndroidScheduleConfigScreenState
       );
 
       if (mounted) {
-        context.read<ScheduleProvider>().updateConfig(savedConfig);
+        final provider = context.read<ScheduleProvider>();
+        provider.updateConfig(savedConfig);
+        provider.recalculateAllCourseTimes(savedConfig);
       }
     } catch (e) {
       debugPrint('静默保存配置失败: $e');
@@ -581,10 +586,22 @@ class AndroidScheduleConfigScreenState
                                 color: textColor,
                               ),
                             ),
-                            liquid.LiquidButton(
-                              text: '✨ 智慧推算',
-                              color: const Color(0xFF4FACFE),
-                              onTap: _smartCascadeSectionTimes,
+                            Row(
+                              children: [
+                                liquid.LiquidButton(
+                                  text: '🔄 对齐课表',
+                                  color: const Color(0xFF00C9FF),
+                                  onTap: () async {
+                                    await _saveConfig();
+                                  },
+                                ),
+                                const SizedBox(width: 8),
+                                liquid.LiquidButton(
+                                  text: '✨ 智慧推算',
+                                  color: const Color(0xFF4FACFE),
+                                  onTap: _smartCascadeSectionTimes,
+                                ),
+                              ],
                             ),
                           ],
                         ),

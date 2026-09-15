@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -397,8 +398,10 @@ class LiveNotificationServiceV2 {
           title = '<b><font color="#FF5252">正在上课</font></b> · <b>${_currentCourse!.name}</b>';
           final courseLoc = _currentCourse!.location.trim();
           final hasLoc = courseLoc.isNotEmpty && !courseLoc.contains('未知');
-          // [v2.10.0] 关键修复：倒计时期间严禁将 subLocation 设为教室名，避免系统胶囊/状态栏药丸显示教室名字而非倒计时秒
-          subLocation = null;
+          // [v2.10.1] 关键修复：上课倒计时期间，subLocation 设为实时倒计时剩余文本（如'剩35分钟'），
+          // 彻底解决之前设为 null 导致系统药丸胶囊完全空白无内容的问题，同时也杜绝使用教室名字覆盖倒计时！
+          final remainingMin = (remainingSec / 60).ceil();
+          subLocation = remainingMin > 0 ? '剩$remainingMin分钟' : '即将下课';
 
           if (totalMs > 0) {
             progressPercent = ((elapsedMs / totalMs) * 100).clamp(0, 100).toInt();
@@ -440,8 +443,8 @@ class LiveNotificationServiceV2 {
 
         if (isToday) {
           if (m <= 45) {
-            // [v2.10.0] 关键修复：倒计时期间 subLocation 设为 null，启动原生硬件级 Chronometer 秒级实时倒计时
-            subLocation = null;
+            // [v2.10.1] 关键修复：课前倒计时期间，subLocation 设为 '$m分钟后上课'
+            subLocation = m > 0 ? '$m分钟后上课' : '马上开始';
             progressPercent = (((45 - m) / 45) * 100).clamp(0, 100).toInt();
             showProgress = true;
             eventTime = start;
@@ -469,10 +472,9 @@ class LiveNotificationServiceV2 {
           subLocation = '$relDay$count节课';
           body = '首节 $startStr <b>${_currentCourse!.name}</b>$loc';
           showProgress = false;
+          eventTime = null;
+          isCountingDown = false;
         }
-
-        eventTime = start;
-        isCountingDown = true;
       }
     }
 
@@ -593,6 +595,42 @@ class LiveNotificationServiceV2 {
       bool nativeSucceeded = false;
       try {
         const MethodChannel liveChannel = MethodChannel('com.zongzi.schedule/live_update');
+
+        // [v2.10.1] 计算下一次精准唤醒时间戳与待消费课程数据供 Native AlarmManager / BroadcastReceiver 唤醒与展示
+        int? nextWakeupMs;
+        final futureCourses = _allCourses.where((c) => c.endTime > nowMs).toList()
+          ..sort((a, b) => a.startTime.compareTo(b.startTime));
+
+        for (final c in futureCourses) {
+          if (c.startTime <= nowMs && c.endTime > nowMs) {
+            if (nextWakeupMs == null || c.endTime < nextWakeupMs) {
+              nextWakeupMs = c.endTime;
+            }
+          } else if (c.startTime > nowMs) {
+            final tenMinBefore = c.startTime - 10 * 60 * 1000;
+            if (tenMinBefore > nowMs) {
+              if (nextWakeupMs == null || tenMinBefore < nextWakeupMs) {
+                nextWakeupMs = tenMinBefore;
+              }
+            } else {
+              if (nextWakeupMs == null || c.startTime < nextWakeupMs) {
+                nextWakeupMs = c.startTime;
+              }
+            }
+          }
+        }
+
+        String? upcomingCoursesJson;
+        if (futureCourses.isNotEmpty) {
+          final listToSave = futureCourses.take(30).map((c) => {
+            'name': c.name,
+            'location': c.location,
+            'startTime': c.startTime,
+            'endTime': c.endTime,
+          }).toList();
+          upcomingCoursesJson = jsonEncode(listToSave);
+        }
+
         await liveChannel.invokeMethod('postPromotedLiveUpdate', {
           'id': _liveNotificationId,
           'title': title,
@@ -604,6 +642,8 @@ class LiveNotificationServiceV2 {
           'isCountingDown': isCountingDown,
           'whenTime': eventTime?.millisecondsSinceEpoch,
           'usesChronometer': eventTime != null,
+          'upcomingCoursesJson': upcomingCoursesJson,
+          'nextWakeupMs': nextWakeupMs,
         });
         nativeSucceeded = true;
       } catch (e) {

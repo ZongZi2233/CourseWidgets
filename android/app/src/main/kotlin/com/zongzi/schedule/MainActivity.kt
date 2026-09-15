@@ -44,8 +44,21 @@ class MainActivity : FlutterActivity() {
                     val whenTime = call.argument<Long>("whenTime")
                     val usesChronometer = call.argument<Boolean>("usesChronometer") ?: false
 
+                    val upcomingCoursesJson = call.argument<String>("upcomingCoursesJson")
+                    if (upcomingCoursesJson != null && upcomingCoursesJson.isNotEmpty()) {
+                        getSharedPreferences(LiveUpdateNotificationManager.PREFS_NAME, android.content.Context.MODE_PRIVATE)
+                            .edit()
+                            .putString(LiveUpdateNotificationManager.KEY_UPCOMING_COURSES, upcomingCoursesJson)
+                            .apply()
+                    }
+                    val nextWakeupMs = call.argument<Long>("nextWakeupMs")
+                    if (nextWakeupMs != null && nextWakeupMs > System.currentTimeMillis()) {
+                        LiveUpdateNotificationManager.scheduleNextAlarm(this, nextWakeupMs)
+                    }
+
                     try {
-                        postPromotedLiveUpdate(
+                        LiveUpdateNotificationManager.postNotification(
+                            context = this,
                             id = id,
                             title = title,
                             body = body,
@@ -62,11 +75,19 @@ class MainActivity : FlutterActivity() {
                         result.error("LIVE_UPDATE_ERROR", e.message, null)
                     }
                 }
+                "scheduleNextAlarm" -> {
+                    val triggerAtMs = call.argument<Long>("triggerAtMs") ?: 0L
+                    if (triggerAtMs > System.currentTimeMillis()) {
+                        LiveUpdateNotificationManager.scheduleNextAlarm(this, triggerAtMs)
+                    }
+                    result.success(true)
+                }
                 "cancelLiveUpdate" -> {
                     val id = call.argument<Int>("id") ?: 1000
                     try {
                         val notificationManager = getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
                         notificationManager.cancel(id)
+                        LiveUpdateNotificationManager.cancelAlarm(this)
                         result.success(true)
                     } catch (e: Exception) {
                         result.error("CANCEL_ERROR", e.message, null)
@@ -206,120 +227,19 @@ class MainActivity : FlutterActivity() {
         whenTime: Long?,
         usesChronometer: Boolean
     ) {
-        val channelId = "live_course_updates_v3"
-        val notificationManager = getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = android.app.NotificationChannel(
-                channelId,
-                "课程实时提醒",
-                android.app.NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = "Android 16 Live Updates 课程倒计时"
-                setShowBadge(true)
-                enableLights(true)
-                lightColor = 0xFFFF9A9E.toInt()
-                enableVibration(false)
-                setSound(null, null)
-            }
-            notificationManager.createNotificationChannel(channel)
-        }
-
-        val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            android.app.Notification.Builder(this, channelId)
-        } else {
-            android.app.Notification.Builder(this)
-        }
-
-        val titleSpan = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            android.text.Html.fromHtml(title, android.text.Html.FROM_HTML_MODE_LEGACY)
-        } else {
-            @Suppress("DEPRECATION")
-            android.text.Html.fromHtml(title)
-        }
-        val bodySpan = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            android.text.Html.fromHtml(body.replace("\n", "<br/>"), android.text.Html.FROM_HTML_MODE_LEGACY)
-        } else {
-            @Suppress("DEPRECATION")
-            android.text.Html.fromHtml(body.replace("\n", "<br/>"))
-        }
-
-        builder.setContentTitle(titleSpan)
-        builder.setContentText(bodySpan)
-        builder.setStyle(android.app.Notification.BigTextStyle().bigText(bodySpan))
-        // [v2.9.9] 严格采用应用专属新 Logo (R.mipmap.ic_launcher) 作为胶囊与通知图标
-        // 彻底移除强制粉色 setColor，消除"粉色底+Emoji"问题，展现纯正高清官方新 Logo
-        builder.setSmallIcon(R.mipmap.ic_launcher)
-        try {
-            val appIconBitmap = android.graphics.BitmapFactory.decodeResource(resources, R.mipmap.ic_launcher)
-            if (appIconBitmap != null) {
-                builder.setLargeIcon(appIconBitmap)
-            }
-        } catch (_: Exception) {}
-        builder.setOngoing(true)
-        builder.setOnlyAlertOnce(true)
-        builder.setAutoCancel(false)
-        builder.setCategory(android.app.Notification.CATEGORY_PROGRESS)
-
-        val hasActiveChronometer = (whenTime != null && whenTime > 0 && usesChronometer)
-
-        // [v2.10.0] 当处于实时倒计时状态时，严禁设置 subText / ticker！
-        // 因为 Android 16 Live Updates 与各大厂商系统（HyperOS / OriginOS / ColorOS）的状态栏胶囊
-        // 一旦检测到 subText 会强行用静态文字覆盖倒计时秒表。只有不设置 subText 时，胶囊才会以高优先级显示秒级 Chronometer！
-        if (!hasActiveChronometer && subLocation != null && subLocation.isNotEmpty()) {
-            builder.setSubText(subLocation)
-            builder.setTicker(subLocation)
-        }
-
-        if (showProgress) {
-            builder.setProgress(maxProgress, progress, false)
-        } else {
-            builder.setProgress(0, 0, false)
-        }
-
-        if (whenTime != null && whenTime > 0) {
-            builder.setWhen(whenTime)
-            builder.setShowWhen(true)
-            if (usesChronometer) {
-                builder.setUsesChronometer(true)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                    builder.setChronometerCountDown(isCountingDown)
-                }
-            }
-        }
-
-        // Android 16 Live Update (Promoted Ongoing) 专属标志与 Extra 注入
-        val extras = android.os.Bundle()
-        extras.putBoolean("android.requestPromotedOngoing", true)
-        builder.addExtras(extras)
-
-        // API 36+ 规范方法反射调用
-        try {
-            val method = builder.javaClass.getMethod("setRequestPromotedOngoing", Boolean::class.javaPrimitiveType)
-            method.invoke(builder, true)
-        } catch (ignored: Throwable) {}
-
-        // 点击意图返回应用
-        val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
-        if (launchIntent != null) {
-            val pendingIntent = android.app.PendingIntent.getActivity(
-                this,
-                0,
-                launchIntent,
-                android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
-            )
-            builder.setContentIntent(pendingIntent)
-        }
-
-        val notification = builder.build()
-        notification.flags = notification.flags or android.app.Notification.FLAG_ONGOING_EVENT
-
-        try {
-            val field = android.app.Notification::class.java.getField("FLAG_PROMOTED_ONGOING")
-            notification.flags = notification.flags or field.getInt(null)
-        } catch (ignored: Throwable) {}
-
-        notificationManager.notify(id, notification)
+        LiveUpdateNotificationManager.postNotification(
+            context = this,
+            id = id,
+            title = title,
+            body = body,
+            subLocation = subLocation,
+            progress = progress,
+            maxProgress = maxProgress,
+            showProgress = showProgress,
+            isCountingDown = isCountingDown,
+            whenTime = whenTime,
+            usesChronometer = usesChronometer
+        )
     }
 
     private fun checkCanPostPromotedNotifications(): Boolean {
