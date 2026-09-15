@@ -22,6 +22,7 @@ import '../transitions/smooth_slide_transitions.dart';
 import '../widgets/glass_context_menu.dart';
 import '../widgets/tablet_sidebar.dart';
 import '../widgets/weekly_schedule_grid.dart';
+import '../widgets/immersive_status_bar_backdrop.dart';
 class AndroidLiquidGlassMain extends StatefulWidget {
   const AndroidLiquidGlassMain({super.key});
   @override
@@ -223,32 +224,38 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
       resizeToAvoidBottomInset: false, // [v2.8.6] 软键盘弹出时防止底层背景被压缩或上移漂移
       backgroundColor: Colors.transparent,
       extendBody: true,
-      body: RepaintBoundary(
-        key: TransparentMaterialPageRoute.contentBoundaryKey,
-        child: PageView(
-          controller: _pageController,
-          physics: const NeverScrollableScrollPhysics(),
-          children: [
-            TickerMode(
-              enabled: _currentIndex == 0,
-              child: RepaintBoundary(
-                child: _buildSchedulePage(),
-              ),
+      body: Stack(
+        children: [
+          RepaintBoundary(
+            key: TransparentMaterialPageRoute.contentBoundaryKey,
+            child: PageView(
+              controller: _pageController,
+              physics: const NeverScrollableScrollPhysics(),
+              children: [
+                TickerMode(
+                  enabled: _currentIndex == 0,
+                  child: RepaintBoundary(
+                    child: _buildSchedulePage(),
+                  ),
+                ),
+                TickerMode(
+                  enabled: _currentIndex == 1,
+                  child: const RepaintBoundary(
+                    child: CalendarViewScreen(),
+                  ),
+                ),
+                TickerMode(
+                  enabled: _currentIndex == 2,
+                  child: RepaintBoundary(
+                    child: _buildPageWithHeader(2, const SettingsMainScreen(), '设置'),
+                  ),
+                ),
+              ],
             ),
-            TickerMode(
-              enabled: _currentIndex == 1,
-              child: const RepaintBoundary(
-                child: CalendarViewScreen(),
-              ),
-            ),
-            TickerMode(
-              enabled: _currentIndex == 2,
-              child: RepaintBoundary(
-                child: _buildPageWithHeader(2, const SettingsMainScreen(), '设置'),
-              ),
-            ),
-          ],
-        ),
+          ),
+          // [v3.0.0] 物理状态栏 (0..48dp) 顶级沉浸式微模糊避让
+          const ImmersiveStatusBarBackdrop(),
+        ],
       ),
       // 官方原生旗舰 GlassTabBar.bottom 专用导航栏
       bottomNavigationBar: SafeArea(
@@ -485,27 +492,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                 ),
               ),
 
-              // [v2.9.7] 课表网格进入屏幕顶底边缘的渐进柔和渐变过渡带
-              Positioned(
-                top: topPadding + 54.0, // 紧跟星期栏下方
-                left: 0,
-                right: 0,
-                height: 18,
-                child: IgnorePointer(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          (isDark ? const Color(0x55101216) : Colors.white.withValues(alpha: 0.30)),
-                          Colors.transparent,
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
+              // [v3.0.0] 顶部状态栏避让已整体移至屏幕物理最顶层 0..48dp (ImmersiveStatusBarBackdrop)，此处不再放置局部生硬截断带
               Positioned(
                 bottom: 64, // 导航栏上方
                 left: 0,

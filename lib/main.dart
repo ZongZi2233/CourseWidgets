@@ -18,7 +18,6 @@ import 'services/onboarding_service.dart';
 import 'services/windows_tray_service.dart';
 import 'services/storage_service.dart';
 import 'services/background_task_service.dart'; // [v2.2.9] 后台任务服务
-import 'ui/transitions/custom_predictive_back_transitions.dart'; // [v2.9.7] 恢复Android预测式返回
 import 'utils/glass_opacity_manager.dart'; // [v2.3.0] 玻璃透明度管理器
 import 'ui/screens/schedule_screen.dart';
 import 'ui/screens/android_liquid_glass_main.dart';
@@ -539,26 +538,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
                 Widget contentWidget = innerContent;
 
-                if (Platform.isWindows || Platform.isMacOS) {
-                  contentWidget = ValueListenableBuilder<double>(
-                    valueListenable: windowsGlobalScale,
-                    builder: (context, scale, _) {
-                      return ValueListenableBuilder<double>(
-                        valueListenable: windowsGlobalOpacity,
-                        builder: (context, opacity, _) {
-                          return Transform.scale(
-                            scale: scale,
-                            child: Opacity(
-                              opacity: opacity,
-                              child: innerContent,
-                            ),
-                          );
-                        },
-                      );
-                    },
-                  );
-                }
-
                 final coreStack = LiquidGlassScope.stack(
                   background: backgroundWidget,
                   content: contentWidget,
@@ -568,42 +547,16 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                   return ValueListenableBuilder<bool>(
                     valueListenable: windowsGlobalIsMaximized,
                     builder: (context, isMaximized, _) {
-                      final shadowPadding = isMaximized ? 0.0 : 12.0;
                       final borderRadius = isMaximized ? 0.0 : 16.0;
                       final smoothing = isMaximized ? 0.0 : 1.0;
 
-                      final windowContent = Padding(
-                        padding: EdgeInsets.all(shadowPadding),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(borderRadius),
-                            boxShadow: isMaximized
-                                ? null
-                                : [
-                                    BoxShadow(
-                                      color: Colors.black.withValues(
-                                        alpha: 0.25,
-                                      ),
-                                      blurRadius: 20,
-                                      spreadRadius: 2,
-                                    ),
-                                  ],
-                          ),
-                          child: ClipSmoothRect(
-                            radius: SmoothBorderRadius(
-                              cornerRadius: borderRadius,
-                              cornerSmoothing: smoothing,
-                            ),
-                            child: coreStack,
-                          ),
+                      return ClipSmoothRect(
+                        radius: SmoothBorderRadius(
+                          cornerRadius: borderRadius,
+                          cornerSmoothing: smoothing,
                         ),
+                        child: coreStack,
                       );
-
-                      // [v2.7.1] 注入自定义边缘以接管无边框化后的窗口缩放
-                      if (Platform.isWindows) {
-                        return WindowResizer(child: windowContent);
-                      }
-                      return windowContent;
                     },
                   );
                 }
