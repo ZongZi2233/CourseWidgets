@@ -354,7 +354,7 @@ class LiveNotificationServiceV2 {
     String body;
     DateTime? eventTime;
     bool isCountingDown = false;
-    String subLocation = '课表助手';
+    String? subLocation = '课表助手';
     int progressPercent = 0;
     bool showProgress = false;
 
@@ -397,14 +397,16 @@ class LiveNotificationServiceV2 {
           title = '<b><font color="#FF5252">正在上课</font></b> · <b>${_currentCourse!.name}</b>';
           final courseLoc = _currentCourse!.location.trim();
           final hasLoc = courseLoc.isNotEmpty && !courseLoc.contains('未知');
-          subLocation = hasLoc ? courseLoc : '正在上课';
+          // [v2.10.0] 关键修复：倒计时期间严禁将 subLocation 设为教室名，避免系统胶囊/状态栏药丸显示教室名字而非倒计时秒
+          subLocation = null;
 
           if (totalMs > 0) {
             progressPercent = ((elapsedMs / totalMs) * 100).clamp(0, 100).toInt();
             showProgress = true;
           }
           final loc = hasLoc ? ' ($courseLoc)' : '';
-          body = '<b>${_currentCourse!.name}</b>$loc\n时间: $startStr - $endStr (共${durationMin}分钟)';
+          // [v2.10.0] 增加直观时间刻度轴与百分比说明，解决“无刻度标识比例尺”问题
+          body = '<b>${_currentCourse!.name}</b>$loc\n时间: $startStr ──●── $endStr ($durationMin分钟 · 进度 $progressPercent%)';
           eventTime = end;
           isCountingDown = true;
 
@@ -438,19 +440,24 @@ class LiveNotificationServiceV2 {
 
         if (isToday) {
           if (m <= 45) {
-            subLocation = hasLoc ? courseLoc : (m <= 10 ? '马上开始' : '即将上课');
+            // [v2.10.0] 关键修复：倒计时期间 subLocation 设为 null，启动原生硬件级 Chronometer 秒级实时倒计时
+            subLocation = null;
             progressPercent = (((45 - m) / 45) * 100).clamp(0, 100).toInt();
             showProgress = true;
+            eventTime = start;
+            isCountingDown = true;
 
             final statusTag = m <= 10 ? '马上开始' : '即将上课';
             title = '<b><font color="#FFA000">$statusTag</font></b> · <b>${_currentCourse!.name}</b>';
-            body = '<b>${_currentCourse!.name}</b>$loc · $startStr 开课\n时间: $startStr - $endStr · 请提前入座准备';
+            body = '<b>${_currentCourse!.name}</b>$loc · $startStr 开课\n时间: 倒计时中 ──── $startStr · 请提前入座准备';
           } else {
             // 课前45分钟以上
             title = '<b>下节课 ($startStr)</b> · <b>${_currentCourse!.name}</b>';
             body = '<b>${_currentCourse!.name}</b>$loc\n时间: $startStr - $endStr';
             subLocation = hasLoc ? courseLoc : startStr;
             showProgress = false;
+            eventTime = null;
+            isCountingDown = false;
           }
         } else {
           // 非今日课程（明日、后天或之后日程）

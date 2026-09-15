@@ -64,12 +64,12 @@ class SmoothSlideTransitionsBuilder extends PageTransitionsBuilder {
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    // [v2.9.3 核心升级] 二级页面直接挂载全局动态壁纸与清润亚克力景深，彻底告别死白与截图卡顿
+    // [v2.10.0] 二级页面保持全局壁纸纯净清晰（blur: 0.0），杜绝转场与二级界面的模糊混杂
     final pageContent = (!route.opaque)
         ? Stack(
             fit: StackFit.expand,
             children: [
-              const AppBackgroundLayer(blur: 16.0),
+              const AppBackgroundLayer(blur: 0.0),
               child,
             ],
           )

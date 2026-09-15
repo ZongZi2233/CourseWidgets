@@ -9,7 +9,7 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Flutter](https://img.shields.io/badge/Flutter-3.44.0+-02569B?logo=flutter)](https://flutter.dev)
 [![Dart](https://img.shields.io/badge/Dart-3.12.0+-0175C2?logo=dart)](https://dart.dev)
-[![Version](https://img.shields.io/badge/Version-2.9.9-FF9BAE)](https://github.com/ZongZi2233AI/CourseWidgets/releases/)
+[![Version](https://img.shields.io/badge/Version-2.10.0-FF9BAE)](https://github.com/ZongZi2233AI/CourseWidgets/releases/)
 
 English | [简体中文](README.md)
 
@@ -17,14 +17,14 @@ English | [简体中文](README.md)
 
 > **Statement**: This project was developed entirely through human-AI collaborative Vibe Coding. Core architecture by [MiMo-V2-Flash](https://github.com/XiaomiMiMo/MiMo-V2-Flash) and Gemini 3.1 Pro, with Windows desktop integration engineered in collaboration with Claude Opus 4.6.
 
-### 📦 Latest Release: [v2.9.9 (Build 10008069)](https://github.com/ZongZi2233AI/CourseWidgets/releases)
-* **Android Standalone**: `CourseWidgets-v2.9.9-android-arm64-v8a.apk` — Built with R8 code shrinking and Dart AOT obfuscation.
-* **Windows Client**: `CourseWidgets-v2.9.9-windows-x64.zip` — Borderless acrylic desktop app with tray support and high-DPI scaling.
+### 📦 Latest Release: [v2.10.0 (Build 10008070)](https://github.com/ZongZi2233AI/CourseWidgets/releases)
+* **Android Standalone**: `CourseWidgets-v2.10.0-android-arm64-v8a.apk` — Built with R8 code shrinking and Dart AOT obfuscation.
+* **Windows Client**: `CourseWidgets-v2.10.0-windows-x64.zip` — Borderless acrylic desktop app with tray support and high-DPI scaling.
 
-#### 🆕 What's New in v2.9.9 (CHANGELOG)
-1. **Official App Logo for Live Updates**: Restored the authentic high-resolution app icon (`@mipmap/ic_launcher` / `R.mipmap.ic_launcher`) for both small and large notification icons on Android, completely stripping forced pink background tints (`builder.setColor(0xFFFF9A9E)`).
-2. **Zero Emoji Across Notifications & Scheduling**: Eliminated all emojis (`📍`, `📅`, `🕒`, `⏳`, `●`, `✓`) from Live Updates in favor of clean structured text; wiped all emojis (`☀️`, `🌙`, `🔔`, `🚨`, `⚡`, `⏰`) from system notification manager; replaced emojis in Android, Mobile, and macOS schedule lists with crisp vector icons.
-3. **Power Efficiency & Notification IPC Deduplication**: Reduced background timer frequency from 10s to 30s (-66% wakeups) while keeping native hardware-level second counting on Android Chronometer; introduced payload caching (`_lastNotifiedPayloadKey`) to skip redundant IPC calls when content has not changed.
+#### 🆕 What's New in v2.10.0 (CHANGELOG)
+1. **Capsule Chronometer Countdown Restoration**: Kept `subLocation` null during active countdown states to prevent Android 16 and OEM capsules from prioritizing text over the real-time chronometer; restored countdown timestamp and countdown flags for the 45-minute pre-class window.
+2. **Visual Scale Bar & Progress Milestones**: Added structured schedule scale axis markers (e.g. `08:00 ──●── 09:35 (95m · Progress 42%)` and `Counting down ──── 08:00`) in notification bodies for intuitive visual tracking.
+3. **Pure Crisp Wallpaper in Settings & Calendar**: Removed the heavy `AppBackgroundLayer(blur: 16.0)` overlays from `SettingsMainScreen`, `CalendarViewScreen`, and route transitions, allowing the crisp global wallpaper to shine through consistently across all tabs.
 
 ---
 

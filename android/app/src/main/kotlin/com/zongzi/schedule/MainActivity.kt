@@ -261,7 +261,12 @@ class MainActivity : FlutterActivity() {
         builder.setAutoCancel(false)
         builder.setCategory(android.app.Notification.CATEGORY_PROGRESS)
 
-        if (subLocation != null && subLocation.isNotEmpty()) {
+        val hasActiveChronometer = (whenTime != null && whenTime > 0 && usesChronometer)
+
+        // [v2.10.0] 当处于实时倒计时状态时，严禁设置 subText / ticker！
+        // 因为 Android 16 Live Updates 与各大厂商系统（HyperOS / OriginOS / ColorOS）的状态栏胶囊
+        // 一旦检测到 subText 会强行用静态文字覆盖倒计时秒表。只有不设置 subText 时，胶囊才会以高优先级显示秒级 Chronometer！
+        if (!hasActiveChronometer && subLocation != null && subLocation.isNotEmpty()) {
             builder.setSubText(subLocation)
             builder.setTicker(subLocation)
         }

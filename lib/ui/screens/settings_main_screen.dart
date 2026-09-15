@@ -10,7 +10,6 @@ import 'settings_about_screen.dart';
 import 'settings_data_screen.dart';
 import 'settings_notification_screen.dart';
 import '../widgets/liquid_components.dart' as liquid;
-import '../widgets/app_background_layer.dart';
 import '../transitions/smooth_slide_transitions.dart';
 
 /// [v2.8.4] 设置主界面 - 全面迁移官方 GlassCard 与 AdaptiveLiquidGlassLayer
@@ -34,10 +33,7 @@ class _SettingsMainScreenState extends State<SettingsMainScreen> {
       extendBody: true,
       body: Stack(
         children: [
-          // [v2.9.5] 视口级单层预模糊壁纸采样
-          const Positioned.fill(
-            child: AppBackgroundLayer(blur: 16.0),
-          ),
+          // [v2.10.0] 彻底移除视口预模糊壁纸，让全局高清壁纸清晰透显，与主课表视觉统一
           AdaptiveLiquidGlassLayer(
         quality: GlassQuality.premium,
         settings: const LiquidGlassSettings(

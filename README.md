@@ -9,7 +9,7 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Flutter](https://img.shields.io/badge/Flutter-3.44.0+-02569B?logo=flutter)](https://flutter.dev)
 [![Dart](https://img.shields.io/badge/Dart-3.12.0+-0175C2?logo=dart)](https://dart.dev)
-[![Version](https://img.shields.io/badge/Version-2.9.9-FF9BAE)](https://github.com/ZongZi2233AI/CourseWidgets/releases/)
+[![Version](https://img.shields.io/badge/Version-2.10.0-FF9BAE)](https://github.com/ZongZi2233AI/CourseWidgets/releases/)
 
 [English](README_EN.md) | 简体中文
 
@@ -17,14 +17,14 @@
 
 > **声明**：本软件除开源代码外完全使用 AI 辅助协同开发。核心架构由 [MiMo-V2-Flash](https://github.com/XiaomiMiMo/MiMo-V2-Flash) 与 Gemini 3.1 Pro 深度构建，Windows 桌面部分协同 Claude Opus 4.6 深度定制。
 
-### 📦 最新版本：[v2.9.9 (Build 10008069)](https://github.com/ZongZi2233AI/CourseWidgets/releases)
-* **Android 单包**：`CourseWidgets-v2.9.9-android-arm64-v8a.apk` —— 全面开启 R8 压缩与 Dart AOT 源码混淆。
-* **Windows 客户端**：`CourseWidgets-v2.9.9-windows-x64.zip` —— 纯净亚克力无边框桌面端，支持托盘驻留与高分屏。
+### 📦 最新版本：[v2.10.0 (Build 10008070)](https://github.com/ZongZi2233AI/CourseWidgets/releases)
+* **Android 单包**：`CourseWidgets-v2.10.0-android-arm64-v8a.apk` —— 全面开启 R8 压缩与 Dart AOT 源码混淆。
+* **Windows 客户端**：`CourseWidgets-v2.10.0-windows-x64.zip` —— 纯净亚克力无边框桌面端，支持托盘驻留与高分屏。
 
-#### 🆕 v2.9.9 本次更新内容 (CHANGELOG)
-1. **Live Update 胶囊与通知图标全面采用官方新 Logo**：在 Android 原生端与 Flutter 端全面恢复使用应用高清官方新 Logo（`@mipmap/ic_launcher` / `R.mipmap.ic_launcher`），彻底移除 `builder.setColor(0xFFFF9A9E)` 及通知通道中的粉色强制底色配置，杜绝“粉色底+Emoji”异常视觉，完整呈现官方高清大图标与胶囊状态。
-2. **彻底剔除通知与排班全链路 Emoji**：全面移除 Live Update 实时通知正文中的所有 Emoji（`📍`、`📅`、`🕒`、`⏳`、`●`、`✓`），升级为规范的括注与时间区间说明；清除 `notification_manager.dart` 中的 `☀️`、`🌙`、`🔔`、`🚨`、`⚡`、`⏰` 等 Emoji 字符；全面移除 Android、通用移动端、macOS 三端排班课程列表项中的 `📍`、`👨‍🏫`、`⏰` Emoji，升级为细腻的矢量图标行布局。
-3. **通知能效优化与 IPC 防抖去重**：后台刷新定时器频率由 10 秒优化为 30 秒，降低 66% 冗余后台唤醒，秒级倒计时由系统底层 Chronometer 硬件级独立调度；引入 `_lastNotifiedPayloadKey` 负载比对，在通知内容、进度和计时状态未变动时直接拦截重复的 MethodChannel IPC 通信，避免频繁与系统 `NotificationManager` 交互，彻底根治潜在的发热与微卡顿。
+#### 🆕 v2.10.0 本次更新内容 (CHANGELOG)
+1. **状态栏胶囊下课秒级倒计时恢复**：倒计时激活期间明确将 `subLocation` 置空，杜绝系统胶囊/药丸将教室名字覆盖秒表的底层缺陷，确保高优先级秒级 Chronometer 倒计时呈现；修复课前 45 分钟未注入倒计时属性导致下节课倒计时看似卡顿的问题。
+2. **进度条时间刻度轴与百分比标识**：在通知正文时间行中集成直观的作息时间轴刻度（如 `08:00 ──●── 09:35 (95分钟 · 进度 42%)` 与 `倒计时中 ──── 08:00`），直观清晰映射比例尺与节点。
+3. **设置与日历页全屏壁纸纯净透显**：彻底剔除设置主页、日历视图与转场构建器中的 `AppBackgroundLayer(blur: 16.0)` 预模糊层，还原全局高清壁纸真实纯净质感，与主课表视觉无缝统一。
 
 ---
 

@@ -2,6 +2,18 @@
 
 本文档记录 CourseWidgets 各版本更新的动态活动演进，重点关注架构改进、渲染优化、故障诊断与教务抓取能力提升。
 
+## [v2.10.0] - 2026-09-15
+
+### 1. Live Update 状态栏胶囊下课秒级倒计时恢复 (Capsule Chronometer Countdown Restoration)
+- **解决胶囊缩写形态被教室覆盖问题**：深入剖析 Android 16 Live Updates 与各大厂商系统（HyperOS / OriginOS / ColorOS）状态栏药丸渲染逻辑，当通知包含 `subText` / `ticker` 时，系统胶囊会强制以文字覆盖计时器。本次更新在倒计时激活期间明确将 `subLocation` 设为 `null`，确保系统胶囊与状态栏药丸以最高优先级呈现秒级硬件 Chronometer 实时跳动。
+- **恢复课前 45 分钟秒级硬件倒计时**：修复课前 45 分钟阶段遗漏注入 `eventTime` 与 `isCountingDown` 导致下节课倒计时只能依靠 Dart 轮询、看似严重滞后停顿的缺陷，全面启用底层 Chronometer 秒级倒计时。
+
+### 2. 进度条时间刻度轴与百分比标识 (Visual Scale Bar & Progress Milestones)
+- **时间轴刻度显式可视化**：在通知正文时间信息中集成明确的时间区间轴标尺（如 `时间: 08:00 ──●── 09:35 (95分钟 · 进度 42%)` 与 `倒计时中 ──── 08:00`），直观映射当前所处作息节点与比例刻度，彻底弥补系统原生进度条无标点刻度的不足。
+
+### 3. 设置与日历页全屏壁纸纯净透显 (Pure Crisp Wallpaper Restoration)
+- **根除设置与日历页全局重度模糊**：彻底移除 `SettingsMainScreen`、`CalendarViewScreen` 以及 `SmoothSlideTransitionsBuilder` 中粗暴注入的 `AppBackgroundLayer(blur: 16.0)` 预模糊遮罩，让全局高清壁纸通透自然地展示在底层，与主课表视觉风格完美对齐，消除任何发灰发糊的体验断层。
+
 ## [v2.9.9] - 2026-09-15
 
 ### 1. Live Update 胶囊与通知图标全面采用官方新 Logo (Official App Logo for Live Updates)

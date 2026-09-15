@@ -10,7 +10,6 @@ import '../../utils/responsive_utils.dart';
 import '../widgets/liquid_components.dart' as liquid;
 import '../widgets/glass_context_menu.dart';
 import '../widgets/unified_backdrop_panel.dart';
-import '../widgets/app_background_layer.dart';
 import '../transitions/smooth_slide_transitions.dart';
 import 'course_edit_screen.dart';
 
@@ -93,10 +92,7 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
 
     return Stack(
       children: [
-        // [v2.9.5] 视口级单层预模糊壁纸采样：全屏静态壁纸高斯模糊，卡片仅在上方滚动，0 重复 BackdropFilter
-        const Positioned.fill(
-          child: AppBackgroundLayer(blur: 16.0),
-        ),
+        // [v2.10.0] 彻底移除日历页壁纸预模糊，让全局高清壁纸清晰透显，与主课表视觉统一
         AdaptiveLiquidGlassLayer(
           quality: GlassQuality.premium,
           settings: const LiquidGlassSettings(
