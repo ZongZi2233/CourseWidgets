@@ -23,6 +23,7 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
   final theme.ThemeService _themeService = theme.ThemeService();
 
   bool _adaptiveDarkMode = false;
+  bool _enableAcrylicBackdrop = true;
   theme.ThemeMode _currentThemeMode = theme.ThemeMode.defaultMode;
 
   bool get _isDarkMode => _themeService.isDarkMode;
@@ -40,9 +41,12 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
   Future<void> _loadSettings() async {
     final adaptiveMode =
         _storage.getBool(StorageService.keyAdaptiveDarkMode) ?? false;
+    final acrylicMode =
+        _storage.getBool(StorageService.keyEnableAcrylicBackdrop) ?? true;
 
     setState(() {
       _adaptiveDarkMode = adaptiveMode;
+      _enableAcrylicBackdrop = acrylicMode;
       _currentThemeMode = _themeService.themeMode;
     });
   }
@@ -72,6 +76,12 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
     if (value) {
       await _storage.setBool(StorageService.keyDarkMode, false);
     }
+  }
+
+  void _toggleAcrylicBackdrop(bool value) async {
+    setState(() => _enableAcrylicBackdrop = value);
+    globalAcrylicBackdropNotifier.value = value;
+    await _storage.setBool(StorageService.keyEnableAcrylicBackdrop, value);
   }
 
   Future<void> _pickBackgroundImage() async {
@@ -393,28 +403,35 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           _buildSection('外观'),
-                          // [v2.9.0] Windows 端未适配深色模式，隐藏相关设置
-                          if (!Platform.isWindows) ...[
-                            _buildSwitchCard(
-                              '自适应深色模式',
-                              '跟随系统设置',
-                              _adaptiveDarkMode,
-                              _toggleAdaptiveMode,
-                            ),
-                            const SizedBox(height: 12),
+                          // [v3.0.0] 全平台开放深色模式控制与自适应系统设置
+                          _buildSwitchCard(
+                            '自适应深色模式',
+                            '跟随系统设置',
+                            _adaptiveDarkMode,
+                            _toggleAdaptiveMode,
+                          ),
+                          const SizedBox(height: 12),
 
-                            IgnorePointer(
-                              ignoring: _adaptiveDarkMode,
-                              child: _buildSwitchCard(
-                                '强制深色模式',
-                                '手动覆盖系统设置',
-                                globalUseDarkMode,
-                                _toggleDarkMode,
-                                disabled: _adaptiveDarkMode,
-                              ),
+                          IgnorePointer(
+                            ignoring: _adaptiveDarkMode,
+                            child: _buildSwitchCard(
+                              '强制深色模式',
+                              '手动覆盖系统设置',
+                              globalUseDarkMode,
+                              _toggleDarkMode,
+                              disabled: _adaptiveDarkMode,
                             ),
-                            const SizedBox(height: 20),
-                          ],
+                          ),
+                          const SizedBox(height: 12),
+
+                          // [v3.0.0] 微乳亚克力工作台底板开关
+                          _buildSwitchCard(
+                            '课表工作台亚克力底板',
+                            '开启呈现微乳半透工作台底板，关闭为沉浸全景透视',
+                            _enableAcrylicBackdrop,
+                            _toggleAcrylicBackdrop,
+                          ),
+                          const SizedBox(height: 20),
 
                           _buildSection('主题色'),
                           _buildActionCard(

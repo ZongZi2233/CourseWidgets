@@ -14,6 +14,7 @@ import 'liquid_components.dart' as liquid;
 import 'course_color_helper.dart';
 import 'course_name_formatter.dart';
 import 'glass_context_menu.dart';
+import 'acrylic_backdrop_plate.dart';
 import '../transitions/smooth_slide_transitions.dart';
 import 'package:smooth_scroll_multiplatform/smooth_scroll_multiplatform.dart';
 
@@ -360,6 +361,19 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
 
     return Stack(
       children: [
+        // 0. [v3.0.0] 微乳亚克力工作台底板（单次预渲染双线性高斯离屏模糊，可开关）
+        Positioned.fill(
+          child: AcrylicBackdropPlate(
+            margin: EdgeInsets.only(
+              top: topPadding,
+              bottom: resolvedPadding.bottom > 20 ? resolvedPadding.bottom - 12 : 8,
+              left: resolvedPadding.left,
+              right: resolvedPadding.right,
+            ),
+            child: const SizedBox.expand(),
+          ),
+        ),
+
         // 1. 纵向滚动内容区：全屏铺满，从固定星期栏下方平滑穿过
         Positioned.fill(
           child: DynMouseScroll(

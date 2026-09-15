@@ -25,6 +25,7 @@ import 'ui/screens/ios_liquid_glass_main.dart'; // [v2.5.9] 新增iOS原生支�
 import 'ui/screens/windows_custom_window.dart';
 import 'ui/screens/macos_custom_window.dart'; // [v2.5.9] 新增macOS支持
 import 'ui/screens/onboarding_screen.dart';
+import 'ui/widgets/zero_flicker_splash_preloader.dart'; // [v3.0.0] 零闪烁启动过渡屏
 import 'ui/transitions/smooth_slide_transitions.dart'; // [v2.4.8] 平滑过渡动画
 import 'dart:async';
 import 'package:flutter_phoenix/flutter_phoenix.dart';
@@ -37,6 +38,10 @@ set globalUseDarkMode(bool v) => globalDarkModeNotifier.value = v;
 final ValueNotifier<String?> globalBackgroundPath = ValueNotifier<String?>(
   null,
 );
+
+/// [v3.0.0] 全局课表工作台微乳亚克力底板开关
+final ValueNotifier<bool> globalAcrylicBackdropNotifier =
+    ValueNotifier<bool>(true);
 
 // [v2.6.0] 全局路由监听器，用于控制底部导航栏的显示与隐藏
 final RouteObserver<PageRoute> routeObserver = RouteObserver<PageRoute>();
@@ -67,9 +72,9 @@ Future<void> loadGlobalBackground() async {
       }
     }
 
-    // 默认设为 null，由深浅色模式动态决定使用 Light.png 还是 Dark.png
-    globalBackgroundPath.value = null;
-    AppLogger.ui('使用自适应 1:1 默认壁纸 (Light.png / Dark.png)');
+    // [v3.0.0] 初始化课表工作台微乳亚克力底板开关偏好
+    globalAcrylicBackdropNotifier.value =
+        storage.getBool(StorageService.keyEnableAcrylicBackdrop) ?? true;
   } catch (e, st) {
     AppLogger.error('WALLPAPER', '加载壁纸错误: $e', e, st);
     globalBackgroundPath.value = null;
@@ -344,21 +349,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     if (_isChecking) {
-      // [v2.8.5 彻底消灭启动黑屏] 使用自然柔和渐变作为首帧过渡，坚决杜绝纯黑黑屏与卡顿感
-      return material.MaterialApp(
+      // [v3.0.0 彻底消灭启动黑屏白屏] 居中精致品牌微动效，极速平滑首帧过渡
+      return const material.MaterialApp(
         debugShowCheckedModeBanner: false,
-        home: material.Scaffold(
-          backgroundColor: Colors.transparent,
-          body: Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [Color(0xFFE0C3FC), Color(0xFF8EC5FC)],
-              ),
-            ),
-          ),
-        ),
+        home: ZeroFlickerSplashPreloader(),
       );
     }
 
