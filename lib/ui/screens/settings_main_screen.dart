@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import '../../constants/theme_constants.dart';
 import '../../services/theme_service.dart';
 import '../../utils/responsive_utils.dart';
@@ -31,26 +30,10 @@ class _SettingsMainScreenState extends State<SettingsMainScreen> {
     return Scaffold(
       backgroundColor: Colors.transparent,
       extendBody: true,
-      body: Stack(
-        children: [
-          // [v2.10.0] 彻底移除视口预模糊壁纸，让全局高清壁纸清晰透显，与主课表视觉统一
-          AdaptiveLiquidGlassLayer(
-        quality: GlassQuality.premium,
-        settings: const LiquidGlassSettings(
-          blur: 3.0,
-          thickness: 24.0,
-          glassColor: Color(0x0EFFFFFF),
-          lightIntensity: 0.70,
-          ambientStrength: 0.45,
-          ambientRim: 0.0,
-          fresnelStrength: 0.05,
-          saturation: 1.20,
-          refractiveIndex: 1.46,
+      body: CustomScrollView(
+        physics: const BouncingScrollPhysics(
+          parent: AlwaysScrollableScrollPhysics(),
         ),
-        child: CustomScrollView(
-          physics: const BouncingScrollPhysics(
-            parent: AlwaysScrollableScrollPhysics(),
-          ),
           slivers: [
             SliverSafeArea(
               bottom: false,
@@ -109,9 +92,6 @@ class _SettingsMainScreenState extends State<SettingsMainScreen> {
           ),
         ],
       ),
-    ),
-    ],
-    ),
     );
   }
 

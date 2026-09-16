@@ -11,6 +11,7 @@ import '../../utils/glass_settings_helper.dart';
 import '../../main.dart';
 import '../widgets/liquid_components.dart' as liquid;
 import 'package:smooth_scroll_multiplatform/smooth_scroll_multiplatform.dart';
+import '../../utils/responsive_utils.dart';
 
 class SettingsGeneralScreen extends StatefulWidget {
   const SettingsGeneralScreen({super.key});
@@ -355,20 +356,7 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
       backgroundColor: Colors.transparent,
       body: Stack(
         children: [
-          AdaptiveLiquidGlassLayer(
-            quality: GlassQuality.premium,
-            settings: const LiquidGlassSettings(
-              blur: 3.0,
-              thickness: 24.0,
-              glassColor: Color(0x0EFFFFFF),
-              lightIntensity: 0.70,
-              ambientStrength: 0.45,
-              ambientRim: 0.0,
-              fresnelStrength: 0.05,
-              saturation: 1.20,
-              refractiveIndex: 1.46,
-            ),
-            child: Column(
+          Column(
               children: [
                 // Header
                 SafeArea(
@@ -377,6 +365,7 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                     child: Row(
                       children: [
+                        if (ResponsiveUtils.isDesktopOrLandscape(context)) const SizedBox(width: 56),
                         Text(
                           '通用设置',
                           style: TextStyle(
@@ -478,7 +467,6 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
                 ),
               ],
             ),
-          ),
           // [v2.9.7] 悬浮右下角返回按钮
           const liquid.FloatingLiquidBackButton(),
         ],

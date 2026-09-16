@@ -28,20 +28,7 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
       backgroundColor: Colors.transparent,
       body: Stack(
         children: [
-          AdaptiveLiquidGlassLayer(
-            quality: GlassQuality.premium,
-            settings: const LiquidGlassSettings(
-              blur: 3.0,
-              thickness: 24.0,
-              glassColor: Color(0x0EFFFFFF),
-              lightIntensity: 0.70,
-              ambientStrength: 0.45,
-              ambientRim: 0.0,
-              fresnelStrength: 0.05,
-              saturation: 1.20,
-              refractiveIndex: 1.46,
-            ),
-            child: Column(
+          Column(
               children: [
                 SafeArea(
                   bottom: false,
@@ -129,11 +116,10 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
             ),
           ],
         ),
-      ),
-      const liquid.FloatingLiquidBackButton(),
-    ],
-  ),
-);
+        const liquid.FloatingLiquidBackButton(),
+      ],
+    ),
+  );
   }
 
   Widget _buildSectionTitle(String title) {

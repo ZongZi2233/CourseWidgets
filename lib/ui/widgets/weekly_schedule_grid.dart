@@ -14,7 +14,7 @@ import 'liquid_components.dart' as liquid;
 import 'course_color_helper.dart';
 import 'course_name_formatter.dart';
 import 'glass_context_menu.dart';
-import 'acrylic_backdrop_plate.dart';
+import '../theme/squircle_geometry.dart';
 import '../transitions/smooth_slide_transitions.dart';
 import 'package:smooth_scroll_multiplatform/smooth_scroll_multiplatform.dart';
 
@@ -71,21 +71,26 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
                 ),
               );
             },
-            child: _buildWeekGrid(context, provider),
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              transitionBuilder: (child, animation) {
+                return FadeTransition(
+                  opacity: animation,
+                  child: child,
+                );
+              },
+              child: KeyedSubtree(
+                key: ValueKey('weekly_grid_content_${provider.currentWeek}'),
+                child: _buildWeekGrid(context, provider),
+              ),
+            ),
           ),
         );
 
-        if (!widget.showControlBar) {
-          return gridBody;
-        }
-
-        return Column(
-          children: [
-            _buildWeekControl(context, provider),
-            const SizedBox(height: 12),
-            Expanded(child: gridBody),
-          ],
-        );
+        // [v3.0.0] 统一由 _buildWeekGrid 内部 Stack 悬浮管理周次控制栏与星期胶囊，彻底消除外层 Column + ClipRect 导致的生硬截断
+        return gridBody;
       },
     );
   }
@@ -104,52 +109,56 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
     final weeks = provider.availableWeeks;
     if (weeks.isEmpty || !context.mounted) return;
 
-    _isBackgroundFrozen.value = true;
-    try {
-      await showModalBottomSheet(
-        context: context,
-        backgroundColor: Colors.transparent,
-        barrierColor: Colors.black.withValues(alpha: 0.20),
-        builder: (sheetCtx) {
-          final sheetDark = Theme.of(sheetCtx).brightness == Brightness.dark;
-          return ClipRRect(
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 20.0, sigmaY: 20.0),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: sheetDark
-                      ? const Color(0xB8161922)
-                      : Colors.white.withValues(alpha: 0.85),
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-                  border: Border(
-                    top: BorderSide(
-                      color: sheetDark
-                          ? Colors.white.withValues(alpha: 0.16)
-                          : Colors.white.withValues(alpha: 0.70),
-                      width: 0.8,
-                    ),
-                  ),
-                ),
-                child: SafeArea(
+    final primaryColor = Theme.of(context).primaryColor;
+
+    await showDialog(
+      context: context,
+      useRootNavigator: false, // 局部路由弹出，保留 Windows 自定义窗口边界与底板渲染
+      barrierColor: Colors.black.withValues(alpha: 0.35),
+      builder: (dialogCtx) {
+        final dialogDark = Theme.of(dialogCtx).brightness == Brightness.dark;
+        return Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: Material(
+              type: MaterialType.transparency,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+                child: liquid.HyperOSCard(
+                  cornerRadius: 24,
+                  padding: const EdgeInsets.all(20),
+                  color: dialogDark
+                      ? const Color(0xC8161922)
+                      : const Color(0xDCFFFFFF),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: const Text(
-                          '选择周次',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            '选择周次',
+                            style: TextStyle(
+                              color: dialogDark ? Colors.white : const Color(0xFF1E2128),
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
-                        ),
+                          GestureDetector(
+                            onTap: () => Navigator.pop(dialogCtx),
+                            child: Icon(
+                              CupertinoIcons.xmark_circle_fill,
+                              color: dialogDark ? Colors.white38 : Colors.black26,
+                              size: 22,
+                            ),
+                          ),
+                        ],
                       ),
-                      Container(
-                        height: 280,
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                      const SizedBox(height: 16),
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxHeight: 280),
                         child: GridView.builder(
+                          shrinkWrap: true,
                           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                             crossAxisCount: 5,
                             mainAxisSpacing: 10,
@@ -164,20 +173,29 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
                               onTap: () {
                                 HapticFeedback.selectionClick();
                                 _changeWeek(provider, w);
-                                Navigator.pop(sheetCtx);
+                                Navigator.pop(dialogCtx);
                               },
                               child: Container(
                                 decoration: BoxDecoration(
                                   color: isCur
-                                      ? AppThemeColors.babyPink
-                                      : (sheetDark ? Colors.white : Colors.black).withValues(alpha: 0.08),
-                                  borderRadius: BorderRadius.circular(12),
+                                      ? primaryColor
+                                      : (dialogDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05)),
+                                  borderRadius: SquircleGeometry.smoothRadius(12),
                                   border: isCur
                                       ? null
                                       : Border.all(
-                                          color: (sheetDark ? Colors.white : Colors.black).withValues(alpha: 0.12),
+                                          color: (dialogDark ? Colors.white : Colors.black).withValues(alpha: 0.10),
                                           width: 0.6,
                                         ),
+                                  boxShadow: isCur
+                                      ? [
+                                          BoxShadow(
+                                            color: primaryColor.withValues(alpha: 0.35),
+                                            blurRadius: 8,
+                                            offset: const Offset(0, 2),
+                                          ),
+                                        ]
+                                      : null,
                                 ),
                                 alignment: Alignment.center,
                                 child: Text(
@@ -185,7 +203,7 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
                                   style: TextStyle(
                                     color: isCur
                                         ? Colors.white
-                                        : (sheetDark ? Colors.white70 : Colors.black87),
+                                        : (dialogDark ? Colors.white70 : const Color(0xFF2D3139)),
                                     fontWeight: isCur ? FontWeight.bold : FontWeight.normal,
                                     fontSize: 13,
                                   ),
@@ -195,20 +213,15 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
                           },
                         ),
                       ),
-                      const SizedBox(height: 16),
                     ],
                   ),
                 ),
               ),
             ),
-          );
-        },
-      );
-    } finally {
-      if (mounted) {
-        _isBackgroundFrozen.value = false;
-      }
-    }
+          ),
+        );
+      },
+    );
   }
 
   Widget _buildWeekControl(BuildContext context, ScheduleProvider provider) {
@@ -226,7 +239,7 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
             style: GlassButtonStyle.filled,
             settings: LiquidGlassSettings(
               glassColor: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.white.withValues(alpha: 0.35),
-              blur: 6,
+              blur: 1.5,
               thickness: 14,
               edgeAbsorption: 0.0,
             ),
@@ -247,7 +260,7 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
               shape: const LiquidRoundedSuperellipse(borderRadius: 14),
               settings: LiquidGlassSettings(
                 glassColor: isDark ? Colors.white.withValues(alpha: 0.12) : Colors.white.withValues(alpha: 0.35),
-                blur: 6.0,
+                blur: 1.5,
                 thickness: 16.0,
                 refractiveIndex: 1.40,
                 ambientRim: 0.0,
@@ -285,7 +298,7 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
             style: GlassButtonStyle.filled,
             settings: LiquidGlassSettings(
               glassColor: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.white.withValues(alpha: 0.35),
-              blur: 6,
+              blur: 1.5,
               thickness: 14,
               edgeAbsorption: 0.0,
             ),
@@ -356,25 +369,19 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final timeColWidth = widget.isPhone ? 32.0 : 38.0;
     const headerHeight = 54.0;
+    const controlBarHeight = 46.0;
     final resolvedPadding = widget.contentPadding.resolve(Directionality.of(context));
     final topPadding = resolvedPadding.top;
 
+    // [v3.0.0] 无论是否开启周次控制栏，均作为悬浮层置于 Stack 顶层，课程卡片从其下方平滑穿过，彻底告别硬截断
+    final weekdayTop = widget.showControlBar ? (topPadding + controlBarHeight + 6) : (topPadding + 2);
+    final contentTop = widget.showControlBar
+        ? (topPadding + controlBarHeight + 6 + headerHeight + 6)
+        : (topPadding + headerHeight + 6);
+
     return Stack(
       children: [
-        // 0. [v3.0.0] 微乳亚克力工作台底板（单次预渲染双线性高斯离屏模糊，可开关）
-        Positioned.fill(
-          child: AcrylicBackdropPlate(
-            margin: EdgeInsets.only(
-              top: topPadding,
-              bottom: resolvedPadding.bottom > 20 ? resolvedPadding.bottom - 12 : 8,
-              left: resolvedPadding.left,
-              right: resolvedPadding.right,
-            ),
-            child: const SizedBox.expand(),
-          ),
-        ),
-
-        // 1. 纵向滚动内容区：全屏铺满，从固定星期栏下方平滑穿过
+        // 1. 纵向滚动内容区：全屏铺满，直接浮于高清壁纸之上，从悬浮星期胶囊与控制栏下方平滑穿过，不截断卡片
         Positioned.fill(
           child: DynMouseScroll(
             durationMS: 250,
@@ -382,8 +389,9 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
             builder: (context, controller, physics) => SingleChildScrollView(
               controller: controller,
               physics: physics,
+              clipBehavior: Clip.none, // 平滑穿透悬浮胶囊与周次控制栏，零生硬裁剪
               padding: EdgeInsets.only(
-                top: topPadding + headerHeight + 8,
+                top: contentTop,
                 bottom: resolvedPadding.bottom,
                 left: resolvedPadding.left,
                 right: resolvedPadding.right,
@@ -391,7 +399,7 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // 左侧时间轴 (1~13 节课，不含头部，直接对齐课程网格)
+                  // 左侧时间轴 (1~13 节课，直接对齐课程网格)
                   SizedBox(
                     width: timeColWidth,
                     child: Column(
@@ -449,60 +457,47 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
           ),
         ),
 
-        // 2. [Excel 冻结窗格] 固定置顶的星期行（周一~周日），通透磨砂底色，卡片从下方穿过
+        // 2. [v3.0.0] 悬浮星期行（周一~周日独立微乳胶囊，悬浮于各列上方，对齐列宽，不作为截断表格头）
         Positioned(
-          top: topPadding,
+          top: weekdayTop,
           left: resolvedPadding.left,
           right: resolvedPadding.right,
           height: headerHeight,
           child: RepaintBoundary(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(14),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: isDark
-                        ? const Color(0x66101216)
-                        : const Color(0x77FFFFFF),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: isDark
-                          ? Colors.white.withValues(alpha: 0.12)
-                          : Colors.black.withValues(alpha: 0.06),
-                      width: 0.8,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: isDark ? 0.20 : 0.06),
-                        blurRadius: 10,
-                        offset: const Offset(0, 3),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  // 左侧占位对齐时间轴
+                  SizedBox(width: timeColWidth),
+                  // 周一至周日标题列独立悬浮胶囊
+                  ...List.generate(daysCount, (dayIndex) {
+                    final day = dayIndex + 1;
+                    return Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 1.5),
+                        child: _buildDayHeaderCell(context, day, provider, isDark),
                       ),
-                    ],
-                  ),
-                  padding: const EdgeInsets.symmetric(vertical: 3),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      // 左侧占位对齐时间轴
-                      SizedBox(width: timeColWidth),
-                      // 周一至周日标题列
-                      ...List.generate(daysCount, (dayIndex) {
-                        final day = dayIndex + 1;
-                        return Expanded(
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 1.5),
-                            child: _buildDayHeaderCell(context, day, provider, isDark),
-                          ),
-                        );
-                      }),
-                    ],
-                  ),
-                ),
+                    );
+                  }),
+                ],
               ),
             ),
           ),
         ),
+
+        // 3. [v3.0.0] 悬浮周次切换与指示控制栏（置于悬浮星期行上方，支持上一周/周次菜单/下一周）
+        if (widget.showControlBar)
+          Positioned(
+            top: topPadding + 2,
+            left: resolvedPadding.left,
+            right: resolvedPadding.right,
+            height: controlBarHeight,
+            child: RepaintBoundary(
+              child: _buildWeekControl(context, provider),
+            ),
+          ),
       ],
     );
   }
@@ -525,92 +520,99 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
         now.month == dayDate.month &&
         now.day == dayDate.day;
 
-    return Container(
+    final primaryColor = Theme.of(context).primaryColor;
+
+    final headerBgColor = isToday
+        ? primaryColor.withValues(alpha: isDark ? 0.30 : 0.20)
+        : (isDark
+            ? Colors.white.withValues(alpha: 0.08)
+            : Colors.white.withValues(alpha: 0.16));
+
+    final headerBorder = isToday
+        ? BorderSide(color: primaryColor.withValues(alpha: 0.85), width: 1.5)
+        : BorderSide(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.12)
+                : Colors.black.withValues(alpha: 0.06),
+            width: 0.8,
+          );
+
+    return SizedBox(
       height: 46,
       width: double.infinity,
-      decoration: isToday
-          ? BoxDecoration(
-              color: AppThemeColors.babyPink.withValues(alpha: isDark ? 0.35 : 0.25),
-              borderRadius: BorderRadius.circular(11),
-              border: Border.all(
-                color: AppThemeColors.babyPink.withValues(alpha: 0.85),
-                width: 1.5,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: AppThemeColors.babyPink.withValues(alpha: isDark ? 0.25 : 0.18),
-                  blurRadius: 6,
-                  offset: const Offset(0, 2),
+      child: liquid.HyperOSCard(
+        useBlur: true,
+        cornerRadius: 12,
+        padding: EdgeInsets.zero,
+        color: headerBgColor,
+        border: headerBorder,
+        shadows: [
+          BoxShadow(
+            color: isToday
+                ? primaryColor.withValues(alpha: isDark ? 0.25 : 0.18)
+                : Colors.black.withValues(alpha: isDark ? 0.16 : 0.04),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+        child: Center(
+          child: widget.isPhone
+              ? Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      weekdays[day - 1],
+                      style: TextStyle(
+                        color: isToday
+                            ? (isDark ? Colors.white : primaryColor)
+                            : (isDark ? Colors.white : const Color(0xFF1F2228)),
+                        fontSize: 11.5,
+                        fontWeight: isToday ? FontWeight.w800 : FontWeight.w600,
+                        height: 1.1,
+                      ),
+                    ),
+                    const SizedBox(height: 1),
+                    Text(
+                      '${dayDate.day}',
+                      style: TextStyle(
+                        color: isToday
+                            ? (isDark ? Colors.white : primaryColor)
+                            : (isDark ? Colors.white70 : const Color(0xFF757B88)),
+                        fontSize: 10.5,
+                        fontWeight: isToday ? FontWeight.w800 : FontWeight.w600,
+                        height: 1.1,
+                      ),
+                    ),
+                  ],
+                )
+              : Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      weekdays[day - 1],
+                      style: TextStyle(
+                        color: isToday
+                            ? (isDark ? Colors.white : primaryColor)
+                            : (isDark ? Colors.white : const Color(0xFF1F2228)),
+                        fontSize: 13,
+                        fontWeight: isToday ? FontWeight.w800 : FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      dateLabel,
+                      style: TextStyle(
+                        color: isToday
+                            ? (isDark ? Colors.white70 : primaryColor.withValues(alpha: 0.85))
+                            : (isDark ? Colors.white60 : const Color(0xFF757B88)),
+                        fontSize: 11,
+                        fontWeight: isToday ? FontWeight.w700 : FontWeight.w500,
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            )
-          : BoxDecoration(
-              color: isDark
-                  ? Colors.white.withValues(alpha: 0.05)
-                  : Colors.white.withValues(alpha: 0.40),
-              borderRadius: BorderRadius.circular(11),
-              border: Border.all(
-                color: isDark
-                    ? Colors.white.withValues(alpha: 0.08)
-                    : Colors.black.withValues(alpha: 0.05),
-                width: 0.8,
-              ),
-            ),
-      child: widget.isPhone
-          ? Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  weekdays[day - 1],
-                  style: TextStyle(
-                    color: isToday
-                        ? (isDark ? AppThemeColors.babyPink : const Color(0xFFC84B66))
-                        : (isDark ? Colors.white : const Color(0xFF1F2228)),
-                    fontSize: 11.5,
-                    fontWeight: isToday ? FontWeight.w800 : FontWeight.w600,
-                    height: 1.1,
-                  ),
-                ),
-                const SizedBox(height: 1),
-                Text(
-                  '${dayDate.day}',
-                  style: TextStyle(
-                    color: isToday
-                        ? (isDark ? AppThemeColors.babyPink : const Color(0xFFC84B66))
-                        : (isDark ? Colors.white70 : const Color(0xFF757B88)),
-                    fontSize: 10.5,
-                    fontWeight: isToday ? FontWeight.w800 : FontWeight.w600,
-                    height: 1.1,
-                  ),
-                ),
-              ],
-            )
-          : Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  weekdays[day - 1],
-                  style: TextStyle(
-                    color: isToday
-                        ? AppThemeColors.babyPink
-                        : (isDark ? Colors.white : const Color(0xFF1F2228)),
-                    fontSize: 13,
-                    fontWeight: isToday ? FontWeight.bold : FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  dateLabel,
-                  style: TextStyle(
-                    color: isToday
-                        ? AppThemeColors.babyPink
-                        : (isDark ? Colors.white60 : const Color(0xFF757B88)),
-                    fontSize: 11,
-                    fontWeight: isToday ? FontWeight.bold : FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
+        ),
+      ),
     );
   }
 
@@ -691,34 +693,27 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
         !course.location.contains('未知') &&
         !course.location.contains('未指定');
 
-    return RepaintBoundary(
-      child: liquid.HyperOSCard(
-        useBlur: false, // 视口级单层裁剪模糊共享，彻底根除 FBO 叠加导致的卡顿
-        cornerRadius: widget.isPhone ? 16 : 18,
-        padding: EdgeInsets.all(widget.isPhone ? 6.0 : 8.0),
-        color: cardBgColor,
-        contentColor: titleColor,
-        // [v2.9.0] 增强浅色与深色模式立体弥散阴影，边界清晰物理浮起
-        shadows: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.36 : 0.20),
-            blurRadius: isDark ? 12 : 14,
-            spreadRadius: isDark ? 0 : 0.5,
-            offset: const Offset(0, 4),
-          ),
-          BoxShadow(
-            color: glowColor.withValues(alpha: isDark ? 0.25 : 0.22),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.20 : 0.12),
-            blurRadius: 4,
-            offset: const Offset(0, 1),
-          ),
-        ],
-        // [v2.9.0] 移除主体直接展开详情，避免与底部三点操作条冲突
-        onTap: null,
+    return liquid.HyperOSCard(
+      useBlur: true, // [v3.0.0] 静态全屏遮罩切片采样，零动态模糊损耗，极速 120 FPS
+      cornerRadius: widget.isPhone ? 16 : 18,
+      padding: EdgeInsets.all(widget.isPhone ? 6.0 : 8.0),
+      color: cardBgColor,
+      contentColor: titleColor,
+      // [v3.0.0] 精简阴影为两层清晰立体弥散，大幅降低浅色与深色模式光栅化重绘消耗
+      shadows: [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: isDark ? 0.32 : 0.12),
+          blurRadius: isDark ? 10 : 8,
+          offset: const Offset(0, 3),
+        ),
+        BoxShadow(
+          color: glowColor.withValues(alpha: isDark ? 0.22 : 0.15),
+          blurRadius: 6,
+          offset: const Offset(0, 1),
+        ),
+      ],
+      // [v2.9.0] 移除主体直接展开详情，避免与底部三点操作条冲突
+      onTap: null,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -794,12 +789,31 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
                     title: '删除课程',
                     icon: CupertinoIcons.trash,
                     isDestructive: true,
-                    onTap: () async {
-                      final provider = Provider.of<ScheduleProvider>(context, listen: false);
-                      await provider.deleteCourse(course);
-                      if (context.mounted) {
-                        liquid.showLiquidToast(context, '已删除课程: ${course.name}');
-                      }
+                    onTap: () {
+                      GlassDialog.show(
+                        context: context,
+                        title: '删除课程',
+                        message: '确定要删除课程「${course.name}」吗？此操作不可撤销。',
+                        actions: [
+                          GlassDialogAction(
+                            label: '取消',
+                            onPressed: () => Navigator.pop(context, false),
+                          ),
+                          GlassDialogAction(
+                            label: '删除',
+                            isDestructive: true,
+                            onPressed: () => Navigator.pop(context, true),
+                          ),
+                        ],
+                      ).then((confirmed) async {
+                        if (confirmed == true && context.mounted) {
+                          final provider = Provider.of<ScheduleProvider>(context, listen: false);
+                          await provider.deleteCourse(course);
+                          if (context.mounted) {
+                            liquid.showLiquidToast(context, '已删除课程: ${course.name}');
+                          }
+                        }
+                      });
                     },
                   ),
                 ],
@@ -822,8 +836,7 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
             ),
           ],
         ),
-      ),
-    );
+      );
   }
 
   /// 官方 Liquid Glass 风格课程详情底板（离屏冻结背景加速，BackdropFilter 确保课表网格清晰微透）
@@ -907,7 +920,7 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
                           height: 44,
                           settings: LiquidGlassSettings(
                             glassColor: AppThemeColors.babyPink.withValues(alpha: 0.35),
-                            blur: 4,
+                            blur: 1.5,
                             thickness: 14,
                           ),
                           shape: const LiquidRoundedSuperellipse(borderRadius: 14),
@@ -926,7 +939,7 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
                         height: 44,
                         settings: LiquidGlassSettings(
                           glassColor: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.08),
-                          blur: 4,
+                          blur: 1.5,
                           thickness: 14,
                         ),
                         shape: const LiquidRoundedSuperellipse(borderRadius: 14),

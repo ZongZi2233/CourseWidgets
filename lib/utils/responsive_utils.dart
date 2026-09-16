@@ -1,3 +1,4 @@
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 
 /// 响应式布局工具类
@@ -5,6 +6,15 @@ class ResponsiveUtils {
   /// 平板模式阈值（宽度 > 600dp）
   static const double tabletBreakpoint = 600.0;
   
+  /// 检测是否为桌面端或横屏环境（返回按钮浮在左上角而非右下角）
+  static bool isDesktopOrLandscape(BuildContext context) {
+    return Platform.isWindows ||
+        Platform.isMacOS ||
+        Platform.isLinux ||
+        MediaQuery.of(context).orientation == Orientation.landscape ||
+        isTabletMode(context);
+  }
+
   /// 检测是否为平板模式（横屏且宽度 > 600dp）
   static bool isTabletMode(BuildContext context) {
     final size = MediaQuery.of(context).size;

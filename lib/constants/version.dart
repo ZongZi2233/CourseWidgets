@@ -2,9 +2,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import '../main.dart' show globalDarkModeNotifier;
 
-/// 当前版本：[v3.0.0-alpha1] 架构重构内测版 - 跨端统一排课网格、时间作息对齐引擎解耦、数据库迁移状态机、双管道双线性高斯渲染与多分支独立测试包名
-const String appVersion = '3.0.0-alpha1';
-const int buildNumber = 300;
+/// 当前版本：[v3.0.0-alpha7] 架构重构内测版 - Windows 原生任务栏图标与圆角融合、Android 边缘折射还原、官方液态日历顶栏、全场景二级页面 120FPS 优化
+const String appVersion = '3.0.0-alpha7';
+const int buildNumber = 307;
 const String copyright = '© 2025-2026 CourseWidgets. All rights reserved.';
 
 // 全局状态

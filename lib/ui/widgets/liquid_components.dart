@@ -1,12 +1,16 @@
+import 'dart:io' show Platform;
 import 'dart:ui' show ImageFilter;
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show Colors, Material, Theme;
+import 'package:flutter/material.dart' show Colors, Material, Theme, Orientation, MediaQuery;
 import 'package:flutter/services.dart';
+import 'package:flutter/rendering.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:flutter_miuix/miuix.dart';
 import '../../constants/theme_constants.dart';
 import '../../utils/glass_settings_helper.dart';
+import '../../utils/responsive_utils.dart';
 import '../../services/theme_service.dart' as theme;
+import '../../services/static_blur_service.dart';
 import '../../main.dart';
 
 enum LiquidStyleType { standard, micro, active }
@@ -508,12 +512,22 @@ class FloatingLiquidBackButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isLandscapeOrDesktop = Platform.isWindows ||
+        Platform.isMacOS ||
+        Platform.isLinux ||
+        MediaQuery.of(context).orientation == Orientation.landscape ||
+        ResponsiveUtils.isTabletMode(context);
+
     return Positioned(
-      bottom: 24,
-      right: 20,
+      top: isLandscapeOrDesktop ? (MediaQuery.of(context).padding.top + 16) : null,
+      left: isLandscapeOrDesktop ? 20 : null,
+      bottom: isLandscapeOrDesktop ? null : 24,
+      right: isLandscapeOrDesktop ? null : 20,
       child: SafeArea(
-        top: false,
-        left: false,
+        top: isLandscapeOrDesktop,
+        bottom: !isLandscapeOrDesktop,
+        left: isLandscapeOrDesktop,
+        right: !isLandscapeOrDesktop,
         child: GestureDetector(
           onTap: () {
             HapticFeedback.lightImpact();
@@ -591,7 +605,7 @@ class HyperOSCard extends StatelessWidget {
     this.padding = const EdgeInsets.all(12),
     this.color,
     this.contentColor,
-    this.useBlur = false, // [v2.9.0] 默认单层模糊共享架构，避免多卡片离屏模糊爆炸
+    this.useBlur = true, // [v3.0.0] 默认开启静态模糊遮罩，极速无损呈现真实亚克力混色
     this.blurRadius = 10.0,
     this.feedbackType = MiuixPressFeedbackType.sink,
     this.border,
@@ -603,10 +617,10 @@ class HyperOSCard extends StatelessWidget {
     final isDark = globalDarkModeNotifier.value;
     final primary = theme.ThemeService().primaryColor;
 
-    // [v2.9.7] HyperOS 混色半透明丙烯酸质感：通透柔和，透出背景壁纸与主题色融合
+    // [v3.0.0] HyperOS 混色半透明丙烯酸质感：通透柔和，透出背景模糊壁纸与主题色融合
     final defaultBgColor = isDark
-        ? Color.alphaBlend(primary.withValues(alpha: 0.14), const Color(0x5514171E))
-        : Color.alphaBlend(primary.withValues(alpha: 0.12), const Color(0x60FFFFFF));
+        ? Color.alphaBlend(primary.withValues(alpha: 0.14), const Color(0x3814171E))
+        : Color.alphaBlend(primary.withValues(alpha: 0.10), const Color(0x30FFFFFF));
 
     // 如果指定了自定义颜色（例如课程卡片自定义整卡染色），直接应用；否则使用默认半透明丙烯酸底色
     final effectiveColor = color ?? defaultBgColor;
@@ -625,39 +639,55 @@ class HyperOSCard extends StatelessWidget {
       side: effectiveBorderSide,
     );
 
-    // [v2.9.0] 增强浅色模式阴影可见度，赋予卡片清晰的物理层次与立体感
+    // [v3.0.0] 精简阴影分层：浅色与深色模式均采用精炼的环境光与主投影，降低光栅化负担
     final effectiveShadows = shadows ?? [
       BoxShadow(
-        color: Colors.black.withValues(alpha: isDark ? 0.36 : 0.18),
-        blurRadius: isDark ? 14 : 16,
-        spreadRadius: isDark ? 0 : 0.5,
-        offset: const Offset(0, 4),
+        color: Colors.black.withValues(alpha: isDark ? 0.32 : 0.12),
+        blurRadius: isDark ? 12 : 10,
+        offset: const Offset(0, 3),
       ),
       BoxShadow(
-        color: Colors.black.withValues(alpha: isDark ? 0.20 : 0.10),
-        blurRadius: 5,
-        offset: const Offset(0, 1.5),
+        color: Colors.black.withValues(alpha: isDark ? 0.16 : 0.06),
+        blurRadius: 4,
+        offset: const Offset(0, 1),
       ),
     ];
 
-    Widget cardBody = DecoratedBox(
-      decoration: ShapeDecoration(
-        color: effectiveColor,
-        shape: shape,
-        shadows: effectiveShadows,
-      ),
-      child: Padding(
-        padding: padding,
-        child: child,
-      ),
-    );
-
+    Widget cardBody;
     if (useBlur) {
-      cardBody = ClipPath(
-        clipper: ShapeBorderClipper(shape: shape),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: blurRadius, sigmaY: blurRadius),
-          child: cardBody,
+      // [v3.0.0] 静态单次烘焙遮罩架构：卡片滑动时作为视口移动采样预烘焙模糊壁纸，
+      // 叠加上层亚克力混色与超椭圆，0 动态 BackdropFilter 损耗，120Hz 满帧
+      cardBody = DecoratedBox(
+        decoration: ShapeDecoration(
+          color: Colors.transparent,
+          shape: shape,
+          shadows: effectiveShadows,
+        ),
+        child: ListenableBuilder(
+          listenable: StaticBlurredWallpaperService.instance,
+          builder: (context, _) {
+            return _StaticMaskCardDecorator(
+              shape: shape,
+              acrylicColor: effectiveColor,
+              border: effectiveBorderSide,
+              child: Padding(
+                padding: padding,
+                child: child,
+              ),
+            );
+          },
+        ),
+      );
+    } else {
+      cardBody = DecoratedBox(
+        decoration: ShapeDecoration(
+          color: effectiveColor,
+          shape: shape,
+          shadows: effectiveShadows,
+        ),
+        child: Padding(
+          padding: padding,
+          child: child,
         ),
       );
     }
@@ -681,5 +711,165 @@ class HyperOSCard extends StatelessWidget {
     }
 
     return cardContent;
+  }
+}
+
+/// [v3.0.0] 静态单次壁纸模糊遮罩渲染组件
+class _StaticMaskCardDecorator extends SingleChildRenderObjectWidget {
+  final RoundedSuperellipseBorder shape;
+  final Color acrylicColor;
+  final BorderSide border;
+
+  const _StaticMaskCardDecorator({
+    required this.shape,
+    required this.acrylicColor,
+    required this.border,
+    required super.child,
+  });
+
+  @override
+  RenderObject createRenderObject(BuildContext context) {
+    return _RenderStaticMaskCard(
+      shape: shape,
+      acrylicColor: acrylicColor,
+      border: border,
+    );
+  }
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    _RenderStaticMaskCard renderObject,
+  ) {
+    renderObject
+      ..shape = shape
+      ..acrylicColor = acrylicColor
+      ..border = border;
+    renderObject.markNeedsPaint();
+  }
+}
+
+class _RenderStaticMaskCard extends RenderProxyBox {
+  RoundedSuperellipseBorder _shape;
+  Color _acrylicColor;
+  BorderSide _border;
+
+  _RenderStaticMaskCard({
+    required RoundedSuperellipseBorder shape,
+    required Color acrylicColor,
+    required BorderSide border,
+    RenderBox? child,
+  })  : _shape = shape,
+        _acrylicColor = acrylicColor,
+        _border = border,
+        super(child);
+
+  RoundedSuperellipseBorder get shape => _shape;
+  set shape(RoundedSuperellipseBorder value) {
+    if (_shape != value) {
+      _shape = value;
+      markNeedsPaint();
+    }
+  }
+
+  Color get acrylicColor => _acrylicColor;
+  set acrylicColor(Color value) {
+    if (_acrylicColor != value) {
+      _acrylicColor = value;
+      markNeedsPaint();
+    }
+  }
+
+  BorderSide get border => _border;
+  set border(BorderSide value) {
+    if (_border != value) {
+      _border = value;
+      markNeedsPaint();
+    }
+  }
+
+  @override
+  void attach(PipelineOwner owner) {
+    super.attach(owner);
+    StaticBlurredWallpaperService.instance.addListener(markNeedsPaint);
+  }
+
+  @override
+  void detach() {
+    StaticBlurredWallpaperService.instance.removeListener(markNeedsPaint);
+    super.detach();
+  }
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    final service = StaticBlurredWallpaperService.instance;
+    final blurredImage = service.blurredImage;
+    final rect = offset & size;
+    final path = shape.getOuterPath(rect);
+
+    if (blurredImage != null) {
+      final globalOffset = localToGlobal(Offset.zero);
+      final view = WidgetsBinding.instance.platformDispatcher.views.firstOrNull;
+      final dpr = (view != null && view.devicePixelRatio > 0) ? view.devicePixelRatio : 1.0;
+      final screenW = view != null ? view.physicalSize.width / dpr : 1080.0;
+      final screenH = view != null ? view.physicalSize.height / dpr : 2400.0;
+
+      if (screenW > 0 && screenH > 0) {
+        final imgW = blurredImage.width.toDouble();
+        final imgH = blurredImage.height.toDouble();
+
+        final srcLeft = (globalOffset.dx / screenW) * imgW;
+        final srcTop = (globalOffset.dy / screenH) * imgH;
+        final srcRight = ((globalOffset.dx + size.width) / screenW) * imgW;
+        final srcBottom = ((globalOffset.dy + size.height) / screenH) * imgH;
+
+        final srcRect = Rect.fromLTRB(
+          srcLeft.clamp(0.0, imgW),
+          srcTop.clamp(0.0, imgH),
+          srcRight.clamp(0.0, imgW),
+          srcBottom.clamp(0.0, imgH),
+        );
+
+        context.canvas.save();
+        context.canvas.clipPath(path);
+
+        // 1. 绘制对应屏幕物理视口的静态模糊壁纸切片
+        if (srcRect.width > 0 && srcRect.height > 0) {
+          context.canvas.drawImageRect(
+            blurredImage,
+            srcRect,
+            rect,
+            Paint()..filterQuality = FilterQuality.low,
+          );
+        }
+
+        // 2. 叠加上层混色半透明丙烯酸质感
+        context.canvas.drawPath(
+          path,
+          Paint()..color = acrylicColor,
+        );
+
+        context.canvas.restore();
+      } else {
+        context.canvas.drawPath(path, Paint()..color = acrylicColor);
+      }
+    } else {
+      // 首次纹理尚未就绪时的优雅纯色降级
+      context.canvas.drawPath(path, Paint()..color = acrylicColor);
+    }
+
+    // 3. 边框绘制
+    if (border.style != BorderStyle.none && border.width > 0) {
+      context.canvas.drawPath(
+        path,
+        Paint()
+          ..color = border.color
+          ..strokeWidth = border.width
+          ..style = PaintingStyle.stroke,
+      );
+    }
+
+    // 绘制子组件（内容）
+    super.paint(context, offset);
   }
 }

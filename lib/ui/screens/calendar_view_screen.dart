@@ -10,6 +10,7 @@ import '../../utils/responsive_utils.dart';
 import '../widgets/liquid_components.dart' as liquid;
 import '../widgets/glass_context_menu.dart';
 import '../widgets/unified_backdrop_panel.dart';
+import '../widgets/acrylic_backdrop_plate.dart';
 import '../transitions/smooth_slide_transitions.dart';
 import 'course_edit_screen.dart';
 
@@ -90,26 +91,7 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
         ? _buildTabletLayout(provider)
         : _buildPhoneLayout(provider);
 
-    return Stack(
-      children: [
-        // [v2.10.0] 彻底移除日历页壁纸预模糊，让全局高清壁纸清晰透显，与主课表视觉统一
-        AdaptiveLiquidGlassLayer(
-          quality: GlassQuality.premium,
-          settings: const LiquidGlassSettings(
-            blur: 3.0,
-            thickness: 24.0,
-            glassColor: Color(0x0EFFFFFF),
-            lightIntensity: 0.70,
-            ambientStrength: 0.45,
-            ambientRim: 0.0,
-            fresnelStrength: 0.05,
-            saturation: 1.20,
-            refractiveIndex: 1.46,
-          ),
-          child: content,
-        ),
-      ],
-    );
+    return content;
   }
 
   /// 平板模式：左右双栏分屏
@@ -125,7 +107,7 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
               flex: 42,
               child: Column(
                 children: [
-                  _buildHeader(),
+                  _buildHeader(horizontalPadding: 0),
                   const SizedBox(height: 12),
                   liquid.HyperOSCard(
                     padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
@@ -153,7 +135,7 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
       child: Column(
         children: [
           const SizedBox(height: 12),
-          _buildHeader(),
+          _buildHeader(horizontalPadding: 16),
           const SizedBox(height: 12),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -170,7 +152,7 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
   }
 
   /// 现代晶透月历顶栏（年月切换、今天速达、月/周胶囊切换）
-  Widget _buildHeader() {
+  Widget _buildHeader({double horizontalPadding = 16.0}) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDark ? Colors.white : const Color(0xFF1A1A2E);
     final subColor = isDark ? Colors.white70 : const Color(0x991A1A2E);
@@ -178,13 +160,38 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
         _currentMonth.month == DateTime.now().month;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: GlassCard(
-        shape: const LiquidRoundedSuperellipse(borderRadius: 20),
-        quality: GlassQuality.premium,
-        useOwnLayer: false,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        child: Row(
+      padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(22),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.22 : 0.08),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: GlassContainer(
+          useOwnLayer: true,
+          quality: GlassQuality.premium,
+          shape: const LiquidRoundedSuperellipse(borderRadius: 22),
+          settings: LiquidGlassSettings(
+            glassColor: isDark
+                ? const Color(0x2212151B)
+                : const Color(0x35FFFFFF),
+            blur: 1.5,
+            thickness: 20.0,
+            refractiveIndex: 1.45,
+            lightIntensity: 0.75,
+            ambientStrength: 0.45,
+            ambientRim: 0.25,
+            fresnelStrength: 0.20,
+            saturation: 1.15,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            child: Row(
           children: [
             // 上个月
             _buildNavButton(
@@ -287,7 +294,9 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
           ],
         ),
       ),
-    );
+    ),
+  ),
+);
   }
 
   Widget _buildNavButton({required IconData icon, required VoidCallback onTap}) {

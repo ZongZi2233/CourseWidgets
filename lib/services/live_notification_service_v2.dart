@@ -583,7 +583,10 @@ class LiveNotificationServiceV2 {
     }
 
     if (Platform.isWindows) {
-      final windowToast = LocalNotification(title: title, body: body);
+      final windowToast = LocalNotification(
+        title: title,
+        body: body,
+      );
       windowToast.onClick = () {
         if (_onNotificationTapCallback != null && _currentCourse != null) {
           _onNotificationTapCallback!(_currentCourse!);

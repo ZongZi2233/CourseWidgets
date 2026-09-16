@@ -15,6 +15,12 @@ namespace {
 #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
 #define DWMWA_USE_IMMERSIVE_DARK_MODE 20
 #endif
+#ifndef DWMWA_BORDER_COLOR
+#define DWMWA_BORDER_COLOR 34
+#endif
+#ifndef DWMWA_COLOR_NONE
+#define DWMWA_COLOR_NONE 0xFFFFFFFE
+#endif
 
 constexpr const wchar_t kWindowClassName[] = L"FLUTTER_RUNNER_WIN32_WINDOW";
 
@@ -88,19 +94,21 @@ WindowClassRegistrar* WindowClassRegistrar::instance_ = nullptr;
 
 const wchar_t* WindowClassRegistrar::GetWindowClass() {
   if (!class_registered_) {
-    WNDCLASS window_class{};
+    WNDCLASSEX window_class{};
+    window_class.cbSize = sizeof(WNDCLASSEX);
     window_class.hCursor = LoadCursor(nullptr, IDC_ARROW);
     window_class.lpszClassName = kWindowClassName;
     window_class.style = CS_HREDRAW | CS_VREDRAW;
     window_class.cbClsExtra = 0;
     window_class.cbWndExtra = 0;
-    window_class.hInstance = GetModuleHandle(nullptr);
-    window_class.hIcon =
-        LoadIcon(window_class.hInstance, MAKEINTRESOURCE(IDI_APP_ICON));
+    window_class.hIcon = (HICON)LoadImage(window_class.hInstance, MAKEINTRESOURCE(IDI_APP_ICON), IMAGE_ICON,
+                                          GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), LR_DEFAULTCOLOR);
+    window_class.hIconSm = (HICON)LoadImage(window_class.hInstance, MAKEINTRESOURCE(IDI_APP_ICON), IMAGE_ICON,
+                                            GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), LR_DEFAULTCOLOR);
     window_class.hbrBackground = 0;
     window_class.lpszMenuName = nullptr;
     window_class.lpfnWndProc = Win32Window::WndProc;
-    RegisterClass(&window_class);
+    RegisterClassEx(&window_class);
     class_registered_ = true;
   }
   return kWindowClassName;
@@ -143,6 +151,18 @@ bool Win32Window::Create(const std::wstring& title,
   if (!window) {
     return false;
   }
+
+  // 显式为窗口设置高分辨率大图标(任务栏/Alt-Tab)与小图标(标题栏/托盘)
+  HICON hIconBig = (HICON)LoadImage(GetModuleHandle(nullptr), MAKEINTRESOURCE(IDI_APP_ICON), IMAGE_ICON,
+                                    GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), LR_DEFAULTCOLOR);
+  HICON hIconSmall = (HICON)LoadImage(GetModuleHandle(nullptr), MAKEINTRESOURCE(IDI_APP_ICON), IMAGE_ICON,
+                                      GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), LR_DEFAULTCOLOR);
+  if (hIconBig) SendMessage(window, WM_SETICON, ICON_BIG, (LPARAM)hIconBig);
+  if (hIconSmall) SendMessage(window, WM_SETICON, ICON_SMALL, (LPARAM)hIconSmall);
+
+  // 隐藏 Windows 11 原生主题色边框，避免与内层产生双重曲率不匹配的突兀边框线
+  COLORREF border_color = DWMWA_COLOR_NONE;
+  DwmSetWindowAttribute(window, DWMWA_BORDER_COLOR, &border_color, sizeof(border_color));
 
   UpdateTheme(window);
 

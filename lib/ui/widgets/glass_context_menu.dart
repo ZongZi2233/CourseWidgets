@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
@@ -19,35 +20,51 @@ class GlassContextMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = Theme.of(context).primaryColor;
+
     return GlassMenu(
       trigger: trigger,
       menuWidth: menuWidth,
-      menuBorderRadius: 24.0,
-      itemBorderRadius: 16.0,
+      menuBorderRadius: 22.0,
+      itemBorderRadius: 14.0,
       autoAdjustToScreen: true,
+      platformViewBackdrop: Platform.isWindows, // 仅 Windows 走降级，Android/iOS 恢复 Impeller 原生凸透镜边缘折射着色器
+      quality: GlassQuality.premium,
       menuAlignment: menuAlignment ?? GlassMenuAlignment.none,
-      settings: const LiquidGlassSettings(
+      selectionColor: isDark
+          ? Colors.white.withValues(alpha: 0.15)
+          : primaryColor.withValues(alpha: 0.16),
+      settings: LiquidGlassSettings(
+        glassColor: isDark
+            ? const Color(0x35101216)
+            : const Color(0x30FFFFFF),
         blur: 1.5,
-        thickness: 18.0,
+        thickness: 20.0,
         refractiveIndex: 1.25,
-        ambientRim: 0.05,
-        fresnelStrength: 0.12,
-        edgeAbsorption: 0.0,
-        glassColor: Color.fromRGBO(255, 255, 255, 0.10),
+        lightIntensity: 0.8,
+        ambientStrength: 0.4,
+        ambientRim: 0.35,
+        fresnelStrength: 0.25,
+        edgeAbsorption: 0.1,
       ),
       items: items.map((item) {
+        final textColor = item.isDestructive
+            ? Colors.redAccent
+            : (isDark ? Colors.white : const Color(0xFF1E2128));
+
         return GlassMenuItem(
           title: item.title,
           titleStyle: TextStyle(
-            fontSize: 16,
+            fontSize: 15,
             fontWeight: FontWeight.w700,
-            letterSpacing: 0.3,
-            color: item.isDestructive ? Colors.redAccent : Colors.white,
+            letterSpacing: 0.2,
+            color: textColor,
           ),
           icon: Icon(
             item.icon,
-            size: 20,
-            color: item.isDestructive ? Colors.redAccent : Colors.white,
+            size: 19,
+            color: textColor,
           ),
           isDestructive: item.isDestructive,
           onTap: item.onTap,

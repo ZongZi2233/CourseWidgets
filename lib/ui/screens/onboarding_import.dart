@@ -17,12 +17,14 @@ import 'webview_import_screen.dart'; // [v2.5.9] 引入教务系统导入
 class OnboardingImport extends StatelessWidget {
   final VoidCallback onNext;
   final VoidCallback onBack;
+  final VoidCallback? onComplete;
   final bool isLastPage;
 
   const OnboardingImport({
     super.key,
     required this.onNext,
     required this.onBack,
+    this.onComplete,
     this.isLastPage = false,
   });
 
@@ -178,25 +180,32 @@ class OnboardingImport extends StatelessWidget {
                       saturation: 1.20,
                       refractiveIndex: 1.40,
                     ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: liquid.LiquidButton(
-                            text: '上一步',
-                            onTap: onBack,
-                            color: isDark ? Colors.white.withValues(alpha: 0.18) : Colors.black.withValues(alpha: 0.08),
-                            textColor: isDark ? Colors.white : const Color(0xFF1E2129),
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: liquid.LiquidButton(
-                            text: isLastPage ? '开始使用' : '下一步',
-                            onTap: onNext,
-                            color: ThemeService().primaryColor,
-                          ),
-                        ),
-                      ],
+                    child: Builder(
+                      builder: (context) {
+                        final provider = context.watch<ScheduleProvider>();
+                        final hasCourses = provider.courses.isNotEmpty;
+
+                        return Row(
+                          children: [
+                            Expanded(
+                              child: liquid.LiquidButton(
+                                text: '上一步',
+                                onTap: onBack,
+                                color: isDark ? Colors.white.withValues(alpha: 0.18) : Colors.black.withValues(alpha: 0.08),
+                                textColor: isDark ? Colors.white : const Color(0xFF1E2129),
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: liquid.LiquidButton(
+                                text: hasCourses ? '进入课表' : (isLastPage ? '开始使用' : '下一步'),
+                                onTap: hasCourses ? (onComplete ?? onNext) : onNext,
+                                color: ThemeService().primaryColor,
+                              ),
+                            ),
+                          ],
+                        );
+                      },
                     ),
                   ),
                 ),
@@ -280,10 +289,10 @@ class OnboardingImport extends StatelessWidget {
         if (success) {
           LiquidToast.success(context, 'ICS 导入成功');
 
-          // 延迟后进入下一页
+          // 导入成功直接完成引导或进入下一页
           Future.delayed(const Duration(milliseconds: 800), () {
             if (context.mounted) {
-              onNext();
+              (onComplete ?? onNext)();
             }
           });
         } else {
@@ -313,7 +322,7 @@ class OnboardingImport extends StatelessWidget {
         LiquidToast.success(context, '教务导入成功');
         Future.delayed(const Duration(milliseconds: 800), () {
           if (context.mounted) {
-            onNext();
+            (onComplete ?? onNext)();
           }
         });
       }
@@ -331,10 +340,10 @@ class OnboardingImport extends StatelessWidget {
         if (success) {
           LiquidToast.success(context, 'HTML 导入成功');
 
-          // 延迟后进入下一页
+          // 导入成功直接完成引导或进入下一页
           Future.delayed(const Duration(milliseconds: 800), () {
             if (context.mounted) {
-              onNext();
+              (onComplete ?? onNext)();
             }
           });
         } else {
@@ -359,10 +368,10 @@ class OnboardingImport extends StatelessWidget {
         if (success) {
           LiquidToast.success(context, 'JSON 导入成功');
 
-          // 延迟后进入下一页
+          // 导入成功直接完成引导或进入下一页
           Future.delayed(const Duration(milliseconds: 800), () {
             if (context.mounted) {
-              onNext();
+              (onComplete ?? onNext)();
             }
           });
         } else {
@@ -395,10 +404,10 @@ class OnboardingImport extends StatelessWidget {
 
       LiquidToast.success(context, '已导入 ${testCourses.length} 节测试课程');
 
-      // 延迟后进入下一页
+      // 导入成功直接完成引导或进入下一页
       Future.delayed(const Duration(milliseconds: 800), () {
         if (context.mounted) {
-          onNext();
+          (onComplete ?? onNext)();
         }
       });
     } catch (e) {

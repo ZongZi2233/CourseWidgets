@@ -18,6 +18,7 @@ import 'services/onboarding_service.dart';
 import 'services/windows_tray_service.dart';
 import 'services/storage_service.dart';
 import 'services/background_task_service.dart'; // [v2.2.9] 后台任务服务
+import 'services/static_blur_service.dart'; // [v3.0.0] 全局静态壁纸模糊遮罩服务
 import 'utils/glass_opacity_manager.dart'; // [v2.3.0] 玻璃透明度管理器
 import 'ui/screens/schedule_screen.dart';
 import 'ui/screens/android_liquid_glass_main.dart';
@@ -39,9 +40,9 @@ final ValueNotifier<String?> globalBackgroundPath = ValueNotifier<String?>(
   null,
 );
 
-/// [v3.0.0] 全局课表工作台微乳亚克力底板开关
+/// [v3.0.0] 全局课表工作台微乳亚克力底板开关（默认关闭，保持原画壁纸100%透彻高清）
 final ValueNotifier<bool> globalAcrylicBackdropNotifier =
-    ValueNotifier<bool>(true);
+    ValueNotifier<bool>(false);
 
 // [v2.6.0] 全局路由监听器，用于控制底部导航栏的显示与隐藏
 final RouteObserver<PageRoute> routeObserver = RouteObserver<PageRoute>();
@@ -49,7 +50,8 @@ final RouteObserver<PageRoute> routeObserver = RouteObserver<PageRoute>();
 Future<void> loadGlobalBackground() async {
   try {
     final storage = StorageService();
-    final savedPath = storage.getString('background_image_path');
+    final savedPath = storage.getString(StorageService.keyBackgroundPath) ??
+        storage.getString('background_image_path');
 
     if (savedPath != null && savedPath.isNotEmpty) {
       if (savedPath.startsWith('asset:')) {
@@ -58,6 +60,7 @@ Future<void> loadGlobalBackground() async {
             savedPath == 'asset:assets/tahoe.jpg') {
           globalBackgroundPath.value = null;
           await storage.remove('background_image_path');
+          await storage.remove(StorageService.keyBackgroundPath);
         } else {
           globalBackgroundPath.value = savedPath;
         }
@@ -72,9 +75,9 @@ Future<void> loadGlobalBackground() async {
       }
     }
 
-    // [v3.0.0] 初始化课表工作台微乳亚克力底板开关偏好
+    // [v3.0.0] 初始化课表工作台微乳亚克力底板开关偏好（默认关闭，保持原画壁纸100%高清透彻）
     globalAcrylicBackdropNotifier.value =
-        storage.getBool(StorageService.keyEnableAcrylicBackdrop) ?? true;
+        storage.getBool(StorageService.keyEnableAcrylicBackdrop) ?? false;
   } catch (e, st) {
     AppLogger.error('WALLPAPER', '加载壁纸错误: $e', e, st);
     globalBackgroundPath.value = null;
@@ -186,6 +189,10 @@ void main() async {
   );
   AppLogger.render('LiquidGlassWidgets 初始化与着色器预热完毕');
 
+  // [v3.0.0] 初始化全局静态单次壁纸模糊烘焙服务
+  StaticBlurredWallpaperService.instance.initialize();
+  AppLogger.render('StaticBlurredWallpaperService 初始化完毕');
+
   // [v2.2.9] 初始化后台任务服务（仅 Android）
   if (Platform.isAndroid) {
     try {
@@ -208,10 +215,23 @@ void main() async {
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
     await windowManager.ensureInitialized();
 
-    // [v2.5.1] 初始化本地桌面通知
+    // [v2.5.1/v3.0.0] 初始化本地桌面通知并清理失效快捷方式
     if (Platform.isWindows) {
+      try {
+        final appData = Platform.environment['APPDATA'];
+        if (appData != null) {
+          final oldLnk = File('$appData\\Microsoft\\Windows\\Start Menu\\Programs\\CourseWidgets.lnk');
+          if (oldLnk.existsSync()) {
+            oldLnk.deleteSync();
+            debugPrint('🗑️ 已清除旧版失效快捷方式 CourseWidgets.lnk');
+          }
+        }
+      } catch (e) {
+        debugPrint('清理旧快捷方式异常: $e');
+      }
+
       await localNotifier.setup(
-        appName: 'CourseWidgets',
+        appName: 'CourseWidgets Beta',
         shortcutPolicy: ShortcutPolicy.requireCreate,
       );
     }
@@ -246,6 +266,7 @@ void main() async {
   }
 
   await loadGlobalBackground();
+  await ThemeService().refreshMonetColors();
 
   runApp(
     Phoenix(
@@ -308,42 +329,54 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   Future<void> _checkOnboarding() async {
-    // [v2.8.5] 消除人造 100ms 延迟，即时加载本地偏好
-    final storage = StorageService();
-    final darkMode = storage.getBool(StorageService.keyDarkMode) ?? false;
-    final adaptiveMode =
-        storage.getBool(StorageService.keyAdaptiveDarkMode) ?? false;
+    try {
+      final storage = StorageService();
+      final darkMode = storage.getBool(StorageService.keyDarkMode) ?? false;
+      final adaptiveMode =
+          storage.getBool(StorageService.keyAdaptiveDarkMode) ?? false;
 
-    bool isDark = false;
-    if (adaptiveMode) {
-      final brightness =
-          WidgetsBinding.instance.platformDispatcher.platformBrightness;
-      isDark = brightness == Brightness.dark;
-    } else {
-      isDark = darkMode;
-    }
-    GlassOpacityManager().setDarkMode(isDark);
-    globalUseDarkMode = isDark;
-    globalDarkModeNotifier.value = isDark;
+      bool isDark = false;
+      if (adaptiveMode) {
+        final brightness =
+            WidgetsBinding.instance.platformDispatcher.platformBrightness;
+        isDark = brightness == Brightness.dark;
+      } else {
+        isDark = darkMode;
+      }
+      GlassOpacityManager().setDarkMode(isDark);
+      globalUseDarkMode = isDark;
+      globalDarkModeNotifier.value = isDark;
 
-    if (mounted) {
-      setState(() {
-        _showOnboarding = _onboardingService.shouldShowOnboarding;
-        _isChecking = false;
-      });
-    }
-  }
-
-  void _completeOnboarding() {
-    // [v2.4.7] 引导完成后主动 reload ScheduleProvider 数据
-    final provider = context.read<ScheduleProvider>();
-    provider.loadSavedData().then((_) {
+      if (mounted) {
+        setState(() {
+          _showOnboarding = _onboardingService.shouldShowOnboarding;
+          _isChecking = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('⚠️ _checkOnboarding 异常兜底: $e');
       if (mounted) {
         setState(() {
           _showOnboarding = false;
+          _isChecking = false;
         });
       }
-    });
+    }
+  }
+
+  Future<void> _completeOnboarding() async {
+    await _onboardingService.completeOnboarding();
+    if (mounted) {
+      setState(() {
+        _showOnboarding = false;
+      });
+    }
+    try {
+      final provider = context.read<ScheduleProvider>();
+      await provider.loadSavedData();
+    } catch (e) {
+      debugPrint('引导完成加载课表失败: $e');
+    }
   }
 
   @override
@@ -510,13 +543,20 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                   );
                 }
 
-                // 【核心修复】如果是桌面端（Windows/macOS），强制裁切背景为超椭圆
+                // [v2.4.1/v3.0.0] 桌面端（Windows/macOS）非最大化状态下优雅裁切背景与窗口内容为超椭圆
                 if (Platform.isWindows || Platform.isMacOS) {
-                  backgroundWidget = ClipSmoothRect(
-                    radius: SmoothBorderRadius(
-                      cornerRadius: 16,
-                      cornerSmoothing: 1.0,
-                    ),
+                  backgroundWidget = ValueListenableBuilder<bool>(
+                    valueListenable: windowsGlobalIsMaximized,
+                    builder: (context, isMaximized, child) {
+                      if (isMaximized) return child!;
+                      return ClipSmoothRect(
+                        radius: SmoothBorderRadius(
+                          cornerRadius: 16,
+                          cornerSmoothing: 1.0,
+                        ),
+                        child: child!,
+                      );
+                    },
                     child: backgroundWidget,
                   );
                 }
@@ -537,6 +577,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                   content: contentWidget,
                 );
 
+                // [v3.0.0] Windows 与 macOS 桌面窗口超椭圆圆角统一接管
                 if (Platform.isWindows || Platform.isMacOS) {
                   return ValueListenableBuilder<bool>(
                     valueListenable: windowsGlobalIsMaximized,

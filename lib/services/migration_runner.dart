@@ -54,7 +54,7 @@ class MigrationRunner {
             debugPrint('✅ [MigrationRunner] 已向 courses 表添加 teacher 字段');
           }
         } catch (e) {
-          debugPrint('⚠️ [MigrationRunner] 检查 courses.teacher 字段跳过: ');
+          debugPrint('⚠️ [MigrationRunner] 检查 courses.teacher 字段跳过: $e');
         }
       },
     ),
@@ -104,14 +104,14 @@ class MigrationRunner {
         if (val is int) currentVersion = val;
       }
 
-      AppLogger.data('数据库当前 Schema 版本: v (目标: v)');
+      AppLogger.data('数据库当前 Schema 版本: v$currentVersion (目标: v$kTargetSchemaVersion)');
 
       // 2. 依次应用未执行的迁移
       for (final step in _migrations) {
         if (currentVersion < step.version) {
-          AppLogger.data('执行数据库迁移: v - ');
+          AppLogger.data('执行数据库迁移: v${step.version} - ${step.description}');
           await step.migrate(db);
-          await db.execute('PRAGMA user_version = ');
+          await db.execute('PRAGMA user_version = ${step.version}');
           currentVersion = step.version;
         }
       }
@@ -119,9 +119,9 @@ class MigrationRunner {
       // 3. 幂等性兜底防卫：确保核心表即便在特殊场景下也绝对完备
       await _ensureIntegrityFallback(db);
 
-      AppLogger.data('✅ 数据库 Schema 迁移完成，当前版本: v');
+      AppLogger.data('✅ 数据库 Schema 迁移完成，当前版本: v$currentVersion');
     } catch (e, stack) {
-      AppLogger.dataError('数据库迁移执行失败: ', e, stack);
+      AppLogger.dataError('数据库迁移执行失败: $e', e, stack);
       // 兜底再次保证基础表存在
       await _ensureIntegrityFallback(db);
     }
@@ -173,7 +173,7 @@ class MigrationRunner {
         )
       ''');
     } catch (e) {
-      debugPrint('⚠️ 兜底表结构校验: ');
+      debugPrint('⚠️ 兜底表结构校验: $e');
     }
   }
 }

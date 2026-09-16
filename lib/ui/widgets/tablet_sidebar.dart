@@ -1,11 +1,12 @@
+import 'dart:ui' show ImageFilter;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
-import '../../constants/theme_constants.dart';
+import 'package:flutter/services.dart';
 import '../../constants/version.dart';
-import '../../utils/glass_settings_helper.dart';
+import '../../services/theme_service.dart';
+import '../theme/squircle_geometry.dart';
 
-/// [v2.2.8] 平板模式侧边栏 - 使用全局玻璃设置系统
+/// [v3.0.0] 平板/横屏模式侧边 Dock - 磨砂毛玻璃与超椭圆设计规范
 class TabletSideBar extends StatelessWidget {
   final int selectedIndex;
   final Function(int) onTabSelected;
@@ -20,114 +21,147 @@ class TabletSideBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Logo
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [AppThemeColors.babyPink, AppThemeColors.softCoral],
-                ),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: const Icon(
-                CupertinoIcons.book_fill,
-                color: Colors.white,
-                size: 24,
-              ),
-            ),
-            const SizedBox(height: 32),
-
-            // 导航项
-            ...List.generate(items.length, (index) {
-              final item = items[index];
-              final isSelected = index == selectedIndex;
-
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 16),
-                child: _buildNavItem(
-                  icon: item.icon,
-                  selectedIcon: item.selectedIcon,
-                  isSelected: isSelected,
-                  onTap: () => onTabSelected(index),
-                ),
-              );
-            }),
-
-            const Spacer(),
-
-            // [v2.2.8] 版本信息 - 使用常量
-            Container(
-              padding: const EdgeInsets.all(6),
-              child: Text(
-                'v$appVersion',
-                style: TextStyle(
-                  color: GlassSettingsHelper.getDisabledTextColor(),
-                  fontSize: 10,
-                ),
-              ),
+      child: Container(
+        width: 76,
+        margin: const EdgeInsets.fromLTRB(14, 10, 6, 14),
+        decoration: BoxDecoration(
+          color: isDark
+              ? const Color(0x33101216)
+              : const Color(0x44FFFFFF),
+          borderRadius: SquircleGeometry.smoothRadius(24),
+          border: Border.all(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.12)
+                : Colors.white.withValues(alpha: 0.50),
+            width: 0.8,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.30 : 0.08),
+              blurRadius: 18,
+              offset: const Offset(0, 6),
             ),
           ],
+        ),
+        child: ClipRRect(
+          borderRadius: SquircleGeometry.smoothRadius(24),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 18.0, sigmaY: 18.0),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Column(
+                children: [
+                  // 顶部官方高清 Logo（彻底移除日历图标与外圈色框）
+                  ClipRRect(
+                    borderRadius: SquircleGeometry.smoothRadius(14),
+                    child: Image.asset(
+                      'assets/icon.png',
+                      width: 44,
+                      height: 44,
+                      filterQuality: FilterQuality.high,
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+
+                  // 导航项
+                  ...List.generate(items.length, (index) {
+                    final item = items[index];
+                    final isSelected = index == selectedIndex;
+
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 16),
+                      child: _buildNavItem(
+                        context: context,
+                        icon: item.icon,
+                        selectedIcon: item.selectedIcon,
+                        label: item.label,
+                        isSelected: isSelected,
+                        onTap: () {
+                          HapticFeedback.selectionClick();
+                          onTabSelected(index);
+                        },
+                      ),
+                    );
+                  }),
+
+                  const Spacer(),
+
+                  // 版本信息
+                  Text(
+                    'v$appVersion',
+                    style: TextStyle(
+                      color: isDark ? Colors.white38 : Colors.black38,
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
       ),
     );
   }
 
   Widget _buildNavItem({
+    required BuildContext context,
     required IconData icon,
     IconData? selectedIcon,
+    required String label,
     required bool isSelected,
     required VoidCallback onTap,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = ThemeService().primaryColor;
+
     return Tooltip(
-      message: '', // 可选添加Tooltip
-      child: Container(
-        width: 50,
-        height: 50,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            if (isSelected)
-              BoxShadow(
-                color: AppThemeColors.babyPink.withValues(alpha: 0.3),
-                blurRadius: 15,
-                spreadRadius: 2,
-              )
-            else
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.2),
-                blurRadius: 10,
-                spreadRadius: 0,
-                offset: const Offset(0, 4),
-              ),
-          ],
-        ),
-        child: GlassButton.custom(
-          onTap: onTap,
-          width: 50,
-          height: 50,
-          style: GlassButtonStyle.filled,
-          settings: LiquidGlassSettings(
-            glassColor: isSelected
-                ? AppThemeColors.babyPink.withValues(alpha: 0.4)
-                : Colors.white.withValues(alpha: 0.05),
-            blur: 1.5,
-            thickness: 18.0,
-            ambientRim: 0.06,
-            fresnelStrength: 0.15,
-            edgeAbsorption: 0.0,
+      message: label,
+      waitDuration: const Duration(milliseconds: 300),
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+          width: 48,
+          height: 48,
+          decoration: BoxDecoration(
+            color: isSelected
+                ? primaryColor.withValues(alpha: isDark ? 0.35 : 0.22)
+                : Colors.transparent,
+            borderRadius: SquircleGeometry.smoothRadius(15),
+            border: isSelected
+                ? Border.all(
+                    color: primaryColor.withValues(alpha: 0.70),
+                    width: 1.2,
+                  )
+                : Border.all(
+                    color: Colors.transparent,
+                    width: 1.2,
+                  ),
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: primaryColor.withValues(alpha: isDark ? 0.30 : 0.18),
+                      blurRadius: 10,
+                      spreadRadius: 1,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : null,
           ),
-          shape: const LiquidRoundedSuperellipse(borderRadius: 16),
-          child: Icon(
-            isSelected && selectedIcon != null ? selectedIcon : icon,
-            color: isSelected ? Colors.white : Colors.white60,
-            size: 24,
+          child: Center(
+            child: Icon(
+              isSelected && selectedIcon != null ? selectedIcon : icon,
+              color: isSelected
+                  ? (isDark ? Colors.white : primaryColor)
+                  : (isDark ? Colors.white.withValues(alpha: 0.65) : const Color(0xFF5A606D)),
+              size: 22,
+            ),
           ),
         ),
       ),

@@ -1,7 +1,10 @@
+import 'dart:ui' show ImageFilter;
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
-import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:provider/provider.dart';
+import '../../constants/version.dart';
 import '../../services/windows_tray_service.dart';
 import '../../providers/schedule_provider.dart';
 import '../widgets/macos_traffic_lights.dart';
@@ -176,24 +179,10 @@ class _WindowsCustomWindowState extends State<WindowsCustomWindow>
                       backgroundColor: Colors.transparent,
                       body: Row(
                         children: [
-                          ScrollConfiguration(
-                            behavior: ScrollConfiguration.of(
-                              context,
-                            ).copyWith(scrollbars: false),
-                            child: SingleChildScrollView(
-                              physics: const NeverScrollableScrollPhysics(),
-                              child: ConstrainedBox(
-                                constraints: BoxConstraints(
-                                  minHeight:
-                                      MediaQuery.of(context).size.height - 40,
-                                ),
-                                child: IntrinsicHeight(child: _buildSidebar()),
-                              ),
-                            ),
-                          ),
+                          _buildSidebar(),
                           Expanded(
                             child: Padding(
-                              padding: const EdgeInsets.all(16.0),
+                              padding: const EdgeInsets.fromLTRB(4.0, 10.0, 14.0, 10.0),
                               child: _buildContent(),
                             ),
                           ),
@@ -244,7 +233,15 @@ class _WindowsCustomWindowState extends State<WindowsCustomWindow>
               color: Colors.white.withValues(alpha: 0.15),
             ),
             const SizedBox(width: 14),
-            Icon(Icons.school, color: Theme.of(context).primaryColor, size: 15),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: Image.asset(
+                'assets/icon.png',
+                width: 16,
+                height: 16,
+                filterQuality: FilterQuality.medium,
+              ),
+            ),
             const SizedBox(width: 8),
             const Text(
               "CourseWidgets Beta",
@@ -280,69 +277,126 @@ class _WindowsCustomWindowState extends State<WindowsCustomWindow>
     );
   }
 
-  /// 侧边栏
+  /// [v3.0.0] macOS / iPadOS 风格一体化微透毛玻璃侧边 Dock
   Widget _buildSidebar() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
-      width: 80,
-      margin: const EdgeInsets.symmetric(vertical: 16),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          _buildNavItem(0, Icons.grid_view, "课程"),
-          const SizedBox(height: 24),
-          _buildNavItem(1, Icons.calendar_today, "日历"),
-          const Spacer(),
-          _buildNavItem(2, Icons.settings, "设置"),
-          const SizedBox(height: 16),
+      width: 76,
+      margin: const EdgeInsets.fromLTRB(14, 10, 6, 14),
+      decoration: BoxDecoration(
+        color: isDark
+            ? const Color(0x33101216)
+            : const Color(0x44FFFFFF),
+        borderRadius: SquircleGeometry.smoothRadius(24),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.12)
+              : Colors.black.withValues(alpha: 0.08),
+          width: 0.7,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.30 : 0.08),
+            blurRadius: 18,
+            offset: const Offset(0, 6),
+          ),
         ],
+      ),
+      child: ClipRRect(
+        borderRadius: SquircleGeometry.smoothRadius(24),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 18.0, sigmaY: 18.0),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            child: Column(
+              children: [
+                // 顶部品牌 Logo（高清原生展示，彻底去除主题色外框包裹）
+                ClipRRect(
+                  borderRadius: SquircleGeometry.smoothRadius(14),
+                  child: Image.asset(
+                    'assets/icon.png',
+                    width: 44,
+                    height: 44,
+                    filterQuality: FilterQuality.high,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                // 导航项目
+                _buildNavItem(0, CupertinoIcons.square_grid_2x2_fill, "课程"),
+                const SizedBox(height: 16),
+                _buildNavItem(1, CupertinoIcons.calendar_today, "日历"),
+                const Spacer(),
+                _buildNavItem(2, CupertinoIcons.gear_alt_fill, "设置"),
+                const SizedBox(height: 14),
+                // 版本标识
+                Text(
+                  'v$appVersion',
+                  style: TextStyle(
+                    color: isDark ? Colors.white38 : Colors.black38,
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
 
   Widget _buildNavItem(int index, IconData icon, String tooltip) {
     final isSelected = _selectedIndex == index;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = Theme.of(context).primaryColor;
+
     return Tooltip(
       message: tooltip,
-      waitDuration: const Duration(milliseconds: 500),
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: SquircleGeometry.smoothRadius(SquircleGeometry.radiusCard),
-          boxShadow: [
-            if (isSelected)
-              BoxShadow(
-                color: Theme.of(context).primaryColor.withValues(alpha: 0.3),
-                blurRadius: 15,
-                spreadRadius: 2,
-              )
-            else
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.2),
-                blurRadius: 10,
-                spreadRadius: 0,
-                offset: const Offset(0, 4),
-              ),
-          ],
-        ),
-        child: GlassButton.custom(
-          onTap: () => setState(() => _selectedIndex = index),
+      waitDuration: const Duration(milliseconds: 300),
+      child: GestureDetector(
+        onTap: () {
+          HapticFeedback.selectionClick();
+          setState(() => _selectedIndex = index);
+        },
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
           width: 48,
           height: 48,
-          style: GlassButtonStyle.filled,
-          settings: LiquidGlassSettings(
-            glassColor: isSelected
-                ? Theme.of(context).primaryColor.withValues(alpha: 0.4)
-                : Colors.white.withValues(alpha: 0.05),
-            blur: 15,
-            thickness: 20.0,
+          decoration: BoxDecoration(
+            color: isSelected
+                ? primaryColor.withValues(alpha: isDark ? 0.35 : 0.22)
+                : Colors.transparent,
+            borderRadius: SquircleGeometry.smoothRadius(15),
+            border: isSelected
+                ? Border.all(
+                    color: primaryColor.withValues(alpha: 0.70),
+                    width: 1.2,
+                  )
+                : Border.all(
+                    color: Colors.transparent,
+                    width: 1.2,
+                  ),
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: primaryColor.withValues(alpha: isDark ? 0.30 : 0.18),
+                      blurRadius: 10,
+                      spreadRadius: 1,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : null,
           ),
-          shape: const LiquidRoundedSuperellipse(borderRadius: 16),
           child: Center(
             child: Icon(
               icon,
               color: isSelected
-                  ? Colors.white
-                  : Colors.white.withValues(alpha: 0.7),
-              size: 24,
+                  ? (isDark ? Colors.white : primaryColor)
+                  : (isDark ? Colors.white.withValues(alpha: 0.65) : const Color(0xFF5A606D)),
+              size: 22,
             ),
           ),
         ),

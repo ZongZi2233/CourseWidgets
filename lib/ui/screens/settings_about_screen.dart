@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/services.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import '../../constants/theme_constants.dart';
 import '../../constants/version.dart';
@@ -9,6 +8,7 @@ import 'dart:convert';
 import '../widgets/liquid_components.dart' as liquid;
 import '../widgets/liquid_toast.dart';
 import '../../utils/glass_settings_helper.dart';
+import '../../utils/responsive_utils.dart';
 
 /// [修复7] iOS 26 液态玻璃风格关于软件页面
 class SettingsAboutScreen extends StatefulWidget {
@@ -58,20 +58,7 @@ class _SettingsAboutScreenState extends State<SettingsAboutScreen>
       backgroundColor: Colors.transparent,
       body: Stack(
         children: [
-          AdaptiveLiquidGlassLayer(
-        quality: GlassQuality.premium,
-        settings: const LiquidGlassSettings(
-          blur: 3.0,
-          thickness: 24.0,
-          glassColor: Color(0x0EFFFFFF),
-          lightIntensity: 0.70,
-          ambientStrength: 0.45,
-          ambientRim: 0.0,
-          fresnelStrength: 0.05,
-          saturation: 1.20,
-          refractiveIndex: 1.46,
-        ),
-        child: Column(
+          Column(
           children: [
             // Header
             SafeArea(
@@ -83,6 +70,7 @@ class _SettingsAboutScreenState extends State<SettingsAboutScreen>
                 ),
                 child: Row(
                   children: [
+                    if (ResponsiveUtils.isDesktopOrLandscape(context)) const SizedBox(width: 56),
                     Text(
                       '关于软件',
                       style: TextStyle(
@@ -230,8 +218,7 @@ class _SettingsAboutScreenState extends State<SettingsAboutScreen>
             ),
           ),
         ],
-            ),
-          ),
+      ),
           // [v2.9.7] 悬浮右下角返回按钮
           const liquid.FloatingLiquidBackButton(),
         ],

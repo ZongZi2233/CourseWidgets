@@ -284,7 +284,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
               interactionBehavior: GlassInteractionBehavior.full,
               settings: const LiquidGlassSettings(
                 thickness: 24.0,
-                blur: 4.0,
+                blur: 1.5,
                 chromaticAberration: 0.15,
                 lightIntensity: 0.70,
                 refractiveIndex: 1.46,
@@ -479,7 +479,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                     );
                   },
                   child: WeeklyScheduleGrid(
-                    key: ValueKey('weekly_grid_${provider.currentWeek}'),
+                    key: const ValueKey('weekly_grid_phone_main'),
                     showControlBar: false,
                     isPhone: true,
                     contentPadding: EdgeInsets.only(

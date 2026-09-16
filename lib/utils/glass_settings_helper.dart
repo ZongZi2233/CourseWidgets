@@ -26,7 +26,7 @@ class GlassSettingsHelper {
 
     return LiquidGlassSettings(
       glassColor: glassColor,
-      blur: blur ?? 3.0,
+      blur: blur ?? 2.0,
       thickness: thickness ?? 24.0, // [v2.8.5] 加大物理厚度与景深透镜曲率
       refractiveIndex: 1.46, // [v2.8.5] 大曲率物理透镜折射
       lightIntensity: 0.70,
@@ -97,7 +97,7 @@ class GlassSettingsHelper {
 
     return LiquidGlassSettings(
       glassColor: glassColor,
-      blur: 4.0,
+      blur: 2.5,
       thickness: 24.0,
       refractiveIndex: 1.45,
       lightIntensity: 0.70,
@@ -131,7 +131,7 @@ class GlassSettingsHelper {
 
     return LiquidGlassSettings(
       glassColor: glassColor,
-      blur: 2.5,
+      blur: 1.5,
       thickness: 12.0,
       refractiveIndex: 1.22,
       lightIntensity: 0.50,

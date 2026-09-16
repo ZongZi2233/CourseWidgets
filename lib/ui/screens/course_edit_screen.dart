@@ -12,6 +12,7 @@ import '../widgets/liquid_glass_pickers.dart';
 import '../widgets/liquid_toast.dart';
 import '../../utils/glass_settings_helper.dart';
 import 'package:smooth_scroll_multiplatform/smooth_scroll_multiplatform.dart';
+import '../../utils/responsive_utils.dart';
 
 class CourseEditScreen extends StatefulWidget {
   final CourseEvent? course;
@@ -73,10 +74,7 @@ class _CourseEditScreenState extends State<CourseEditScreen> {
       resizeToAvoidBottomInset: true, // 允许自身表单根据输入法滚动避让
       body: Stack(
         children: [
-          AdaptiveLiquidGlassLayer(
-            quality: GlassQuality.standard,
-            settings: GlassSettingsHelper.getStandardSettings(),
-            child: Column(
+          Column(
               children: [
                 // Header
                 SafeArea(
@@ -88,6 +86,7 @@ class _CourseEditScreenState extends State<CourseEditScreen> {
                     ),
                     child: Row(
                       children: [
+                        if (ResponsiveUtils.isDesktopOrLandscape(context)) const SizedBox(width: 56),
                         Text(
                           widget.course == null ? '添加课程' : '编辑课程',
                           style: TextStyle(
@@ -219,7 +218,6 @@ class _CourseEditScreenState extends State<CourseEditScreen> {
             ),
           ],
         ),
-      ),
       // [v2.9.7] 悬浮右下角返回按钮
       const FloatingLiquidBackButton(),
     ],

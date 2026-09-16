@@ -45,19 +45,18 @@ class CourseColorPalette {
 
   /// [整个卡片染色] 计算整张卡片的半透明丙烯酸质感底色
   /// 白天采用微乳晶澈莫兰迪微染，夜间采用暗夜曜石马卡龙高透
+  /// [v3.0.0] 适度优化底色不透明度，使底层静态模糊壁纸光影与纹理清晰细腻地透射出来
   static Color getCardColor(String courseName, bool isDark) {
     final base = getBaseColor(courseName, isDark);
     if (isDark) {
-      // [v2.9.7] 深色模式：40% 暗夜曜石基底 + 35% 活力马卡龙纯色注入，纯色混色通透深邃透出壁纸
       return Color.alphaBlend(
-        base.withValues(alpha: 0.35),
-        const Color(0x66141720),
+        base.withValues(alpha: 0.28),
+        const Color(0x45141720),
       );
     } else {
-      // [v2.9.7] 浅色模式：46% 晶透乳白基底 + 35% 莫兰迪纯色注入，温润纯色混色微透卡片透出壁纸
       return Color.alphaBlend(
-        base.withValues(alpha: 0.35),
-        const Color(0x75FFFFFF),
+        base.withValues(alpha: 0.22),
+        const Color(0x38FFFFFF),
       );
     }
   }

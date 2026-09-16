@@ -11,26 +11,20 @@ class OnboardingService {
   
   static const String _keyOnboardingCompleted = 'onboarding_completed';
   static const String _keyOnboardingVersion = 'onboarding_version';
-  static const String _currentOnboardingVersion = '2.2.8';
+  static const String _currentOnboardingVersion = '3.0.0-alpha2';
 
-  /// 是否需要显示引导
+  /// 是否需要显示引导（只要完成过引导，绝不重复打扰用户）
   bool get shouldShowOnboarding {
     final completed = _storage.getBool(_keyOnboardingCompleted) ?? false;
-    final version = _storage.getString(_keyOnboardingVersion) ?? '';
-    
-    // 如果从未完成引导，或者引导版本不匹配，则显示
-    final shouldShow = !completed || version != _currentOnboardingVersion;
-    
-    debugPrint('🎯 引导检查: completed=$completed, version=$version, shouldShow=$shouldShow');
-    
-    return shouldShow;
+    debugPrint('🎯 引导检查: completed=$completed');
+    return !completed;
   }
 
   /// 标记引导已完成
   Future<void> completeOnboarding() async {
     await _storage.setBool(_keyOnboardingCompleted, true);
     await _storage.setString(_keyOnboardingVersion, _currentOnboardingVersion);
-    debugPrint('✅ 引导已完成');
+    debugPrint('✅ 引导已完成 (版本: $_currentOnboardingVersion)');
   }
 
   /// 重置引导状态（用于测试）
