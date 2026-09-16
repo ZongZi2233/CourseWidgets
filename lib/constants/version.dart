@@ -2,9 +2,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import '../main.dart' show globalDarkModeNotifier;
 
-/// 当前版本：[v2.10.0] 官方正式版 - 状态栏胶囊下课秒级倒计时恢复、下节课秒级倒计时修复、进度条时间刻度轴与百分比标识、设置与日历页全屏壁纸纯净透显
-const String appVersion = '2.10.0';
-const int buildNumber = 10008070;
+/// 当前版本：[v2.10.1] 官方正式版 - 状态栏胶囊倒计时与后台闹钟唤醒增强、课时表精确对齐
+const String appVersion = '2.10.1';
+const int buildNumber = 10008071;
 const String copyright = '© 2025-2026 CourseWidgets. All rights reserved.';
 
 // 全局状态
