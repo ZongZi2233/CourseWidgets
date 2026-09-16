@@ -1,7 +1,7 @@
 {
   "version": "3.0.0-alpha7",
   "buildNumber": 307,
-  "collectedAt": "2026-09-16T17:57:28.942542",
+  "collectedAt": "2026-09-16T18:13:14.767275",
   "artifacts": [
     {
       "platform": "Android",
@@ -11,7 +11,7 @@
       "size": 58788080,
       "size_formatted": "56.06 MB",
       "sha256": "8f02183905337dc86b9b8150a3155d1be8648bfd57f6fb904b98bb2b2ecc553e",
-      "updated_at": "2026-09-16 17:57:26"
+      "updated_at": "2026-09-16 18:13:12"
     },
     {
       "platform": "Windows",
@@ -20,8 +20,8 @@
       "path": "D:\\VSCODE\\Schedule\\schedule_app\\release\\CourseWidgets-v3.0.0-alpha7-windows-x64.zip",
       "size": 57617379,
       "size_formatted": "54.95 MB",
-      "sha256": "0132516a9829edc2c6e8305b1d90caad485506b5b859f475d0c8b88bf4147650",
-      "updated_at": "2026-09-16 17:57:28"
+      "sha256": "f75be405f909963b528f7723682b3318e0cf191303fce2a29ca7d9cffe054457",
+      "updated_at": "2026-09-16 18:13:14"
     }
   ]
 }
