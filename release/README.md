@@ -1,18 +1,18 @@
-# CourseWidgets v2.10.1 (Build 10008071) Release 产物发布归档
+# CourseWidgets v2.10.3 (Build 10008073) Release 产物发布归档
 
-> **生成时间**: 2026-09-18 16:04:33  
-> **版本号**: `2.10.1` (`10008071`)  
+> **生成时间**: 2026-09-18 16:24:52  
+> **版本号**: `2.10.3` (`10008073`)  
 
 ## 产物下载与校验列表
 
 | 平台 | 文件名 | 体积 | SHA256 校验和 |
 | :--- | :--- | :--- | :--- |
-| Android | `CourseWidgets-v2.10.1-android-arm64-v8a.apk` | 57.66 MB | `6596a03088ff0d85...e1727fb2` |
-| Windows | `CourseWidgets-v2.10.1-windows-x64.zip` | 54.59 MB | `4925c266cdde1679...8f16d91c` |
+| Android | `CourseWidgets-v2.10.3-android-arm64-v8a.apk` | 57.66 MB | `2848e036b1976a55...643b8194` |
+| Windows | `CourseWidgets-v2.10.3-windows-x64.zip` | 54.59 MB | `a8b833618caa3532...c18b3d2d` |
 
 ## 完整校验和 (SHA-256)
 
 ```text
-6596a03088ff0d85dea0c027f44b0fefae12d55cc4f2f4779859e7a9e1727fb2  CourseWidgets-v2.10.1-android-arm64-v8a.apk
-4925c266cdde16796fccadbafffaab12f151951d10832b89f341ebe68f16d91c  CourseWidgets-v2.10.1-windows-x64.zip
+2848e036b1976a556ebebf18bca12477c7823bc24a4f07fc7d1feecb643b8194  CourseWidgets-v2.10.3-android-arm64-v8a.apk
+a8b833618caa3532bd61d77952faf6b6770741626fe407a03762698ac18b3d2d  CourseWidgets-v2.10.3-windows-x64.zip
 ```
