@@ -663,19 +663,14 @@ class HyperOSCard extends StatelessWidget {
           shape: shape,
           shadows: effectiveShadows,
         ),
-        child: ListenableBuilder(
-          listenable: StaticBlurredWallpaperService.instance,
-          builder: (context, _) {
-            return _StaticMaskCardDecorator(
-              shape: shape,
-              acrylicColor: effectiveColor,
-              border: effectiveBorderSide,
-              child: Padding(
-                padding: padding,
-                child: child,
-              ),
-            );
-          },
+        child: _StaticMaskCardDecorator(
+          shape: shape,
+          acrylicColor: effectiveColor,
+          border: effectiveBorderSide,
+          child: Padding(
+            padding: padding,
+            child: child,
+          ),
         ),
       );
     } else {
@@ -754,6 +749,9 @@ class _RenderStaticMaskCard extends RenderProxyBox {
   Color _acrylicColor;
   BorderSide _border;
 
+  Path? _cachedPath;
+  Size? _cachedSize;
+
   _RenderStaticMaskCard({
     required RoundedSuperellipseBorder shape,
     required Color acrylicColor,
@@ -768,6 +766,7 @@ class _RenderStaticMaskCard extends RenderProxyBox {
   set shape(RoundedSuperellipseBorder value) {
     if (_shape != value) {
       _shape = value;
+      _cachedPath = null;
       markNeedsPaint();
     }
   }
@@ -800,15 +799,29 @@ class _RenderStaticMaskCard extends RenderProxyBox {
     super.detach();
   }
 
+  Path _getOrUpdatePath(Size currentSize) {
+    if (_cachedPath == null || _cachedSize != currentSize) {
+      _cachedPath = shape.getOuterPath(Offset.zero & currentSize);
+      _cachedSize = currentSize;
+    }
+    return _cachedPath!;
+  }
+
   @override
   void paint(PaintingContext context, Offset offset) {
     final service = StaticBlurredWallpaperService.instance;
     final blurredImage = service.blurredImage;
-    final rect = offset & size;
-    final path = shape.getOuterPath(rect);
+    final localPath = _getOrUpdatePath(size);
+
+    context.canvas.save();
+    context.canvas.translate(offset.dx, offset.dy);
 
     if (blurredImage != null) {
-      final globalOffset = localToGlobal(Offset.zero);
+      // 0 开销从 Canvas 矩阵获取全局平移坐标，消除 localToGlobal 全树回溯
+      final matrix = context.canvas.getTransform();
+      final globalX = matrix[12];
+      final globalY = matrix[13];
+
       final view = WidgetsBinding.instance.platformDispatcher.views.firstOrNull;
       final dpr = (view != null && view.devicePixelRatio > 0) ? view.devicePixelRatio : 1.0;
       final screenW = view != null ? view.physicalSize.width / dpr : 1080.0;
@@ -818,10 +831,10 @@ class _RenderStaticMaskCard extends RenderProxyBox {
         final imgW = blurredImage.width.toDouble();
         final imgH = blurredImage.height.toDouble();
 
-        final srcLeft = (globalOffset.dx / screenW) * imgW;
-        final srcTop = (globalOffset.dy / screenH) * imgH;
-        final srcRight = ((globalOffset.dx + size.width) / screenW) * imgW;
-        final srcBottom = ((globalOffset.dy + size.height) / screenH) * imgH;
+        final srcLeft = (globalX / screenW) * imgW;
+        final srcTop = (globalY / screenH) * imgH;
+        final srcRight = ((globalX + size.width) / screenW) * imgW;
+        final srcBottom = ((globalY + size.height) / screenH) * imgH;
 
         final srcRect = Rect.fromLTRB(
           srcLeft.clamp(0.0, imgW),
@@ -830,44 +843,43 @@ class _RenderStaticMaskCard extends RenderProxyBox {
           srcBottom.clamp(0.0, imgH),
         );
 
-        context.canvas.save();
-        context.canvas.clipPath(path);
+        context.canvas.clipPath(localPath);
 
         // 1. 绘制对应屏幕物理视口的静态模糊壁纸切片
         if (srcRect.width > 0 && srcRect.height > 0) {
           context.canvas.drawImageRect(
             blurredImage,
             srcRect,
-            rect,
+            Offset.zero & size,
             Paint()..filterQuality = FilterQuality.low,
           );
         }
 
         // 2. 叠加上层混色半透明丙烯酸质感
         context.canvas.drawPath(
-          path,
+          localPath,
           Paint()..color = acrylicColor,
         );
-
-        context.canvas.restore();
       } else {
-        context.canvas.drawPath(path, Paint()..color = acrylicColor);
+        context.canvas.drawPath(localPath, Paint()..color = acrylicColor);
       }
     } else {
       // 首次纹理尚未就绪时的优雅纯色降级
-      context.canvas.drawPath(path, Paint()..color = acrylicColor);
+      context.canvas.drawPath(localPath, Paint()..color = acrylicColor);
     }
 
     // 3. 边框绘制
     if (border.style != BorderStyle.none && border.width > 0) {
       context.canvas.drawPath(
-        path,
+        localPath,
         Paint()
           ..color = border.color
           ..strokeWidth = border.width
           ..style = PaintingStyle.stroke,
       );
     }
+
+    context.canvas.restore();
 
     // 绘制子组件（内容）
     super.paint(context, offset);

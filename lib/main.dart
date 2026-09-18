@@ -26,7 +26,7 @@ import 'ui/screens/ios_liquid_glass_main.dart'; // [v2.5.9] 新增iOS原生支�
 import 'ui/screens/windows_custom_window.dart';
 import 'ui/screens/macos_custom_window.dart'; // [v2.5.9] 新增macOS支持
 import 'ui/screens/onboarding_screen.dart';
-import 'ui/widgets/zero_flicker_splash_preloader.dart'; // [v3.0.0] 零闪烁启动过渡屏
+import 'ui/widgets/animated_splash_overlay.dart'; // [v3.0.0] 秒开开屏动效与并行渲染就绪门
 import 'ui/transitions/smooth_slide_transitions.dart'; // [v2.4.8] 平滑过渡动画
 import 'dart:async';
 import 'package:flutter_phoenix/flutter_phoenix.dart';
@@ -293,7 +293,6 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   final OnboardingService _onboardingService = OnboardingService();
   bool _showOnboarding = false;
-  bool _isChecking = true;
 
   @override
   void initState() {
@@ -350,7 +349,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       if (mounted) {
         setState(() {
           _showOnboarding = _onboardingService.shouldShowOnboarding;
-          _isChecking = false;
         });
       }
     } catch (e) {
@@ -358,7 +356,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       if (mounted) {
         setState(() {
           _showOnboarding = false;
-          _isChecking = false;
         });
       }
     }
@@ -381,14 +378,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    if (_isChecking) {
-      // [v3.0.0 彻底消灭启动黑屏白屏] 居中精致品牌微动效，极速平滑首帧过渡
-      return const material.MaterialApp(
-        debugShowCheckedModeBanner: false,
-        home: ZeroFlickerSplashPreloader(),
-      );
-    }
-
     return ValueListenableBuilder<bool>(
       valueListenable: globalDarkModeNotifier,
       builder: (context, isDarkMode, _) {
@@ -598,25 +587,27 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
                 return coreStack;
               },
-              home: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 600),
-                switchInCurve: Curves.easeOutCubic,
-                switchOutCurve: Curves.easeInCubic,
-                transitionBuilder: (child, animation) {
-                  return FadeTransition(
-                    opacity: animation,
-                    child: child,
-                  );
-                },
-                child: _showOnboarding
-                    ? OnboardingScreen(
-                        key: const ValueKey('onboarding_screen'),
-                        onComplete: _completeOnboarding,
-                      )
-                    : KeyedSubtree(
-                        key: const ValueKey('home_screen'),
-                        child: _getHomeParams(),
-                      ),
+              home: AnimatedSplashOverlay(
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 600),
+                  switchInCurve: Curves.easeOutCubic,
+                  switchOutCurve: Curves.easeInCubic,
+                  transitionBuilder: (child, animation) {
+                    return FadeTransition(
+                      opacity: animation,
+                      child: child,
+                    );
+                  },
+                  child: _showOnboarding
+                      ? OnboardingScreen(
+                          key: const ValueKey('onboarding_screen'),
+                          onComplete: _completeOnboarding,
+                        )
+                      : KeyedSubtree(
+                          key: const ValueKey('home_screen'),
+                          child: _getHomeParams(),
+                        ),
+                ),
               ),
               );
             },

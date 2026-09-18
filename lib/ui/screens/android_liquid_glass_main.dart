@@ -439,22 +439,9 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
     );
   }
 
-  /// [v2.8.9] 重构手机端主课表页面：全周看板网格贯通上下滑动，穿透悬浮标题栏与底栏
+  /// [v2.8.9/v3.0.0] 重构手机端主课表页面：全周看板网格贯通上下滑动，穿透悬浮标题栏与底栏
   Widget _buildSchedulePage() {
-    return AdaptiveLiquidGlassLayer(
-      quality: GlassQuality.premium,
-      settings: const LiquidGlassSettings(
-        blur: 3.0,
-        thickness: 24.0,
-        glassColor: Color(0x0EFFFFFF),
-        lightIntensity: 0.70,
-        ambientStrength: 0.45,
-        ambientRim: 0.0,
-        fresnelStrength: 0.05,
-        saturation: 1.20,
-        refractiveIndex: 1.46,
-      ),
-      child: Consumer<ScheduleProvider>(
+    return Consumer<ScheduleProvider>(
         builder: (context, provider, _) {
           // [v2.9.7 星期栏抬高接近顶栏] 顶部安全留白调整至 top + 54，布局更紧致
           final topPadding = MediaQuery.of(context).padding.top + 54;
@@ -541,8 +528,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
             ],
           );
         },
-      ),
-    );
+      );
   }
 
   /// 现代晶透顶部栏：精简为品牌 Logo 与当前日期指示，腾出顶部空间
