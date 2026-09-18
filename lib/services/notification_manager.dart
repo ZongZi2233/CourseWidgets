@@ -291,10 +291,12 @@ class NotificationManager {
   }) async {
     // [v2.6.0.19] 使用专门应对裸 EXE 的 local_notifier 而非 flutter_local_notifications
     try {
+      final cleanTitle = title.replaceAll(RegExp(r'<[^>]*>'), '');
+      final cleanBody = body.replaceAll(RegExp(r'<[^>]*>'), '');
       final notification = LocalNotification(
         identifier: id.toString(),
-        title: title,
-        body: body,
+        title: cleanTitle,
+        body: cleanBody,
       );
 
       notification.onShow = () {

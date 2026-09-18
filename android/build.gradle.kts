@@ -26,12 +26,12 @@ tasks.register<Delete>("clean") {
 allprojects {
     plugins.withId("com.android.library") {
         configure<com.android.build.api.dsl.LibraryExtension> {
-            compileSdk = 36
+            compileSdk = 37
         }
     }
     plugins.withId("com.android.application") {
         configure<com.android.build.api.dsl.ApplicationExtension> {
-            compileSdk = 36
+            compileSdk = 37
         }
     }
     configurations.all {
