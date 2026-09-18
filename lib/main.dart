@@ -17,6 +17,7 @@ import 'services/notification_manager.dart'; // [v2.7.0] 通知管理器
 import 'services/onboarding_service.dart';
 import 'services/windows_tray_service.dart';
 import 'services/storage_service.dart';
+import 'services/static_blur_service.dart'; // [v3.0.0/v2.10.1] 静态单次壁纸模糊烘焙服务
 import 'services/background_task_service.dart'; // [v2.2.9] 后台任务服务
 import 'ui/transitions/custom_predictive_back_transitions.dart'; // [v2.9.7] 恢复Android预测式返回
 import 'utils/glass_opacity_manager.dart'; // [v2.3.0] 玻璃透明度管理器
@@ -26,6 +27,7 @@ import 'ui/screens/ios_liquid_glass_main.dart'; // [v2.5.9] 新增iOS原生支�
 import 'ui/screens/windows_custom_window.dart';
 import 'ui/screens/macos_custom_window.dart'; // [v2.5.9] 新增macOS支持
 import 'ui/screens/onboarding_screen.dart';
+import 'ui/widgets/animated_splash_overlay.dart'; // [v3.0.0/v2.10.1] 秒开开屏动效与并行渲染就绪门
 import 'ui/transitions/smooth_slide_transitions.dart'; // [v2.4.8] 平滑过渡动画
 import 'dart:async';
 import 'package:flutter_phoenix/flutter_phoenix.dart';
@@ -181,6 +183,10 @@ void main() async {
     warmUpMode: GlassWarmUpMode.always,
   );
   AppLogger.render('LiquidGlassWidgets 初始化与着色器预热完毕');
+
+  // [v2.10.1/v3.0.0] 初始化全局静态单次壁纸模糊烘焙服务
+  StaticBlurredWallpaperService.instance.initialize();
+  AppLogger.render('StaticBlurredWallpaperService 初始化完成');
 
   // [v2.2.9] 初始化后台任务服务（仅 Android）
   if (Platform.isAndroid) {
@@ -610,25 +616,27 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
                 return coreStack;
               },
-              home: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 600),
-                switchInCurve: Curves.easeOutCubic,
-                switchOutCurve: Curves.easeInCubic,
-                transitionBuilder: (child, animation) {
-                  return FadeTransition(
-                    opacity: animation,
-                    child: child,
-                  );
-                },
-                child: _showOnboarding
-                    ? OnboardingScreen(
-                        key: const ValueKey('onboarding_screen'),
-                        onComplete: _completeOnboarding,
-                      )
-                    : KeyedSubtree(
-                        key: const ValueKey('home_screen'),
-                        child: _getHomeParams(),
-                      ),
+              home: AnimatedSplashOverlay(
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 600),
+                  switchInCurve: Curves.easeOutCubic,
+                  switchOutCurve: Curves.easeInCubic,
+                  transitionBuilder: (child, animation) {
+                    return FadeTransition(
+                      opacity: animation,
+                      child: child,
+                    );
+                  },
+                  child: _showOnboarding
+                      ? OnboardingScreen(
+                          key: const ValueKey('onboarding_screen'),
+                          onComplete: _completeOnboarding,
+                        )
+                      : KeyedSubtree(
+                          key: const ValueKey('home_screen'),
+                          child: _getHomeParams(),
+                        ),
+                ),
               ),
               );
             },
