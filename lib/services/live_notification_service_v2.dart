@@ -266,7 +266,7 @@ class LiveNotificationServiceV2 {
     if (Platform.isWindows) {
       final windowToast = LocalNotification(
         title: '10 分钟后上课',
-        body: '${_currentCourse!.name} ${_currentCourse!.location}',
+        body: _stripHtml('${_currentCourse!.name} ${_currentCourse!.location}'),
       );
       windowToast.onClick = () {
         if (_onNotificationTapCallback != null && _currentCourse != null) {
@@ -583,9 +583,11 @@ class LiveNotificationServiceV2 {
     }
 
     if (Platform.isWindows) {
+      final cleanTitle = _stripHtml(title);
+      final cleanBody = _stripHtml(body);
       final windowToast = LocalNotification(
-        title: title,
-        body: body,
+        title: cleanTitle,
+        body: cleanBody,
       );
       windowToast.onClick = () {
         if (_onNotificationTapCallback != null && _currentCourse != null) {
@@ -695,5 +697,10 @@ class LiveNotificationServiceV2 {
   /// 停止服务
   Future<void> dispose() async {
     await cancelNotification();
+  }
+
+  /// [v2.10.2/v3.0.0] 彻底清洗 HTML 标签（用于 Windows Toast 与纯文本通知表面，杜绝 <b><font> 标签外泄形成乱码）
+  static String _stripHtml(String input) {
+    return input.replaceAll(RegExp(r'<[^>]*>'), '');
   }
 }

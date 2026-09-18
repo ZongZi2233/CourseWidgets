@@ -50,6 +50,7 @@ class MainActivity : FlutterActivity() {
                             .edit()
                             .putString(LiveUpdateNotificationManager.KEY_UPCOMING_COURSES, upcomingCoursesJson)
                             .apply()
+                        com.zongzi.schedule.widget.ScheduleWidgetReceiver.updateAll(this)
                     }
                     val nextWakeupMs = call.argument<Long>("nextWakeupMs")
                     if (nextWakeupMs != null && nextWakeupMs > System.currentTimeMillis()) {
@@ -88,6 +89,7 @@ class MainActivity : FlutterActivity() {
                         val notificationManager = getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
                         notificationManager.cancel(id)
                         LiveUpdateNotificationManager.cancelAlarm(this)
+                        com.zongzi.schedule.widget.ScheduleWidgetReceiver.updateAll(this)
                         result.success(true)
                     } catch (e: Exception) {
                         result.error("CANCEL_ERROR", e.message, null)

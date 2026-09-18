@@ -29,6 +29,7 @@ class CourseAlarmReceiver : BroadcastReceiver() {
 
         try {
             refreshNotificationFromSavedCourses(context)
+            com.zongzi.schedule.widget.ScheduleWidgetReceiver.updateAll(context)
         } catch (e: Exception) {
             Log.e("CourseWidgets", "刷新课表通知失败: ${e.message}", e)
         } finally {
