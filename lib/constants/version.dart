@@ -2,9 +2,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import '../main.dart' show globalDarkModeNotifier;
 
-/// 当前版本：[v3.0.0-alpha8] 架构重构内测版 - 秒开开屏动效与并行渲染就绪门、无损 120FPS 动态渲染与转场优化
-const String appVersion = '3.0.0-alpha8';
-const int buildNumber = 308;
+/// 当前版本：[v3.0.0-alpha9] 架构重构内测版 - Jetpack Glance 2×2 液态超椭圆玻璃小组件、API 37/35 深度适配与 Windows 通知防乱码修复
+const String appVersion = '3.0.0-alpha9';
+const int buildNumber = 309;
 const String copyright = '© 2025-2026 CourseWidgets. All rights reserved.';
 
 // 全局状态
