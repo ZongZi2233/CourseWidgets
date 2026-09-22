@@ -70,7 +70,21 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
                 ),
               );
             },
-            child: _buildWeekGrid(context, provider),
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              transitionBuilder: (child, animation) {
+                return FadeTransition(
+                  opacity: animation,
+                  child: child,
+                );
+              },
+              child: KeyedSubtree(
+                key: ValueKey('weekly_grid_content_${provider.currentWeek}'),
+                child: _buildWeekGrid(context, provider),
+              ),
+            ),
           ),
         );
 
@@ -162,6 +176,7 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
                             return GestureDetector(
                               onTap: () {
                                 HapticFeedback.selectionClick();
+                                _isBackgroundFrozen.value = false;
                                 _changeWeek(provider, w);
                                 Navigator.pop(sheetCtx);
                               },
