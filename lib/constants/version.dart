@@ -2,9 +2,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import '../main.dart' show globalDarkModeNotifier;
 
-/// 当前版本：[v3.0.0-alpha9] 架构重构内测版 - Jetpack Glance 2×2 液态超椭圆玻璃小组件、API 37/35 深度适配与 Windows 通知防乱码修复
-const String appVersion = '3.0.0-alpha9';
-const int buildNumber = 309;
+/// 当前版本：[v3.0.0-alpha10] 架构重构内测版 - Jetpack Glance 2×2 液态超椭圆玻璃小组件、API 37/35 深度适配与 Windows 通知防乱码修复
+const String appVersion = '3.0.0-alpha10';
+const int buildNumber = 310;
 const String copyright = '© 2025-2026 CourseWidgets. All rights reserved.';
 
 // 全局状态

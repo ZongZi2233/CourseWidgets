@@ -1,18 +1,18 @@
-# CourseWidgets v3.0.0-alpha9 (Build 309) Release 产物发布归档
+# CourseWidgets v3.0.0-alpha10 (Build 310) Release 产物发布归档
 
-> **生成时间**: 2026-09-22 17:22:28  
-> **版本号**: `3.0.0-alpha9` (`309`)  
+> **生成时间**: 2026-09-22 17:52:49  
+> **版本号**: `3.0.0-alpha10` (`310`)  
 
 ## 产物下载与校验列表
 
 | 平台 | 文件名 | 体积 | SHA256 校验和 |
 | :--- | :--- | :--- | :--- |
-| Android | `CourseWidgets-v3.0.0-alpha9-android-arm64-v8a.apk` | 58.93 MB | `ab466d1cc76ee7ee...d0e955b4` |
-| Windows | `CourseWidgets-v3.0.0-alpha9-windows-x64.zip` | 54.95 MB | `f1ef4132eb0db437...67c36397` |
+| Android | `CourseWidgets-v3.0.0-alpha10-android-arm64-v8a.apk` | 58.93 MB | `738d30183093e42e...dd46960a` |
+| Windows | `CourseWidgets-v3.0.0-alpha10-windows-x64.zip` | 54.95 MB | `c9de1f1066010e68...b700c9dd` |
 
 ## 完整校验和 (SHA-256)
 
 ```text
-ab466d1cc76ee7ee9cd287f64ccac695113049ede32e457708759b15d0e955b4  CourseWidgets-v3.0.0-alpha9-android-arm64-v8a.apk
-f1ef4132eb0db437646df6d614b6fcae277cbeca1e6f6b95229c0cb867c36397  CourseWidgets-v3.0.0-alpha9-windows-x64.zip
+738d30183093e42e2de2b676d21574c0f3a21663acc6daec0f548c7edd46960a  CourseWidgets-v3.0.0-alpha10-android-arm64-v8a.apk
+c9de1f1066010e689c308f2344cfa77383fc6148932b9caf11b2dd19b700c9dd  CourseWidgets-v3.0.0-alpha10-windows-x64.zip
 ```
