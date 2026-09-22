@@ -693,8 +693,9 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
         !course.location.contains('未知') &&
         !course.location.contains('未指定');
 
-    return liquid.HyperOSCard(
-      useBlur: true, // [v3.0.0] 静态全屏遮罩切片采样，零动态模糊损耗，极速 120 FPS
+    return RepaintBoundary(
+      child: liquid.HyperOSCard(
+        useBlur: true, // [v3.0.0] 静态全屏遮罩切片采样，零动态模糊损耗，极速 120 FPS
       cornerRadius: widget.isPhone ? 16 : 18,
       padding: EdgeInsets.all(widget.isPhone ? 6.0 : 8.0),
       color: cardBgColor,
@@ -836,7 +837,8 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
             ),
           ],
         ),
-      );
+      ),
+    );
   }
 
   /// 官方 Liquid Glass 风格课程详情底板（离屏冻结背景加速，BackdropFilter 确保课表网格清晰微透）

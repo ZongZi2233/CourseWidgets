@@ -1,4 +1,5 @@
 import 'dart:io' show Platform;
+import 'dart:math' as math;
 import 'dart:ui' show ImageFilter;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Colors, Material, Theme, Orientation, MediaQuery;
@@ -831,10 +832,16 @@ class _RenderStaticMaskCard extends RenderProxyBox {
         final imgW = blurredImage.width.toDouble();
         final imgH = blurredImage.height.toDouble();
 
-        final srcLeft = (globalX / screenW) * imgW;
-        final srcTop = (globalY / screenH) * imgH;
-        final srcRight = ((globalX + size.width) / screenW) * imgW;
-        final srcBottom = ((globalY + size.height) / screenH) * imgH;
+        // 智能 BoxFit.cover 比例映射：无论处于稳态还是横竖屏旋转过渡期，
+        // 确保采样切片始终与底层高清壁纸保持几何居中对齐，杜绝拉伸变形与坐标漂移。
+        final scale = math.max(imgW / screenW, imgH / screenH);
+        final offsetX = (imgW - screenW * scale) / 2.0;
+        final offsetY = (imgH - screenH * scale) / 2.0;
+
+        final srcLeft = globalX * scale + offsetX;
+        final srcTop = globalY * scale + offsetY;
+        final srcRight = (globalX + size.width) * scale + offsetX;
+        final srcBottom = (globalY + size.height) * scale + offsetY;
 
         final srcRect = Rect.fromLTRB(
           srcLeft.clamp(0.0, imgW),

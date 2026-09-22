@@ -1,9 +1,41 @@
 <?xml version="1.0" encoding="utf-8"?>
-<shape xmlns:android="http://schemas.android.com/apk/res/android"
-    android:shape="rectangle">
-    <corners android:radius="26dp" />
-    <solid android:color="#D0181B22" />
-    <stroke
-        android:width="1dp"
-        android:color="#40FFFFFF" />
-</shape>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Layer 0: 旗舰微乳亚克力深度通透磨砂渐变底板 -->
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="26dp" />
+            <gradient
+                android:angle="135"
+                android:startColor="#D8181F2C"
+                android:centerColor="#CC121624"
+                android:endColor="#D40C0F18"
+                android:type="linear" />
+        </shape>
+    </item>
+
+    <!-- Layer 1: 顶部 270° 物理玻璃镜面折射光晕 (从顶部边缘柔和散焦渐隐) -->
+    <item android:bottom="45dp">
+        <shape android:shape="rectangle">
+            <corners
+                android:topLeftRadius="26dp"
+                android:topRightRadius="26dp"
+                android:bottomLeftRadius="0dp"
+                android:bottomRightRadius="0dp" />
+            <gradient
+                android:angle="270"
+                android:startColor="#30FFFFFF"
+                android:endColor="#00FFFFFF"
+                android:type="linear" />
+        </shape>
+    </item>
+
+    <!-- Layer 2: 液态磨砂高透边框 (1.2dp 晶莹描边) -->
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="26dp" />
+            <stroke
+                android:width="1.2dp"
+                android:color="#48FFFFFF" />
+        </shape>
+    </item>
+</layer-list>

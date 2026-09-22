@@ -25,7 +25,12 @@ class StaticBlurredWallpaperService extends ChangeNotifier with WidgetsBindingOb
   ui.Image? _blurredImage;
   ui.Image? get blurredImage => _blurredImage;
 
+  Size? _bakedScreenSize;
+  Size? get bakedScreenSize => _bakedScreenSize;
+
   bool _isBaking = false;
+  bool _hasPendingRebake = false;
+  Size? _pendingRebakeSize;
   String? _lastWallpaperKey;
   Size? _lastScreenSize;
 
@@ -48,8 +53,8 @@ class StaticBlurredWallpaperService extends ChangeNotifier with WidgetsBindingOb
   void didChangeMetrics() {
     final newSize = _getScreenLogicalSize();
     if (_lastScreenSize == null ||
-        (newSize.width - _lastScreenSize!.width).abs() > 20 ||
-        (newSize.height - _lastScreenSize!.height).abs() > 20) {
+        (newSize.width - _lastScreenSize!.width).abs() > 10 ||
+        (newSize.height - _lastScreenSize!.height).abs() > 10) {
       bakeCurrentWallpaper(customScreenSize: newSize);
     }
   }
@@ -78,7 +83,11 @@ class StaticBlurredWallpaperService extends ChangeNotifier with WidgetsBindingOb
 
   /// 触发单次静态高斯模糊纹理烘焙（若内容未变则自动跳过）
   Future<void> bakeCurrentWallpaper({Size? customScreenSize}) async {
-    if (_isBaking) return;
+    if (_isBaking) {
+      _hasPendingRebake = true;
+      _pendingRebakeSize = customScreenSize ?? _getScreenLogicalSize();
+      return;
+    }
 
     final isDark = globalDarkModeNotifier.value;
     final bgPath = globalBackgroundPath.value;
@@ -158,14 +167,21 @@ class StaticBlurredWallpaperService extends ChangeNotifier with WidgetsBindingOb
 
       final oldImage = _blurredImage;
       _blurredImage = bakedImage;
+      _bakedScreenSize = screenSize;
       oldImage?.dispose();
 
-      debugPrint('✨ [StaticBlurredWallpaperService] 静态壁纸模糊纹理烘焙成功: ${bakedImage.width}x${bakedImage.height}');
+      debugPrint('✨ [StaticBlurredWallpaperService] 静态壁纸模糊纹理烘焙成功: ${bakedImage.width}x${bakedImage.height} (屏幕: ${screenSize.width.round()}x${screenSize.height.round()})');
       notifyListeners();
     } catch (e) {
       debugPrint('⚠️ [StaticBlurredWallpaperService] 静态壁纸模糊纹理烘焙失败: $e');
     } finally {
       _isBaking = false;
+      if (_hasPendingRebake) {
+        _hasPendingRebake = false;
+        final nextSize = _pendingRebakeSize;
+        _pendingRebakeSize = null;
+        scheduleMicrotask(() => bakeCurrentWallpaper(customScreenSize: nextSize));
+      }
     }
   }
 

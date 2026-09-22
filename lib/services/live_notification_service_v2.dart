@@ -626,13 +626,26 @@ class LiveNotificationServiceV2 {
         }
 
         String? upcomingCoursesJson;
-        if (futureCourses.isNotEmpty) {
-          final listToSave = futureCourses.take(30).map((c) => {
-            'name': c.name,
-            'location': c.location,
-            'startTime': c.startTime,
-            'endTime': c.endTime,
-          }).toList();
+        if (_allCourses.isNotEmpty) {
+          // [v3.0.0] 供给小组件与锁屏通报：保存前后 14 天完整课表数据（涵盖已上完与待上课程，支持桌面小组件切日回看与全天看板）
+          final nowTime = DateTime.now();
+          final startWindow = nowTime.subtract(const Duration(days: 7)).millisecondsSinceEpoch;
+          final endWindow = nowTime.add(const Duration(days: 14)).millisecondsSinceEpoch;
+          final relevantCourses = _allCourses
+              .where((c) => c.startTime >= startWindow && c.startTime <= endWindow)
+              .toList()
+            ..sort((a, b) => a.startTime.compareTo(b.startTime));
+
+          final listToSave = (relevantCourses.isNotEmpty ? relevantCourses : _allCourses)
+              .take(80)
+              .map((c) => {
+                'name': c.name,
+                'location': c.location,
+                'teacher': c.teacher,
+                'startTime': c.startTime,
+                'endTime': c.endTime,
+              })
+              .toList();
           upcomingCoursesJson = jsonEncode(listToSave);
         }
 

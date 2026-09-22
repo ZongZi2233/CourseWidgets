@@ -106,61 +106,76 @@ class ScheduleGlanceWidget : GlanceAppWidget() {
                         )
                         Spacer(modifier = GlanceModifier.defaultWeight())
 
-                        // 切日前一天
-                        Text(
-                            text = "‹",
-                            style = TextStyle(
-                                color = ColorProvider(Color.White),
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp
-                            ),
+                        // 切日前一天 (加宽触控热区)
+                        Box(
                             modifier = GlanceModifier
+                                .width(34.dp)
+                                .height(28.dp)
                                 .background(ImageProvider(R.drawable.bg_glass_badge))
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
                                 .clickable(
                                     actionRunCallback<SwitchDayActionCallback>(
                                         actionParametersOf(SwitchDayActionCallback.deltaKey to -1)
                                     )
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "‹",
+                                style = TextStyle(
+                                    color = ColorProvider(Color.White),
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp
                                 )
-                        )
+                            )
+                        }
                         Spacer(modifier = GlanceModifier.width(4.dp))
 
                         // 回到今天
-                        Text(
-                            text = "今",
-                            style = TextStyle(
-                                color = ColorProvider(if (dayOffset == 0) Color(0xFFFF9A9E) else Color.White),
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 10.sp
-                            ),
+                        Box(
                             modifier = GlanceModifier
+                                .width(34.dp)
+                                .height(28.dp)
                                 .background(ImageProvider(R.drawable.bg_glass_badge))
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
                                 .clickable(
                                     actionRunCallback<SwitchDayActionCallback>(
                                         actionParametersOf(SwitchDayActionCallback.deltaKey to 0)
                                     )
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "今",
+                                style = TextStyle(
+                                    color = ColorProvider(if (dayOffset == 0) Color(0xFFFF9A9E) else Color.White),
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 11.sp
                                 )
-                        )
+                            )
+                        }
                         Spacer(modifier = GlanceModifier.width(4.dp))
 
                         // 切日后一天
-                        Text(
-                            text = "›",
-                            style = TextStyle(
-                                color = ColorProvider(Color.White),
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp
-                            ),
+                        Box(
                             modifier = GlanceModifier
+                                .width(34.dp)
+                                .height(28.dp)
                                 .background(ImageProvider(R.drawable.bg_glass_badge))
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
                                 .clickable(
                                     actionRunCallback<SwitchDayActionCallback>(
                                         actionParametersOf(SwitchDayActionCallback.deltaKey to 1)
                                     )
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "›",
+                                style = TextStyle(
+                                    color = ColorProvider(Color.White),
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp
                                 )
-                        )
+                            )
+                        }
                     }
 
                     // 核心课程卡片内容区：点击唤醒主应用本体
@@ -269,7 +284,7 @@ class ScheduleGlanceWidget : GlanceAppWidget() {
                                 )
                                 Spacer(modifier = GlanceModifier.height(3.dp))
                                 Text(
-                                    text = "享受自由时光，好好休息吧~",
+                                    text = if (dayOffset == 0) "轻点 › 翻阅明日日程" else "享受自由时光，好好休息吧~",
                                     style = TextStyle(
                                         color = ColorProvider(Color(0x99FFFFFF)),
                                         fontSize = 10.sp
@@ -366,14 +381,16 @@ class ScheduleGlanceWidget : GlanceAppWidget() {
             val first = dayCourses.first()
             val st = first.optLong("startTime", 0L)
             val et = first.optLong("endTime", 0L)
+            val countDesc = if (dayCourses.size > 1) " · 共${dayCourses.size}节" else ""
+            val statusTitle = if (dayOffset > 0) "当天首节$countDesc" else "历史课程$countDesc"
             return WidgetCourseData(
                 name = first.optString("name", "课程"),
                 location = first.optString("location", ""),
                 teacher = first.optString("teacher", ""),
                 startTime = st,
                 endTime = et,
-                statusText = "当天首节",
-                statusColor = Color(0xFF64B5F6),
+                statusText = statusTitle,
+                statusColor = if (dayOffset > 0) Color(0xFF64B5F6) else Color(0xFFB0BEC5),
                 progressPercent = 0,
                 isOngoing = false
             )

@@ -63,20 +63,22 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
   }
 
 
-  // [v2.8.9] 被其他页面覆盖时：仅隐藏底部导航栏，零 GPU 阻塞直出 120 FPS 丝滑滑入
+  // [v2.8.9/v3.0.0] 被其他页面覆盖时：冻结底层课表动画并隐藏底栏，二级页面转场满帧 120 FPS
   @override
   void didPushNext() {
     if (mounted) {
+      _isBackgroundFrozen.value = true;
       setState(() {
         _isBottomNavVisible = false;
       });
     }
   }
 
-  // [v2.8.9] 上一层页面弹出：平滑恢复底部导航栏
+  // [v2.8.9/v3.0.0] 上一层页面弹出：平滑解冻课表并恢复底部导航栏
   @override
   void didPopNext() {
     if (mounted) {
+      _isBackgroundFrozen.value = false;
       setState(() {
         _isBottomNavVisible = true;
       });
@@ -466,7 +468,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                     );
                   },
                   child: WeeklyScheduleGrid(
-                    key: const ValueKey('weekly_grid_phone_main'),
+                    key: ValueKey('weekly_grid_phone_${provider.currentWeek}'),
                     showControlBar: false,
                     isPhone: true,
                     contentPadding: EdgeInsets.only(
@@ -1423,6 +1425,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                           return GestureDetector(
                             onTap: () {
                               HapticFeedback.selectionClick();
+                              _isBackgroundFrozen.value = false;
                               provider.setCurrentWeek(week);
                               Navigator.pop(ctx);
                             },

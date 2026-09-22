@@ -115,3 +115,12 @@
 -keepclassmembers class * {
     void <init>();
 }
+
+# [v3.0.0] Jetpack Glance 桌面小组件与动作回调保护
+-keep class androidx.glance.** { *; }
+-keep interface androidx.glance.** { *; }
+-keep class com.zongzi.schedule.widget.** { *; }
+-keepclassmembers class * implements androidx.glance.appwidget.action.ActionCallback {
+    public <init>();
+    public <methods>;
+}
