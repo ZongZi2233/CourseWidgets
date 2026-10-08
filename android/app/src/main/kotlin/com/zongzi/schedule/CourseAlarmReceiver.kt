@@ -60,19 +60,27 @@ class CourseAlarmReceiver : BroadcastReceiver() {
             // 正在上课中
             if (st <= now && et > now) {
                 currentCourse = c
-                if (et in (now + 1) until nextWakeupTime) {
-                    nextWakeupTime = et
-                }
             } else if (st > now) {
                 if (nextCourse == null || st < nextCourse.optLong("startTime", Long.MAX_VALUE)) {
                     nextCourse = c
                 }
-                val tenMinBefore = st - 10 * 60 * 1000
-                if (tenMinBefore > now && tenMinBefore < nextWakeupTime) {
-                    nextWakeupTime = tenMinBefore
-                }
-                if (st in (now + 1) until nextWakeupTime) {
-                    nextWakeupTime = st
+            }
+        }
+
+        // [v3.0.0] 分钟级硬件闹钟精准对齐算法：上课期间或课前 60 分钟倒计时期间，每分钟准时唤醒刷新剩余时间
+        val nextMinute = ((now / 60000L) + 1L) * 60000L
+        if (currentCourse != null) {
+            val et = currentCourse.optLong("endTime", now)
+            nextWakeupTime = if (nextMinute < et) nextMinute else et
+        } else if (nextCourse != null) {
+            val st = nextCourse.optLong("startTime", now)
+            val diffMs = st - now
+            if (diffMs <= 60 * 60 * 1000L) {
+                nextWakeupTime = if (nextMinute < st) nextMinute else st
+            } else {
+                val sixtyMinBefore = st - 60 * 60 * 1000L
+                if (sixtyMinBefore > now) {
+                    nextWakeupTime = sixtyMinBefore
                 }
             }
         }

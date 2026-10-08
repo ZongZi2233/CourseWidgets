@@ -593,7 +593,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                   color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.10),
+                    color: isDark ? const Color(0x30000000) : const Color(0x12000000),
                     width: 0.8,
                   ),
                 ),
@@ -718,7 +718,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                     borderRadius: BorderRadius.circular(18),
                     border: Border.all(
                       color: isDark
-                          ? Colors.white.withValues(alpha: canPrev ? 0.18 : 0.06)
+                          ? (canPrev ? const Color(0x40000000) : const Color(0x18000000))
                           : (canPrev ? const Color(0xFFCDD3DE) : const Color(0xFFE4E7ED)),
                       width: 0.9,
                     ),
@@ -774,7 +774,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
               ),
               const SizedBox(width: 6),
 
-              // 4. (＞) 下一周按钮（加深同系色描边，无黑边）
+              // 4. (＞) 下一周按钮（暗色微描边，消除突兀白边）
               GestureDetector(
                 onTap: canNext
                     ? () {
@@ -793,7 +793,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                     borderRadius: BorderRadius.circular(18),
                     border: Border.all(
                       color: isDark
-                          ? Colors.white.withValues(alpha: canNext ? 0.18 : 0.06)
+                          ? (canNext ? const Color(0x40000000) : const Color(0x18000000))
                           : (canNext ? const Color(0xFFCDD3DE) : const Color(0xFFE4E7ED)),
                       width: 0.9,
                     ),
@@ -809,7 +809,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
               ),
               const SizedBox(width: 6),
 
-              // 5. (⋯) 变形多功能菜单（加深同系色描边，无黑边）
+              // 5. (⋯) 变形多功能菜单（暗色微描边，消除突兀白边）
               GlassMenu(
                 menuWidth: 170,
                 menuBorderRadius: 20,
@@ -827,7 +827,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                         borderRadius: BorderRadius.circular(18),
                         border: Border.all(
                           color: isDark
-                              ? Colors.white.withValues(alpha: 0.18)
+                              ? const Color(0x40000000)
                               : const Color(0xFFCDD3DE),
                           width: 0.9,
                         ),
@@ -1291,6 +1291,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
 
   /// 优雅的无课程占位视图
   Widget _buildEmptyCourseView() {
+    final isDark = Theme.of(context).brightness == Brightness.dark || globalDarkModeNotifier.value;
     return SizedBox(
       height: MediaQuery.of(context).size.height * 0.45,
       child: Center(
@@ -1301,10 +1302,10 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
               width: 64,
               height: 64,
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.06),
+                color: isDark ? const Color(0x20000000) : Colors.white.withValues(alpha: 0.06),
                 borderRadius: BorderRadius.circular(22),
                 border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.12),
+                  color: isDark ? const Color(0x35000000) : const Color(0x10000000),
                   width: 0.8,
                 ),
               ),
@@ -1364,8 +1365,8 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                   border: Border(
                     top: BorderSide(
                       color: isDark
-                          ? Colors.white.withValues(alpha: 0.16)
-                          : Colors.white.withValues(alpha: 0.70),
+                          ? const Color(0x35000000)
+                          : const Color(0x12000000),
                       width: 0.8,
                     ),
                   ),
@@ -1446,8 +1447,8 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(
                                   color: isCur
-                                      ? Colors.white.withValues(alpha: 0.6)
-                                      : Colors.white.withValues(alpha: 0.1),
+                                      ? AppThemeColors.babyPink.withValues(alpha: 0.65)
+                                      : (isDark ? const Color(0x30000000) : const Color(0x0E000000)),
                                   width: 0.8,
                                 ),
                               ),

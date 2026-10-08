@@ -184,7 +184,7 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
                                   border: isCur
                                       ? null
                                       : Border.all(
-                                          color: (dialogDark ? Colors.white : Colors.black).withValues(alpha: 0.10),
+                                          color: (dialogDark ? const Color(0x30000000) : const Color(0x10000000)),
                                           width: 0.6,
                                         ),
                                   boxShadow: isCur
@@ -532,8 +532,8 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
         ? BorderSide(color: primaryColor.withValues(alpha: 0.85), width: 1.5)
         : BorderSide(
             color: isDark
-                ? Colors.white.withValues(alpha: 0.12)
-                : Colors.black.withValues(alpha: 0.06),
+                ? const Color(0x30000000)
+                : const Color(0x0E000000),
             width: 0.8,
           );
 
@@ -541,7 +541,7 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
       height: 46,
       width: double.infinity,
       child: liquid.HyperOSCard(
-        useBlur: true,
+        useBlur: false,
         cornerRadius: 12,
         padding: EdgeInsets.zero,
         color: headerBgColor,
@@ -695,7 +695,7 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
 
     return RepaintBoundary(
       child: liquid.HyperOSCard(
-        useBlur: true, // [v3.0.0] 静态全屏遮罩切片采样，零动态模糊损耗，极速 120 FPS
+        useBlur: false, // [v3.0.0] 对齐 moyue 核心渲染架构：视口滚动项禁用逐卡动态采样，由 RepaintBoundary 极速缓存，满帧 120 FPS
       cornerRadius: widget.isPhone ? 16 : 18,
       padding: EdgeInsets.all(widget.isPhone ? 6.0 : 8.0),
       color: cardBgColor,

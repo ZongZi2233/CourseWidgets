@@ -22,19 +22,19 @@
                 android:bottomRightRadius="0dp" />
             <gradient
                 android:angle="270"
-                android:startColor="#24FFFFFF"
+                android:startColor="#10FFFFFF"
                 android:endColor="#00FFFFFF"
                 android:type="linear" />
         </shape>
     </item>
 
-    <!-- Layer 2: 0.8dp 细腻水晶倒角描边 -->
+    <!-- Layer 2: 0.6dp 柔和暗色高质感倒角描边 (消除白边) -->
     <item>
         <shape android:shape="rectangle">
             <corners android:radius="18dp" />
             <stroke
-                android:width="0.8dp"
-                android:color="#48FFFFFF" />
+                android:width="0.6dp"
+                android:color="#1C000000" />
         </shape>
     </item>
 </layer-list>

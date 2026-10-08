@@ -23,19 +23,19 @@
                 android:bottomRightRadius="0dp" />
             <gradient
                 android:angle="270"
-                android:startColor="#30FFFFFF"
+                android:startColor="#16FFFFFF"
                 android:endColor="#00FFFFFF"
                 android:type="linear" />
         </shape>
     </item>
 
-    <!-- Layer 2: 液态磨砂高透边框 (1.2dp 晶莹描边) -->
+    <!-- Layer 2: 液态磨砂微暗深邃边框 (0.8dp 消除廉价突兀白边，呈现高定亚克力质感) -->
     <item>
         <shape android:shape="rectangle">
             <corners android:radius="26dp" />
             <stroke
-                android:width="1.2dp"
-                android:color="#48FFFFFF" />
+                android:width="0.8dp"
+                android:color="#24000000" />
         </shape>
     </item>
 </layer-list>
