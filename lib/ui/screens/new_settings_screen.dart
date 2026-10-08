@@ -164,20 +164,18 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
         padding: const EdgeInsets.all(16),
         child: Row(
           children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [color, color.withValues(alpha: 0.6)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+            SizedBox(
+              width: 36,
+              height: 36,
+              child: Center(
+                child: Icon(
+                  icon,
+                  color: _textColor,
+                  size: 26,
                 ),
-                borderRadius: BorderRadius.circular(14),
               ),
-              child: Icon(icon, color: Colors.white, size: 24),
             ),
-            const SizedBox(width: 16),
+            const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,

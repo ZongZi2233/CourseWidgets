@@ -400,16 +400,18 @@ class SettingsDataScreen extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         child: Row(
           children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: color.withValues(alpha: 0.3)),
+            SizedBox(
+              width: 36,
+              height: 36,
+              child: Center(
+                child: Icon(
+                  icon,
+                  color: isDark ? const Color(0xFFE2E7F0) : const Color(0xFF2C3240),
+                  size: 26,
+                ),
               ),
-              child: Icon(icon, color: color, size: 24),
             ),
-            const SizedBox(width: 16),
+            const SizedBox(width: 14),
             Expanded(
               child: Text(
                 title,

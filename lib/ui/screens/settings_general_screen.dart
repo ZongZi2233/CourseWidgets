@@ -278,22 +278,12 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
         ),
         child: Row(
           children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                gradient: isSelected
-                    ? LinearGradient(
-                        colors: [
-                          AppThemeColors.babyPink.withValues(alpha: 0.3),
-                          AppThemeColors.softCoral.withValues(alpha: 0.3),
-                        ],
-                      )
-                    : null,
-                color: isSelected ? null : _textColor.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
+            SizedBox(
+              width: 32,
+              height: 32,
+              child: Center(
+                child: Icon(icon, color: _textColor, size: 22),
               ),
-              child: Icon(icon, color: _textColor, size: 20),
             ),
             const SizedBox(width: 12),
             Expanded(

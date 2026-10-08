@@ -487,26 +487,13 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                 ),
               ),
 
-              // [v2.9.7] 课表网格进入屏幕顶底边缘的渐进柔和渐变过渡带
+              // [v3.0.0] 顶部状态栏物理无极渐进式模糊系统 (Progressive Variable Blur)
               Positioned(
-                top: topPadding + 54.0, // 紧跟星期栏下方
+                top: 0,
                 left: 0,
                 right: 0,
-                height: 18,
-                child: IgnorePointer(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          (isDark ? const Color(0x55101216) : Colors.white.withValues(alpha: 0.30)),
-                          Colors.transparent,
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
+                height: topPadding + 16.0,
+                child: _buildProgressiveBlurStatusBar(topPadding + 16.0, isDark),
               ),
               Positioned(
                 bottom: 64, // 导航栏上方
@@ -560,6 +547,78 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
     );
   }
 
+  /// [v3.0.0] 顶部状态栏物理无极变深渐进式模糊系统 (Progressive Variable Blur)
+  Widget _buildProgressiveBlurStatusBar(double height, bool isDark) {
+    return IgnorePointer(
+      child: SizedBox(
+        height: height,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // 阶段 1: 全高柔和轻量散焦 (sigma 4)
+            ShaderMask(
+              shaderCallback: (bounds) => const LinearGradient(
+                begin: Alignment.bottomCenter,
+                end: Alignment.topCenter,
+                stops: [0.0, 0.45, 0.85, 1.0],
+                colors: [Colors.transparent, Color(0x55000000), Color(0xCC000000), Colors.black],
+              ).createShader(bounds),
+              blendMode: BlendMode.dstIn,
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 4.0, sigmaY: 4.0),
+                child: const ColoredBox(color: Colors.transparent),
+              ),
+            ),
+            // 阶段 2: 中段亚克力过渡 (sigma 10)
+            ShaderMask(
+              shaderCallback: (bounds) => const LinearGradient(
+                begin: Alignment.bottomCenter,
+                end: Alignment.topCenter,
+                stops: [0.25, 0.65, 0.95, 1.0],
+                colors: [Colors.transparent, Color(0x66000000), Color(0xDD000000), Colors.black],
+              ).createShader(bounds),
+              blendMode: BlendMode.dstIn,
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
+                child: const ColoredBox(color: Colors.transparent),
+              ),
+            ),
+            // 阶段 3: 状态栏顶端深度无极雾化 (sigma 22)
+            ShaderMask(
+              shaderCallback: (bounds) => const LinearGradient(
+                begin: Alignment.bottomCenter,
+                end: Alignment.topCenter,
+                stops: [0.45, 0.8, 1.0],
+                colors: [Colors.transparent, Color(0x88000000), Colors.black],
+              ).createShader(bounds),
+              blendMode: BlendMode.dstIn,
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 22.0, sigmaY: 22.0),
+                child: const ColoredBox(color: Colors.transparent),
+              ),
+            ),
+            // 顶端无极环境光渐变底色：确保状态栏时钟与电量图标极致清晰
+            DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  stops: const [0.0, 0.35, 0.7, 1.0],
+                  colors: [
+                    isDark ? const Color(0xB00E1015) : const Color(0x9EFFFFFF),
+                    isDark ? const Color(0x660E1015) : const Color(0x55FFFFFF),
+                    isDark ? const Color(0x180E1015) : const Color(0x12FFFFFF),
+                    Colors.transparent,
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   /// 现代晶透顶部栏：精简为品牌 Logo 与当前日期指示，腾出顶部空间
   Widget _buildModernTopBar(ScheduleProvider provider) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -570,13 +629,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.22 : 0.08),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
-        ],
+        boxShadow: liquid.HyperOSShadows.dock(isDark),
       ),
       child: GlassContainer(
         useOwnLayer: true,

@@ -181,26 +181,24 @@ class _SettingsNotificationScreenState
     required IconData icon,
     required VoidCallback onTap,
   }) {
+    final isDark = GlassSettingsHelper.isDark(context);
     return liquid.HyperOSCard(
       padding: const EdgeInsets.all(20),
       onTap: onTap,
       child: Row(
         children: [
-          Container(
-            width: 50,
-            height: 50,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  AppThemeColors.babyPink.withValues(alpha: 0.8),
-                  AppThemeColors.softCoral.withValues(alpha: 0.8),
-                ],
+          SizedBox(
+            width: 36,
+            height: 36,
+            child: Center(
+              child: Icon(
+                icon,
+                color: isDark ? const Color(0xFFE2E7F0) : const Color(0xFF2C3240),
+                size: 26,
               ),
-              borderRadius: BorderRadius.circular(16),
             ),
-            child: Icon(icon, color: Colors.white, size: 24),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -242,25 +240,23 @@ class _SettingsNotificationScreenState
     required bool value,
     required ValueChanged<bool> onChanged,
   }) {
+    final isDark = GlassSettingsHelper.isDark(context);
     return liquid.HyperOSCard(
       padding: const EdgeInsets.all(20),
       child: Row(
         children: [
-          Container(
-            width: 50,
-            height: 50,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  AppThemeColors.babyPink.withValues(alpha: 0.8),
-                  AppThemeColors.softCoral.withValues(alpha: 0.8),
-                ],
+          SizedBox(
+            width: 36,
+            height: 36,
+            child: Center(
+              child: Icon(
+                icon,
+                color: isDark ? const Color(0xFFE2E7F0) : const Color(0xFF2C3240),
+                size: 26,
               ),
-              borderRadius: BorderRadius.circular(16),
             ),
-            child: Icon(icon, color: Colors.white, size: 24),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

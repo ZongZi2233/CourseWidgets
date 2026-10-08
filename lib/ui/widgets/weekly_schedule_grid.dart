@@ -458,28 +458,16 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
           height: headerHeight,
           child: RepaintBoundary(
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(16),
               child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
+                filter: ImageFilter.blur(sigmaX: 14.0, sigmaY: 14.0),
                 child: Container(
                   decoration: BoxDecoration(
                     color: isDark
                         ? const Color(0x66101216)
                         : const Color(0x77FFFFFF),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: isDark
-                          ? const Color(0x30000000)
-                          : const Color(0x12000000),
-                      width: 0.8,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: isDark ? 0.20 : 0.06),
-                        blurRadius: 10,
-                        offset: const Offset(0, 3),
-                      ),
-                    ],
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: liquid.HyperOSShadows.dock(isDark),
                   ),
                   padding: const EdgeInsets.symmetric(vertical: 3),
                   child: Row(
@@ -527,36 +515,15 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
         now.day == dayDate.day;
 
     return Container(
-      height: 46,
+      height: 44,
       width: double.infinity,
       decoration: isToday
           ? BoxDecoration(
-              color: AppThemeColors.babyPink.withValues(alpha: isDark ? 0.35 : 0.25),
-              borderRadius: BorderRadius.circular(11),
-              border: Border.all(
-                color: AppThemeColors.babyPink.withValues(alpha: 0.85),
-                width: 1.5,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: AppThemeColors.babyPink.withValues(alpha: isDark ? 0.25 : 0.18),
-                  blurRadius: 6,
-                  offset: const Offset(0, 2),
-                ),
-              ],
+              color: AppThemeColors.babyPink.withValues(alpha: isDark ? 0.28 : 0.18),
+              borderRadius: BorderRadius.circular(10),
+              boxShadow: liquid.HyperOSShadows.pill(isDark, accentColor: AppThemeColors.babyPink),
             )
-          : BoxDecoration(
-              color: isDark
-                  ? Colors.white.withValues(alpha: 0.05)
-                  : Colors.white.withValues(alpha: 0.40),
-              borderRadius: BorderRadius.circular(11),
-              border: Border.all(
-                color: isDark
-                    ? const Color(0x30000000)
-                    : const Color(0x0E000000),
-                width: 0.8,
-              ),
-            ),
+          : null, // 非今日：纯净无边框透明，彻底摒弃厚重卡片盒子堆叠
       child: widget.isPhone
           ? Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -566,21 +533,21 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
                   style: TextStyle(
                     color: isToday
                         ? (isDark ? AppThemeColors.babyPink : const Color(0xFFC84B66))
-                        : (isDark ? Colors.white : const Color(0xFF1F2228)),
+                        : (isDark ? Colors.white60 : const Color(0xFF6B7280)),
                     fontSize: 11.5,
                     fontWeight: isToday ? FontWeight.w800 : FontWeight.w600,
                     height: 1.1,
                   ),
                 ),
-                const SizedBox(height: 1),
+                const SizedBox(height: 1.5),
                 Text(
                   '${dayDate.day}',
                   style: TextStyle(
                     color: isToday
                         ? (isDark ? AppThemeColors.babyPink : const Color(0xFFC84B66))
-                        : (isDark ? Colors.white70 : const Color(0xFF757B88)),
-                    fontSize: 10.5,
-                    fontWeight: isToday ? FontWeight.w800 : FontWeight.w600,
+                        : (isDark ? Colors.white.withValues(alpha: 0.9) : const Color(0xFF1F2228)),
+                    fontSize: 12.0,
+                    fontWeight: isToday ? FontWeight.w900 : FontWeight.w700,
                     height: 1.1,
                   ),
                 ),
@@ -594,7 +561,7 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
                   style: TextStyle(
                     color: isToday
                         ? AppThemeColors.babyPink
-                        : (isDark ? Colors.white : const Color(0xFF1F2228)),
+                        : (isDark ? Colors.white70 : const Color(0xFF6B7280)),
                     fontSize: 13,
                     fontWeight: isToday ? FontWeight.bold : FontWeight.w600,
                   ),
@@ -605,9 +572,9 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
                   style: TextStyle(
                     color: isToday
                         ? AppThemeColors.babyPink
-                        : (isDark ? Colors.white60 : const Color(0xFF757B88)),
-                    fontSize: 11,
-                    fontWeight: isToday ? FontWeight.bold : FontWeight.w500,
+                        : (isDark ? Colors.white.withValues(alpha: 0.9) : const Color(0xFF1F2228)),
+                    fontSize: 11.5,
+                    fontWeight: isToday ? FontWeight.w900 : FontWeight.w600,
                   ),
                 ),
               ],
@@ -699,25 +666,7 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
         padding: EdgeInsets.all(widget.isPhone ? 6.0 : 8.0),
         color: cardBgColor,
         contentColor: titleColor,
-        // [v2.9.0] 增强浅色与深色模式立体弥散阴影，边界清晰物理浮起
-        shadows: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.36 : 0.20),
-            blurRadius: isDark ? 12 : 14,
-            spreadRadius: isDark ? 0 : 0.5,
-            offset: const Offset(0, 4),
-          ),
-          BoxShadow(
-            color: glowColor.withValues(alpha: isDark ? 0.25 : 0.22),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.20 : 0.12),
-            blurRadius: 4,
-            offset: const Offset(0, 1),
-          ),
-        ],
+        shadows: liquid.HyperOSShadows.card(isDark, glowColor: glowColor),
         // [v2.9.0] 移除主体直接展开详情，避免与底部三点操作条冲突
         onTap: null,
         child: Column(

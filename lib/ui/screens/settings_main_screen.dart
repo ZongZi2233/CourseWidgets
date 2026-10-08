@@ -133,23 +133,18 @@ class _SettingsMainScreenState extends State<SettingsMainScreen> {
       },
       child: Row(
         children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  color.withValues(alpha: 0.8),
-                  color.withValues(alpha: 0.4),
-                ],
+          SizedBox(
+            width: 36,
+            height: 36,
+            child: Center(
+              child: Icon(
+                icon,
+                color: isDark ? const Color(0xFFE2E7F0) : const Color(0xFF2C3240),
+                size: 26,
               ),
-              borderRadius: BorderRadius.circular(15),
             ),
-            child: Icon(icon, color: Colors.white, size: 24),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
