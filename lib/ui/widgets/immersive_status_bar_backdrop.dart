@@ -21,7 +21,7 @@ class ImmersiveStatusBarBackdrop extends StatelessWidget {
     final topPadding = mq.padding.top;
     if (topPadding <= 0) return const SizedBox.shrink();
 
-    final totalHeight = topPadding + extraHeight;
+    final totalHeight = topPadding + extraHeight + 28.0;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final screenW = mq.size.width;
     final screenH = mq.size.height;
@@ -35,7 +35,7 @@ class ImmersiveStatusBarBackdrop extends StatelessWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // 1. 0 显存回读开销：基于 StaticBlurredWallpaperService 静态模糊纹理顶部视口切片
+            // 1. 0 显存回读开销：基于 StaticBlurredWallpaperService 静态模糊纹理顶部视口切片 + 物理无极变深遮罩
             AnimatedBuilder(
               animation: StaticBlurredWallpaperService.instance,
               builder: (context, _) {
@@ -51,22 +51,24 @@ class ImmersiveStatusBarBackdrop extends StatelessWidget {
               },
             ),
 
-            // 2. 柔和渐进式防眩晕环境暗角与边缘渐隐（自然溶解隐入下方课表）
+            // 2. 柔和无极变深环境光与防眩晕底色（与无极变深模糊完全对齐）
             DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  stops: const [0.0, 0.7, 1.0],
+                  stops: const [0.0, 0.45, 0.8, 1.0],
                   colors: isDark
                       ? [
-                          Colors.black.withValues(alpha: 0.28),
-                          Colors.black.withValues(alpha: 0.12),
+                          const Color(0xB80E1015),
+                          const Color(0x660E1015),
+                          const Color(0x180E1015),
                           Colors.transparent,
                         ]
                       : [
-                          Colors.black.withValues(alpha: 0.06),
-                          Colors.black.withValues(alpha: 0.02),
+                          const Color(0xA0FFFFFF),
+                          const Color(0x55FFFFFF),
+                          const Color(0x12FFFFFF),
                           Colors.transparent,
                         ],
                 ),
@@ -108,12 +110,41 @@ class _StatusBarBlurPainter extends CustomPainter {
       (size.height * scale + offsetY).clamp(0.0, imgH),
     );
 
+    final rect = Offset.zero & size;
+
+    // 真正的物理无极渐进式模糊：通过 saveLayer + dstIn 线性渐变遮罩，使模糊强度从底部 0 连续平滑递增至顶部 100%
+    canvas.saveLayer(rect, Paint());
+
     canvas.drawImageRect(
       img,
       srcRect,
-      Offset.zero & size,
-      Paint()..filterQuality = FilterQuality.low,
+      rect,
+      Paint()
+        ..filterQuality = FilterQuality.medium
+        ..isAntiAlias = true,
     );
+
+    final maskShader = ui.Gradient.linear(
+      Offset(0, size.height),
+      Offset.zero,
+      const [
+        Colors.transparent,
+        Color(0x22000000),
+        Color(0x77000000),
+        Color(0xCC000000),
+        Colors.black,
+      ],
+      const [0.0, 0.25, 0.55, 0.82, 1.0],
+    );
+
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..blendMode = BlendMode.dstIn
+        ..shader = maskShader,
+    );
+
+    canvas.restore();
   }
 
   @override

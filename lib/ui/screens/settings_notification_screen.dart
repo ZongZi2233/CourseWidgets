@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import '../../constants/theme_constants.dart';
 import '../../services/notification_manager.dart';
 import '../../services/data_import_service.dart';
 import '../../utils/glass_settings_helper.dart';
 import '../widgets/liquid_components.dart' as liquid;
 import 'package:smooth_scroll_multiplatform/smooth_scroll_multiplatform.dart';
-import '../../utils/responsive_utils.dart';
 
 /// [v2.2.8] 课程通知设置页面
 class SettingsNotificationScreen extends StatefulWidget {
@@ -46,7 +46,20 @@ class _SettingsNotificationScreenState
       backgroundColor: Colors.transparent,
       body: Stack(
         children: [
-          Column(
+          AdaptiveLiquidGlassLayer(
+            quality: GlassQuality.premium,
+            settings: const LiquidGlassSettings(
+              blur: 3.0,
+              thickness: 24.0,
+              glassColor: Color(0x0EFFFFFF),
+              lightIntensity: 0.70,
+              ambientStrength: 0.45,
+              ambientRim: 0.0,
+              fresnelStrength: 0.05,
+              saturation: 1.20,
+              refractiveIndex: 1.46,
+            ),
+            child: Column(
               children: [
                 // Header
                 SafeArea(
@@ -55,7 +68,6 @@ class _SettingsNotificationScreenState
                     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                     child: Row(
                       children: [
-                        if (ResponsiveUtils.isDesktopOrLandscape(context)) const SizedBox(width: 56),
                         Text(
                           '课程通知',
                           style: TextStyle(
@@ -155,6 +167,7 @@ class _SettingsNotificationScreenState
                 ),
               ],
             ),
+          ),
           // [v2.9.7] 悬浮右下角返回按钮
           const liquid.FloatingLiquidBackButton(),
         ],
@@ -168,26 +181,24 @@ class _SettingsNotificationScreenState
     required IconData icon,
     required VoidCallback onTap,
   }) {
+    final isDark = GlassSettingsHelper.isDark(context);
     return liquid.HyperOSCard(
       padding: const EdgeInsets.all(20),
       onTap: onTap,
       child: Row(
         children: [
-          Container(
-            width: 50,
-            height: 50,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  AppThemeColors.babyPink.withValues(alpha: 0.8),
-                  AppThemeColors.softCoral.withValues(alpha: 0.8),
-                ],
+          SizedBox(
+            width: 36,
+            height: 36,
+            child: Center(
+              child: Icon(
+                icon,
+                color: isDark ? const Color(0xFFE2E7F0) : const Color(0xFF2C3240),
+                size: 26,
               ),
-              borderRadius: BorderRadius.circular(16),
             ),
-            child: Icon(icon, color: Colors.white, size: 24),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -229,25 +240,23 @@ class _SettingsNotificationScreenState
     required bool value,
     required ValueChanged<bool> onChanged,
   }) {
+    final isDark = GlassSettingsHelper.isDark(context);
     return liquid.HyperOSCard(
       padding: const EdgeInsets.all(20),
       child: Row(
         children: [
-          Container(
-            width: 50,
-            height: 50,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  AppThemeColors.babyPink.withValues(alpha: 0.8),
-                  AppThemeColors.softCoral.withValues(alpha: 0.8),
-                ],
+          SizedBox(
+            width: 36,
+            height: 36,
+            child: Center(
+              child: Icon(
+                icon,
+                color: isDark ? const Color(0xFFE2E7F0) : const Color(0xFF2C3240),
+                size: 26,
               ),
-              borderRadius: BorderRadius.circular(16),
             ),
-            child: Icon(icon, color: Colors.white, size: 24),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

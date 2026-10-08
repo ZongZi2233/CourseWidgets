@@ -7,7 +7,4 @@
         android:startColor="#33FFFFFF"
         android:endColor="#1AFFFFFF"
         android:type="linear" />
-    <stroke
-        android:width="0.6dp"
-        android:color="#1C000000" />
 </shape>

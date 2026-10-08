@@ -28,13 +28,4 @@
         </shape>
     </item>
 
-    <!-- Layer 2: 0.6dp 柔和暗色高质感倒角描边 (消除白边) -->
-    <item>
-        <shape android:shape="rectangle">
-            <corners android:radius="18dp" />
-            <stroke
-                android:width="0.6dp"
-                android:color="#1C000000" />
-        </shape>
-    </item>
 </layer-list>

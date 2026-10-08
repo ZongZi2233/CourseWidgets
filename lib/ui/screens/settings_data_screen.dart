@@ -11,9 +11,8 @@ import '../widgets/liquid_components.dart' as liquid;
 import '../widgets/liquid_toast.dart';
 import 'package:flutter_phoenix/flutter_phoenix.dart';
 import 'webview_import_screen.dart';
-import 'package:smooth_scroll_multiplatform/smooth_scroll_multiplatform.dart';
 import '../../services/app_logger.dart';
-import '../../utils/responsive_utils.dart';
+import 'package:smooth_scroll_multiplatform/smooth_scroll_multiplatform.dart';
 
 class SettingsDataScreen extends StatelessWidget {
   const SettingsDataScreen({super.key});
@@ -28,7 +27,20 @@ class SettingsDataScreen extends StatelessWidget {
       backgroundColor: Colors.transparent,
       body: Stack(
         children: [
-          Column(
+          AdaptiveLiquidGlassLayer(
+        quality: GlassQuality.premium,
+        settings: const LiquidGlassSettings(
+          blur: 3.0,
+          thickness: 24.0,
+          glassColor: Color(0x0EFFFFFF),
+          lightIntensity: 0.70,
+          ambientStrength: 0.45,
+          ambientRim: 0.0,
+          fresnelStrength: 0.05,
+          saturation: 1.20,
+          refractiveIndex: 1.46,
+        ),
+        child: Column(
           children: [
             SafeArea(
               bottom: false,
@@ -39,7 +51,6 @@ class SettingsDataScreen extends StatelessWidget {
                 ),
                 child: Row(
                   children: [
-                    if (ResponsiveUtils.isDesktopOrLandscape(context)) const SizedBox(width: 56),
                     Text(
                       '数据管理',
                       style: TextStyle(
@@ -226,12 +237,13 @@ class SettingsDataScreen extends StatelessWidget {
             ),
           ],
         ),
-        // [v2.9.7] 悬浮右下角返回按钮
-        const liquid.FloatingLiquidBackButton(),
-      ],
-    ),
-  );
-}
+      ),
+      // [v2.9.7] 悬浮右下角返回按钮
+      const liquid.FloatingLiquidBackButton(),
+    ],
+  ),
+);
+  }
 
   // [v2.2.2] 历史记录对话框
   void _showHistoryDialog(
@@ -388,16 +400,18 @@ class SettingsDataScreen extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         child: Row(
           children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: color.withValues(alpha: 0.3)),
+            SizedBox(
+              width: 36,
+              height: 36,
+              child: Center(
+                child: Icon(
+                  icon,
+                  color: isDark ? const Color(0xFFE2E7F0) : const Color(0xFF2C3240),
+                  size: 26,
+                ),
               ),
-              child: Icon(icon, color: color, size: 24),
             ),
-            const SizedBox(width: 16),
+            const SizedBox(width: 14),
             Expanded(
               child: Text(
                 title,

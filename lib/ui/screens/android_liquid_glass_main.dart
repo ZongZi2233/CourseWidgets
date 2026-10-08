@@ -543,13 +543,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.22 : 0.08),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
-        ],
+        boxShadow: liquid.HyperOSShadows.dock(isDark),
       ),
       child: GlassContainer(
         useOwnLayer: true,
@@ -636,14 +630,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(26),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.14),
-            blurRadius: 18,
-            spreadRadius: 1,
-            offset: const Offset(0, 6),
-          ),
-        ],
+        boxShadow: liquid.HyperOSShadows.dock(isDark),
       ),
       child: GlassContainer(
         useOwnLayer: true,

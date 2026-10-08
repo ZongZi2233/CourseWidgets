@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import '../../constants/theme_constants.dart';
 import '../../services/theme_service.dart';
 import '../../utils/responsive_utils.dart';
@@ -30,10 +31,26 @@ class _SettingsMainScreenState extends State<SettingsMainScreen> {
     return Scaffold(
       backgroundColor: Colors.transparent,
       extendBody: true,
-      body: CustomScrollView(
-        physics: const BouncingScrollPhysics(
-          parent: AlwaysScrollableScrollPhysics(),
+      body: Stack(
+        children: [
+          // [v2.10.0] 彻底移除视口预模糊壁纸，让全局高清壁纸清晰透显，与主课表视觉统一
+          AdaptiveLiquidGlassLayer(
+        quality: GlassQuality.premium,
+        settings: const LiquidGlassSettings(
+          blur: 3.0,
+          thickness: 24.0,
+          glassColor: Color(0x0EFFFFFF),
+          lightIntensity: 0.70,
+          ambientStrength: 0.45,
+          ambientRim: 0.0,
+          fresnelStrength: 0.05,
+          saturation: 1.20,
+          refractiveIndex: 1.46,
         ),
+        child: CustomScrollView(
+          physics: const BouncingScrollPhysics(
+            parent: AlwaysScrollableScrollPhysics(),
+          ),
           slivers: [
             SliverSafeArea(
               bottom: false,
@@ -92,6 +109,9 @@ class _SettingsMainScreenState extends State<SettingsMainScreen> {
           ),
         ],
       ),
+    ),
+    ],
+    ),
     );
   }
 
@@ -113,23 +133,18 @@ class _SettingsMainScreenState extends State<SettingsMainScreen> {
       },
       child: Row(
         children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  color.withValues(alpha: 0.8),
-                  color.withValues(alpha: 0.4),
-                ],
+          SizedBox(
+            width: 36,
+            height: 36,
+            child: Center(
+              child: Icon(
+                icon,
+                color: isDark ? const Color(0xFFE2E7F0) : const Color(0xFF2C3240),
+                size: 26,
               ),
-              borderRadius: BorderRadius.circular(15),
             ),
-            child: Icon(icon, color: Colors.white, size: 24),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

@@ -520,99 +520,71 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
         now.month == dayDate.month &&
         now.day == dayDate.day;
 
-    final primaryColor = Theme.of(context).primaryColor;
-
-    final headerBgColor = isToday
-        ? primaryColor.withValues(alpha: isDark ? 0.30 : 0.20)
-        : (isDark
-            ? Colors.white.withValues(alpha: 0.08)
-            : Colors.white.withValues(alpha: 0.16));
-
-    final headerBorder = isToday
-        ? BorderSide(color: primaryColor.withValues(alpha: 0.85), width: 1.5)
-        : BorderSide(
-            color: isDark
-                ? const Color(0x30000000)
-                : const Color(0x0E000000),
-            width: 0.8,
-          );
-
-    return SizedBox(
-      height: 46,
+    return Container(
+      height: 44,
       width: double.infinity,
-      child: liquid.HyperOSCard(
-        useBlur: false,
-        cornerRadius: 12,
-        padding: EdgeInsets.zero,
-        color: headerBgColor,
-        border: headerBorder,
-        shadows: [
-          BoxShadow(
-            color: isToday
-                ? primaryColor.withValues(alpha: isDark ? 0.25 : 0.18)
-                : Colors.black.withValues(alpha: isDark ? 0.16 : 0.04),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
-        child: Center(
-          child: widget.isPhone
-              ? Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      weekdays[day - 1],
-                      style: TextStyle(
-                        color: isToday
-                            ? (isDark ? Colors.white : primaryColor)
-                            : (isDark ? Colors.white : const Color(0xFF1F2228)),
-                        fontSize: 11.5,
-                        fontWeight: isToday ? FontWeight.w800 : FontWeight.w600,
-                        height: 1.1,
-                      ),
-                    ),
-                    const SizedBox(height: 1),
-                    Text(
-                      '${dayDate.day}',
-                      style: TextStyle(
-                        color: isToday
-                            ? (isDark ? Colors.white : primaryColor)
-                            : (isDark ? Colors.white70 : const Color(0xFF757B88)),
-                        fontSize: 10.5,
-                        fontWeight: isToday ? FontWeight.w800 : FontWeight.w600,
-                        height: 1.1,
-                      ),
-                    ),
-                  ],
-                )
-              : Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      weekdays[day - 1],
-                      style: TextStyle(
-                        color: isToday
-                            ? (isDark ? Colors.white : primaryColor)
-                            : (isDark ? Colors.white : const Color(0xFF1F2228)),
-                        fontSize: 13,
-                        fontWeight: isToday ? FontWeight.w800 : FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      dateLabel,
-                      style: TextStyle(
-                        color: isToday
-                            ? (isDark ? Colors.white70 : primaryColor.withValues(alpha: 0.85))
-                            : (isDark ? Colors.white60 : const Color(0xFF757B88)),
-                        fontSize: 11,
-                        fontWeight: isToday ? FontWeight.w700 : FontWeight.w500,
-                      ),
-                    ),
-                  ],
+      decoration: isToday
+          ? BoxDecoration(
+              color: AppThemeColors.babyPink.withValues(alpha: isDark ? 0.28 : 0.18),
+              borderRadius: BorderRadius.circular(10),
+              boxShadow: liquid.HyperOSShadows.pill(isDark, accentColor: AppThemeColors.babyPink),
+            )
+          : null, // 非今日：纯净无边框透明，彻底摒弃厚重卡片盒子堆叠
+      child: widget.isPhone
+          ? Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  weekdays[day - 1],
+                  style: TextStyle(
+                    color: isToday
+                        ? (isDark ? AppThemeColors.babyPink : const Color(0xFFC84B66))
+                        : (isDark ? Colors.white60 : const Color(0xFF6B7280)),
+                    fontSize: 11.5,
+                    fontWeight: isToday ? FontWeight.w800 : FontWeight.w600,
+                    height: 1.1,
+                  ),
                 ),
-        ),
-      ),
+                const SizedBox(height: 1.5),
+                Text(
+                  '${dayDate.day}',
+                  style: TextStyle(
+                    color: isToday
+                        ? (isDark ? AppThemeColors.babyPink : const Color(0xFFC84B66))
+                        : (isDark ? Colors.white.withValues(alpha: 0.9) : const Color(0xFF1F2228)),
+                    fontSize: 12.0,
+                    fontWeight: isToday ? FontWeight.w900 : FontWeight.w700,
+                    height: 1.1,
+                  ),
+                ),
+              ],
+            )
+          : Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  weekdays[day - 1],
+                  style: TextStyle(
+                    color: isToday
+                        ? AppThemeColors.babyPink
+                        : (isDark ? Colors.white70 : const Color(0xFF6B7280)),
+                    fontSize: 13,
+                    fontWeight: isToday ? FontWeight.bold : FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  dateLabel,
+                  style: TextStyle(
+                    color: isToday
+                        ? AppThemeColors.babyPink
+                        : (isDark ? Colors.white.withValues(alpha: 0.9) : const Color(0xFF1F2228)),
+                    fontSize: 11.5,
+                    fontWeight: isToday ? FontWeight.w900 : FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
     );
   }
 
@@ -700,19 +672,7 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
       padding: EdgeInsets.all(widget.isPhone ? 6.0 : 8.0),
       color: cardBgColor,
       contentColor: titleColor,
-      // [v3.0.0] 精简阴影为两层清晰立体弥散，大幅降低浅色与深色模式光栅化重绘消耗
-      shadows: [
-        BoxShadow(
-          color: Colors.black.withValues(alpha: isDark ? 0.32 : 0.12),
-          blurRadius: isDark ? 10 : 8,
-          offset: const Offset(0, 3),
-        ),
-        BoxShadow(
-          color: glowColor.withValues(alpha: isDark ? 0.22 : 0.15),
-          blurRadius: 6,
-          offset: const Offset(0, 1),
-        ),
-      ],
+      shadows: liquid.HyperOSShadows.card(isDark, glowColor: glowColor),
       // [v2.9.0] 移除主体直接展开详情，避免与底部三点操作条冲突
       onTap: null,
         child: Column(

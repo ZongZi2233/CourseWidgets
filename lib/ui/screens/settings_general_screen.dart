@@ -11,7 +11,6 @@ import '../../utils/glass_settings_helper.dart';
 import '../../main.dart';
 import '../widgets/liquid_components.dart' as liquid;
 import 'package:smooth_scroll_multiplatform/smooth_scroll_multiplatform.dart';
-import '../../utils/responsive_utils.dart';
 
 class SettingsGeneralScreen extends StatefulWidget {
   const SettingsGeneralScreen({super.key});
@@ -24,7 +23,6 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
   final theme.ThemeService _themeService = theme.ThemeService();
 
   bool _adaptiveDarkMode = false;
-  bool _enableAcrylicBackdrop = true;
   theme.ThemeMode _currentThemeMode = theme.ThemeMode.defaultMode;
 
   bool get _isDarkMode => _themeService.isDarkMode;
@@ -42,12 +40,9 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
   Future<void> _loadSettings() async {
     final adaptiveMode =
         _storage.getBool(StorageService.keyAdaptiveDarkMode) ?? false;
-    final acrylicMode =
-        _storage.getBool(StorageService.keyEnableAcrylicBackdrop) ?? true;
 
     setState(() {
       _adaptiveDarkMode = adaptiveMode;
-      _enableAcrylicBackdrop = acrylicMode;
       _currentThemeMode = _themeService.themeMode;
     });
   }
@@ -77,12 +72,6 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
     if (value) {
       await _storage.setBool(StorageService.keyDarkMode, false);
     }
-  }
-
-  void _toggleAcrylicBackdrop(bool value) async {
-    setState(() => _enableAcrylicBackdrop = value);
-    globalAcrylicBackdropNotifier.value = value;
-    await _storage.setBool(StorageService.keyEnableAcrylicBackdrop, value);
   }
 
   Future<void> _pickBackgroundImage() async {
@@ -289,22 +278,12 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
         ),
         child: Row(
           children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                gradient: isSelected
-                    ? LinearGradient(
-                        colors: [
-                          AppThemeColors.babyPink.withValues(alpha: 0.3),
-                          AppThemeColors.softCoral.withValues(alpha: 0.3),
-                        ],
-                      )
-                    : null,
-                color: isSelected ? null : _textColor.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
+            SizedBox(
+              width: 32,
+              height: 32,
+              child: Center(
+                child: Icon(icon, color: _textColor, size: 22),
               ),
-              child: Icon(icon, color: _textColor, size: 20),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -356,7 +335,20 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
       backgroundColor: Colors.transparent,
       body: Stack(
         children: [
-          Column(
+          AdaptiveLiquidGlassLayer(
+            quality: GlassQuality.premium,
+            settings: const LiquidGlassSettings(
+              blur: 3.0,
+              thickness: 24.0,
+              glassColor: Color(0x0EFFFFFF),
+              lightIntensity: 0.70,
+              ambientStrength: 0.45,
+              ambientRim: 0.0,
+              fresnelStrength: 0.05,
+              saturation: 1.20,
+              refractiveIndex: 1.46,
+            ),
+            child: Column(
               children: [
                 // Header
                 SafeArea(
@@ -365,7 +357,6 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                     child: Row(
                       children: [
-                        if (ResponsiveUtils.isDesktopOrLandscape(context)) const SizedBox(width: 56),
                         Text(
                           '通用设置',
                           style: TextStyle(
@@ -392,35 +383,28 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           _buildSection('外观'),
-                          // [v3.0.0] 全平台开放深色模式控制与自适应系统设置
-                          _buildSwitchCard(
-                            '自适应深色模式',
-                            '跟随系统设置',
-                            _adaptiveDarkMode,
-                            _toggleAdaptiveMode,
-                          ),
-                          const SizedBox(height: 12),
-
-                          IgnorePointer(
-                            ignoring: _adaptiveDarkMode,
-                            child: _buildSwitchCard(
-                              '强制深色模式',
-                              '手动覆盖系统设置',
-                              globalUseDarkMode,
-                              _toggleDarkMode,
-                              disabled: _adaptiveDarkMode,
+                          // [v2.9.0] Windows 端未适配深色模式，隐藏相关设置
+                          if (!Platform.isWindows) ...[
+                            _buildSwitchCard(
+                              '自适应深色模式',
+                              '跟随系统设置',
+                              _adaptiveDarkMode,
+                              _toggleAdaptiveMode,
                             ),
-                          ),
-                          const SizedBox(height: 12),
+                            const SizedBox(height: 12),
 
-                          // [v3.0.0] 微乳亚克力工作台底板开关
-                          _buildSwitchCard(
-                            '课表工作台亚克力底板',
-                            '开启呈现微乳半透工作台底板，关闭为沉浸全景透视',
-                            _enableAcrylicBackdrop,
-                            _toggleAcrylicBackdrop,
-                          ),
-                          const SizedBox(height: 20),
+                            IgnorePointer(
+                              ignoring: _adaptiveDarkMode,
+                              child: _buildSwitchCard(
+                                '强制深色模式',
+                                '手动覆盖系统设置',
+                                globalUseDarkMode,
+                                _toggleDarkMode,
+                                disabled: _adaptiveDarkMode,
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                          ],
 
                           _buildSection('主题色'),
                           _buildActionCard(
@@ -467,6 +451,7 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
                 ),
               ],
             ),
+          ),
           // [v2.9.7] 悬浮右下角返回按钮
           const liquid.FloatingLiquidBackButton(),
         ],

@@ -29,13 +29,4 @@
         </shape>
     </item>
 
-    <!-- Layer 2: 液态磨砂微暗深邃边框 (0.8dp 消除廉价突兀白边，呈现高定亚克力质感) -->
-    <item>
-        <shape android:shape="rectangle">
-            <corners android:radius="26dp" />
-            <stroke
-                android:width="0.8dp"
-                android:color="#24000000" />
-        </shape>
-    </item>
 </layer-list>

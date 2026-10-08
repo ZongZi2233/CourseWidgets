@@ -28,7 +28,20 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
       backgroundColor: Colors.transparent,
       body: Stack(
         children: [
-          Column(
+          AdaptiveLiquidGlassLayer(
+            quality: GlassQuality.premium,
+            settings: const LiquidGlassSettings(
+              blur: 3.0,
+              thickness: 24.0,
+              glassColor: Color(0x0EFFFFFF),
+              lightIntensity: 0.70,
+              ambientStrength: 0.45,
+              ambientRim: 0.0,
+              fresnelStrength: 0.05,
+              saturation: 1.20,
+              refractiveIndex: 1.46,
+            ),
+            child: Column(
               children: [
                 SafeArea(
                   bottom: false,
@@ -116,10 +129,11 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
             ),
           ],
         ),
-        const liquid.FloatingLiquidBackButton(),
-      ],
-    ),
-  );
+      ),
+      const liquid.FloatingLiquidBackButton(),
+    ],
+  ),
+);
   }
 
   Widget _buildSectionTitle(String title) {
@@ -150,20 +164,18 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
         padding: const EdgeInsets.all(16),
         child: Row(
           children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [color, color.withValues(alpha: 0.6)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+            SizedBox(
+              width: 36,
+              height: 36,
+              child: Center(
+                child: Icon(
+                  icon,
+                  color: _textColor,
+                  size: 26,
                 ),
-                borderRadius: BorderRadius.circular(14),
               ),
-              child: Icon(icon, color: Colors.white, size: 24),
             ),
-            const SizedBox(width: 16),
+            const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
