@@ -1,9 +1,40 @@
 <?xml version="1.0" encoding="utf-8"?>
-<shape xmlns:android="http://schemas.android.com/apk/res/android"
-    android:shape="rectangle">
-    <corners android:radius="18dp" />
-    <solid android:color="#24FFFFFF" />
-    <stroke
-        android:width="0.8dp"
-        android:color="#35FFFFFF" />
-</shape>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Layer 0: 柔光半透磨砂内胆渐变底板 -->
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="18dp" />
+            <gradient
+                android:angle="135"
+                android:startColor="#2EFFFFFF"
+                android:endColor="#15FFFFFF"
+                android:type="linear" />
+        </shape>
+    </item>
+
+    <!-- Layer 1: 顶部微晶反光 -->
+    <item android:bottom="25dp">
+        <shape android:shape="rectangle">
+            <corners
+                android:topLeftRadius="18dp"
+                android:topRightRadius="18dp"
+                android:bottomLeftRadius="0dp"
+                android:bottomRightRadius="0dp" />
+            <gradient
+                android:angle="270"
+                android:startColor="#10FFFFFF"
+                android:endColor="#00FFFFFF"
+                android:type="linear" />
+        </shape>
+    </item>
+
+    <!-- Layer 2: 0.6dp 柔和暗色高质感倒角描边 (消除白边) -->
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="18dp" />
+            <stroke
+                android:width="0.6dp"
+                android:color="#1C000000" />
+        </shape>
+    </item>
+</layer-list>

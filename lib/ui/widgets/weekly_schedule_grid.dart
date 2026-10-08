@@ -138,8 +138,8 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
                   border: Border(
                     top: BorderSide(
                       color: sheetDark
-                          ? Colors.white.withValues(alpha: 0.16)
-                          : Colors.white.withValues(alpha: 0.70),
+                          ? const Color(0x30000000)
+                          : const Color(0x15000000),
                       width: 0.8,
                     ),
                   ),
@@ -189,7 +189,7 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
                                   border: isCur
                                       ? null
                                       : Border.all(
-                                          color: (sheetDark ? Colors.white : Colors.black).withValues(alpha: 0.12),
+                                          color: (sheetDark ? const Color(0x30000000) : const Color(0x10000000)),
                                           width: 0.6,
                                         ),
                                 ),
@@ -469,8 +469,8 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(
                       color: isDark
-                          ? Colors.white.withValues(alpha: 0.12)
-                          : Colors.black.withValues(alpha: 0.06),
+                          ? const Color(0x30000000)
+                          : const Color(0x12000000),
                       width: 0.8,
                     ),
                     boxShadow: [
@@ -552,8 +552,8 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
               borderRadius: BorderRadius.circular(11),
               border: Border.all(
                 color: isDark
-                    ? Colors.white.withValues(alpha: 0.08)
-                    : Colors.black.withValues(alpha: 0.05),
+                    ? const Color(0x30000000)
+                    : const Color(0x0E000000),
                 width: 0.8,
               ),
             ),
@@ -853,8 +853,8 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
                 border: Border(
                   top: BorderSide(
                     color: isDark
-                        ? Colors.white.withValues(alpha: 0.16)
-                        : Colors.white.withValues(alpha: 0.70),
+                        ? const Color(0x30000000)
+                        : const Color(0x15000000),
                     width: 0.8,
                   ),
                 ),

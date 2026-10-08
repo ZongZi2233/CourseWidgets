@@ -601,38 +601,60 @@ class LiveNotificationServiceV2 {
       try {
         const MethodChannel liveChannel = MethodChannel('com.zongzi.schedule/live_update');
 
-        // [v2.10.1] 计算下一次精准唤醒时间戳与待消费课程数据供 Native AlarmManager / BroadcastReceiver 唤醒与展示
+        // [v3.0.0] 计算下一次硬件级精准闹钟唤醒时间戳：上课中或课前60分钟内，每分钟对齐刷新
         int? nextWakeupMs;
+        final nextMinuteMs = ((nowMs ~/ 60000) + 1) * 60000;
         final futureCourses = _allCourses.where((c) => c.endTime > nowMs).toList()
           ..sort((a, b) => a.startTime.compareTo(b.startTime));
 
         for (final c in futureCourses) {
           if (c.startTime <= nowMs && c.endTime > nowMs) {
-            if (nextWakeupMs == null || c.endTime < nextWakeupMs) {
-              nextWakeupMs = c.endTime;
+            // 正在上课中：每分钟必须精准唤醒刷新剩余时间和进度
+            final wake = (nextMinuteMs < c.endTime) ? nextMinuteMs : c.endTime;
+            if (nextWakeupMs == null || wake < nextWakeupMs) {
+              nextWakeupMs = wake;
             }
           } else if (c.startTime > nowMs) {
-            final tenMinBefore = c.startTime - 10 * 60 * 1000;
-            if (tenMinBefore > nowMs) {
-              if (nextWakeupMs == null || tenMinBefore < nextWakeupMs) {
-                nextWakeupMs = tenMinBefore;
+            final diffMs = c.startTime - nowMs;
+            if (diffMs <= 60 * 60 * 1000) {
+              // 开课前 60 分钟内：进入倒计时，每分钟精准刷新剩余时间
+              final wake = (nextMinuteMs < c.startTime) ? nextMinuteMs : c.startTime;
+              if (nextWakeupMs == null || wake < nextWakeupMs) {
+                nextWakeupMs = wake;
               }
             } else {
-              if (nextWakeupMs == null || c.startTime < nextWakeupMs) {
-                nextWakeupMs = c.startTime;
+              // 开课前 60 分钟以上：休眠到课前 60 分钟准时唤醒开启倒计时
+              final sixtyMinBefore = c.startTime - 60 * 60 * 1000;
+              if (sixtyMinBefore > nowMs) {
+                if (nextWakeupMs == null || sixtyMinBefore < nextWakeupMs) {
+                  nextWakeupMs = sixtyMinBefore;
+                }
               }
             }
           }
         }
 
         String? upcomingCoursesJson;
-        if (futureCourses.isNotEmpty) {
-          final listToSave = futureCourses.take(30).map((c) => {
-            'name': c.name,
-            'location': c.location,
-            'startTime': c.startTime,
-            'endTime': c.endTime,
-          }).toList();
+        if (_allCourses.isNotEmpty) {
+          // [v3.0.0] 供给小组件与锁屏通报：保存前后 14 天完整课表数据（涵盖已上完与待上课程，支持桌面小组件切日回看与全天看板）
+          final nowTime = DateTime.now();
+          final startWindow = nowTime.subtract(const Duration(days: 7)).millisecondsSinceEpoch;
+          final endWindow = nowTime.add(const Duration(days: 14)).millisecondsSinceEpoch;
+          final relevantCourses = _allCourses
+              .where((c) => c.startTime >= startWindow && c.startTime <= endWindow)
+              .toList()
+            ..sort((a, b) => a.startTime.compareTo(b.startTime));
+
+          final listToSave = (relevantCourses.isNotEmpty ? relevantCourses : _allCourses)
+              .take(80)
+              .map((c) => {
+                'name': c.name,
+                'location': c.location,
+                'teacher': c.teacher,
+                'startTime': c.startTime,
+                'endTime': c.endTime,
+              })
+              .toList();
           upcomingCoursesJson = jsonEncode(listToSave);
         }
 
