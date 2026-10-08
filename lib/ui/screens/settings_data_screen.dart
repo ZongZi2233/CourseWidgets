@@ -28,70 +28,57 @@ class SettingsDataScreen extends StatelessWidget {
       body: Stack(
         children: [
           AdaptiveLiquidGlassLayer(
-        quality: GlassQuality.premium,
-        settings: const LiquidGlassSettings(
-          blur: 3.0,
-          thickness: 24.0,
-          glassColor: Color(0x0EFFFFFF),
-          lightIntensity: 0.70,
-          ambientStrength: 0.45,
-          ambientRim: 0.0,
-          fresnelStrength: 0.05,
-          saturation: 1.20,
-          refractiveIndex: 1.46,
-        ),
-        child: Column(
-          children: [
-            SafeArea(
-              bottom: false,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 14,
-                ),
-                child: Row(
-                  children: [
-                    Text(
-                      '数据管理',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: isDark ? Colors.white : Colors.black87,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+            quality: ThemeService().glassQuality,
+            settings: const LiquidGlassSettings(
+              blur: 3.0,
+              thickness: 24.0,
+              glassColor: Color(0x0EFFFFFF),
+              lightIntensity: 0.70,
+              ambientStrength: 0.45,
+              ambientRim: 0.0,
+              fresnelStrength: 0.0,
+              saturation: 1.20,
+              refractiveIndex: 1.46,
             ),
-            Expanded(
-              child: DynMouseScroll(
-                durationMS: 250,
-                scrollSpeed: 1.2,
-                builder: (context, controller, physics) => ListView(
-                  controller: controller,
-                  padding: const EdgeInsets.all(16),
-                  physics: physics,
-                  children: [
-                    liquid.HyperOSCard(
-                      padding: const EdgeInsets.all(20),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '数据操作',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: isDark ? Colors.white : Colors.black87,
-                            ),
+            child: Column(
+              children: [
+                SafeArea(
+                  bottom: false,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 14,
+                    ),
+                    child: Row(
+                      children: [
+                        Text(
+                          '数据管理',
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: isDark ? Colors.white : const Color(0xFF1B1D24),
                           ),
-                          const SizedBox(height: 16),
-                          // [v2.5.9] 教务系统导入（WebView）
-                          _buildActionCard(
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: DynMouseScroll(
+                    durationMS: 250,
+                    scrollSpeed: 1.2,
+                    builder: (context, controller, physics) => ListView(
+                      controller: controller,
+                      padding: const EdgeInsets.all(16),
+                      physics: physics,
+                      children: [
+                        // [v3.0.0] 大卡片 1：数据导入
+                        _buildSectionHeader('数据导入', isDark),
+                        _buildCardGroup([
+                          _buildActionRow(
                             '教务系统导入',
-                            '',
+                            '支持超星、正方、青果等主流系统',
                             CupertinoIcons.globe,
-                            AppThemeColors.babyPink,
                             () {
                               if (Platform.isAndroid ||
                                   Platform.isIOS ||
@@ -110,91 +97,104 @@ class SettingsDataScreen extends StatelessWidget {
                                 );
                               }
                             },
+                            isDark,
                           ),
-                          _buildActionCard(
+                          _buildActionRow(
                             '导入 ICS 日历',
-                            '',
+                            '通用日历 iCalendar 格式文件',
                             Icons.calendar_month_rounded,
-                            Colors.orangeAccent,
                             () async {
                               final success = await provider.importData();
-                              if (success && context.mounted)
+                              if (success && context.mounted) {
                                 _showToast(context, 'ICS 导入成功');
+                              }
                             },
+                            isDark,
                           ),
-                          _buildActionCard(
+                          _buildActionRow(
                             '导入 HTML 课表',
-                            '',
+                            '教务网课程表离线网页文件',
                             Icons.code_rounded,
-                            Colors.deepPurpleAccent,
                             () async {
                               final success = await provider.importHtmlData();
-                              if (success && context.mounted)
+                              if (success && context.mounted) {
                                 _showToast(context, 'HTML 导入成功');
+                              }
                             },
+                            isDark,
                           ),
-                          _buildActionCard(
+                          _buildActionRow(
                             '导入 JSON 课表',
-                            '',
+                            '备份数据与自定义时间配置',
                             Icons.receipt_long_rounded,
-                            Colors.blueAccent,
                             () async {
                               final success = await provider.importJsonFile();
                               if (success && context.mounted) {
                                 _showToast(context, 'JSON 导入成功，已同步时间配置');
                               }
                             },
+                            isDark,
                           ),
-                          _buildActionCard(
+                          _buildActionRow(
                             '导入测试数据',
-                            '',
+                            '加载官方示例课表快速体验',
                             Icons.data_exploration_rounded,
-                            Colors.teal,
                             () async {
                               final success = await provider.importFromAssets();
-                              if (success && context.mounted)
+                              if (success && context.mounted) {
                                 _showToast(context, '测试数据已导入');
+                              }
                             },
+                            isDark,
                           ),
+                        ], isDark),
 
-                          const SizedBox(height: 16),
-                          _buildActionCard(
-                            '导出为 ICS',
-                            '',
+                        const SizedBox(height: 20),
+
+                        // [v3.0.0] 大卡片 2：数据导出
+                        _buildSectionHeader('数据导出', isDark),
+                        _buildCardGroup([
+                          _buildActionRow(
+                            '导出为 ICS 日历',
+                            '供手机日历与其他应用同步显示',
                             Icons.ios_share_rounded,
-                            Colors.green,
                             () async {
-                              final activeSchedule = await dataImportService
-                                  .getActiveSchedule();
+                              final activeSchedule =
+                                  await dataImportService.getActiveSchedule();
                               if (activeSchedule != null) {
                                 final path = await dataImportService
                                     .exportHistoryToIcs(activeSchedule['id']);
-                                if (path != null && context.mounted)
+                                if (path != null && context.mounted) {
                                   _showToast(context, 'ICS 已导出到:\n$path');
+                                }
                               } else {
-                                if (context.mounted)
+                                if (context.mounted) {
                                   _showToast(context, '未找到当前课表');
+                                }
                               }
                             },
+                            isDark,
                           ),
-                          _buildActionCard(
+                          _buildActionRow(
                             '导出为 JSON',
-                            '',
+                            '完整导出包含作息时间与所有课程',
                             Icons.data_object_rounded,
-                            Colors.blueAccent,
                             () async {
                               final success = await provider.exportData();
-                              if (success && context.mounted)
+                              if (success && context.mounted) {
                                 _showToast(context, 'JSON 导出成功');
+                              }
                             },
+                            isDark,
                           ),
-                          _buildActionCard(
-                            '导出系统诊断与Logcat日志',
-                            '',
+                          _buildActionRow(
+                            '导出系统诊断与日志',
+                            '导出 Logcat 日志至公共下载目录',
                             CupertinoIcons.doc_text_viewfinder,
-                            Colors.cyanAccent,
                             () async {
-                              final path = await AppLogger.exportLogsToPublicDownloads(tag: 'USER_EXPORT');
+                              final path = await AppLogger.exportLogsToPublicDownloads(
+                                tag: 'USER_EXPORT',
+                              );
                               if (context.mounted) {
                                 if (path != null) {
                                   _showToast(context, '诊断日志已导出至公共下载目录:\n$path');
@@ -203,41 +203,45 @@ class SettingsDataScreen extends StatelessWidget {
                                 }
                               }
                             },
+                            isDark,
                           ),
+                        ], isDark),
 
-                          const SizedBox(height: 16),
-                          _buildActionCard(
+                        const SizedBox(height: 20),
+
+                        // [v3.0.0] 大卡片 3：维护与管理（清除数据红色标记）
+                        _buildSectionHeader('维护与管理', isDark),
+                        _buildCardGroup([
+                          _buildActionRow(
+                            '历史记录管理',
+                            '查看与切换已导入的历史课表版本',
+                            CupertinoIcons.time,
+                            () => _showHistoryDialog(
+                              context,
+                              dataImportService,
+                              provider,
+                              isDark,
+                            ),
+                            isDark,
+                          ),
+                          _buildActionRow(
                             '清除所有数据',
-                            '',
+                            '删除所有已保存课程及作息配置',
                             Icons.delete_forever_rounded,
-                            Colors.redAccent,
                             () => _confirmClear(context, provider),
+                            isDark,
+                            isDestructive: true,
                           ),
-                        ],
-                      ),
-                    ),
+                        ], isDark),
 
-                    const SizedBox(height: 16),
-                    // [v2.2.2] 历史记录管理移到数据管理
-                    _buildActionCard(
-                      '历史记录管理',
-                      '',
-                      CupertinoIcons.time,
-                      Colors.purpleAccent,
-                      () => _showHistoryDialog(
-                        context,
-                        dataImportService,
-                        provider,
-                        isDark, // Pass isDark
-                      ),
+                        const SizedBox(height: 100),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
-              ),
+              ],
             ),
-          ],
-        ),
-      ),
+          ),
       // [v2.9.7] 悬浮右下角返回按钮
       const liquid.FloatingLiquidBackButton(),
     ],
@@ -384,20 +388,70 @@ class SettingsDataScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildActionCard(
+  static const double kSettingsItemHeight = 56.0;
+
+  Widget _buildSectionHeader(String title, bool isDark) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 4, bottom: 8),
+      child: Text(
+        title,
+        style: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+          color: isDark ? Colors.white60 : const Color(0xFF6B7280),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCardGroup(List<Widget> children, bool isDark) {
+    final dividerColor = isDark
+        ? Colors.white.withValues(alpha: 0.06)
+        : Colors.black.withValues(alpha: 0.05);
+
+    return liquid.HyperOSCard(
+      cornerRadius: 24,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: Column(
+        children: [
+          for (int i = 0; i < children.length; i++) ...[
+            if (i > 0)
+              Divider(
+                height: 1,
+                thickness: 0.6,
+                indent: 48,
+                color: dividerColor,
+              ),
+            children[i],
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionRow(
     String title,
     String subtitle,
     IconData icon,
-    Color color,
     VoidCallback onTap,
-  ) {
-    // [v2.3.0修复] 使用 GestureDetector 确保整个卡片可点击
-    final isDark = ThemeService().isDarkMode;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: liquid.HyperOSCard(
-        onTap: onTap,
-        padding: const EdgeInsets.all(16),
+    bool isDark, {
+    bool isDestructive = false,
+  }) {
+    final primaryColor = isDestructive
+        ? const Color(0xFFFF5252)
+        : (isDark ? Colors.white : const Color(0xFF1B1D24));
+    final iconColor = isDestructive
+        ? const Color(0xFFFF5252)
+        : (isDark ? const Color(0xFFD6DBE5) : const Color(0xFF3A4150));
+    final subColor = isDestructive
+        ? const Color(0xFFFF5252).withValues(alpha: 0.7)
+        : (isDark ? Colors.white60 : const Color(0xFF718096));
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: SizedBox(
+        height: kSettingsItemHeight,
         child: Row(
           children: [
             SizedBox(
@@ -406,25 +460,42 @@ class SettingsDataScreen extends StatelessWidget {
               child: Center(
                 child: Icon(
                   icon,
-                  color: isDark ? const Color(0xFFE2E7F0) : const Color(0xFF2C3240),
-                  size: 26,
+                  color: iconColor,
+                  size: 22,
                 ),
               ),
             ),
-            const SizedBox(width: 14),
+            const SizedBox(width: 12),
             Expanded(
-              child: Text(
-                title,
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: isDark ? Colors.white : Colors.black87,
-                ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: primaryColor,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      color: subColor,
+                    ),
+                  ),
+                ],
               ),
             ),
             Icon(
-              Icons.chevron_right,
-              color: isDark ? Colors.white54 : Colors.black54,
+              CupertinoIcons.right_chevron,
+              color: isDestructive
+                  ? const Color(0xFFFF5252).withValues(alpha: 0.6)
+                  : (isDark ? Colors.white38 : Colors.black26),
+              size: 15,
             ),
           ],
         ),

@@ -688,7 +688,7 @@ class HyperOSCard extends StatelessWidget {
     this.padding = const EdgeInsets.all(12),
     this.color,
     this.contentColor,
-    this.useBlur = false, // [v3.0.0] 单次静态全屏模糊采样架构，零 FBO 离屏切换，满帧 120 FPS
+    this.useBlur = true, // [v3.0.0] 默认开启共享静态全屏模糊纹理采样，零动态 FBO 切换，满帧 120 FPS
     this.blurRadius = 10.0,
     this.feedbackType = MiuixPressFeedbackType.sink,
     this.border,

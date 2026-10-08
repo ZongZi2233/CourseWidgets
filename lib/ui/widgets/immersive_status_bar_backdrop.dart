@@ -1,12 +1,10 @@
-import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
-import '../../services/static_blur_service.dart';
+import '../../services/theme_service.dart';
 
-/// [v3.0.0] 物理状态栏顶级沉浸式高质感静态磨砂避让遮罩
-/// 废除全屏实时 GPU BackdropFilter（杜绝每次滑动与转场造成 10~15ms 显存读回卡顿），
-/// 改用直接从 [StaticBlurredWallpaperService] 采样静态烘焙纹理的顶部切片，
-/// 渲染耗时从 8.5ms 骤降至 0.005ms，彻底解决 120 FPS 掉帧问题。
+/// [v3.0.0-alpha12] 物理状态栏顶级沉浸式高质感无极渐进模糊遮罩 (Progressive Variable Blur)
+/// 采用连续 ShaderMask + 多级微散焦 BackdropFilter，使从下方滚入的课程卡片与标题无极渐变模糊消隐，
+/// 彻底根除死黑遮罩块，呈现自然、通透的 HyperOS / iOS 旗舰级状态栏物理散焦。
 class ImmersiveStatusBarBackdrop extends StatelessWidget {
   final double extraHeight;
 
@@ -21,10 +19,8 @@ class ImmersiveStatusBarBackdrop extends StatelessWidget {
     final topPadding = mq.padding.top;
     if (topPadding <= 0) return const SizedBox.shrink();
 
-    final totalHeight = topPadding + extraHeight + 28.0;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final screenW = mq.size.width;
-    final screenH = mq.size.height;
+    final totalHeight = topPadding + extraHeight + 32.0;
+    final isDark = ThemeService().isDarkMode;
 
     return Positioned(
       top: 0,
@@ -35,40 +31,61 @@ class ImmersiveStatusBarBackdrop extends StatelessWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // 1. 0 显存回读开销：基于 StaticBlurredWallpaperService 静态模糊纹理顶部视口切片 + 物理无极变深遮罩
-            AnimatedBuilder(
-              animation: StaticBlurredWallpaperService.instance,
-              builder: (context, _) {
-                final blurredImage = StaticBlurredWallpaperService.instance.blurredImage;
-                if (blurredImage == null) return const SizedBox.shrink();
-                return CustomPaint(
-                  painter: _StatusBarBlurPainter(
-                    image: blurredImage,
-                    screenW: screenW,
-                    screenH: screenH,
-                  ),
-                );
-              },
+            // 阶段 1: 全高度深层无极渐进式高斯模糊 (sigma 20)
+            ShaderMask(
+              shaderCallback: (bounds) => const LinearGradient(
+                begin: Alignment.bottomCenter,
+                end: Alignment.topCenter,
+                stops: [0.0, 0.35, 0.70, 1.0],
+                colors: [
+                  Colors.transparent,
+                  Color(0x33000000),
+                  Color(0x99000000),
+                  Colors.black,
+                ],
+              ).createShader(bounds),
+              blendMode: BlendMode.dstIn,
+              child: BackdropFilter(
+                filter: ui.ImageFilter.blur(sigmaX: 20.0, sigmaY: 20.0),
+                child: const ColoredBox(color: Colors.transparent),
+              ),
             ),
 
-            // 2. 柔和无极变深环境光与防眩晕底色（与无极变深模糊完全对齐）
+            // 阶段 2: 中段精细散焦过渡 (sigma 8)
+            ShaderMask(
+              shaderCallback: (bounds) => const LinearGradient(
+                begin: Alignment.bottomCenter,
+                end: Alignment.topCenter,
+                stops: [0.0, 0.55, 1.0],
+                colors: [
+                  Colors.transparent,
+                  Color(0x66000000),
+                  Colors.black,
+                ],
+              ).createShader(bounds),
+              blendMode: BlendMode.dstIn,
+              child: BackdropFilter(
+                filter: ui.ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
+                child: const ColoredBox(color: Colors.transparent),
+              ),
+            ),
+
+            // 阶段 3: 顶端极其克制的环境光微透衰减底色（提供 10%~16% 微弱防眩光，绝非厚厚生硬黑块）
             DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  stops: const [0.0, 0.45, 0.8, 1.0],
+                  stops: const [0.0, 0.45, 1.0],
                   colors: isDark
-                      ? [
-                          const Color(0xB80E1015),
-                          const Color(0x660E1015),
-                          const Color(0x180E1015),
+                      ? const [
+                          Color(0x300E1015),
+                          Color(0x120E1015),
                           Colors.transparent,
                         ]
-                      : [
-                          const Color(0xA0FFFFFF),
-                          const Color(0x55FFFFFF),
-                          const Color(0x12FFFFFF),
+                      : const [
+                          Color(0x30FFFFFF),
+                          Color(0x12FFFFFF),
                           Colors.transparent,
                         ],
                 ),
@@ -78,79 +95,5 @@ class ImmersiveStatusBarBackdrop extends StatelessWidget {
         ),
       ),
     );
-  }
-}
-
-class _StatusBarBlurPainter extends CustomPainter {
-  final ui.Image? image;
-  final double screenW;
-  final double screenH;
-
-  _StatusBarBlurPainter({
-    required this.image,
-    required this.screenW,
-    required this.screenH,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final img = image;
-    if (img == null || screenW <= 0 || screenH <= 0) return;
-
-    final imgW = img.width.toDouble();
-    final imgH = img.height.toDouble();
-    final scale = math.max(imgW / screenW, imgH / screenH);
-    final offsetX = (imgW - screenW * scale) / 2.0;
-    final offsetY = (imgH - screenH * scale) / 2.0;
-
-    final srcRect = Rect.fromLTRB(
-      offsetX.clamp(0.0, imgW),
-      offsetY.clamp(0.0, imgH),
-      (screenW * scale + offsetX).clamp(0.0, imgW),
-      (size.height * scale + offsetY).clamp(0.0, imgH),
-    );
-
-    final rect = Offset.zero & size;
-
-    // 真正的物理无极渐进式模糊：通过 saveLayer + dstIn 线性渐变遮罩，使模糊强度从底部 0 连续平滑递增至顶部 100%
-    canvas.saveLayer(rect, Paint());
-
-    canvas.drawImageRect(
-      img,
-      srcRect,
-      rect,
-      Paint()
-        ..filterQuality = FilterQuality.medium
-        ..isAntiAlias = true,
-    );
-
-    final maskShader = ui.Gradient.linear(
-      Offset(0, size.height),
-      Offset.zero,
-      const [
-        Colors.transparent,
-        Color(0x22000000),
-        Color(0x77000000),
-        Color(0xCC000000),
-        Colors.black,
-      ],
-      const [0.0, 0.25, 0.55, 0.82, 1.0],
-    );
-
-    canvas.drawRect(
-      rect,
-      Paint()
-        ..blendMode = BlendMode.dstIn
-        ..shader = maskShader,
-    );
-
-    canvas.restore();
-  }
-
-  @override
-  bool shouldRepaint(covariant _StatusBarBlurPainter oldDelegate) {
-    return oldDelegate.image != image ||
-        oldDelegate.screenW != screenW ||
-        oldDelegate.screenH != screenH;
   }
 }

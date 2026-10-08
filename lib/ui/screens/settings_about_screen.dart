@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
+import 'package:flutter/services.dart';
+import 'dart:ui';
 import '../../constants/theme_constants.dart';
 import '../../constants/version.dart';
 import 'dart:io';
@@ -145,9 +146,9 @@ class _SettingsAboutScreenState extends State<SettingsAboutScreen>
                               borderRadius: BorderRadius.circular(16),
                             ),
                             child: Text(
-                              'v$appVersion',
+                              'v$appVersion · Build $buildNumber',
                               style: const TextStyle(
-                                fontSize: 14,
+                                fontSize: 13,
                                 color: Colors.white,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -293,135 +294,168 @@ class _SettingsAboutScreenState extends State<SettingsAboutScreen>
   /// [v2.6.3] 弹窗展示版本更新内容与下载按钮
   void _showUpdateDialog(String latestTag, String releaseBody) {
     final downloadUrl = _buildDownloadUrl(latestTag);
+    final isDark = GlassSettingsHelper.isDark(context);
+
     showDialog(
       context: context,
-      builder: (ctx) => Dialog(
-        backgroundColor: Colors.transparent,
-        child: GlassCard(
-          shape: const LiquidRoundedSuperellipse(borderRadius: 28),
-          quality: GlassQuality.premium,
-          useOwnLayer: true,
-          padding: EdgeInsets.zero,
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      CupertinoIcons.arrow_down_circle_fill,
-                      color: AppThemeColors.babyPink,
-                      size: 28,
-                    ),
-                    const SizedBox(width: 10),
-                    Text(
-                      '发现新版本 $latestTag',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  '当前版本: v$appVersion',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.6),
-                    fontSize: 13,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Container(
-                  constraints: const BoxConstraints(maxHeight: 240),
-                  child: SingleChildScrollView(
-                    child: Text(
-                      releaseBody,
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.85),
-                        fontSize: 14,
-                        height: 1.5,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                Row(
-                  children: [
-                    Expanded(
-                      child: GlassButton.custom(
-                        onTap: () => Navigator.of(ctx).pop(),
-                        width: double.infinity,
+      barrierColor: Colors.black.withValues(alpha: 0.4),
+      builder: (ctx) => BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+        child: Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: liquid.HyperOSCard(
+              cornerRadius: 28,
+              useBlur: true,
+              shadows: liquid.HyperOSShadows.modal(isDark),
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 44,
                         height: 44,
-                        style: GlassButtonStyle.filled,
-                        settings: const LiquidGlassSettings(
-                          glassColor: Colors.transparent,
-                          blur: 0,
-                          thickness: 0,
+                        decoration: BoxDecoration(
+                          color: AppThemeColors.babyPink.withValues(alpha: 0.22),
+                          borderRadius: BorderRadius.circular(16),
                         ),
-                        shape: const LiquidRoundedSuperellipse(
-                          borderRadius: 14,
+                        child: Icon(
+                          CupertinoIcons.arrow_down_circle_fill,
+                          color: AppThemeColors.babyPink,
+                          size: 26,
                         ),
-                        child: const Center(
-                          child: Text(
-                            '稍后',
-                            style: TextStyle(color: Colors.white, fontSize: 15),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '发现新版本 $latestTag',
+                              style: TextStyle(
+                                color: isDark ? Colors.white : const Color(0xFF1A1A2E),
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              '当前版本: v$appVersion (Build $buildNumber)',
+                              style: TextStyle(
+                                color: isDark ? Colors.white60 : Colors.black54,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+                  Container(
+                    constraints: const BoxConstraints(maxHeight: 220),
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.05)
+                          : Colors.black.withValues(alpha: 0.03),
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    child: SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      child: Text(
+                        releaseBody,
+                        style: TextStyle(
+                          color: isDark
+                              ? Colors.white.withValues(alpha: 0.88)
+                              : const Color(0xFF2C3240),
+                          fontSize: 13.5,
+                          height: 1.55,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextButton(
+                          onPressed: () => Navigator.of(ctx).pop(),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
                           ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: GlassButton.custom(
-                        onTap: () async {
-                          Navigator.of(ctx).pop();
-                          // 使用 Process.run 打开浏览器下载
-                          if (Platform.isWindows) {
-                            await Process.run('cmd', [
-                              '/c',
-                              'start',
-                              downloadUrl,
-                            ]);
-                          } else if (Platform.isAndroid) {
-                            // Android 通过 intent
-                            await Process.run('am', [
-                              'start',
-                              '-a',
-                              'android.intent.action.VIEW',
-                              '-d',
-                              downloadUrl,
-                            ]);
-                          }
-                        },
-                        width: double.infinity,
-                        height: 44,
-                        style: GlassButtonStyle.filled,
-                        settings: const LiquidGlassSettings(
-                          glassColor: Colors.transparent,
-                          blur: 0,
-                          thickness: 0,
-                        ),
-                        shape: const LiquidRoundedSuperellipse(
-                          borderRadius: 14,
-                        ),
-                        child: Center(
                           child: Text(
-                            Platform.isWindows ? '下载 Windows 版' : '下载 APK',
-                            style: const TextStyle(
-                              color: Colors.white,
+                            '稍后再说',
+                            style: TextStyle(
+                              color: isDark ? Colors.white60 : Colors.black54,
                               fontSize: 15,
-                              fontWeight: FontWeight.bold,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-              ],
+                      const SizedBox(width: 12),
+                      Expanded(
+                        flex: 2,
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: () async {
+                              HapticFeedback.mediumImpact();
+                              Navigator.of(ctx).pop();
+                              if (Platform.isWindows) {
+                                await Process.run('cmd', ['/c', 'start', downloadUrl]);
+                              } else if (Platform.isAndroid) {
+                                await Process.run('am', [
+                                  'start',
+                                  '-a',
+                                  'android.intent.action.VIEW',
+                                  '-d',
+                                  downloadUrl,
+                                ]);
+                              }
+                            },
+                            borderRadius: BorderRadius.circular(16),
+                            child: Ink(
+                              height: 48,
+                              decoration: BoxDecoration(
+                                color: AppThemeColors.babyPink,
+                                borderRadius: BorderRadius.circular(16),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: AppThemeColors.babyPink
+                                        .withValues(alpha: 0.35),
+                                    blurRadius: 12,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
+                              ),
+                              child: Center(
+                                child: Text(
+                                  Platform.isWindows ? '下载 Windows 版' : '立即下载 APK',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -430,35 +464,86 @@ class _SettingsAboutScreenState extends State<SettingsAboutScreen>
   }
 
   Widget _buildUpdateCheckButton() {
-    return GlassButton.custom(
-      onTap: _isCheckingUpdate ? () {} : _checkForUpdates,
-      width: double.infinity,
-      height: 52,
-      style: GlassButtonStyle.filled,
-      settings: LiquidGlassSettings(
-        glassColor: AppThemeColors.babyPink.withValues(alpha: 0.22),
-        blur: 1.5,
-        thickness: 18,
-        refractiveIndex: 1.25,
-        lightIntensity: 0.70,
-        specularSharpness: GlassSpecularSharpness.sharp,
-      ),
-      shape: const LiquidRoundedSuperellipse(borderRadius: 20),
-      child: Center(
-        child: _isCheckingUpdate
-            ? const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-              )
-            : const Text(
-                '检查更新',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
+    final isDark = GlassSettingsHelper.isDark(context);
+    return liquid.HyperOSCard(
+      cornerRadius: 22,
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+      onTap: _isCheckingUpdate
+          ? null
+          : () {
+              HapticFeedback.lightImpact();
+              _checkForUpdates();
+            },
+      child: SizedBox(
+        height: 56.0,
+        child: Row(
+          children: [
+            SizedBox(
+              width: 36,
+              height: 36,
+              child: Center(
+                child: Icon(
+                  CupertinoIcons.arrow_2_circlepath,
+                  color: isDark
+                      ? const Color(0xFFD6DBE5)
+                      : const Color(0xFF3A4150),
+                  size: 24,
                 ),
               ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '检查新版本',
+                    style: TextStyle(
+                      fontSize: 15.5,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white : const Color(0xFF1A1A2E),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '当前为最新开发版 v$appVersion',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isDark ? Colors.white60 : Colors.black54,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (_isCheckingUpdate)
+              SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.2,
+                  color: AppThemeColors.babyPink,
+                ),
+              )
+            else
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppThemeColors.babyPink
+                      .withValues(alpha: isDark ? 0.22 : 0.16),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Text(
+                  '检查',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : AppThemeColors.babyPink,
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

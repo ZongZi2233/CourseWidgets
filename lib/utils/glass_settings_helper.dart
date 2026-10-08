@@ -32,7 +32,7 @@ class GlassSettingsHelper {
       lightIntensity: 0.70,
       ambientStrength: 0.45,
       ambientRim: 0.0, // [v2.8.5 彻底消除人造白边]
-      fresnelStrength: 0.05, // [v2.8.5 消除掠射角强白光边缘]
+      fresnelStrength: 0.0, // [v3.0.0 消除掠射角人造白边描边]
       saturation: 1.20,
     );
   }
@@ -52,7 +52,7 @@ class GlassSettingsHelper {
       lightIntensity: 0.70,
       ambientStrength: 0.45,
       ambientRim: 0.0, // [v2.8.5 消除白边]
-      fresnelStrength: 0.05,
+      fresnelStrength: 0.0, // [v3.0.0 消除白边]
       saturation: 1.20,
     );
   }

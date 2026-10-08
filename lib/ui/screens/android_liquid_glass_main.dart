@@ -293,7 +293,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                 saturation: 1.20,
                 ambientStrength: 0.45,
                 ambientRim: 0.0,
-                fresnelStrength: 0.05,
+                fresnelStrength: 0.0,
                 glassColor: Color(0x18FFFFFF),
               ),
               // [v2.8.4] 遵循官方演示：采用 100% 纯澈透光的物理凸透镜滑块（blur: 0，无任何高斯模糊浑浊感）
@@ -452,23 +452,10 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
           return Stack(
             children: [
               // 课程网格本周看板：全屏铺满，上下纵向滚动，平滑穿过顶栏与底栏
-              // [v2.9.6] 课程网格本周看板：支持背景控件离屏冻结优化，全周贯通穿透
               Positioned.fill(
-                child: ValueListenableBuilder<bool>(
-                  valueListenable: _isBackgroundFrozen,
-                  builder: (context, isFrozen, child) {
-                    return RepaintBoundary(
-                      child: IgnorePointer(
-                        ignoring: isFrozen,
-                        child: TickerMode(
-                          enabled: !isFrozen,
-                          child: child!,
-                        ),
-                      ),
-                    );
-                  },
+                child: RepaintBoundary(
                   child: WeeklyScheduleGrid(
-                    key: ValueKey('weekly_grid_phone_${provider.currentWeek}'),
+                    key: const ValueKey('weekly_grid_phone_main'),
                     showControlBar: false,
                     isPhone: true,
                     contentPadding: EdgeInsets.only(
@@ -557,7 +544,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
           lightIntensity: 0.70,
           ambientStrength: 0.45,
           ambientRim: 0.0,
-          fresnelStrength: 0.05,
+          fresnelStrength: 0.0,
           saturation: 1.20,
         ),
         child: Padding(
@@ -580,16 +567,13 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                 ),
               ),
               const Spacer(),
-              // 当前日期指示徽章
+              // 当前日期指示徽章 (无边框，柔和漫反射阴影)
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: isDark ? const Color(0x30000000) : const Color(0x12000000),
-                    width: 0.8,
-                  ),
+                  boxShadow: liquid.HyperOSShadows.pill(isDark),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -646,7 +630,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
           lightIntensity: 0.75,
           ambientStrength: 0.45,
           ambientRim: 0.0,
-          fresnelStrength: 0.06,
+          fresnelStrength: 0.0,
           edgeAbsorption: 0.0,
         ),
         child: Padding(
@@ -654,7 +638,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // 1. (+) 添加课程按钮
+              // 1. (+) 添加课程按钮 (纯净无边框，柔粉弥散阴影)
               GestureDetector(
                 onTap: () {
                   HapticFeedback.selectionClick();
@@ -672,10 +656,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                   decoration: BoxDecoration(
                     color: AppThemeColors.babyPink.withValues(alpha: isDark ? 0.25 : 0.18),
                     borderRadius: BorderRadius.circular(18),
-                    border: Border.all(
-                      color: const Color(0xFFE56A85).withValues(alpha: isDark ? 0.55 : 0.40),
-                      width: 1.0,
-                    ),
+                    boxShadow: liquid.HyperOSShadows.pill(isDark, accentColor: AppThemeColors.babyPink),
                   ),
                   child: Icon(
                     CupertinoIcons.add,
@@ -686,7 +667,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
               ),
               const SizedBox(width: 6),
 
-              // 2. (＜) 上一周按钮（加深同系色描边，无黑边）
+              // 2. (＜) 上一周按钮 (纯净无边框，漫反射微阴影)
               GestureDetector(
                 onTap: canPrev
                     ? () {
@@ -703,12 +684,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                         ? Colors.white.withValues(alpha: canPrev ? 0.10 : 0.04)
                         : (canPrev ? const Color(0xFFEFF1F5) : const Color(0xFFF7F8FA)),
                     borderRadius: BorderRadius.circular(18),
-                    border: Border.all(
-                      color: isDark
-                          ? (canPrev ? const Color(0x40000000) : const Color(0x18000000))
-                          : (canPrev ? const Color(0xFFCDD3DE) : const Color(0xFFE4E7ED)),
-                      width: 0.9,
-                    ),
+                    boxShadow: canPrev ? liquid.HyperOSShadows.pill(isDark) : null,
                   ),
                   child: Icon(
                     CupertinoIcons.chevron_left,
@@ -721,7 +697,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
               ),
               const SizedBox(width: 6),
 
-              // 3. (第 X 周 ▾) 核心选择胶囊（加深柔粉描边）
+              // 3. (第 X 周 ▾) 核心选择胶囊 (纯净无边框，柔粉漫反射阴影)
               GestureDetector(
                 onTap: () => _showWeekPickerSheet(context, provider),
                 behavior: HitTestBehavior.opaque,
@@ -732,10 +708,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                   decoration: BoxDecoration(
                     color: AppThemeColors.babyPink.withValues(alpha: isDark ? 0.26 : 0.18),
                     borderRadius: BorderRadius.circular(18),
-                    border: Border.all(
-                      color: const Color(0xFFE56A85).withValues(alpha: isDark ? 0.55 : 0.42),
-                      width: 1.0,
-                    ),
+                    boxShadow: liquid.HyperOSShadows.pill(isDark, accentColor: AppThemeColors.babyPink),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -761,7 +734,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
               ),
               const SizedBox(width: 6),
 
-              // 4. (＞) 下一周按钮（暗色微描边，消除突兀白边）
+              // 4. (＞) 下一周按钮 (纯净无边框，漫反射微阴影)
               GestureDetector(
                 onTap: canNext
                     ? () {
@@ -778,12 +751,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                         ? Colors.white.withValues(alpha: canNext ? 0.10 : 0.04)
                         : (canNext ? const Color(0xFFEFF1F5) : const Color(0xFFF7F8FA)),
                     borderRadius: BorderRadius.circular(18),
-                    border: Border.all(
-                      color: isDark
-                          ? (canNext ? const Color(0x40000000) : const Color(0x18000000))
-                          : (canNext ? const Color(0xFFCDD3DE) : const Color(0xFFE4E7ED)),
-                      width: 0.9,
-                    ),
+                    boxShadow: canNext ? liquid.HyperOSShadows.pill(isDark) : null,
                   ),
                   child: Icon(
                     CupertinoIcons.chevron_right,
@@ -796,7 +764,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
               ),
               const SizedBox(width: 6),
 
-              // 5. (⋯) 变形多功能菜单（暗色微描边，消除突兀白边）
+              // 5. (⋯) 变形多功能菜单 (纯净无边框，漫反射微阴影)
               GlassMenu(
                 menuWidth: 170,
                 menuBorderRadius: 20,
@@ -812,12 +780,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                             ? Colors.white.withValues(alpha: 0.10)
                             : const Color(0xFFEFF1F5),
                         borderRadius: BorderRadius.circular(18),
-                        border: Border.all(
-                          color: isDark
-                              ? const Color(0x40000000)
-                              : const Color(0xFFCDD3DE),
-                          width: 0.9,
-                        ),
+                        boxShadow: liquid.HyperOSShadows.pill(isDark),
                       ),
                       child: Icon(
                         CupertinoIcons.ellipsis,
@@ -1432,12 +1395,9 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                                     ? null
                                     : Colors.white.withValues(alpha: 0.08),
                                 borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: isCur
-                                      ? AppThemeColors.babyPink.withValues(alpha: 0.65)
-                                      : (isDark ? const Color(0x30000000) : const Color(0x0E000000)),
-                                  width: 0.8,
-                                ),
+                                boxShadow: isCur
+                                    ? liquid.HyperOSShadows.pill(isDark, accentColor: AppThemeColors.babyPink)
+                                    : null,
                               ),
                               alignment: Alignment.center,
                               child: Text(

@@ -85,39 +85,18 @@ class AndroidScheduleConfigScreenState
   }
 
   void _pickSemesterDate() async {
-    // 使用液态玻璃风格的日期选择器
-    liquid.showLiquidDialog(
+    final currentDate = _parseDate(_semesterDateController.text);
+    final picked = await showLiquidGlassCalendarPicker(
       context: context,
-      builder: liquid.LiquidGlassDialog(
-        title: '选择开学日期',
-        content: SizedBox(
-          height: 300,
-          child: LiquidGlassDatePicker(
-            initialDate: _config.semesterStartDate,
-            onDateChanged: (date) {
-              setState(() {
-                _semesterDateController.text =
-                    '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-              });
-            },
-          ),
-        ),
-        actions: [
-          GlassDialogAction(
-            label: '取消',
-            onPressed: () => Navigator.of(context, rootNavigator: true).pop(),
-          ),
-          GlassDialogAction(
-            label: '确定',
-            isPrimary: true,
-            onPressed: () {
-              // [v2.6.5] 确保使用 rootNavigator 关闭弹窗
-              Navigator.of(context, rootNavigator: true).pop();
-            },
-          ),
-        ],
-      ),
+      initialDate: currentDate,
     );
+    if (picked != null) {
+      setState(() {
+        _semesterDateController.text =
+            '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+      });
+      _saveConfigQuietly();
+    }
   }
 
   int? _parseTime(String timeStr) {

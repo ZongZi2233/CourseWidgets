@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:material_color_utilities/material_color_utilities.dart';
 import 'package:system_theme/system_theme.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart' show GlassQuality;
 import 'storage_service.dart';
 import '../main.dart'; // For globalUseDarkMode
 import '../utils/glass_opacity_manager.dart';
@@ -36,6 +37,18 @@ class ThemeService extends ChangeNotifier {
   Color get primaryColor => _primaryColor;
   Color get secondaryColor => _secondaryColor;
   ThemeMode get themeMode => _themeMode;
+
+  // [v3.0.0] 全局液态玻璃渲染质量控制 (Premium 旗舰完整折射 vs Standard 高帧率省电)
+  static final ValueNotifier<GlassQuality> globalGlassQualityNotifier =
+      ValueNotifier<GlassQuality>(GlassQuality.premium);
+
+  GlassQuality get glassQuality => globalGlassQualityNotifier.value;
+
+  Future<void> setGlassQuality(GlassQuality quality) async {
+    globalGlassQualityNotifier.value = quality;
+    await _storage.setString('global_glass_quality', quality.name);
+    notifyListeners();
+  }
 
   // [v2.5.0/v2.8.5] 快捷获取深色模式状态
   bool get isDarkMode => globalDarkModeNotifier.value;
@@ -111,6 +124,14 @@ class ThemeService extends ChangeNotifier {
     } else if (_themeMode == ThemeMode.defaultMode) {
       _primaryColor = defaultPrimaryColor;
       _secondaryColor = defaultSecondaryColor;
+    }
+
+    // 恢复全局玻璃渲染质量
+    final savedQuality = _storage.getString('global_glass_quality');
+    if (savedQuality != null) {
+      globalGlassQualityNotifier.value = savedQuality == GlassQuality.standard.name
+          ? GlassQuality.standard
+          : GlassQuality.premium;
     }
 
     notifyListeners();

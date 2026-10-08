@@ -54,37 +54,26 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
           onHorizontalDragEnd: (Platform.isWindows || Platform.isMacOS || Platform.isLinux)
               ? null
               : (details) {
-                  if (details.primaryVelocity! > 0) {
+                  final vel = details.primaryVelocity ?? 0.0;
+                  if (vel > 100) {
                     _changeWeek(provider, provider.currentWeek - 1);
-                  } else if (details.primaryVelocity! < 0) {
+                  } else if (vel < -100) {
                     _changeWeek(provider, provider.currentWeek + 1);
                   }
                 },
-          child: ValueListenableBuilder<bool>(
-            valueListenable: _isBackgroundFrozen,
-            builder: (context, isFrozen, child) {
-              return IgnorePointer(
-                ignoring: isFrozen,
-                child: TickerMode(
-                  enabled: !isFrozen,
-                  child: child!,
-                ),
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 200),
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeInCubic,
+            transitionBuilder: (child, animation) {
+              return FadeTransition(
+                opacity: animation,
+                child: child,
               );
             },
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 200),
-              switchInCurve: Curves.easeOutCubic,
-              switchOutCurve: Curves.easeInCubic,
-              transitionBuilder: (child, animation) {
-                return FadeTransition(
-                  opacity: animation,
-                  child: child,
-                );
-              },
-              child: KeyedSubtree(
-                key: ValueKey('weekly_grid_content_${provider.currentWeek}'),
-                child: _buildWeekGrid(context, provider),
-              ),
+            child: KeyedSubtree(
+              key: ValueKey('weekly_grid_content_${provider.currentWeek}'),
+              child: _buildWeekGrid(context, provider),
             ),
           ),
         );
@@ -264,7 +253,7 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
                 thickness: 16.0,
                 refractiveIndex: 1.40,
                 ambientRim: 0.0,
-                fresnelStrength: 0.05,
+                fresnelStrength: 0.0,
                 edgeAbsorption: 0.0,
               ),
               child: Padding(
@@ -667,8 +656,8 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
 
     return RepaintBoundary(
       child: liquid.HyperOSCard(
-        useBlur: false, // [v3.0.0] 对齐 moyue 核心渲染架构：视口滚动项禁用逐卡动态采样，由 RepaintBoundary 极速缓存，满帧 120 FPS
-      cornerRadius: widget.isPhone ? 16 : 18,
+        useBlur: true, // [v3.0.0] 共享单次静态全屏高斯模糊双线性采样，零 FBO 离屏开销，极高质量磨砂质感
+        cornerRadius: widget.isPhone ? 16 : 18,
       padding: EdgeInsets.all(widget.isPhone ? 6.0 : 8.0),
       color: cardBgColor,
       contentColor: titleColor,

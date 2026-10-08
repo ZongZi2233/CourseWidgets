@@ -1,27 +1,27 @@
 {
-  "version": "3.0.0-alpha10",
-  "buildNumber": 310,
-  "collectedAt": "2026-10-08T22:05:04.571019",
+  "version": "3.0.0-alpha12",
+  "buildNumber": 312,
+  "collectedAt": "2026-10-08T23:24:24.293364",
   "artifacts": [
     {
       "platform": "Android",
-      "filename": "CourseWidgets-v3.0.0-alpha10-android-arm64-v8a.apk",
+      "filename": "CourseWidgets-v3.0.0-alpha12-android-arm64-v8a.apk",
       "source": "app-arm64-v8a-release.apk",
-      "path": "D:\\VSCODE\\Schedule\\schedule_app\\release\\CourseWidgets-v3.0.0-alpha10-android-arm64-v8a.apk",
-      "size": 61787883,
-      "size_formatted": "58.93 MB",
-      "sha256": "10c887ccaf9dd4db9c5ab504215b2b511b67b2e4bfaa1f87851d4b9a060da99a",
-      "updated_at": "2026-10-08 22:05:02"
+      "path": "D:\\VSCODE\\Schedule\\schedule_app\\release\\CourseWidgets-v3.0.0-alpha12-android-arm64-v8a.apk",
+      "size": 61919287,
+      "size_formatted": "59.05 MB",
+      "sha256": "1aaf5f5af6a4b6b44e2a229fbb561c028bbe6f942768bbc4ee1e06da2d70f643",
+      "updated_at": "2026-10-08 23:24:22"
     },
     {
       "platform": "Windows",
-      "filename": "CourseWidgets-v3.0.0-alpha10-windows-x64.zip",
+      "filename": "CourseWidgets-v3.0.0-alpha12-windows-x64.zip",
       "source": "build/windows/x64/runner/Release",
-      "path": "D:\\VSCODE\\Schedule\\schedule_app\\release\\CourseWidgets-v3.0.0-alpha10-windows-x64.zip",
-      "size": 57598707,
-      "size_formatted": "54.93 MB",
-      "sha256": "2dc97345c1761ac8e1a985601fa604ef1db785026172999bb6e1ec24f9ae0b5c",
-      "updated_at": "2026-10-08 22:05:04"
+      "path": "D:\\VSCODE\\Schedule\\schedule_app\\release\\CourseWidgets-v3.0.0-alpha12-windows-x64.zip",
+      "size": 57652337,
+      "size_formatted": "54.98 MB",
+      "sha256": "32c25469d6a377ed3c23d61dda5d3863118fb0a01bbe642319ef766a4f842304",
+      "updated_at": "2026-10-08 23:24:24"
     }
   ]
 }
