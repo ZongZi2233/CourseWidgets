@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
-import '../../constants/theme_constants.dart';
 import '../../services/theme_service.dart';
 import '../../utils/responsive_utils.dart';
 import 'new_settings_screen.dart';
@@ -23,165 +21,284 @@ class _SettingsMainScreenState extends State<SettingsMainScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = ThemeService().isDarkMode;
-    final isTablet = ResponsiveUtils.isTabletMode(context);
 
-    // [v2.9.8] 自适应顶部间距：平板16，手机80（避开悬浮毛玻璃顶栏64pt并保留16pt呼吸距离，彻底消除重叠）
-    final topPadding = isTablet ? 16.0 : 80.0;
+    final isLandscapePhone = ResponsiveUtils.isLandscapePhone(context);
+    final isDesktopOrTablet = ResponsiveUtils.isTabletMode(context) ||
+        ResponsiveUtils.isDesktopOrLandscape(context);
+    final isLandscape = ResponsiveUtils.isLandscape(context) || isDesktopOrTablet;
+
+    // 自适应顶部与底部内边距：横屏/桌面端贴顶紧凑，手机竖屏预留顶部标题栏与浮动Dock
+    final double topPadding;
+    if (isDesktopOrTablet || isLandscapePhone) {
+      topPadding = 16.0;
+    } else {
+      topPadding = 80.0;
+    }
+
+    final double bottomPadding;
+    if (isLandscapePhone || isDesktopOrTablet) {
+      bottomPadding = MediaQuery.paddingOf(context).bottom + 76.0;
+    } else {
+      bottomPadding = 120.0;
+    }
 
     return Scaffold(
       backgroundColor: Colors.transparent,
       extendBody: true,
-      body: Stack(
+      body: SafeArea(
+        top: false,
+        bottom: false,
+        child: isLandscape
+            ? _buildLandscapeLayout(isDark, topPadding, bottomPadding)
+            : _buildPortraitLayout(isDark, topPadding, bottomPadding),
+      ),
+    );
+  }
+
+  /// [v3.0.0-alpha23] 横屏与桌面端左右双栏自适应布局（左栏核心功能，右栏数据与关于）
+  Widget _buildLandscapeLayout(bool isDark, double topPadding, double bottomPadding) {
+    return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(
+        parent: AlwaysScrollableScrollPhysics(),
+      ),
+      padding: EdgeInsets.fromLTRB(20, topPadding, 20, bottomPadding),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // [v2.10.0] 彻底移除视口预模糊壁纸，让全局高清壁纸清晰透显，与主课表视觉统一
-          AdaptiveLiquidGlassLayer(
-        quality: GlassQuality.premium,
-        settings: const LiquidGlassSettings(
-          blur: 3.0,
-          thickness: 24.0,
-          glassColor: Color(0x0EFFFFFF),
-          lightIntensity: 0.70,
-          ambientStrength: 0.45,
-          ambientRim: 0.0,
-          fresnelStrength: 0.05,
-          saturation: 1.20,
-          refractiveIndex: 1.46,
-        ),
-        child: CustomScrollView(
-          physics: const BouncingScrollPhysics(
-            parent: AlwaysScrollableScrollPhysics(),
-          ),
-          slivers: [
-            SliverSafeArea(
-              bottom: false,
-              sliver: SliverPadding(
-                padding: EdgeInsets.fromLTRB(16, topPadding, 16, 120),
-              sliver: SliverList(
-                delegate: SliverChildListDelegate([
-                  _buildSettingsEntry(
+          // 左栏：核心功能设置 (50%)
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildSectionHeader('核心功能设置', isDark),
+                _buildCardGroup([
+                  _buildSettingsRow(
                     title: '课程设置',
                     subtitle: '添加课程、学期配置、课时配置',
                     icon: Icons.school_rounded,
-                    color: AppThemeColors.babyPink,
                     onTap: () => _navigateTo(const NewSettingsScreen()),
                     isDark: isDark,
                   ),
-                  const SizedBox(height: 16),
-                  _buildSettingsEntry(
+                  _buildSettingsRow(
                     title: '课程通知',
                     subtitle: '提醒时间、双次提醒、Live Activities',
                     icon: Icons.notifications_rounded,
-                    color: AppThemeColors.softCoral,
-                    onTap: () =>
-                        _navigateTo(const SettingsNotificationScreen()),
+                    onTap: () => _navigateTo(const SettingsNotificationScreen()),
                     isDark: isDark,
                   ),
-                  const SizedBox(height: 16),
-                  _buildSettingsEntry(
+                  _buildSettingsRow(
                     title: '通用设置',
-                    subtitle: '深色模式、历史记录、背景图片',
+                    subtitle: '外观、全局玻璃画质、个性化',
                     icon: Icons.tune_rounded,
-                    color: AppThemeColors.paleApricot,
                     onTap: () => _navigateTo(const SettingsGeneralScreen()),
                     isDark: isDark,
                   ),
-                  const SizedBox(height: 16),
-                  _buildSettingsEntry(
+                ]),
+              ],
+            ),
+          ),
+          const SizedBox(width: 16),
+          // 右栏：数据与关于 (50%)
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildSectionHeader('数据与关于', isDark),
+                _buildCardGroup([
+                  _buildSettingsRow(
                     title: '数据管理',
-                    subtitle: '导入导出、清理数据',
+                    subtitle: '导入导出、历史备份、清理数据',
                     icon: Icons.cloud_sync_rounded,
-                    color: Colors.blueAccent,
                     onTap: () => _navigateTo(const SettingsDataScreen()),
                     isDark: isDark,
                   ),
-                  const SizedBox(height: 16),
-                  _buildSettingsEntry(
+                  _buildSettingsRow(
                     title: '关于软件',
-                    subtitle: '版本信息、开发者信息',
+                    subtitle: '版本信息、开源协议、检查更新',
                     icon: Icons.info_outline_rounded,
-                    color: Colors.purpleAccent,
                     onTap: () => _navigateTo(const SettingsAboutScreen()),
                     isDark: isDark,
                   ),
                 ]),
-              ),
+              ],
             ),
           ),
         ],
       ),
-    ),
-    ],
-    ),
     );
   }
 
-  Widget _buildSettingsEntry({
+  /// 手机竖屏经典单列滚动布局
+  Widget _buildPortraitLayout(bool isDark, double topPadding, double bottomPadding) {
+    return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(
+        parent: AlwaysScrollableScrollPhysics(),
+      ),
+      padding: EdgeInsets.fromLTRB(16, topPadding, 16, bottomPadding),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildSectionHeader('核心功能设置', isDark),
+          _buildCardGroup([
+            _buildSettingsRow(
+              title: '课程设置',
+              subtitle: '添加课程、学期配置、课时配置',
+              icon: Icons.school_rounded,
+              onTap: () => _navigateTo(const NewSettingsScreen()),
+              isDark: isDark,
+            ),
+            _buildSettingsRow(
+              title: '课程通知',
+              subtitle: '提醒时间、双次提醒、Live Activities',
+              icon: Icons.notifications_rounded,
+              onTap: () => _navigateTo(const SettingsNotificationScreen()),
+              isDark: isDark,
+            ),
+            _buildSettingsRow(
+              title: '通用设置',
+              subtitle: '外观、全局玻璃画质、个性化',
+              icon: Icons.tune_rounded,
+              onTap: () => _navigateTo(const SettingsGeneralScreen()),
+              isDark: isDark,
+            ),
+          ]),
+          const SizedBox(height: 20),
+          _buildSectionHeader('数据与关于', isDark),
+          _buildCardGroup([
+            _buildSettingsRow(
+              title: '数据管理',
+              subtitle: '导入导出、历史备份、清理数据',
+              icon: Icons.cloud_sync_rounded,
+              onTap: () => _navigateTo(const SettingsDataScreen()),
+              isDark: isDark,
+            ),
+            _buildSettingsRow(
+              title: '关于软件',
+              subtitle: '版本信息、开源协议、检查更新',
+              icon: Icons.info_outline_rounded,
+              onTap: () => _navigateTo(const SettingsAboutScreen()),
+              isDark: isDark,
+            ),
+          ]),
+        ],
+      ),
+    );
+  }
+
+  static const double kSettingsItemHeight = 58.0;
+
+  Widget _buildSectionHeader(String title, bool isDark) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 4, bottom: 8),
+      child: Text(
+        title,
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          color: isDark ? Colors.white54 : Colors.black45,
+          letterSpacing: 0.3,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCardGroup(List<Widget> children) {
+    final isDark = ThemeService().isDarkMode;
+    final dividerColor = isDark
+        ? Colors.white.withValues(alpha: 0.06)
+        : Colors.black.withValues(alpha: 0.05);
+
+    return liquid.HyperOSCard(
+      cornerRadius: 24,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: Column(
+        children: [
+          for (int i = 0; i < children.length; i++) ...[
+            if (i > 0)
+              Divider(
+                height: 1,
+                thickness: 0.6,
+                indent: 48,
+                color: dividerColor,
+              ),
+            children[i],
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSettingsRow({
     required String title,
     required String subtitle,
     required IconData icon,
-    required Color color,
     required VoidCallback onTap,
     required bool isDark,
   }) {
-    // [v2.8.5] 迁移至 HyperOSCard：超椭圆平滑曲率与轻量高斯模糊，带来极低重绘开销与 120Hz 满帧
-    return liquid.HyperOSCard(
-      cornerRadius: 22,
-      padding: const EdgeInsets.all(18),
+    return InkWell(
       onTap: () {
-        HapticFeedback.lightImpact(); // [v2.4.0] 添加触控震动
+        HapticFeedback.lightImpact();
         onTap();
       },
-      child: Row(
-        children: [
-          SizedBox(
-            width: 36,
-            height: 36,
-            child: Center(
-              child: Icon(
-                icon,
-                color: isDark ? const Color(0xFFE2E7F0) : const Color(0xFF2C3240),
-                size: 26,
+      borderRadius: BorderRadius.circular(16),
+      child: SizedBox(
+        height: kSettingsItemHeight,
+        child: Row(
+          children: [
+            SizedBox(
+              width: 36,
+              height: 36,
+              child: Center(
+                child: Icon(
+                  icon,
+                  color: isDark ? const Color(0xFFD6DBE5) : const Color(0xFF3A4150),
+                  size: 24,
+                ),
               ),
             ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: isDark ? Colors.white : const Color(0xFF1A1A2E),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 15.5,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white : const Color(0xFF1A1A2E),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: isDark ? Colors.white60 : Colors.black54,
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isDark ? Colors.white60 : Colors.black54,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          Icon(
-            Icons.chevron_right_rounded,
-            color: isDark ? Colors.white30 : Colors.black26,
-          ),
-        ],
+            Icon(
+              Icons.chevron_right_rounded,
+              color: isDark ? Colors.white30 : Colors.black26,
+              size: 20,
+            ),
+          ],
+        ),
       ),
     );
   }
 
   void _navigateTo(Widget screen) {
-    // [v2.3.0修复] 使用 MaterialPageRoute 提供原生流畅动画
     Navigator.push(
       context,
       TransparentMaterialPageRoute(builder: (context) => screen),
     );
   }
 }
+

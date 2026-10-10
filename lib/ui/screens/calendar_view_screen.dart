@@ -9,7 +9,6 @@ import '../../services/data_import_service.dart';
 import '../../utils/responsive_utils.dart';
 import '../widgets/liquid_components.dart' as liquid;
 import '../widgets/glass_context_menu.dart';
-import '../widgets/unified_backdrop_panel.dart';
 import '../transitions/smooth_slide_transitions.dart';
 import 'course_edit_screen.dart';
 
@@ -84,60 +83,58 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
   @override
   Widget build(BuildContext context) {
     final provider = Provider.of<ScheduleProvider>(context);
-    final isTablet = ResponsiveUtils.isTabletMode(context);
+    final isLandscape = ResponsiveUtils.isLandscape(context) ||
+        ResponsiveUtils.isTabletMode(context);
 
-    final Widget content = isTablet
-        ? _buildTabletLayout(provider)
+    final Widget content = isLandscape
+        ? _buildLandscapeLayout(provider)
         : _buildPhoneLayout(provider);
 
-    return Stack(
-      children: [
-        // [v2.10.0] 彻底移除日历页壁纸预模糊，让全局高清壁纸清晰透显，与主课表视觉统一
-        AdaptiveLiquidGlassLayer(
-          quality: GlassQuality.premium,
-          settings: const LiquidGlassSettings(
-            blur: 3.0,
-            thickness: 24.0,
-            glassColor: Color(0x0EFFFFFF),
-            lightIntensity: 0.70,
-            ambientStrength: 0.45,
-            ambientRim: 0.0,
-            fresnelStrength: 0.05,
-            saturation: 1.20,
-            refractiveIndex: 1.46,
-          ),
-          child: content,
-        ),
-      ],
-    );
+    return content;
   }
 
-  /// 平板模式：左右双栏分屏
-  Widget _buildTabletLayout(ScheduleProvider provider) {
+  /// [v3.0.0-alpha23] 横屏自适应左右双栏分屏（Android横屏与Windows桌面完全对齐）
+  /// 左栏：精简晶透顶栏 + 完整月历网格
+  /// 右栏：选中日期的课程日程详情列表
+  Widget _buildLandscapeLayout(ScheduleProvider provider) {
+    final bottomInset = MediaQuery.paddingOf(context).bottom + 76.0;
+
     return SafeArea(
+      bottom: false,
+      left: false,
+      right: false,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        padding: EdgeInsets.fromLTRB(
+          16 + MediaQuery.paddingOf(context).left,
+          8,
+          16 + MediaQuery.paddingOf(context).right,
+          bottomInset,
+        ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 左侧：日历月份与日期网格 (42%)
+            // 左侧：缩减至左侧的完整日历顶栏与日期网格 (45%)
             Expanded(
-              flex: 42,
-              child: Column(
-                children: [
-                  _buildHeader(),
-                  const SizedBox(height: 12),
-                  liquid.HyperOSCard(
-                    padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
-                    child: _buildCalendarGrid(provider),
-                  ),
-                ],
+              flex: 45,
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildHeader(horizontalPadding: 0, compact: true),
+                    const SizedBox(height: 8),
+                    liquid.HyperOSCard(
+                      padding: const EdgeInsets.all(12),
+                      child: _buildCalendarGrid(provider),
+                    ),
+                  ],
+                ),
               ),
             ),
-            const SizedBox(width: 18),
-            // 右侧：选定日期课程列表 (58%)
+            const SizedBox(width: 14),
+            // 右侧：选定日期课程列表 (55%)
             Expanded(
-              flex: 58,
+              flex: 55,
               child: _buildSelectedDateCourses(provider),
             ),
           ],
@@ -146,14 +143,14 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
     );
   }
 
-  /// 手机模式：上下垂直结构，内置 SafeArea 与顶部独立间距，彻底消除与系统顶栏重叠
+  /// 手机竖屏模式：上下垂直结构，内置 SafeArea 与顶部独立间距
   Widget _buildPhoneLayout(ScheduleProvider provider) {
     return SafeArea(
       bottom: false,
       child: Column(
         children: [
           const SizedBox(height: 12),
-          _buildHeader(),
+          _buildHeader(horizontalPadding: 16),
           const SizedBox(height: 12),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -170,21 +167,47 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
   }
 
   /// 现代晶透月历顶栏（年月切换、今天速达、月/周胶囊切换）
-  Widget _buildHeader() {
+  Widget _buildHeader({double horizontalPadding = 16.0, bool compact = false}) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDark ? Colors.white : const Color(0xFF1A1A2E);
-    final subColor = isDark ? Colors.white70 : const Color(0x991A1A2E);
     final isCurrentMonthToday = _currentMonth.year == DateTime.now().year &&
         _currentMonth.month == DateTime.now().month;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: GlassCard(
-        shape: const LiquidRoundedSuperellipse(borderRadius: 20),
-        quality: GlassQuality.premium,
-        useOwnLayer: false,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        child: Row(
+      padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(22),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.22 : 0.08),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: GlassContainer(
+          useOwnLayer: true,
+          quality: GlassQuality.premium,
+          shape: const LiquidRoundedSuperellipse(borderRadius: 22),
+          settings: LiquidGlassSettings(
+            glassColor: isDark
+                ? const Color(0x2212151B)
+                : const Color(0x35FFFFFF),
+            blur: 1.5,
+            thickness: 20.0,
+            refractiveIndex: 1.45,
+            lightIntensity: 0.75,
+            ambientStrength: 0.45,
+            ambientRim: 0.0,
+            fresnelStrength: 0.0,
+            saturation: 1.15,
+          ),
+          child: Padding(
+            padding: compact
+                ? const EdgeInsets.symmetric(horizontal: 10, vertical: 6)
+                : const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            child: Row(
           children: [
             // 上个月
             _buildNavButton(
@@ -224,9 +247,6 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
                     decoration: BoxDecoration(
                       color: AppThemeColors.babyPink.withValues(alpha: 0.18),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: AppThemeColors.babyPink.withValues(alpha: 0.35),
-                      ),
                     ),
                     child: Text(
                       '今天',
@@ -287,7 +307,9 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
           ],
         ),
       ),
-    );
+    ),
+  ),
+);
   }
 
   Widget _buildNavButton({required IconData icon, required VoidCallback onTap}) {

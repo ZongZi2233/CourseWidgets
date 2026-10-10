@@ -2,13 +2,14 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
-import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import '../../models/schedule_config.dart';
 import '../../providers/schedule_provider.dart';
 import '../../constants/theme_constants.dart';
 import '../widgets/liquid_components.dart' as liquid;
 import '../widgets/liquid_glass_pickers.dart';
 import '../widgets/unified_backdrop_panel.dart';
+import '../widgets/immersive_status_bar_backdrop.dart';
+import 'package:smooth_scroll_multiplatform/smooth_scroll_multiplatform.dart';
 
 class AndroidScheduleConfigScreen extends StatefulWidget {
   /// [v2.3.0] 是否显示导航元素（返回按钮、保存按钮）
@@ -85,39 +86,18 @@ class AndroidScheduleConfigScreenState
   }
 
   void _pickSemesterDate() async {
-    // 使用液态玻璃风格的日期选择器
-    liquid.showLiquidDialog(
+    final currentDate = _parseDate(_semesterDateController.text);
+    final picked = await showLiquidGlassCalendarPicker(
       context: context,
-      builder: liquid.LiquidGlassDialog(
-        title: '选择开学日期',
-        content: SizedBox(
-          height: 300,
-          child: LiquidGlassDatePicker(
-            initialDate: _config.semesterStartDate,
-            onDateChanged: (date) {
-              setState(() {
-                _semesterDateController.text =
-                    '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-              });
-            },
-          ),
-        ),
-        actions: [
-          GlassDialogAction(
-            label: '取消',
-            onPressed: () => Navigator.of(context, rootNavigator: true).pop(),
-          ),
-          GlassDialogAction(
-            label: '确定',
-            isPrimary: true,
-            onPressed: () {
-              // [v2.6.5] 确保使用 rootNavigator 关闭弹窗
-              Navigator.of(context, rootNavigator: true).pop();
-            },
-          ),
-        ],
-      ),
+      initialDate: currentDate,
     );
+    if (picked != null) {
+      setState(() {
+        _semesterDateController.text =
+            '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+      });
+      _saveConfigQuietly();
+    }
   }
 
   int? _parseTime(String timeStr) {
@@ -216,7 +196,7 @@ class AndroidScheduleConfigScreenState
     _saveConfigQuietly();
     liquid.showLiquidToast(
       context,
-      '✨ 已推算大学大小课间：45m课时+5m小课间+15m大课间 (下午14:00/晚间18:30)',
+      '已推算大学大小课间：45m课时+5m小课间+15m大课间 (下午14:00/晚间18:30)',
     );
   }
 
@@ -312,7 +292,6 @@ class AndroidScheduleConfigScreenState
       if (mounted) {
         final provider = context.read<ScheduleProvider>();
         provider.updateConfig(savedConfig);
-        provider.recalculateAllCourseTimes(savedConfig);
       }
     } catch (e) {
       debugPrint('静默保存配置失败: $e');
@@ -338,6 +317,9 @@ class AndroidScheduleConfigScreenState
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDark ? Colors.white : const Color(0xFF1A1A2E);
 
+    final topPadding = widget.showNavigation ? (MediaQuery.paddingOf(context).top + 54) : 0.0;
+    final defaultPadding = EdgeInsets.fromLTRB(16, topPadding > 0 ? topPadding : 16, 16, 100);
+
     return PopScope(
       canPop: true,
       onPopInvokedWithResult: (didPop, result) {
@@ -349,47 +331,17 @@ class AndroidScheduleConfigScreenState
         backgroundColor: Colors.transparent,
         body: Stack(
           children: [
-            Column(
-          children: [
-            // Custom Header - [v2.3.0] 根据 showNavigation 参数决定是否显示
-            if (widget.showNavigation)
-              SafeArea(
-                bottom: false,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 12,
-                  ),
-                  child: Row(
-                    children: [
-                      Text(
-                        '课时配置',
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                          color: textColor,
-                        ),
-                      ),
-                      const Spacer(),
-                      liquid.LiquidButton(
-                        text: '保存',
-                        width: 76,
-                        height: 38,
-                        onTap: _saveConfig,
-                        color: AppThemeColors.babyPink,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-          // Content - 使用ListView优化滚动
-          Expanded(
-            child: ListView(
-              padding: widget.contentPadding ?? const EdgeInsets.all(16),
-              physics: const BouncingScrollPhysics(),
-              children: [
-                // 基础设置
+            // 1. 全出血自由滑动内容区
+            Positioned.fill(
+              child: DynMouseScroll(
+                durationMS: 250,
+                scrollSpeed: 1.2,
+                builder: (context, controller, physics) => ListView(
+                  controller: controller,
+                  padding: widget.contentPadding ?? defaultPadding,
+                  physics: physics,
+                  children: [
+                    // 基础设置
                 UnifiedBackdropPanel(
                   borderRadius: 24,
                   padding: const EdgeInsets.all(20),
@@ -548,7 +500,10 @@ class AndroidScheduleConfigScreenState
                                   width: double.infinity,
                                   child: liquid.LiquidButton(
                                     text: '一键校准：对齐首周至 ${targetMonday.month}月${targetMonday.day}日 (第1周)',
-                                    color: const Color(0xFF4FACFE),
+                                    color: isDark
+                                        ? Colors.white.withValues(alpha: 0.12)
+                                        : Colors.black.withValues(alpha: 0.06),
+                                    textColor: textColor,
                                     onTap: () async {
                                       await provider.alignScheduleToStartDate(targetMonday);
                                       if (context.mounted) {
@@ -589,16 +544,22 @@ class AndroidScheduleConfigScreenState
                             Row(
                               children: [
                                 liquid.LiquidButton(
-                                  text: '🔄 对齐课表',
-                                  color: const Color(0xFF00C9FF),
+                                  text: '对齐课表',
+                                  color: isDark
+                                      ? Colors.white.withValues(alpha: 0.12)
+                                      : Colors.black.withValues(alpha: 0.06),
+                                  textColor: textColor,
                                   onTap: () async {
                                     await _saveConfig();
                                   },
                                 ),
                                 const SizedBox(width: 8),
                                 liquid.LiquidButton(
-                                  text: '✨ 智慧推算',
-                                  color: const Color(0xFF4FACFE),
+                                  text: '智慧推算',
+                                  color: isDark
+                                      ? Colors.white.withValues(alpha: 0.12)
+                                      : Colors.black.withValues(alpha: 0.06),
+                                  textColor: textColor,
                                   onTap: _smartCascadeSectionTimes,
                                 ),
                               ],
@@ -656,14 +617,54 @@ class AndroidScheduleConfigScreenState
                 ],
               ),
             ),
-          ],
-        ),
-        // [v2.9.7] 悬浮右下角返回按钮
-        if (widget.showNavigation) const liquid.FloatingLiquidBackButton(),
-      ],
+          ),
+
+          // 2. 状态栏微模糊避让 (0..48dp)
+          if (widget.showNavigation) const ImmersiveStatusBarBackdrop(),
+
+          // 3. 悬浮标题栏
+          if (widget.showNavigation)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 12,
+                  ),
+                  child: Row(
+                    children: [
+                      Text(
+                        '课时配置',
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: textColor,
+                        ),
+                      ),
+                      const Spacer(),
+                      liquid.LiquidButton(
+                        text: '保存',
+                        width: 76,
+                        height: 38,
+                        onTap: _saveConfig,
+                        color: AppThemeColors.babyPink,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+          // 4. [v2.9.7] 悬浮右下角返回按钮
+          if (widget.showNavigation) const liquid.FloatingLiquidBackButton(),
+        ],
+      ),
     ),
-  ),
-);
+  );
 }
 
   Widget _buildSectionRow(int index) {
@@ -694,11 +695,6 @@ class AndroidScheduleConfigScreenState
                     ? Colors.white.withValues(alpha: 0.05)
                     : Colors.black.withValues(alpha: 0.03),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: isDark
-                      ? Colors.white.withValues(alpha: 0.1)
-                      : Colors.black.withValues(alpha: 0.1),
-                ),
               ),
               child: TextField(
                 controller: _startControllers[index],
@@ -733,11 +729,6 @@ class AndroidScheduleConfigScreenState
                       ? Colors.white.withValues(alpha: 0.05)
                       : Colors.black.withValues(alpha: 0.03),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: isDark
-                        ? Colors.white.withValues(alpha: 0.1)
-                        : Colors.black.withValues(alpha: 0.1),
-                  ),
                 ),
                 child: TextField(
                   controller: _durationControllers[index],

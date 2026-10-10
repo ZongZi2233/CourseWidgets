@@ -13,7 +13,7 @@ class BootReceiver : BroadcastReceiver() {
             Intent.ACTION_MY_PACKAGE_REPLACED == action ||
             "android.intent.action.QUICKBOOT_POWERON" == action) {
             val alarmIntent = Intent(context, CourseAlarmReceiver::class.java).apply {
-                this.action = CourseAlarmReceiver.ACTION_COURSE_WAKEUP
+                this.action = CourseAlarmReceiver.getAction(context)
             }
             context.sendBroadcast(alarmIntent)
         }

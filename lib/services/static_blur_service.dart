@@ -43,29 +43,36 @@ class StaticBlurredWallpaperService extends ChangeNotifier with WidgetsBindingOb
     globalDarkModeNotifier.removeListener(_onWallpaperOrThemeChanged);
     globalDarkModeNotifier.addListener(_onWallpaperOrThemeChanged);
 
-    // 首次自动排队烘焙
+    // 立即启动单次离屏静态模糊烘焙，确保卡片与背景在首帧及转场打开时纹理即刻就绪
+    bakeCurrentWallpaper();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       bakeCurrentWallpaper();
     });
   }
 
+  Timer? _metricsDebounceTimer;
+
   @override
   void didChangeMetrics() {
-    final newSize = _getScreenLogicalSize();
-    if (_lastScreenSize == null ||
-        (newSize.width - _lastScreenSize!.width).abs() > 10 ||
-        (newSize.height - _lastScreenSize!.height).abs() > 10) {
-      bakeCurrentWallpaper(customScreenSize: newSize);
-    }
+    _metricsDebounceTimer?.cancel();
+    _metricsDebounceTimer = Timer(const Duration(milliseconds: 500), () {
+      final newSize = _getScreenLogicalSize();
+      if (_lastScreenSize == null ||
+          (newSize.width - _lastScreenSize!.width).abs() > 20 ||
+          (newSize.height - _lastScreenSize!.height).abs() > 20) {
+        bakeCurrentWallpaper(customScreenSize: newSize);
+      }
+    });
   }
 
   void _onWallpaperOrThemeChanged() {
     bakeCurrentWallpaper();
   }
 
-  /// 解析当前适用的壁纸 ImageProvider
-  ImageProvider _resolveImageProvider(bool isDark, String? bgPath) {
+  /// 解析当前适用的壁纸 ImageProvider (内置 360px 适度下采样，极速解码 <2ms)
+  ImageProvider _resolveImageProvider(bool isDark, String? bgPath, {int? targetWidth}) {
     final defaultAsset = isDark ? 'assets/Dark.png' : 'assets/Light.png';
+    ImageProvider base;
     if (bgPath != null && bgPath.isNotEmpty) {
       if (bgPath.startsWith('asset:')) {
         final raw = bgPath.substring(6);
@@ -73,12 +80,17 @@ class StaticBlurredWallpaperService extends ChangeNotifier with WidgetsBindingOb
                 raw == 'assets/tahoe.jpg')
             ? defaultAsset
             : raw;
-        return AssetImage(assetPath);
+        base = AssetImage(assetPath);
       } else {
-        return FileImage(File(bgPath));
+        base = FileImage(File(bgPath));
       }
+    } else {
+      base = AssetImage(defaultAsset);
     }
-    return AssetImage(defaultAsset);
+    if (targetWidth != null && targetWidth > 0) {
+      return ResizeImage(base, width: targetWidth);
+    }
+    return base;
   }
 
   /// 触发单次静态高斯模糊纹理烘焙（若内容未变则自动跳过）
@@ -95,7 +107,7 @@ class StaticBlurredWallpaperService extends ChangeNotifier with WidgetsBindingOb
     // 确定屏幕逻辑尺寸
     Size screenSize = customScreenSize ?? _getScreenLogicalSize();
     if (screenSize.width <= 0 || screenSize.height <= 0) {
-      screenSize = const Size(1080, 2400);
+      screenSize = const Size(393, 852);
     }
     _lastScreenSize = screenSize;
 
@@ -108,13 +120,12 @@ class StaticBlurredWallpaperService extends ChangeNotifier with WidgetsBindingOb
     _lastWallpaperKey = currentKey;
 
     try {
-      final provider = _resolveImageProvider(isDark, bgPath);
-      final rawImage = await _loadUiImage(provider);
-
-      // 静态高斯模糊目标尺寸：适度降采样（宽度约 540~720），不仅显存占用极小 (<2MB)，
-      // 而且高斯模糊半径在降采样层上呈现更柔和细腻的亚克力散焦效果，且 drawImageRect 极速。
-      final targetW = math.min(720.0, screenSize.width);
+      // 静态高斯模糊目标尺寸：适度降采样（宽度约 540），显存极小 (~1.2MB)，解码与 GPU 模糊一次性完成
+      final targetW = math.min(540.0, screenSize.width);
       final targetH = (targetW / screenSize.width) * screenSize.height;
+
+      final provider = _resolveImageProvider(isDark, bgPath, targetWidth: targetW.round());
+      final rawImage = await _loadUiImage(provider);
 
       final recorder = ui.PictureRecorder();
       final canvas = Canvas(recorder);
@@ -137,11 +148,12 @@ class StaticBlurredWallpaperService extends ChangeNotifier with WidgetsBindingOb
         sampleSrcRect = Rect.fromLTWH(0, top, rawImage.width.toDouble(), sampleH);
       }
 
-      // 单次离屏高斯模糊（sigma: 25.0，通过 saveLayer 在 GPU 离屏通道真正完成高质感磨砂亚克力纹理烘焙）
+      // [v3.0.0-alpha22] 对低分辨率 mipmap 进行彻底的一次性离屏高斯模糊处理 (sigma: 18.0)，
+      // 彻底消除低分辨率 mipmap 未经模糊直接展示产生的锯齿与噪点，呈现纯正温润的磨砂毛玻璃底板
       final blurPaint = Paint()
         ..imageFilter = ui.ImageFilter.blur(
-          sigmaX: 25.0,
-          sigmaY: 25.0,
+          sigmaX: 18.0,
+          sigmaY: 18.0,
           tileMode: TileMode.clamp,
         );
 
@@ -158,7 +170,7 @@ class StaticBlurredWallpaperService extends ChangeNotifier with WidgetsBindingOb
       if (isDark) {
         canvas.drawRect(
           dstRect,
-          Paint()..color = const Color(0x35000000),
+          Paint()..color = const Color(0x18000000),
         );
       }
 
@@ -199,7 +211,7 @@ class StaticBlurredWallpaperService extends ChangeNotifier with WidgetsBindingOb
         }
       }
     } catch (_) {}
-    return const Size(1080, 2400);
+    return const Size(393, 852);
   }
 
   /// 从 ImageProvider 加载 raw ui.Image
@@ -227,6 +239,7 @@ class StaticBlurredWallpaperService extends ChangeNotifier with WidgetsBindingOb
 
   @override
   void dispose() {
+    _metricsDebounceTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     globalBackgroundPath.removeListener(_onWallpaperOrThemeChanged);
     globalDarkModeNotifier.removeListener(_onWallpaperOrThemeChanged);

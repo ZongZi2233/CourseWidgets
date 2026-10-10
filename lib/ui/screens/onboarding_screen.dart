@@ -5,7 +5,6 @@ import 'onboarding_welcome.dart';
 import 'onboarding_theme.dart';
 import 'onboarding_config.dart';
 import 'onboarding_import.dart';
-import '../widgets/app_background_layer.dart';
 
 /// [v2.2.8/v2.9.0] 首次启动引导主框架
 class OnboardingScreen extends StatefulWidget {
@@ -69,10 +68,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // [v2.9.5] 视口级单层预模糊壁纸采样
-          const Positioned.fill(
-            child: AppBackgroundLayer(blur: 16.0),
-          ),
           PageView(
             controller: _pageController,
             physics: const NeverScrollableScrollPhysics(), // 禁用手势滑动
@@ -97,6 +92,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               OnboardingImport(
                 onNext: _nextPage,
                 onBack: _previousPage,
+                onComplete: _completeOnboarding,
                 isLastPage: false,
               ),
 

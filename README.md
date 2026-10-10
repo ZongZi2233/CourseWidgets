@@ -6,10 +6,10 @@
 
 **基于 Apple iOS 26 液态玻璃与 HyperOS 设计语言的新一代全平台大学课程表应用**
 
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-AGPL%203.0-blue.svg)](LICENSE)
 [![Flutter](https://img.shields.io/badge/Flutter-3.44.0+-02569B?logo=flutter)](https://flutter.dev)
 [![Dart](https://img.shields.io/badge/Dart-3.12.0+-0175C2?logo=dart)](https://dart.dev)
-[![Version](https://img.shields.io/badge/Version-2.10.0-FF9BAE)](https://github.com/ZongZi2233AI/CourseWidgets/releases/)
+[![Version](https://img.shields.io/badge/Version-3.0.0-FF9BAE)](https://github.com/ZongZi2233AI/CourseWidgets/releases/)
 
 [English](README_EN.md) | 简体中文
 
@@ -17,14 +17,15 @@
 
 > **声明**：本软件除开源代码外完全使用 AI 辅助协同开发。核心架构由 [MiMo-V2-Flash](https://github.com/XiaomiMiMo/MiMo-V2-Flash) 与 Gemini 3.1 Pro 深度构建，Windows 桌面部分协同 Claude Opus 4.6 深度定制。
 
-### 📦 最新版本：[v2.10.0 (Build 10008070)](https://github.com/ZongZi2233AI/CourseWidgets/releases)
-* **Android 单包**：`CourseWidgets-v2.10.0-android-arm64-v8a.apk` —— 全面开启 R8 压缩与 Dart AOT 源码混淆。
-* **Windows 客户端**：`CourseWidgets-v2.10.0-windows-x64.zip` —— 纯净亚克力无边框桌面端，支持托盘驻留与高分屏。
+### 📦 最新版本：[v3.0.0 正式版 (Build 3000)](https://github.com/ZongZi2233AI/CourseWidgets/releases)
+* **Android 单包**：`CourseWidgets-v3.0.0-android-arm64-v8a.apk` —— 全面开启 R8 压缩与 Dart AOT 源码混淆。
+* **Windows 客户端**：`CourseWidgets-v3.0.0-windows-x64.zip` —— 纯净亚克力无边框桌面端，支持托盘驻留与高分屏。
 
-#### 🆕 v2.10.0 本次更新内容 (CHANGELOG)
-1. **状态栏胶囊下课秒级倒计时恢复**：倒计时激活期间明确将 `subLocation` 置空，杜绝系统胶囊/药丸将教室名字覆盖秒表的底层缺陷，确保高优先级秒级 Chronometer 倒计时呈现；修复课前 45 分钟未注入倒计时属性导致下节课倒计时看似卡顿的问题。
-2. **进度条时间刻度轴与百分比标识**：在通知正文时间行中集成直观的作息时间轴刻度（如 `08:00 ──●── 09:35 (95分钟 · 进度 42%)` 与 `倒计时中 ──── 08:00`），直观清晰映射比例尺与节点。
-3. **设置与日历页全屏壁纸纯净透显**：彻底剔除设置主页、日历视图与转场构建器中的 `AppBackgroundLayer(blur: 16.0)` 预模糊层，还原全局高清壁纸真实纯净质感，与主课表视觉无缝统一。
+#### 🆕 v3.0.0 正式版更新内容 (CHANGELOG)
+1. **课程语义节次物理固化与移位吃课根治**：升级 SQLite Schema v4，将课程所属节次落盘持久化，修改课时作息不再造成课程移位或被吃掉；
+2. **WebView 会话持久化与凭据记忆**：Windows 统一用户数据目录，Android 支持跨域第三方 Cookie，集成教务凭据安全自动回填；
+3. **全链路导入导出无损流通**：支持携带节次与作息的 ICS 双向导出导入、第三方 HTML 导入与全量 JSON 备份还原；
+4. **全域 LiquidGlass 质感与 Spring 弹簧动效**：重构微透磨砂弹窗与按钮，消除闪烁与实色遮罩，全屏高斯景深融合。
 
 ---
 
@@ -155,7 +156,7 @@ lib/
 
 ## 📄 许可证 (License)
 
-本项目采用 [Apache 2.0 许可证](LICENSE) 开源。第三方开源库授权声明参见 [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md)。
+本项目采用 [GNU Affero General Public License v3.0 (AGPL-3.0)](LICENSE) 开源。第三方开源库授权声明参见 [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md)。
 
 ---
 

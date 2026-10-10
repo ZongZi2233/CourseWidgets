@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.zongzi" "\0"
-            VALUE "FileDescription", "coursewidgets" "\0"
+            VALUE "FileDescription", "CourseWidgets Beta" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "coursewidgets" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 com.zongzi.schedule. All rights reserved." "\0"
-            VALUE "OriginalFilename", "coursewidgets.exe" "\0"
-            VALUE "ProductName", "CourseWidgets" "\0"
+            VALUE "InternalName", "coursewidgets_beta" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 com.zongzi.schedule.beta. All rights reserved." "\0"
+            VALUE "OriginalFilename", "CourseWidgetsBeta.exe" "\0"
+            VALUE "ProductName", "CourseWidgets Beta" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

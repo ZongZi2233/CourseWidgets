@@ -7,19 +7,25 @@ import 'android_schedule_config_screen.dart';
 
 /// [v2.2.8/v2.9.0] 引导页面 - 课时配置
 /// 复用现有的课时配置页面，并支持自动持久化与统一液态玻璃折射
-class OnboardingConfig extends StatelessWidget {
+class OnboardingConfig extends StatefulWidget {
   final VoidCallback onNext;
   final VoidCallback onBack;
   final bool isLastPage;
-  final GlobalKey<AndroidScheduleConfigScreenState> _configKey =
-      GlobalKey<AndroidScheduleConfigScreenState>();
 
-  OnboardingConfig({
+  const OnboardingConfig({
     super.key,
     required this.onNext,
     required this.onBack,
     this.isLastPage = true,
   });
+
+  @override
+  State<OnboardingConfig> createState() => _OnboardingConfigState();
+}
+
+class _OnboardingConfigState extends State<OnboardingConfig> {
+  final GlobalKey<AndroidScheduleConfigScreenState> _configKey =
+      GlobalKey<AndroidScheduleConfigScreenState>();
 
   @override
   Widget build(BuildContext context) {
@@ -117,7 +123,7 @@ class OnboardingConfig extends StatelessWidget {
                         Expanded(
                           child: liquid.LiquidButton(
                             text: '上一步',
-                            onTap: onBack,
+                            onTap: widget.onBack,
                             color: isDark ? Colors.white.withValues(alpha: 0.18) : Colors.black.withValues(alpha: 0.08),
                             textColor: isDark ? Colors.white : const Color(0xFF1E2129),
                           ),
@@ -125,11 +131,11 @@ class OnboardingConfig extends StatelessWidget {
                         const SizedBox(width: 16),
                         Expanded(
                           child: liquid.LiquidButton(
-                            text: isLastPage ? '开始使用' : '下一步',
+                            text: widget.isLastPage ? '开始使用' : '下一步',
                             onTap: () {
                               // [v2.9.0] 显式触发课时配置静默保存并更新课表
                               _configKey.currentState?.saveConfigFromParent();
-                              onNext();
+                              widget.onNext();
                             },
                             color: ThemeService().primaryColor,
                           ),

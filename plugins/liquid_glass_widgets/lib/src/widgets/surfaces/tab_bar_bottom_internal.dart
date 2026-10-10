@@ -45,13 +45,16 @@ import '../../../widgets/surfaces/glass_tab_bar.dart' show GlassTab;
 /// - `refractiveIndex: 1.59` — polycarbonate-grade refraction.
 /// - `lightAngle: 0.75π` (135°) — Apple standard upper-left key light.
 const kBottomBarGlassDefaults = LiquidGlassSettings(
-  thickness: 30,
-  blur: 3,
-  chromaticAberration: 0.3,
-  lightIntensity: 0.6,
-  refractiveIndex: 1.59,
-  saturation: 0.7,
-  ambientStrength: 1,
+  thickness: 20,
+  blur: 4.5,
+  chromaticAberration: 0.0,
+  lightIntensity: 0.35,
+  refractiveIndex: 1.35,
+  saturation: 1.0,
+  ambientStrength: 0.20,
+  ambientRim: 0.0,
+  fresnelStrength: 0.0,
+  edgeAbsorption: 0.06,
   lightAngle: 0.75 * math.pi,
   glassColor: Color(0x3DFFFFFF),
 );
@@ -677,6 +680,8 @@ class TabIndicatorState extends State<TabIndicator>
                           velocityScale: 10,
                         );
 
+                        final isInteracting = tabIsDown || tabIsDragging;
+
                         // Switch rendering mode based on masking quality
                         switch (widget.maskingQuality) {
                           case MaskingQuality.off:
@@ -687,6 +692,7 @@ class TabIndicatorState extends State<TabIndicator>
                               targetAlignment: Alignment(targetAlignment, 0),
                               thickness: thickness,
                               velocity: velocity,
+                              isInteracting: isInteracting,
                               indicatorRadius: indicatorRadius,
                               indicatorColor: indicatorColor,
                             );
@@ -696,6 +702,7 @@ class TabIndicatorState extends State<TabIndicator>
                               alignment: alignment,
                               thickness: thickness,
                               velocity: velocity,
+                              isInteracting: isInteracting,
                               jellyTransform: jellyTransform,
                               indicatorRadius: indicatorRadius,
                               indicatorColor: indicatorColor,
@@ -769,6 +776,7 @@ class TabIndicatorState extends State<TabIndicator>
     required AlignmentGeometry targetAlignment,
     required double thickness,
     required double velocity,
+    required bool isInteracting,
     required double indicatorRadius,
     required Color indicatorColor,
   }) {
@@ -808,7 +816,7 @@ class TabIndicatorState extends State<TabIndicator>
           ),
 
           // Glass indicator — on top so it refracts the icon layer AND the glow beneath.
-          if (widget.visible && thickness > 0.05)
+          if (widget.visible && (thickness > 0.01 || isInteracting))
             AnimatedGlassIndicator(
               velocity: velocity,
               itemCount: widget.tabCount,
@@ -817,6 +825,7 @@ class TabIndicatorState extends State<TabIndicator>
               quality: widget.quality,
               indicatorColor: indicatorColor,
               isBackgroundIndicator: false,
+              isInteracting: isInteracting,
               innerBlur: widget.innerBlur,
               padding: const EdgeInsets.all(4),
               expansion: widget.indicatorExpansion,
@@ -859,6 +868,7 @@ class TabIndicatorState extends State<TabIndicator>
     required AlignmentGeometry alignment,
     required double thickness,
     required double velocity,
+    required bool isInteracting,
     required Matrix4 jellyTransform,
     required double indicatorRadius,
     required Color indicatorColor,
@@ -894,6 +904,7 @@ class TabIndicatorState extends State<TabIndicator>
                     quality: widget.quality,
                     indicatorColor: indicatorColor,
                     isBackgroundIndicator: false,
+                    isInteracting: isInteracting,
                     paintBackground: true,
                     paintGlass: false,
                     innerBlur: widget.innerBlur,
@@ -1028,6 +1039,7 @@ class TabIndicatorState extends State<TabIndicator>
             quality: widget.quality,
             indicatorColor: indicatorColor,
             isBackgroundIndicator: false,
+            isInteracting: isInteracting,
             paintBackground: false,
             paintGlass: true,
             padding: const EdgeInsets.all(4),

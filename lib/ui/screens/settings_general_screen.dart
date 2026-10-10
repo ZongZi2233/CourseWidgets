@@ -10,6 +10,7 @@ import '../../services/theme_service.dart' as theme;
 import '../../utils/glass_settings_helper.dart';
 import '../../main.dart';
 import '../widgets/liquid_components.dart' as liquid;
+import '../widgets/immersive_status_bar_backdrop.dart';
 import 'package:smooth_scroll_multiplatform/smooth_scroll_multiplatform.dart';
 
 class SettingsGeneralScreen extends StatefulWidget {
@@ -331,128 +332,145 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final topPadding = MediaQuery.paddingOf(context).top + 54;
+
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Stack(
         children: [
-          AdaptiveLiquidGlassLayer(
-            quality: GlassQuality.premium,
-            settings: const LiquidGlassSettings(
-              blur: 3.0,
-              thickness: 24.0,
-              glassColor: Color(0x0EFFFFFF),
-              lightIntensity: 0.70,
-              ambientStrength: 0.45,
-              ambientRim: 0.0,
-              fresnelStrength: 0.05,
-              saturation: 1.20,
-              refractiveIndex: 1.46,
-            ),
-            child: Column(
-              children: [
-                // Header
-                SafeArea(
-                  bottom: false,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                    child: Row(
-                      children: [
-                        Text(
-                          '通用设置',
-                          style: TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                            color: GlassSettingsHelper.getTextColor(context),
+          // 1. 全出血自由滑动内容区：穿透顶栏与状态栏，消除截断，满帧 120 FPS
+          Positioned.fill(
+            child: DynMouseScroll(
+              durationMS: 250,
+              scrollSpeed: 1.2,
+              builder: (context, controller, physics) => SingleChildScrollView(
+                controller: controller,
+                physics: physics,
+                padding: EdgeInsets.fromLTRB(16, topPadding, 16, 100),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // [v3.0.0] 外观设置大卡片（合并自适应与强制深色）
+                    _buildSection('外观'),
+                    if (!Platform.isWindows) ...[
+                      _buildCardGroup([
+                        _buildSwitchRow(
+                          '自适应深色模式',
+                          '跟随系统设置',
+                          CupertinoIcons.circle_righthalf_fill,
+                          _adaptiveDarkMode,
+                          _toggleAdaptiveMode,
+                        ),
+                        IgnorePointer(
+                          ignoring: _adaptiveDarkMode,
+                          child: _buildSwitchRow(
+                            '强制深色模式',
+                            '手动覆盖系统设置',
+                            CupertinoIcons.moon_fill,
+                            globalUseDarkMode,
+                            _toggleDarkMode,
+                            disabled: _adaptiveDarkMode,
                           ),
                         ),
-                      ],
-                    ),
-                  ),
-                ),
+                      ]),
+                      const SizedBox(height: 20),
+                    ],
 
-                // Content
-                Expanded(
-                  child: DynMouseScroll(
-                    durationMS: 250,
-                    scrollSpeed: 1.2,
-                    builder: (context, controller, physics) => SingleChildScrollView(
-                      controller: controller,
-                      physics: physics,
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildSection('外观'),
-                          // [v2.9.0] Windows 端未适配深色模式，隐藏相关设置
-                          if (!Platform.isWindows) ...[
-                            _buildSwitchCard(
-                              '自适应深色模式',
-                              '跟随系统设置',
-                              _adaptiveDarkMode,
-                              _toggleAdaptiveMode,
-                            ),
-                            const SizedBox(height: 12),
-
-                            IgnorePointer(
-                              ignoring: _adaptiveDarkMode,
-                              child: _buildSwitchCard(
-                                '强制深色模式',
-                                '手动覆盖系统设置',
-                                globalUseDarkMode,
-                                _toggleDarkMode,
-                                disabled: _adaptiveDarkMode,
-                              ),
-                            ),
-                            const SizedBox(height: 20),
-                          ],
-
-                          _buildSection('主题色'),
-                          _buildActionCard(
-                            '主题色设置',
-                            CupertinoIcons.color_filter,
-                            _showThemeModeBottomSheet,
-                            subtitle: _getThemeModeText(),
-                          ),
-
-                          const SizedBox(height: 20),
-                          _buildSection('个性化'),
-                          _buildActionCard(
-                            '更换背景图片',
-                            CupertinoIcons.photo,
-                            _pickBackgroundImage,
-                          ),
-                          const SizedBox(height: 10),
-                          _buildActionCard(
-                            '恢复默认背景',
-                            CupertinoIcons.arrow_counterclockwise,
-                            () async {
-                              globalBackgroundPath.value = null;
-                              await _storage.remove(StorageService.keyBackgroundPath);
-                              _showAlert('已恢复', '背景已恢复默认渐变');
-                            },
-                          ),
-
-                          const SizedBox(height: 20),
-                          _buildSection('性能'),
-                          _buildActionCard(
-                            '着色器质量',
-                            CupertinoIcons.speedometer,
-                            _toggleShaderQuality,
-                            subtitle: GlassEffect.useHighPerformanceShader
-                                ? '当前：高性能模式（切换后需重启）'
-                                : '当前：高质量模式（切换后需重启）',
-                          ),
-
-                          const SizedBox(height: 100),
-                        ],
+                    // [v3.0.0] 主题色大卡片
+                    _buildSection('主题色'),
+                    _buildCardGroup([
+                      _buildActionRow(
+                        '主题色设置',
+                        _getThemeModeText(),
+                        CupertinoIcons.color_filter,
+                        _showThemeModeBottomSheet,
                       ),
-                    ),
-                  ),
+                    ]),
+
+                    const SizedBox(height: 20),
+
+                    // [v3.0.0] 个性化大卡片（合并更换背景与恢复默认）
+                    _buildSection('个性化'),
+                    _buildCardGroup([
+                      _buildActionRow(
+                        '更换背景图片',
+                        '从本地相册选择自定义壁纸',
+                        CupertinoIcons.photo,
+                        _pickBackgroundImage,
+                      ),
+                      _buildActionRow(
+                        '恢复默认背景',
+                        '重置为内置质感渐变壁纸',
+                        CupertinoIcons.arrow_counterclockwise,
+                        () async {
+                          globalBackgroundPath.value = null;
+                          await _storage.remove(StorageService.keyBackgroundPath);
+                          _showAlert('已恢复', '背景已恢复默认渐变');
+                        },
+                      ),
+                    ]),
+
+                    const SizedBox(height: 20),
+
+                    // [v3.0.0] 渲染性能大卡片（Premium 旗舰画质 vs Standard 流畅高帧切换）
+                    _buildSection('渲染与性能'),
+                    _buildCardGroup([
+                      ListenableBuilder(
+                        listenable: theme.ThemeService.globalGlassQualityNotifier,
+                        builder: (context, _) {
+                          final isPremium = theme.ThemeService.globalGlassQualityNotifier.value == GlassQuality.premium;
+                          return _buildActionRow(
+                            '全局玻璃渲染模式',
+                            isPremium
+                                ? '当前：旗舰画质 (Premium) · 完整折射光影'
+                                : '当前：流畅高帧 (Standard) · 适合老旧机型',
+                            CupertinoIcons.speedometer,
+                            _toggleGlassQuality,
+                            trailing: liquid.LiquidSwitch(
+                              value: isPremium,
+                              onChanged: (_) => _toggleGlassQuality(),
+                            ),
+                          );
+                        },
+                      ),
+                    ]),
+
+                    const SizedBox(height: 100),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
-          // [v2.9.7] 悬浮右下角返回按钮
+
+          // 2. 状态栏微模糊避让 (0..48dp)
+          const ImmersiveStatusBarBackdrop(),
+
+          // 3. 悬浮标题栏
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                child: Row(
+                  children: [
+                    Text(
+                      '通用设置',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: GlassSettingsHelper.getTextColor(context),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          // 4. [v2.9.7] 悬浮右下角返回按钮
           const liquid.FloatingLiquidBackButton(),
         ],
       ),
@@ -569,140 +587,171 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
     );
   }
 
-  Widget _buildSwitchCard(
-    String title,
-    String subtitle,
-    bool value,
-    ValueChanged<bool> onChanged, {
-    bool disabled = false,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: liquid.HyperOSCard(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      color: _textColor.withValues(alpha: disabled ? 0.5 : 1.0),
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      color: _textSecondaryColor.withValues(
-                        alpha: disabled ? 0.5 : 1.0,
-                      ),
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
+  static const double kSettingsItemHeight = 56.0;
+
+  /// [v3.0.0] 合并同类设置项的大圆角超椭圆卡片容器（统一高度与内边距，去除生硬边框）
+  Widget _buildCardGroup(List<Widget> children) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final dividerColor = isDark
+        ? Colors.white.withValues(alpha: 0.06)
+        : Colors.black.withValues(alpha: 0.05);
+
+    return liquid.HyperOSCard(
+      cornerRadius: 24,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: Column(
+        children: [
+          for (int i = 0; i < children.length; i++) ...[
+            if (i > 0)
+              Divider(
+                height: 1,
+                thickness: 0.6,
+                indent: 48,
+                color: dividerColor,
               ),
-            ),
-            liquid.LiquidSwitch(
-              value: value,
-              onChanged: disabled ? (v) {} : onChanged,
-            ),
+            children[i],
           ],
-        ),
+        ],
       ),
     );
   }
 
-  Widget _buildActionCard(
+  /// [v3.0.0] 标准化高度开关设置行（统一 56dp 高度，纯净图标无厚重底色块）
+  Widget _buildSwitchRow(
     String title,
+    String subtitle,
+    IconData icon,
+    bool value,
+    ValueChanged<bool> onChanged, {
+    bool disabled = false,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return SizedBox(
+      height: kSettingsItemHeight,
+      child: Row(
+        children: [
+          SizedBox(
+            width: 36,
+            height: 36,
+            child: Center(
+              child: Icon(
+                icon,
+                color: isDark ? const Color(0xFFD6DBE5) : const Color(0xFF3A4150),
+                size: 22,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    color: _textColor.withValues(alpha: disabled ? 0.45 : 1.0),
+                    fontWeight: FontWeight.w600,
+                    fontSize: 15,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    color: _textSecondaryColor.withValues(alpha: disabled ? 0.45 : 1.0),
+                    fontSize: 11.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          liquid.LiquidSwitch(
+            value: value,
+            onChanged: disabled ? (v) {} : onChanged,
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// [v3.0.0] 标准化高度操作设置行（统一 56dp 高度，纯净图标无厚重底色块）
+  Widget _buildActionRow(
+    String title,
+    String subtitle,
     IconData icon,
     VoidCallback onTap, {
-    String? subtitle,
+    Widget? trailing,
   }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: liquid.HyperOSCard(
-        onTap: onTap,
-        padding: const EdgeInsets.all(16),
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: SizedBox(
+        height: kSettingsItemHeight,
         child: Row(
           children: [
-            Icon(icon, color: AppThemeColors.babyPink),
-            const SizedBox(width: 16),
+            SizedBox(
+              width: 36,
+              height: 36,
+              child: Center(
+                child: Icon(
+                  icon,
+                  color: isDark ? const Color(0xFFD6DBE5) : const Color(0xFF3A4150),
+                  size: 22,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     title,
                     style: TextStyle(
                       color: _textColor,
-                      fontWeight: FontWeight.bold,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 15,
                     ),
                   ),
-                  if (subtitle != null) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style: TextStyle(
-                        color: _textSecondaryColor,
-                        fontSize: 12,
-                      ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      color: _textSecondaryColor,
+                      fontSize: 11.5,
                     ),
-                  ],
+                  ),
                 ],
               ),
             ),
-            Icon(
-              CupertinoIcons.right_chevron,
-              color: _textSecondaryColor.withValues(alpha: 0.5),
-              size: 16,
-            ),
+            trailing ??
+                Icon(
+                  CupertinoIcons.right_chevron,
+                  color: _textSecondaryColor.withValues(alpha: 0.45),
+                  size: 15,
+                ),
           ],
         ),
       ),
     );
   }
 
-  /// [v2.7.0] 着色器质量切换
-  void _toggleShaderQuality() {
-    final newValue = !GlassEffect.useHighPerformanceShader;
-    _storage.setBool('high_performance_shader', newValue);
-    GlassEffect.useHighPerformanceShader = newValue;
-    GlassEffect.invalidateShader();
-
-    liquid.showLiquidDialog(
-      context: context,
-      builder: liquid.LiquidGlassDialog(
-        title: '着色器已切换',
-        content: Text(
-          '已切换到${newValue ? "高性能" : "高质量"}模式。\n请重启应用以生效。',
-          style: const TextStyle(color: Colors.white70),
-        ),
-        actions: [
-          GlassDialogAction(
-            label: '稍后重启',
-            onPressed: () => Navigator.pop(context),
-          ),
-          GlassDialogAction(
-            label: '立即退出',
-            isPrimary: true,
-            onPressed: () {
-              Navigator.pop(context);
-              if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
-                exit(0);
-              } else {
-                SystemNavigator.pop();
-              }
-            },
-          ),
-        ],
-      ),
-    );
-
+  /// [v3.0.0] 全局玻璃渲染模式即时切换（Premium 旗舰画质 vs Standard 流畅省电）
+  void _toggleGlassQuality() async {
+    HapticFeedback.selectionClick();
+    final currentQuality = theme.ThemeService().glassQuality;
+    final newQuality = currentQuality == GlassQuality.premium
+        ? GlassQuality.standard
+        : GlassQuality.premium;
+    await theme.ThemeService().setGlassQuality(newQuality);
+    if (!mounted) return;
     setState(() {});
+    liquid.showLiquidToast(
+      context,
+      '已切换至${newQuality == GlassQuality.premium ? "旗舰画质 (Premium)" : "流畅高帧 (Standard)"}模式',
+    );
   }
 }

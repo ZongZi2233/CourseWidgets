@@ -343,11 +343,6 @@ class _ScheduleConfigScreenState extends State<ScheduleConfigScreen> {
             ? Colors.white.withOpacity(0.05)
             : Colors.black.withOpacity(0.03),
         borderRadius: BorderRadius.circular(LiquidGlassTheme.mediumRadius),
-        border: Border.all(
-          color: _isDarkMode
-              ? Colors.white.withOpacity(0.1)
-              : Colors.black.withOpacity(0.1),
-        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -430,11 +425,6 @@ class _ScheduleConfigScreenState extends State<ScheduleConfigScreen> {
             ? Colors.white.withOpacity(0.03)
             : Colors.black.withOpacity(0.02),
         borderRadius: BorderRadius.circular(LiquidGlassTheme.smallRadius),
-        border: Border.all(
-          color: _isDarkMode
-              ? Colors.white.withOpacity(0.05)
-              : Colors.black.withOpacity(0.05),
-        ),
       ),
       child: Row(
         children: [
@@ -507,11 +497,6 @@ class _ScheduleConfigScreenState extends State<ScheduleConfigScreen> {
                 ? Colors.white.withOpacity(0.05)
                 : Colors.black.withOpacity(0.03),
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: _isDarkMode
-                  ? Colors.white.withOpacity(0.1)
-                  : Colors.black.withOpacity(0.1),
-            ),
           ),
           child: TextField(
             controller: controller,

@@ -8,6 +8,7 @@ import '../services/database_helper.dart';
 import '../services/onboarding_service.dart'; // [v2.5.9] 引入重置引导服务
 import '../services/ics_parser.dart'; // [v2.8.9] 引入课时推导算法
 import '../services/live_notification_service_v2.dart'; // [v2.10.1] 作息配置联动刷新通知与胶囊
+import '../services/time_alignment_engine.dart';
 
 /// 课表状态管理器 - 基于SQLite数据库
 class ScheduleProvider with ChangeNotifier {
@@ -35,22 +36,22 @@ class ScheduleProvider with ChangeNotifier {
   DateTime get semesterStartDate => _currentConfig.semesterStartDate;
   ScheduleConfigModel get currentConfig => _currentConfig;
 
-  // 缓存有效周次
-  List<int> _availableWeeks = [1];
+  // 缓存有效周次（学期默认提供 1~25 周，确保任何周次均可正常浏览与滑动）
+  List<int> _availableWeeks = List.generate(25, (i) => i + 1);
 
   /// 获取所有有效周次（使用缓存）
   List<int> get availableWeeks => _availableWeeks;
 
   /// 刷新有效周次缓存
   Future<void> _refreshAvailableWeeks() async {
-    _availableWeeks = await _importService.getAvailableWeeks(
+    final fetched = await _importService.getAvailableWeeks(
       _currentConfig.semesterStartDate,
     );
-    if (_availableWeeks.isEmpty) {
-      _availableWeeks = List.generate(16, (i) => i + 1);
-    } else if (!_availableWeeks.contains(1)) {
-      _availableWeeks = [1, ..._availableWeeks]..sort();
+    int maxWeek = 25;
+    for (final w in fetched) {
+      if (w > maxWeek) maxWeek = w;
     }
+    _availableWeeks = List.generate(maxWeek, (i) => i + 1);
     notifyListeners();
   }
 
@@ -287,10 +288,10 @@ class ScheduleProvider with ChangeNotifier {
           });
         }
       } else {
-        _availableWeeks = [1];
+        _availableWeeks = List.generate(25, (i) => i + 1);
         if (_currentWeek < 1) _currentWeek = 1;
         if (_currentDay < 1 || _currentDay > 7) _currentDay = 1;
-        debugPrint('⚠️ 没有课程数据，使用默认周次和星期');
+        debugPrint('⚠️ 没有课程数据，使用默认周次 1~25 和星期');
       }
     } catch (e) {
       _errorMessage = '加载数据失败: $e';
@@ -331,7 +332,7 @@ class ScheduleProvider with ChangeNotifier {
 
     // 重置状态
     _courses = [];
-    _availableWeeks = [1]; // 重置周次缓存
+    _availableWeeks = List.generate(25, (i) => i + 1); // 重置周次缓存为 1~25 周
     _currentWeek = 1;
     _currentDay = 1;
     // _semesterStartDate consolidated into _currentConfig
@@ -387,28 +388,45 @@ class ScheduleProvider with ChangeNotifier {
 
   /// 获取当前周次的所有课程
   List<CourseEvent> getCurrentWeekCourses() {
-    final weekCourses = _courses.where((course) {
-      final week = course.getWeekNumber(_currentConfig.semesterStartDate);
-      return week == _currentWeek;
-    }).toList();
+    final weekCourses = TimeAlignmentEngine.filterCoursesForWeek(
+      _courses,
+      _currentWeek,
+      _currentConfig.semesterStartDate,
+    );
     debugPrint('📚 第 $_currentWeek 周共有 ${weekCourses.length} 节课');
     return weekCourses;
   }
 
   /// 获取当前选中日期的课程
   List<CourseEvent> getCurrentDayCourses() {
-    final weekCourses = getCurrentWeekCourses();
-    final dayCourses = weekCourses
-        .where((course) => course.weekday == _currentDay)
-        .toList();
+    final dayCourses = TimeAlignmentEngine.filterCoursesForDay(
+      _courses,
+      _currentWeek,
+      _currentDay,
+      _currentConfig.semesterStartDate,
+    );
     debugPrint('📚 星期 $_currentDay 共有 ${dayCourses.length} 节课');
     return dayCourses;
   }
 
   /// 获取指定星期的课程（用于平板模式的周视图）
   List<CourseEvent> getCoursesForDay(int day) {
-    final weekCourses = getCurrentWeekCourses();
-    return weekCourses.where((course) => course.weekday == day).toList();
+    return TimeAlignmentEngine.filterCoursesForDay(
+      _courses,
+      _currentWeek,
+      day,
+      _currentConfig.semesterStartDate,
+    );
+  }
+
+  /// [v3.0.0-alpha14] 获取指定周次和指定星期的课程（用于横向滑动切换周次与 PageView 跟手预渲染）
+  List<CourseEvent> getCoursesForDayAndWeek(int day, int week) {
+    return TimeAlignmentEngine.filterCoursesForDay(
+      _courses,
+      week,
+      day,
+      _currentConfig.semesterStartDate,
+    );
   }
 
   /// 获取下一个课程
@@ -418,60 +436,18 @@ class ScheduleProvider with ChangeNotifier {
 
   /// [v2.8.0] 获取当前正在进行或未来的下一节课程（全时段保活，支持跨天、跨周查找）
   CourseEvent? getCurrentOrNextCourse() {
-    if (_courses.isEmpty) return null;
-
-    final nowMs = DateTime.now().millisecondsSinceEpoch;
-
-    // 1. 优先查找当前正在进行中的课程
-    for (final course in _courses) {
-      if (course.startTime <= nowMs && course.endTime > nowMs) {
-        return course;
-      }
-    }
-
-    // 2. 查找未来即将开始的最早一门课程（包括今日后续、明天或下周课程）
-    CourseEvent? nextUpcoming;
-    for (final course in _courses) {
-      if (course.startTime > nowMs) {
-        if (nextUpcoming == null || course.startTime < nextUpcoming.startTime) {
-          nextUpcoming = course;
-        }
-      }
-    }
-
-    if (nextUpcoming != null) {
-      return nextUpcoming;
-    }
-
-    // 3. 如果所有课程都已结束，返回最后一门课程以保持状态胶囊
-    CourseEvent? lastCourse;
-    for (final course in _courses) {
-      if (lastCourse == null || course.endTime > lastCourse.endTime) {
-        lastCourse = course;
-      }
-    }
-    return lastCourse;
+    return TimeAlignmentEngine.findCurrentOrNextCourse(_courses);
   }
 
   /// [v2.8.0] 获取现有课表中最早课程所在的周一（用于智能检测是否对齐开学首周）
   DateTime? getEarliestCourseMonday() {
-    if (_courses.isEmpty) return null;
-    DateTime? earliest;
-    for (final c in _courses) {
-      final dt = DateTime.fromMillisecondsSinceEpoch(c.startTime);
-      if (earliest == null || dt.isBefore(earliest)) {
-        earliest = dt;
-      }
-    }
-    if (earliest == null) return null;
-    final dateOnly = DateTime(earliest.year, earliest.month, earliest.day);
-    return dateOnly.subtract(Duration(days: dateOnly.weekday - 1));
+    return TimeAlignmentEngine.getEarliestCourseMonday(_courses);
   }
 
   /// [v2.8.0] 智能课表平移：将整个课表基准平移至目标开学日期首周，并按当前课时重算
   Future<void> alignScheduleToStartDate(DateTime targetStartDate) async {
     if (_courses.isEmpty) return;
-    final earliestMonday = getEarliestCourseMonday();
+    final earliestMonday = TimeAlignmentEngine.getEarliestCourseMonday(_courses);
     if (earliestMonday == null) return;
 
     final targetMonday = DateTime(targetStartDate.year, targetStartDate.month, targetStartDate.day)
@@ -479,27 +455,9 @@ class ScheduleProvider with ChangeNotifier {
 
     final offsetDays = targetMonday.difference(earliestMonday).inDays;
     
-    // 如果存在整周偏移，进行全局平移
+    // 如果存在整周偏移，通过 TimeAlignmentEngine 进行全局平移
     if (offsetDays != 0) {
-      final newCourses = <CourseEvent>[];
-      for (final course in _courses) {
-        final originalStart = DateTime.fromMillisecondsSinceEpoch(course.startTime);
-        final originalEnd = DateTime.fromMillisecondsSinceEpoch(course.endTime);
-
-        final shiftedStart = originalStart.add(Duration(days: offsetDays));
-        final shiftedEnd = originalEnd.add(Duration(days: offsetDays));
-
-        newCourses.add(
-          CourseEvent(
-            id: course.id,
-            name: course.name,
-            location: course.location,
-            teacher: course.teacher,
-            startTime: shiftedStart.millisecondsSinceEpoch,
-            endTime: shiftedEnd.millisecondsSinceEpoch,
-          ),
-        );
-      }
+      final newCourses = TimeAlignmentEngine.alignCoursesToTargetStartDate(_courses, targetStartDate);
       _courses = newCourses;
       await DatabaseHelper.instance.insertCourses(newCourses);
       debugPrint('✅ 课表首周已从 ${earliestMonday.toString().substring(0, 10)} 平移 $offsetDays 天至 ${targetMonday.toString().substring(0, 10)}');
@@ -653,92 +611,94 @@ class ScheduleProvider with ChangeNotifier {
       final week = (daysSinceStart >= 0) ? ((daysSinceStart ~/ 7) + 1) : 1;
       final dayOfWeek = startDt.weekday; // 1=Monday..7=Sunday
 
-      final timeMinutes = startDt.hour * 60 + startDt.minute;
-      final endDt = DateTime.fromMillisecondsSinceEpoch(course.endTime);
-      final endMinutes = endDt.hour * 60 + endDt.minute;
-      final duration = endMinutes - timeMinutes;
+      int startSection;
+      int endSection;
 
-      // 1. 根据时长精准推导课程所占节数 (防异常拉伸与午休穿透)
-      // 单节: <= 65 分钟
-      // 双节大课: 66~115 分钟 (如 90~100 分钟)
-      // 三节大课: 116~165 分钟 (如 135~150 分钟)
-      // 四节: > 165 分钟
-      int spanSections;
-      if (duration <= 65) {
-        spanSections = 1;
-      } else if (duration <= 115) {
-        spanSections = 2;
-      } else if (duration <= 165) {
-        spanSections = 3;
+      if (course.startSection != null &&
+          course.endSection != null &&
+          course.startSection! > 0 &&
+          course.endSection! >= course.startSection!) {
+        // [v3.0.0 核心突破] 课程固有语义节次优先！彻底摒弃时间差模糊吸附，杜绝吃课与错位
+        startSection = course.startSection!;
+        endSection = course.endSection!;
       } else {
-        spanSections = 4;
-      }
+        // 兜底推导：针对旧版本未持久化节次的遗留课程数据
+        final timeMinutes = startDt.hour * 60 + startDt.minute;
+        final endDt = DateTime.fromMillisecondsSinceEpoch(course.endTime);
+        final endMinutes = endDt.hour * 60 + endDt.minute;
+        final duration = endMinutes - timeMinutes;
 
-      // 2. [v2.10.1 核心自适应节次匹配] 依据旧配置作息表匹配最接近的起始节次，绝不死板硬编码
-      int minSec = 1;
-      int maxSec = 13;
-      if (timeMinutes < 12 * 60 + 30) {
-        minSec = 1;
-        maxSec = 4;
-      } else if (timeMinutes < 17 * 60 + 45) {
-        minSec = 5;
-        maxSec = 8;
-      } else {
-        minSec = 9;
-        maxSec = 13;
-      }
-
-      int startSection = minSec;
-      int minDiff = 100000;
-      for (var entry in oldConfig.sectionStartTimes.entries) {
-        if (entry.key < minSec || entry.key > maxSec) continue;
-        final diff = (entry.value - timeMinutes).abs();
-        if (diff < minDiff) {
-          minDiff = diff;
-          startSection = entry.key;
-        }
-      }
-
-      // 容错兜底：若旧配置与当前时间偏差过大（例如首次导入无旧配置），使用时段标准吸附
-      if (minDiff > 90) {
-        if (timeMinutes < 9 * 60 + 15) {
-          startSection = 1; // 上午第 1 节 (08:00~09:15)
-        } else if (timeMinutes < 10 * 60) {
-          startSection = 2; // 上午第 2 节 (09:15~10:00)
-        } else if (timeMinutes < 11 * 60 + 30) {
-          startSection = 3; // 上午第 3 节 (10:00~11:30)
-        } else if (timeMinutes < 12 * 60 + 30) {
-          startSection = 4; // 上午第 4 节 (11:30~12:30)
-        } else if (timeMinutes < 14 * 60 + 20) {
-          startSection = 5; // 下午第 5 节 (13:00~14:20)
-        } else if (timeMinutes < 15 * 60) {
-          startSection = 6; // 下午第 6 节 (14:20~15:00)
-        } else if (timeMinutes < 16 * 60 + 20) {
-          startSection = 7; // 下午第 7 节 (15:00~16:20)
-        } else if (timeMinutes < 17 * 60 + 30) {
-          startSection = 8; // 下午第 8 节 (16:20~17:30)
-        } else if (timeMinutes < 19 * 60 + 20) {
-          startSection = 9; // 晚间第 9 节 (18:00~19:20)
-        } else if (timeMinutes < 20 * 60) {
-          startSection = 10; // 晚间第 10 节 (19:20~20:00)
+        int spanSections;
+        if (duration <= 65) {
+          spanSections = 1;
+        } else if (duration <= 115) {
+          spanSections = 2;
+        } else if (duration <= 165) {
+          spanSections = 3;
         } else {
-          startSection = 11; // 晚间第 11 节
+          spanSections = 4;
         }
-      }
 
-      // 3. 【核心保护】绝对禁止单门课程跨越午休与晚餐！
-      // 上午课程 (startSection <= 4): 结束节次严禁超过第 4 节
-      // 下午课程 (startSection 5..8): 结束节次严禁超过第 8 节
-      // 晚间课程 (startSection 9..13): 结束节次严禁超过第 13 节
-      if (startSection <= 4) {
-        spanSections = spanSections.clamp(1, 4 - startSection + 1);
-      } else if (startSection <= 8) {
-        spanSections = spanSections.clamp(1, 8 - startSection + 1);
-      } else if (startSection <= 13) {
-        spanSections = spanSections.clamp(1, 13 - startSection + 1);
-      }
+        int minSec = 1;
+        int maxSec = 13;
+        if (timeMinutes < 12 * 60 + 30) {
+          minSec = 1;
+          maxSec = 4;
+        } else if (timeMinutes < 17 * 60 + 45) {
+          minSec = 5;
+          maxSec = 8;
+        } else {
+          minSec = 9;
+          maxSec = 13;
+        }
 
-      final endSection = startSection + spanSections - 1;
+        startSection = minSec;
+        int minDiff = 100000;
+        for (var entry in oldConfig.sectionStartTimes.entries) {
+          if (entry.key < minSec || entry.key > maxSec) continue;
+          final diff = (entry.value - timeMinutes).abs();
+          if (diff < minDiff) {
+            minDiff = diff;
+            startSection = entry.key;
+          }
+        }
+
+        if (minDiff > 90) {
+          if (timeMinutes < 9 * 60 + 15) {
+            startSection = 1;
+          } else if (timeMinutes < 10 * 60) {
+            startSection = 2;
+          } else if (timeMinutes < 11 * 60 + 30) {
+            startSection = 3;
+          } else if (timeMinutes < 12 * 60 + 30) {
+            startSection = 4;
+          } else if (timeMinutes < 14 * 60 + 20) {
+            startSection = 5;
+          } else if (timeMinutes < 15 * 60) {
+            startSection = 6;
+          } else if (timeMinutes < 16 * 60 + 20) {
+            startSection = 7;
+          } else if (timeMinutes < 17 * 60 + 30) {
+            startSection = 8;
+          } else if (timeMinutes < 19 * 60 + 20) {
+            startSection = 9;
+          } else if (timeMinutes < 20 * 60) {
+            startSection = 10;
+          } else {
+            startSection = 11;
+          }
+        }
+
+        if (startSection <= 4) {
+          spanSections = spanSections.clamp(1, 4 - startSection + 1);
+        } else if (startSection <= 8) {
+          spanSections = spanSections.clamp(1, 8 - startSection + 1);
+        } else if (startSection <= 13) {
+          spanSections = spanSections.clamp(1, 13 - startSection + 1);
+        }
+
+        endSection = startSection + spanSections - 1;
+      }
 
       // 用新配置计算新时间
       final newStartTime = newConfig.getStartTime(week, dayOfWeek, startSection);
@@ -750,13 +710,11 @@ class ScheduleProvider with ChangeNotifier {
       );
 
       newCourses.add(
-        CourseEvent(
-          id: course.id,
-          name: course.name,
-          location: course.location,
-          teacher: course.teacher,
+        course.copyWith(
           startTime: newStartTime.millisecondsSinceEpoch,
           endTime: newEndTime.millisecondsSinceEpoch,
+          startSection: startSection,
+          endSection: endSection,
         ),
       );
     }
@@ -954,6 +912,8 @@ class ScheduleProvider with ChangeNotifier {
             teacher: template['teacher'] as String,
             startTime: startTime.millisecondsSinceEpoch,
             endTime: endTime.millisecondsSinceEpoch,
+            startSection: startSection,
+            endSection: endSection,
           );
 
           testCourses.add(course);

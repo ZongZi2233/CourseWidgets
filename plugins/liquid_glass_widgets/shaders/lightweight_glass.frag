@@ -334,7 +334,8 @@ void main() {
   rimAlphaBase += totalSpecular * kRimAlphaSpecular * rimFade;
   rimAlphaBase *= (1.0 + thicknessOffset * kThicknessRimBoost) * (1.0 + densityFactor * 0.1);
   rimAlphaBase *= borderMask;
-  rimAlphaBase = clamp(rimAlphaBase, 0.0, 1.0);
+  float fresnelGate = clamp(uFresnelStrength * 20.0, 0.0, 1.0);
+  rimAlphaBase = clamp(rimAlphaBase, 0.0, 1.0) * fresnelGate;
 
   // ---- STAGE 7: EXTRAS (fresnel) ----
   // uFresnelStrength (slot 33) scales the grazing-angle rim. Default 1.0 = calibrated
@@ -500,9 +501,8 @@ void main() {
     // because rimAlphaBase is already near-zero via rimFade.
     vec3 pathBRimColor = rimColorBase;
 
-    // Minimum border floor: only active in dark mode (rimFade=1.0).
-    // In light mode rimFade≈0.08, so this floor is effectively zero.
-    float minRimAlpha = borderMask * 0.06 * rimFade;
+    // Minimum border floor: gated by fresnelGate so fresnelStrength=0 eliminates white border completely
+    float minRimAlpha = borderMask * 0.06 * rimFade * fresnelGate;
     float effectiveRimAlpha = max(rimAlphaBase, minRimAlpha);
 
     // Rim composited over body.

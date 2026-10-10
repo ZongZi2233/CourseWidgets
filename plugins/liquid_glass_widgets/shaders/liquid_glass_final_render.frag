@@ -505,15 +505,13 @@ void main() {
         float oppositeLight = max(0.0, dot(anisoN, -uLightDirection));
         float totalInfluence = mainLight + oppositeLight * 0.8;
 
-        // Restore the thin, sharp iOS 26 highlight lobe!
-        // pow(x, 1.5) = x * sqrt(x). This thins out the highlight without causing
-        // flickering because we properly re-normalized anisoN above.
-        float directional = totalInfluence * sqrt(totalInfluence) * uLightIntensity * 3.0;
-        float ambient     = uAmbientStrength * 0.5;
+        // Softened highlight lobe to eliminate harsh white rim artifacts
+        float directional = totalInfluence * sqrt(totalInfluence) * uLightIntensity * 1.5;
+        float ambient     = uAmbientStrength * 0.3;
 
         // Soft-clamp brightness with x/(1+x) to prevent mix() extrapolating
         // beyond highlightColor.
-        float brightnessRaw = (directional + ambient) * edgeFactor * thicknessScale * 0.8;
+        float brightnessRaw = (directional + ambient) * edgeFactor * thicknessScale * 0.45;
         float brightness    = brightnessRaw / (1.0 + brightnessRaw);
 
         vec3 highlightColor = getHighlightColor(refractColor.rgb, 1.0);

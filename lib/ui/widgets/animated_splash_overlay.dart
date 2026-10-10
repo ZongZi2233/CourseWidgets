@@ -110,10 +110,9 @@ class _AnimatedSplashOverlayState extends State<AnimatedSplashOverlay>
 
     final provider = _scheduleProvider;
     final isDataReady = provider != null && !provider.isLoading;
-    final isBlurReady = StaticBlurredWallpaperService.instance.blurredImage != null;
 
-    // 当数据和离屏模糊就绪后，等待当前帧栅格化结束
-    if (isDataReady && isBlurReady) {
+    // [v3.0.0-alpha13] 数据加载完毕后立即放行开屏门禁，绝不让静态模糊异步烘焙阻塞首屏展现
+    if (isDataReady) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           _triggerDismiss();

@@ -148,7 +148,7 @@ object LiveUpdateNotificationManager {
         if (triggerAtMs <= System.currentTimeMillis()) return
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
         val intent = Intent(context, CourseAlarmReceiver::class.java).apply {
-            action = CourseAlarmReceiver.ACTION_COURSE_WAKEUP
+            action = CourseAlarmReceiver.getAction(context)
         }
         val pendingIntent = PendingIntent.getBroadcast(
             context,
@@ -181,7 +181,7 @@ object LiveUpdateNotificationManager {
     fun cancelAlarm(context: Context) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
         val intent = Intent(context, CourseAlarmReceiver::class.java).apply {
-            action = CourseAlarmReceiver.ACTION_COURSE_WAKEUP
+            action = CourseAlarmReceiver.getAction(context)
         }
         val pendingIntent = PendingIntent.getBroadcast(
             context,

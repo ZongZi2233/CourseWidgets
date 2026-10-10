@@ -118,7 +118,13 @@ class ProgressiveBlur extends StatefulWidget {
     try {
       return await ui.FragmentProgram.fromAsset(path);
     } catch (_) {
-      return ui.FragmentProgram.fromAsset(testPath);
+      try {
+        return await ui.FragmentProgram.fromAsset(testPath);
+      } catch (_) {
+        return await ui.FragmentProgram.fromAsset(
+          'plugins/liquid_glass_widgets/shaders/progressive_blur.frag',
+        );
+      }
     }
   }
 

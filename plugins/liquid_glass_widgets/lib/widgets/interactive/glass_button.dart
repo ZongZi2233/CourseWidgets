@@ -169,6 +169,8 @@ class GlassButton extends StatefulWidget {
     this.canRequestFocus = true,
     this.excludeFromSemantics = false,
     this.isStationary = false,
+    this.pressDarken = false,
+    this.showOverlayColor = true,
   }) : child = null;
 
   /// Creates a glass button with custom content.
@@ -231,6 +233,8 @@ class GlassButton extends StatefulWidget {
     this.canRequestFocus = true,
     this.excludeFromSemantics = false,
     this.isStationary = false,
+    this.pressDarken = false,
+    this.showOverlayColor = true,
   })  : icon = null,
         iconSize = 24.0,
         iconColor = null;
@@ -609,6 +613,13 @@ class GlassButton extends StatefulWidget {
   /// interactive widgets (e.g., in [GlassButtonGroup.icons]).
   final bool excludeFromSemantics;
 
+  /// Whether the button surface darkens on press (tactile dimming) instead of brightening.
+  final bool pressDarken;
+
+  /// Whether to render a colored overlay on hover/press. Defaults to true.
+  /// Set to false to preserve 100% transparent glass with pure refraction and spring deformation.
+  final bool showOverlayColor;
+
   @override
   State<GlassButton> createState() => _GlassButtonState();
 }
@@ -801,6 +812,9 @@ class _GlassButtonState extends State<GlassButton>
       animation:
           Listenable.merge([_saturationAnimation, _isHovered, _isFocused]),
       builder: (context, _) {
+        if (!widget.showOverlayColor || effectiveAmbientBaseLight <= 0.0) {
+          return const SizedBox.shrink();
+        }
         double opacity = _saturationAnimation.value * effectiveAmbientBaseLight;
         if (_isFocused.value) {
           opacity += 0.15;
@@ -808,11 +822,15 @@ class _GlassButtonState extends State<GlassButton>
           opacity += 0.08;
         }
         if (opacity <= 0) return const SizedBox.shrink();
+        final Color overlayColor = widget.pressDarken
+            ? CupertinoColors.black
+                .withValues(alpha: (opacity * 1.8).clamp(0.0, 0.40))
+            : CupertinoColors.white
+                .withValues(alpha: opacity.clamp(0.0, 1.0));
         return Positioned.fill(
           child: IgnorePointer(
             child: ColoredBox(
-              color: CupertinoColors.white
-                  .withValues(alpha: opacity.clamp(0.0, 1.0)),
+              color: overlayColor,
             ),
           ),
         );

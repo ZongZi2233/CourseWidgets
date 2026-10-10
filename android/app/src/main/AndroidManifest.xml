@@ -11,7 +11,7 @@
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
     
     <application
-        android:label="CourseWidgets"
+        android:label="CourseWidgets Beta"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:enableOnBackInvokedCallback="true"
@@ -63,7 +63,7 @@
             android:name=".CourseAlarmReceiver"
             android:exported="false">
             <intent-filter>
-                <action android:name="com.zongzi.schedule.ACTION_COURSE_WAKEUP" />
+                <action android:name="${applicationId}.ACTION_COURSE_WAKEUP" />
             </intent-filter>
         </receiver>
 

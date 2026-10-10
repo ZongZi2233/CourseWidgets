@@ -166,7 +166,7 @@ class _AdaptiveLiquidGlassLayerState extends State<AdaptiveLiquidGlassLayer> {
     // Resolve shadow for SDF rendering. Shadows only apply in light mode.
     final bool isDark = GlassTheme.brightnessOf(context) == Brightness.dark;
     final List<BoxShadow> resolvedShadows =
-        isDark ? const <BoxShadow>[] : effectiveSettings.effectiveShadow;
+        isDark ? const <BoxShadow>[] : (effectiveSettings.shadow ?? const <BoxShadow>[]);
 
     // Keep the child subtree's element identity stable across the wrapper toggle
     // below (see [_contentKey]) so its animation controllers survive.

@@ -1,3 +1,4 @@
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 
 /// 响应式布局工具类
@@ -5,13 +6,36 @@ class ResponsiveUtils {
   /// 平板模式阈值（宽度 > 600dp）
   static const double tabletBreakpoint = 600.0;
   
-  /// 检测是否为平板模式（横屏且宽度 > 600dp）
+  /// 检测是否为桌面端或横屏环境（返回按钮浮在左上角而非右下角）
+  static bool isDesktopOrLandscape(BuildContext context) {
+    return Platform.isWindows ||
+        Platform.isMacOS ||
+        Platform.isLinux ||
+        MediaQuery.of(context).orientation == Orientation.landscape ||
+        isTabletMode(context);
+  }
+
+  /// 检测是否为真正的平板或桌面大屏模式（桌面宽度 > 600，移动端最短边 >= 600dp 且横屏）
   static bool isTabletMode(BuildContext context) {
     final size = MediaQuery.of(context).size;
     final orientation = MediaQuery.of(context).orientation;
-    
-    // 平板模式：横屏且宽度 > 600dp
-    return size.width > tabletBreakpoint && 
+
+    if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
+      return size.width > tabletBreakpoint;
+    }
+    // 移动端平板判定：最短边 >= 600dp (iPad/Android 平板) 且横屏
+    return size.shortestSide >= tabletBreakpoint && 
+           orientation == Orientation.landscape;
+  }
+
+  /// 检测是否为手机横屏模式（移动端且最短边 < 600dp 且处于横屏）
+  static bool isLandscapePhone(BuildContext context) {
+    if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
+      return false;
+    }
+    final size = MediaQuery.of(context).size;
+    final orientation = MediaQuery.of(context).orientation;
+    return size.shortestSide < tabletBreakpoint &&
            orientation == Orientation.landscape;
   }
   

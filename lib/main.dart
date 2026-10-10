@@ -17,9 +17,8 @@ import 'services/notification_manager.dart'; // [v2.7.0] 通知管理器
 import 'services/onboarding_service.dart';
 import 'services/windows_tray_service.dart';
 import 'services/storage_service.dart';
-import 'services/static_blur_service.dart'; // [v3.0.0/v2.10.1] 静态单次壁纸模糊烘焙服务
 import 'services/background_task_service.dart'; // [v2.2.9] 后台任务服务
-import 'ui/transitions/custom_predictive_back_transitions.dart'; // [v2.9.7] 恢复Android预测式返回
+import 'services/static_blur_service.dart'; // [v3.0.0] 全局静态壁纸模糊遮罩服务
 import 'utils/glass_opacity_manager.dart'; // [v2.3.0] 玻璃透明度管理器
 import 'ui/screens/schedule_screen.dart';
 import 'ui/screens/android_liquid_glass_main.dart';
@@ -27,7 +26,7 @@ import 'ui/screens/ios_liquid_glass_main.dart'; // [v2.5.9] 新增iOS原生支�
 import 'ui/screens/windows_custom_window.dart';
 import 'ui/screens/macos_custom_window.dart'; // [v2.5.9] 新增macOS支持
 import 'ui/screens/onboarding_screen.dart';
-import 'ui/widgets/animated_splash_overlay.dart'; // [v3.0.0/v2.10.1] 秒开开屏动效与并行渲染就绪门
+import 'ui/widgets/animated_splash_overlay.dart'; // [v3.0.0] 秒开开屏动效与并行渲染就绪门
 import 'ui/transitions/smooth_slide_transitions.dart'; // [v2.4.8] 平滑过渡动画
 import 'dart:async';
 import 'package:flutter_phoenix/flutter_phoenix.dart';
@@ -41,13 +40,18 @@ final ValueNotifier<String?> globalBackgroundPath = ValueNotifier<String?>(
   null,
 );
 
+/// [v3.0.0] 全局课表工作台微乳亚克力底板开关（默认关闭，保持原画壁纸100%透彻高清）
+final ValueNotifier<bool> globalAcrylicBackdropNotifier =
+    ValueNotifier<bool>(false);
+
 // [v2.6.0] 全局路由监听器，用于控制底部导航栏的显示与隐藏
 final RouteObserver<PageRoute> routeObserver = RouteObserver<PageRoute>();
 
 Future<void> loadGlobalBackground() async {
   try {
     final storage = StorageService();
-    final savedPath = storage.getString('background_image_path');
+    final savedPath = storage.getString(StorageService.keyBackgroundPath) ??
+        storage.getString('background_image_path');
 
     if (savedPath != null && savedPath.isNotEmpty) {
       if (savedPath.startsWith('asset:')) {
@@ -56,6 +60,7 @@ Future<void> loadGlobalBackground() async {
             savedPath == 'asset:assets/tahoe.jpg') {
           globalBackgroundPath.value = null;
           await storage.remove('background_image_path');
+          await storage.remove(StorageService.keyBackgroundPath);
         } else {
           globalBackgroundPath.value = savedPath;
         }
@@ -70,9 +75,9 @@ Future<void> loadGlobalBackground() async {
       }
     }
 
-    // 默认设为 null，由深浅色模式动态决定使用 Light.png 还是 Dark.png
-    globalBackgroundPath.value = null;
-    AppLogger.ui('使用自适应 1:1 默认壁纸 (Light.png / Dark.png)');
+    // [v3.0.0] 初始化课表工作台微乳亚克力底板开关偏好（默认关闭，保持原画壁纸100%高清透彻）
+    globalAcrylicBackdropNotifier.value =
+        storage.getBool(StorageService.keyEnableAcrylicBackdrop) ?? false;
   } catch (e, st) {
     AppLogger.error('WALLPAPER', '加载壁纸错误: $e', e, st);
     globalBackgroundPath.value = null;
@@ -170,23 +175,25 @@ void main() async {
     }
   }
 
-  // [v2.7.0] 初始化着色器质量偏好（必须在 LiquidGlass 初始化之前）
-  final shaderStorage = StorageService();
-  GlassEffect.useHighPerformanceShader =
-      shaderStorage.getBool('high_performance_shader') ?? false;
-  AppLogger.render(
-    '🎨 着色器模式: ${GlassEffect.useHighPerformanceShader ? "高性能" : "高质量"}',
-  );
+  // [v3.0.0-alpha18] 强制使用完整 3D 渲染着色器 (Premium)，杜绝高性能 2D 降级
+  GlassEffect.useHighPerformanceShader = false;
+  AppLogger.render('🎨 着色器模式: 旗舰高质量 (Premium)');
 
-  // [v2.4.1/v2.7.8] 初始化 Liquid Glass (支持 Windows Impeller/ANGLE 与移动端高帧率预热)
+  // [v2.4.1/v2.7.8/v3.0.0-alpha14] 初始化 Liquid Glass (支持 120Hz 预算校准与移动端高帧率预热)
   await LiquidGlassWidgets.initialize(
     warmUpMode: GlassWarmUpMode.always,
   );
-  AppLogger.render('LiquidGlassWidgets 初始化与着色器预热完毕');
+  GlassPerformanceMonitor.rasterBudget = const Duration(microseconds: 8333); // 120Hz
+  GlassPerformanceMonitor.sustainedFrameThreshold = 120;
+  AppLogger.render('LiquidGlassWidgets 初始化与着色器预热完毕 (120Hz 预算已校准)');
 
-  // [v2.10.1/v3.0.0] 初始化全局静态单次壁纸模糊烘焙服务
+  // [v3.0.0-alpha13] 预编译 ProgressiveBlur 状态栏无极渐变模糊着色器
+  await ProgressiveBlur.preload();
+  AppLogger.render('ProgressiveBlur 着色器预编译完毕');
+
+  // [v3.0.0] 初始化全局静态单次壁纸模糊烘焙服务
   StaticBlurredWallpaperService.instance.initialize();
-  AppLogger.render('StaticBlurredWallpaperService 初始化完成');
+  AppLogger.render('StaticBlurredWallpaperService 初始化完毕');
 
   // [v2.2.9] 初始化后台任务服务（仅 Android）
   if (Platform.isAndroid) {
@@ -210,10 +217,23 @@ void main() async {
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
     await windowManager.ensureInitialized();
 
-    // [v2.5.1] 初始化本地桌面通知
+    // [v2.5.1/v3.0.0] 初始化本地桌面通知并清理失效快捷方式
     if (Platform.isWindows) {
+      try {
+        final appData = Platform.environment['APPDATA'];
+        if (appData != null) {
+          final oldLnk = File('$appData\\Microsoft\\Windows\\Start Menu\\Programs\\CourseWidgets.lnk');
+          if (oldLnk.existsSync()) {
+            oldLnk.deleteSync();
+            debugPrint('🗑️ 已清除旧版失效快捷方式 CourseWidgets.lnk');
+          }
+        }
+      } catch (e) {
+        debugPrint('清理旧快捷方式异常: $e');
+      }
+
       await localNotifier.setup(
-        appName: 'CourseWidgets',
+        appName: 'CourseWidgets Beta',
         shortcutPolicy: ShortcutPolicy.requireCreate,
       );
     }
@@ -248,15 +268,28 @@ void main() async {
   }
 
   await loadGlobalBackground();
+  await ThemeService().refreshMonetColors();
+
+  // [v3.0.0-alpha18] 全时全刻强制 Premium 旗舰材质，彻底禁用运行时自动降级
+  ThemeService.globalGlassQualityNotifier.value = GlassQuality.premium;
+  final storage = StorageService();
+  await storage.setString('glass_quality', GlassQuality.premium.name);
+  await storage.setString('global_glass_quality', GlassQuality.premium.name);
 
   runApp(
-    Phoenix(
-      child: MultiProvider(
-        providers: [
-          ChangeNotifierProvider(create: (_) => ScheduleProvider()),
-          ChangeNotifierProvider.value(value: ThemeService()),
-        ],
-        child: const MyApp(),
+    LiquidGlassWidgets.wrap(
+      child: Phoenix(
+        child: MultiProvider(
+          providers: [
+            ChangeNotifierProvider(create: (_) => ScheduleProvider()),
+            ChangeNotifierProvider.value(value: ThemeService()),
+          ],
+          child: const MyApp(),
+        ),
+      ),
+      adaptiveQuality: false, // 严禁自动降级，保持 100% 全时全刻 Premium
+      theme: GlassThemeData.simple(
+        quality: GlassQuality.premium,
       ),
     ),
   );
@@ -274,7 +307,6 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   final OnboardingService _onboardingService = OnboardingService();
   bool _showOnboarding = false;
-  bool _isChecking = true;
 
   @override
   void initState() {
@@ -310,65 +342,56 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   Future<void> _checkOnboarding() async {
-    // [v2.8.5] 消除人造 100ms 延迟，即时加载本地偏好
-    final storage = StorageService();
-    final darkMode = storage.getBool(StorageService.keyDarkMode) ?? false;
-    final adaptiveMode =
-        storage.getBool(StorageService.keyAdaptiveDarkMode) ?? false;
+    try {
+      final storage = StorageService();
+      final darkMode = storage.getBool(StorageService.keyDarkMode) ?? false;
+      final adaptiveMode =
+          storage.getBool(StorageService.keyAdaptiveDarkMode) ?? false;
 
-    bool isDark = false;
-    if (adaptiveMode) {
-      final brightness =
-          WidgetsBinding.instance.platformDispatcher.platformBrightness;
-      isDark = brightness == Brightness.dark;
-    } else {
-      isDark = darkMode;
-    }
-    GlassOpacityManager().setDarkMode(isDark);
-    globalUseDarkMode = isDark;
-    globalDarkModeNotifier.value = isDark;
+      bool isDark = false;
+      if (adaptiveMode) {
+        final brightness =
+            WidgetsBinding.instance.platformDispatcher.platformBrightness;
+        isDark = brightness == Brightness.dark;
+      } else {
+        isDark = darkMode;
+      }
+      GlassOpacityManager().setDarkMode(isDark);
+      globalUseDarkMode = isDark;
+      globalDarkModeNotifier.value = isDark;
 
-    if (mounted) {
-      setState(() {
-        _showOnboarding = _onboardingService.shouldShowOnboarding;
-        _isChecking = false;
-      });
-    }
-  }
-
-  void _completeOnboarding() {
-    // [v2.4.7] 引导完成后主动 reload ScheduleProvider 数据
-    final provider = context.read<ScheduleProvider>();
-    provider.loadSavedData().then((_) {
+      if (mounted) {
+        setState(() {
+          _showOnboarding = _onboardingService.shouldShowOnboarding;
+        });
+      }
+    } catch (e) {
+      debugPrint('⚠️ _checkOnboarding 异常兜底: $e');
       if (mounted) {
         setState(() {
           _showOnboarding = false;
         });
       }
-    });
+    }
+  }
+
+  Future<void> _completeOnboarding() async {
+    await _onboardingService.completeOnboarding();
+    if (mounted) {
+      setState(() {
+        _showOnboarding = false;
+      });
+    }
+    try {
+      final provider = context.read<ScheduleProvider>();
+      await provider.loadSavedData();
+    } catch (e) {
+      debugPrint('引导完成加载课表失败: $e');
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isChecking) {
-      // [v2.8.5 彻底消灭启动黑屏] 使用自然柔和渐变作为首帧过渡，坚决杜绝纯黑黑屏与卡顿感
-      return material.MaterialApp(
-        debugShowCheckedModeBanner: false,
-        home: material.Scaffold(
-          backgroundColor: Colors.transparent,
-          body: Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [Color(0xFFE0C3FC), Color(0xFF8EC5FC)],
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-
     return ValueListenableBuilder<bool>(
       valueListenable: globalDarkModeNotifier,
       builder: (context, isDarkMode, _) {
@@ -379,79 +402,85 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
             return Consumer<ThemeService>(
               builder: (context, themeService, child) {
-                return material.MaterialApp(
+                final lightMaterialTheme = material.ThemeData(
+                  useMaterial3: true,
+                  brightness: material.Brightness.light,
+                  scaffoldBackgroundColor: material.Colors.transparent,
+                  colorScheme: material.ColorScheme.fromSeed(
+                    seedColor: themeService.primaryColor,
+                    brightness: material.Brightness.light,
+                  ),
+                  fontFamily: (Platform.isWindows || Platform.isMacOS)
+                      ? 'PingFangSC'
+                      : null,
+                  fontFamilyFallback: (Platform.isWindows || Platform.isMacOS)
+                      ? const ['SFPro']
+                      : null,
+                  textTheme: const material.TextTheme(
+                    titleLarge: TextStyle(fontWeight: FontWeight.bold),
+                    titleMedium: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  pageTransitionsTheme: const material.PageTransitionsTheme(
+                    builders: {
+                      material.TargetPlatform.android:
+                          SmoothSlideTransitionsBuilder(),
+                      material.TargetPlatform.iOS:
+                          SmoothSlideTransitionsBuilder(),
+                      material.TargetPlatform.windows:
+                          SmoothSlideTransitionsBuilder(),
+                    },
+                  ),
+                );
+
+                final darkMaterialTheme = material.ThemeData(
+                  useMaterial3: true,
+                  brightness: material.Brightness.dark,
+                  scaffoldBackgroundColor: material.Colors.transparent,
+                  colorScheme: material.ColorScheme.fromSeed(
+                    seedColor: themeService.primaryColor,
+                    brightness: material.Brightness.dark,
+                  ),
+                  fontFamily: (Platform.isWindows || Platform.isMacOS)
+                      ? 'PingFangSC'
+                      : null,
+                  fontFamilyFallback: (Platform.isWindows || Platform.isMacOS)
+                      ? const ['SFPro']
+                      : null,
+                  textTheme: const material.TextTheme(
+                    titleLarge: TextStyle(fontWeight: FontWeight.bold),
+                    titleMedium: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  pageTransitionsTheme: const material.PageTransitionsTheme(
+                    builders: {
+                      material.TargetPlatform.android:
+                          SmoothSlideTransitionsBuilder(),
+                      material.TargetPlatform.iOS:
+                          SmoothSlideTransitionsBuilder(),
+                      material.TargetPlatform.windows:
+                          SmoothSlideTransitionsBuilder(),
+                    },
+                  ),
+                );
+
+                // [v3.0.0-alpha17] 彻底杜绝全局 MaterialApp，完全迁移至旗舰级 CupertinoApp 根应用
+                return CupertinoApp(
                   debugShowCheckedModeBanner: false,
                   navigatorObservers: [routeObserver],
-                  themeMode: isDarkMode
-                      ? material.ThemeMode.dark
-                      : material.ThemeMode.light,
-              theme: material.ThemeData(
-                useMaterial3: true,
-                brightness: material.Brightness.light,
-                scaffoldBackgroundColor: material.Colors.transparent,
-                colorScheme: material.ColorScheme.fromSeed(
-                  seedColor: themeService.primaryColor,
-                  brightness: material.Brightness.light,
-                ),
-                // [v2.4.4] 全局字体：仅在桌面端强制使用 PingFangSC/SFPro 以避免移动端字体文件被打包带来的体积膨胀
-                // [v2.7.0] 移动端恢复系统默认字体 (Roboto/San Francisco)
-                fontFamily: (Platform.isWindows || Platform.isMacOS)
-                    ? 'PingFangSC'
-                    : null,
-                fontFamilyFallback: (Platform.isWindows || Platform.isMacOS)
-                    ? const ['SFPro']
-                    : null,
-                // [v2.4.4] 全局加粗标题
-                textTheme: const material.TextTheme(
-                  titleLarge: TextStyle(fontWeight: FontWeight.bold),
-                  titleMedium: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                // [v2.9.3] 统一使用 SmoothSlideTransitionsBuilder，杜绝双弹
-                pageTransitionsTheme: const material.PageTransitionsTheme(
-                  builders: {
-                    material.TargetPlatform.android:
-                        SmoothSlideTransitionsBuilder(),
-                    material.TargetPlatform.iOS:
-                        SmoothSlideTransitionsBuilder(),
-                    material.TargetPlatform.windows:
-                        SmoothSlideTransitionsBuilder(),
-                  },
-                ),
-              ),
-              darkTheme: material.ThemeData(
-                useMaterial3: true,
-                brightness: material.Brightness.dark,
-                scaffoldBackgroundColor: material.Colors.transparent,
-                colorScheme: material.ColorScheme.fromSeed(
-                  seedColor: themeService.primaryColor,
-                  brightness: material.Brightness.dark,
-                ),
-                fontFamily: (Platform.isWindows || Platform.isMacOS)
-                    ? 'PingFangSC'
-                    : null,
-                fontFamilyFallback: (Platform.isWindows || Platform.isMacOS)
-                    ? const ['SFPro']
-                    : null,
-                textTheme: const material.TextTheme(
-                  titleLarge: TextStyle(fontWeight: FontWeight.bold),
-                  titleMedium: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                pageTransitionsTheme: const material.PageTransitionsTheme(
-                  builders: {
-                    material.TargetPlatform.android:
-                        SmoothSlideTransitionsBuilder(),
-                    material.TargetPlatform.iOS:
-                        SmoothSlideTransitionsBuilder(),
-                    material.TargetPlatform.windows:
-                        SmoothSlideTransitionsBuilder(),
-                  },
-                ),
-              ),
-              // [v2.4.9] Windows 平滑滚动 — BouncingScrollPhysics + 鼠标拖拽
-              scrollBehavior: Platform.isWindows
-                  ? _SmoothWindowsScrollBehavior()
-                  : null,
-              builder: (context, child) {
+                  theme: CupertinoThemeData(
+                    brightness: isDarkMode ? Brightness.dark : Brightness.light,
+                    primaryColor: themeService.primaryColor,
+                    scaffoldBackgroundColor: Colors.transparent,
+                    barBackgroundColor: Colors.transparent,
+                  ),
+                  localizationsDelegates: const [
+                    material.DefaultMaterialLocalizations.delegate,
+                    DefaultCupertinoLocalizations.delegate,
+                    DefaultWidgetsLocalizations.delegate,
+                  ],
+                  scrollBehavior: Platform.isWindows
+                      ? _SmoothWindowsScrollBehavior()
+                      : null,
+                  builder: (context, child) {
                 // [v2.9.0] 智能视口物理分辨率自适应：根据屏幕尺寸与 devicePixelRatio 动态按需解码，杜绝无意义显存浪费
                 ImageProvider resolveAdaptiveImage(ImageProvider rawProvider) {
                   final mq = MediaQuery.maybeOf(context);
@@ -523,13 +552,20 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                   );
                 }
 
-                // 【核心修复】如果是桌面端（Windows/macOS），强制裁切背景为超椭圆
+                // [v2.4.1/v3.0.0] 桌面端（Windows/macOS）非最大化状态下优雅裁切背景与窗口内容为超椭圆
                 if (Platform.isWindows || Platform.isMacOS) {
-                  backgroundWidget = ClipSmoothRect(
-                    radius: SmoothBorderRadius(
-                      cornerRadius: 16,
-                      cornerSmoothing: 1.0,
-                    ),
+                  backgroundWidget = ValueListenableBuilder<bool>(
+                    valueListenable: windowsGlobalIsMaximized,
+                    builder: (context, isMaximized, child) {
+                      if (isMaximized) return child!;
+                      return ClipSmoothRect(
+                        radius: SmoothBorderRadius(
+                          cornerRadius: 16,
+                          cornerSmoothing: 1.0,
+                        ),
+                        child: child!,
+                      );
+                    },
                     child: backgroundWidget,
                   );
                 }
@@ -537,79 +573,37 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 // [v2.4.1] 隔离背景层，防止二级页面切换时引发玻璃滤镜的重绘掉帧
                 backgroundWidget = RepaintBoundary(child: backgroundWidget);
 
-                // 如果是桌面端，仅对内容层（而非背景）进行缩放和渐隐
-                final Widget innerContent = material.Material(
-                  type: material.MaterialType.transparency,
-                  child: child ?? const SizedBox(),
+                // 为 CupertinoApp 下的所有子页面注入配套的 Material Theme 和透明底板
+                final Widget innerContent = material.Theme(
+                  data: isDarkMode ? darkMaterialTheme : lightMaterialTheme,
+                  child: material.Material(
+                    type: material.MaterialType.transparency,
+                    child: child ?? const SizedBox(),
+                  ),
                 );
 
                 Widget contentWidget = innerContent;
-
-                if (Platform.isWindows || Platform.isMacOS) {
-                  contentWidget = ValueListenableBuilder<double>(
-                    valueListenable: windowsGlobalScale,
-                    builder: (context, scale, _) {
-                      return ValueListenableBuilder<double>(
-                        valueListenable: windowsGlobalOpacity,
-                        builder: (context, opacity, _) {
-                          return Transform.scale(
-                            scale: scale,
-                            child: Opacity(
-                              opacity: opacity,
-                              child: innerContent,
-                            ),
-                          );
-                        },
-                      );
-                    },
-                  );
-                }
 
                 final coreStack = LiquidGlassScope.stack(
                   background: backgroundWidget,
                   content: contentWidget,
                 );
 
+                // [v3.0.0] Windows 与 macOS 桌面窗口超椭圆圆角统一接管
                 if (Platform.isWindows || Platform.isMacOS) {
                   return ValueListenableBuilder<bool>(
                     valueListenable: windowsGlobalIsMaximized,
                     builder: (context, isMaximized, _) {
-                      final shadowPadding = isMaximized ? 0.0 : 12.0;
                       final borderRadius = isMaximized ? 0.0 : 16.0;
                       final smoothing = isMaximized ? 0.0 : 1.0;
 
-                      final windowContent = Padding(
-                        padding: EdgeInsets.all(shadowPadding),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(borderRadius),
-                            boxShadow: isMaximized
-                                ? null
-                                : [
-                                    BoxShadow(
-                                      color: Colors.black.withValues(
-                                        alpha: 0.25,
-                                      ),
-                                      blurRadius: 20,
-                                      spreadRadius: 2,
-                                    ),
-                                  ],
-                          ),
-                          child: ClipSmoothRect(
-                            radius: SmoothBorderRadius(
-                              cornerRadius: borderRadius,
-                              cornerSmoothing: smoothing,
-                            ),
-                            child: coreStack,
-                          ),
+                      return ClipSmoothRect(
+                        radius: SmoothBorderRadius(
+                          cornerRadius: borderRadius,
+                          cornerSmoothing: smoothing,
                         ),
+                        child: coreStack,
                       );
-
-                      // [v2.7.1] 注入自定义边缘以接管无边框化后的窗口缩放
-                      if (Platform.isWindows) {
-                        return WindowResizer(child: windowContent);
-                      }
-                      return windowContent;
                     },
                   );
                 }

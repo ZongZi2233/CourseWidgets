@@ -7,6 +7,7 @@ import '../models/course_event.dart';
 import 'html_to_ics_converter.dart';
 import 'storage_service.dart';
 import 'app_logger.dart';
+import 'migration_runner.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
@@ -60,39 +61,9 @@ class DatabaseHelper {
     return _database!;
   }
 
-  /// 确保所有必要的表都存在
+  /// 确保所有必要的表都存在并执行版本迁移
   Future<void> _ensureTablesExist(Database db) async {
-    // 检查 courses 表是否有 teacher 字段
-    try {
-      final result = await db.rawQuery('PRAGMA table_info(courses)');
-      final hasTeacherField = result.any(
-        (column) => column['name'] == 'teacher',
-      );
-
-      if (!hasTeacherField) {
-        // 添加 teacher 字段
-        await db.execute('ALTER TABLE courses ADD COLUMN teacher TEXT');
-        debugPrint('✅ 已添加 teacher 字段到 courses 表');
-      }
-    } catch (e) {
-      debugPrint('检查 teacher 字段失败: $e');
-    }
-
-    // 检查并创建历史记录表
-    final historyTableExists = await db.rawQuery(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name='schedule_history'",
-    );
-    if (historyTableExists.isEmpty) {
-      await _createScheduleHistoryTable(db);
-    }
-
-    // 检查并创建配置表
-    final configTableExists = await db.rawQuery(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name='schedule_config'",
-    );
-    if (configTableExists.isEmpty) {
-      await _createScheduleConfigTable(db);
-    }
+    await MigrationRunner.runMigrations(db);
   }
 
   Future<Database> _initDB(String filePath) async {
@@ -135,22 +106,7 @@ class DatabaseHelper {
   }
 
   Future _createDB(Database db, int version) async {
-    await db.execute('''
-    CREATE TABLE courses (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      location TEXT,
-      teacher TEXT,
-      startTime INTEGER NOT NULL,
-      endTime INTEGER NOT NULL
-    )
-    ''');
-
-    // 创建历史记录表
-    await _createScheduleHistoryTable(db);
-
-    // 创建配置表
-    await _createScheduleConfigTable(db);
+    await MigrationRunner.runMigrations(db);
   }
 
   /// 批量插入课程
@@ -238,10 +194,10 @@ class DatabaseHelper {
     return result.map((e) => CourseEvent.fromMap(e)).toList();
   }
 
-  /// 获取所有可用周次 (始终从第 1 周开始连续提供，绝不丢失第 1 周)
+  /// 获取所有可用周次 (始终从第 1 周到至少 25 周连续提供，确保全学期均可浏览与选择)
   Future<List<int>> getAvailableWeeks(DateTime startDate) async {
     final courses = await getAllCourses();
-    int maxWeek = 16;
+    int maxWeek = 25;
 
     for (var course in courses) {
       final week = course.getWeekNumber(startDate);
@@ -250,8 +206,8 @@ class DatabaseHelper {
       }
     }
 
-    // 学期周次必须从第 1 周到 maxWeek 连续提供，确保即使第 1 周暂无排课也完全可访问与选择
-    maxWeek = maxWeek.clamp(16, 30);
+    // 学期周次必须从第 1 周到 maxWeek 连续提供，默认至少 25 周，确保全学期自由选择与浏览
+    maxWeek = maxWeek.clamp(25, 35);
     return List.generate(maxWeek, (i) => i + 1);
   }
 
@@ -285,35 +241,7 @@ class DatabaseHelper {
 
   // ==================== 课程表历史记录管理 ====================
 
-  /// 创建课程表历史记录表
-  Future<void> _createScheduleHistoryTable(Database db) async {
-    await db.execute('''
-    CREATE TABLE IF NOT EXISTS schedule_history (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      source_type TEXT NOT NULL, -- 'ics' 或 'html'
-      source_data TEXT, -- 原始数据（ICS内容或HTML JSON）
-      course_data TEXT NOT NULL, -- 课程数据（JSON格式）
-      created_at INTEGER NOT NULL,
-      is_active INTEGER DEFAULT 0,
-      semester TEXT, -- 学期信息
-      config_data TEXT -- 课时配置数据（JSON格式）
-    )
-    ''');
-  }
 
-  /// 创建课时配置表
-  Future<void> _createScheduleConfigTable(Database db) async {
-    await db.execute('''
-    CREATE TABLE IF NOT EXISTS schedule_config (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      config_data TEXT NOT NULL,
-      is_default INTEGER DEFAULT 0,
-      created_at INTEGER NOT NULL
-    )
-    ''');
-  }
 
   /// 保存新的课程表历史记录
   Future<int> saveScheduleHistory({
@@ -457,72 +385,83 @@ class DatabaseHelper {
       );
       final config = ScheduleConfig();
       return IcsGenerator.generate(courses, config);
-    } else if (sourceType == 'webview_json') {
-      // [v2.6.5] WebView JS 提取的课程数据 → 从 CourseEvent timestamps 生成 ICS
-      final courseDataStr = result.first['course_data'] as String;
-      final courseData = jsonDecode(courseDataStr) as List<dynamic>;
-      final events = courseData
-          .cast<Map<String, dynamic>>()
-          .map((e) => CourseEvent.fromMap(e))
-          .toList();
-
-      // 直接从 CourseEvent 时间戳生成 ICS
-      final sb = StringBuffer();
-      String _fmt(DateTime dt) {
-        String td(int n) => n >= 10 ? '$n' : '0$n';
-        return '${dt.year}${td(dt.month)}${td(dt.day)}T${td(dt.hour)}${td(dt.minute)}${td(dt.second)}';
+    } else {
+      // [v3.0.0] 针对 webview_json、json 导入或原生备份，统一从 CourseEvent 导出为标准 RFC 5545 ICS
+      try {
+        final courseDataStr = result.first['course_data'] as String;
+        final courseData = jsonDecode(courseDataStr) as List<dynamic>;
+        final events = courseData
+            .cast<Map<String, dynamic>>()
+            .map((e) => CourseEvent.fromMap(e))
+            .toList();
+        final configDataStr = result.first['config_data'] as String?;
+        return generateIcsFromCourses(events, configDataStr: configDataStr);
+      } catch (e) {
+        debugPrint('从历史记录生成 ICS 异常: $e');
+        return null;
       }
+    }
+  }
 
-      final nowStr = _fmt(DateTime.now());
-
-      sb.write('BEGIN:VCALENDAR\r\n');
-      sb.write('VERSION:2.0\r\n');
-      sb.write('PRODID:-//CourseWidgets//Schedule//CN\r\n');
-      sb.write('BEGIN:VTIMEZONE\r\n');
-      sb.write('TZID:Asia/Shanghai\r\n');
-      sb.write('BEGIN:STANDARD\r\n');
-      sb.write('TZNAME:CST\r\n');
-      sb.write('TZOFFSETFROM:+0800\r\n');
-      sb.write('TZOFFSETTO:+0800\r\n');
-      sb.write('DTSTART:19700101T000000\r\n');
-      sb.write('END:STANDARD\r\n');
-      sb.write('END:VTIMEZONE\r\n');
-
-      final configDataStr = result.first['config_data'] as String?;
-      if (configDataStr != null && configDataStr.isNotEmpty) {
-        sb.write('X-SCHEDULE-CONFIG:$configDataStr\r\n');
-      }
-
-      int uid = 0;
-      for (final evt in events) {
-        final start = DateTime.fromMillisecondsSinceEpoch(evt.startTime);
-        final end = DateTime.fromMillisecondsSinceEpoch(evt.endTime);
-        sb.write('BEGIN:VEVENT\r\n');
-        sb.write('DTSTAMP:${nowStr}Z\r\n');
-        sb.write('UID:CW-${++uid}-$nowStr@coursewidgets\r\n');
-        sb.write('SUMMARY:${evt.name}\r\n');
-        sb.write('DTSTART;TZID=Asia/Shanghai:${_fmt(start)}\r\n');
-        sb.write('DTEND;TZID=Asia/Shanghai:${_fmt(end)}\r\n');
-        if (evt.location.isNotEmpty) {
-          sb.write('LOCATION:${evt.location}\r\n');
-        }
-        String desc = evt.location;
-        if (evt.teacher.isNotEmpty) {
-          desc += '\\n${evt.teacher}';
-        }
-        sb.write('DESCRIPTION:$desc\r\n');
-        sb.write('BEGIN:VALARM\r\n');
-        sb.write('ACTION:DISPLAY\r\n');
-        sb.write('TRIGGER;RELATED=START:-PT20M\r\n');
-        sb.write('DESCRIPTION:${evt.name}\r\n');
-        sb.write('END:VALARM\r\n');
-        sb.write('END:VEVENT\r\n');
-      }
-      sb.write('END:VCALENDAR\r\n');
-      return sb.toString();
+  /// [v3.0.0] 统一将任何 CourseEvent 课程列表导出为携带 X-SCHEDULE-CONFIG 的无损 ICS 字符串
+  String generateIcsFromCourses(List<CourseEvent> events, {String? configDataStr}) {
+    final sb = StringBuffer();
+    String fmt(DateTime dt) {
+      String td(int n) => n >= 10 ? '$n' : '0$n';
+      return '${dt.year}${td(dt.month)}${td(dt.day)}T${td(dt.hour)}${td(dt.minute)}${td(dt.second)}';
     }
 
-    return null;
+    final nowStr = fmt(DateTime.now());
+
+    sb.write('BEGIN:VCALENDAR\r\n');
+    sb.write('VERSION:2.0\r\n');
+    sb.write('PRODID:-//CourseWidgets//Schedule//CN\r\n');
+    sb.write('BEGIN:VTIMEZONE\r\n');
+    sb.write('TZID:Asia/Shanghai\r\n');
+    sb.write('BEGIN:STANDARD\r\n');
+    sb.write('TZNAME:CST\r\n');
+    sb.write('TZOFFSETFROM:+0800\r\n');
+    sb.write('TZOFFSETTO:+0800\r\n');
+    sb.write('DTSTART:19700101T000000\r\n');
+    sb.write('END:STANDARD\r\n');
+    sb.write('END:VTIMEZONE\r\n');
+
+    final effectiveConfig = configDataStr ?? StorageService().getString('schedule_config');
+    if (effectiveConfig != null && effectiveConfig.isNotEmpty) {
+      sb.write('X-SCHEDULE-CONFIG:$effectiveConfig\r\n');
+    }
+
+    int uid = 0;
+    for (final evt in events) {
+      final start = DateTime.fromMillisecondsSinceEpoch(evt.startTime);
+      final end = DateTime.fromMillisecondsSinceEpoch(evt.endTime);
+      sb.write('BEGIN:VEVENT\r\n');
+      sb.write('DTSTAMP:${nowStr}Z\r\n');
+      sb.write('UID:CW-${++uid}-$nowStr@coursewidgets\r\n');
+      sb.write('SUMMARY:${evt.name}\r\n');
+      sb.write('DTSTART;TZID=Asia/Shanghai:${fmt(start)}\r\n');
+      sb.write('DTEND;TZID=Asia/Shanghai:${fmt(end)}\r\n');
+      if (evt.location.isNotEmpty) {
+        sb.write('LOCATION:${evt.location}\r\n');
+      }
+      String desc = evt.location;
+      if (evt.teacher.isNotEmpty) {
+        desc += '\\n${evt.teacher}';
+      }
+      if (evt.startSection != null && evt.endSection != null) {
+        desc += '\\n节次:第${evt.startSection}-${evt.endSection}节';
+        sb.write('X-SECTION:${evt.startSection}-${evt.endSection}\r\n');
+      }
+      sb.write('DESCRIPTION:$desc\r\n');
+      sb.write('BEGIN:VALARM\r\n');
+      sb.write('ACTION:DISPLAY\r\n');
+      sb.write('TRIGGER;RELATED=START:-PT20M\r\n');
+      sb.write('DESCRIPTION:${evt.name}\r\n');
+      sb.write('END:VALARM\r\n');
+      sb.write('END:VEVENT\r\n');
+    }
+    sb.write('END:VCALENDAR\r\n');
+    return sb.toString();
   }
 
   /// 清理旧的历史记录（保留最近50条）

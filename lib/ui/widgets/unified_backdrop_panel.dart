@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'liquid_components.dart';
 
 /// [v2.8.0] 统一混色模糊背板
 /// 替换大面积全屏玻璃组件（如日历容器、课时设置列表），
@@ -34,10 +35,6 @@ class UnifiedBackdropPanel extends StatelessWidget {
         ? Colors.black.withValues(alpha: 0.32)
         : Colors.white.withValues(alpha: 0.65);
 
-    final borderColor = isDark
-        ? Colors.white.withValues(alpha: 0.12)
-        : Colors.black.withValues(alpha: 0.05);
-
     final themedChild = DefaultTextStyle(
       style: TextStyle(
         color: primaryTextColor,
@@ -59,14 +56,7 @@ class UnifiedBackdropPanel extends StatelessWidget {
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: BorderRadius.circular(borderRadius),
-        border: Border.all(color: borderColor, width: 1.0),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.20 : 0.04),
-            blurRadius: 16,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        boxShadow: HyperOSShadows.card(isDark),
       ),
       child: themedChild,
     );

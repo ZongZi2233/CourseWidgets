@@ -289,7 +289,7 @@ class NotificationManager {
     required String title,
     required String body,
   }) async {
-    // [v2.6.0.19] 使用专门应对裸 EXE 的 local_notifier 而非 flutter_local_notifications
+    // [v2.6.0.19/v3.0.0] 使用专门应对裸 EXE 的 local_notifier，由应用快捷方式与 EXE 原生图标自动呈现
     try {
       final cleanTitle = title.replaceAll(RegExp(r'<[^>]*>'), '');
       final cleanBody = body.replaceAll(RegExp(r'<[^>]*>'), '');
@@ -300,7 +300,7 @@ class NotificationManager {
       );
 
       notification.onShow = () {
-        debugPrint('🔔 Windows 通知已展示');
+        debugPrint('🔔 Windows 通知已展示: $title');
       };
 
       await notification.show();

@@ -1,177 +1,59 @@
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
-import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:provider/provider.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import '../../services/windows_tray_service.dart';
 import '../../providers/schedule_provider.dart';
+import '../widgets/macos_traffic_lights.dart';
+import '../animations/app_motion.dart';
+import '../transitions/smooth_slide_transitions.dart';
 import 'windows_schedule_screen.dart';
 import 'settings_main_screen.dart';
 import 'calendar_view_screen.dart';
 
-/// 全局注入，使得背景跟随自定义窗口同步缩放
+/// 全局注入兼容变量，向后兼容调用者
 final ValueNotifier<double> windowsGlobalScale = ValueNotifier(1.0);
 final ValueNotifier<double> windowsGlobalOpacity = ValueNotifier(1.0);
 final ValueNotifier<bool> windowsGlobalIsMaximized = ValueNotifier(false);
 
-/// 用于给由于 setAsFrameless 移除边框的窗体重新加上缩放手柄
+/// [v3.0.0] 占位兼容类：窗口边框拉伸已由 Windows 11 DWM 系统原生接管
 class WindowResizer extends StatelessWidget {
   final Widget child;
   const WindowResizer({super.key, required this.child});
 
-  Widget _buildEdge({
-    double? top,
-    double? bottom,
-    double? left,
-    double? right,
-    double? width,
-    double? height,
-    required MouseCursor cursor,
-    required ResizeEdge edge,
-  }) {
-    return Positioned(
-      top: top,
-      bottom: bottom,
-      left: left,
-      right: right,
-      width: width,
-      height: height,
-      child: MouseRegion(
-        cursor: cursor,
-        child: GestureDetector(
-          behavior: HitTestBehavior.translucent,
-          onPanStart: (_) => windowManager.startResizing(edge),
-          child: Container(color: Colors.transparent),
-        ),
-      ),
-    );
-  }
-
   @override
-  Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        child,
-        _buildEdge(
-          top: 0,
-          left: 8,
-          right: 8,
-          height: 6,
-          cursor: SystemMouseCursors.resizeUpDown,
-          edge: ResizeEdge.top,
-        ),
-        _buildEdge(
-          bottom: 0,
-          left: 8,
-          right: 8,
-          height: 6,
-          cursor: SystemMouseCursors.resizeUpDown,
-          edge: ResizeEdge.bottom,
-        ),
-        _buildEdge(
-          left: 0,
-          top: 8,
-          bottom: 8,
-          width: 6,
-          cursor: SystemMouseCursors.resizeLeftRight,
-          edge: ResizeEdge.left,
-        ),
-        _buildEdge(
-          right: 0,
-          top: 8,
-          bottom: 8,
-          width: 6,
-          cursor: SystemMouseCursors.resizeLeftRight,
-          edge: ResizeEdge.right,
-        ),
-        _buildEdge(
-          top: 0,
-          left: 0,
-          width: 8,
-          height: 8,
-          cursor: SystemMouseCursors.resizeUpLeftDownRight,
-          edge: ResizeEdge.topLeft,
-        ),
-        _buildEdge(
-          top: 0,
-          right: 0,
-          width: 8,
-          height: 8,
-          cursor: SystemMouseCursors.resizeUpRightDownLeft,
-          edge: ResizeEdge.topRight,
-        ),
-        _buildEdge(
-          bottom: 0,
-          left: 0,
-          width: 8,
-          height: 8,
-          cursor: SystemMouseCursors.resizeUpRightDownLeft,
-          edge: ResizeEdge.bottomLeft,
-        ),
-        _buildEdge(
-          bottom: 0,
-          right: 0,
-          width: 8,
-          height: 8,
-          cursor: SystemMouseCursors.resizeUpLeftDownRight,
-          edge: ResizeEdge.bottomRight,
-        ),
-      ],
-    );
-  }
+  Widget build(BuildContext context) => child;
 }
 
-/// [v2.2.0] 完全重构的Windows自定义窗口
-/// 修复：DPI缩放、窗口动画、托盘功能、窗口调整大小
+/// [v3.0.0-alpha25] macOS 27 Golden Gate 风格 Windows 现代桌面窗口
+/// - DWM 原生接管：去除自制透明拖拽碰撞盒与假阴影，原生支持 Windows 11 Snap Layouts 贴靠
+/// - 零掉帧：彻底拔除最小化自制缩放淡出动画，交由系统硬件合成器 0 延迟响应
+/// - 左上角一体化交通灯：纯圆 12pt、间距 8pt、悬停微缩矢量符号淡入 (✕, ─, ＋)
+/// - 导航全面对齐横屏手机：左下角官方 GlassTabBar 双标签 touch bar + 右下角独立圆形液态玻璃设置按钮
+/// - 布局全量迁移：课表、双栏日历、双栏设置全屏展开，四周零挤占，二级页面无缝推入退出
 class WindowsCustomWindow extends StatefulWidget {
   const WindowsCustomWindow({super.key});
+
   @override
   State<WindowsCustomWindow> createState() => _WindowsCustomWindowState();
 }
 
 class _WindowsCustomWindowState extends State<WindowsCustomWindow>
-    with WindowListener, TickerProviderStateMixin {
+    with WindowListener {
   int _selectedIndex = 0;
   bool _isMaximized = false;
-  final GlobalKey<NavigatorState> _localNavigatorKey =
-      GlobalKey<NavigatorState>();
-
-  // [v2.5.1反馈] 恢复真·自定义窗口最大最小化动画
-  late AnimationController _windowAnimController;
-  late Animation<double> _scaleAnim;
-  late Animation<double> _opacityAnim;
 
   @override
   void initState() {
     super.initState();
     windowManager.addListener(this);
-
-    // [v2.8.6] 初始化轻量级窗口最小化动画 (0.96微缩与柔和淡出，160ms极速响应)
-    _windowAnimController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 160),
-    );
-    _scaleAnim = Tween<double>(begin: 1.0, end: 0.96).animate(
-      CurvedAnimation(
-        parent: _windowAnimController,
-        curve: Curves.easeOutCubic,
-      ),
-    );
-    _opacityAnim = Tween<double>(begin: 1.0, end: 0.0).animate(
-      CurvedAnimation(parent: _windowAnimController, curve: Curves.easeInCubic),
-    );
-
-    _windowAnimController.addListener(() {
-      windowsGlobalScale.value = _scaleAnim.value;
-      windowsGlobalOpacity.value = _opacityAnim.value;
-    });
-
     _initWindow();
 
-    // [v2.3.0修复] 初始化托盘服务并启动课程提醒
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
 
-      // [v2.7.0修复] 确保桌面端在启动时强制加载SQLite与配置内容
       try {
         await context.read<ScheduleProvider>().loadSavedData();
       } catch (e) {
@@ -182,13 +64,11 @@ class _WindowsCustomWindowState extends State<WindowsCustomWindow>
         final tray = WindowsTrayService();
         await tray.initialize();
 
-        // 启动课程提醒
         if (mounted) {
           final provider = context.read<ScheduleProvider>();
           tray.startCourseReminder(provider);
         }
 
-        // [v2.5.0] 监听托盘菜单的页面切换事件
         tray.navigationStream.listen((index) {
           if (mounted) {
             setState(() {
@@ -204,101 +84,63 @@ class _WindowsCustomWindowState extends State<WindowsCustomWindow>
     });
   }
 
-  /// [v2.2.0修复1+2] 修复DPI缩放问题 + 启用窗口调整大小
   void _initWindow() async {
-    // 等待窗口完全初始化
     await Future.delayed(const Duration(milliseconds: 150));
 
-    // [修复2] 启用窗口调整大小
     await windowManager.setResizable(true);
-
-    // 设置最小窗口大小
     await windowManager.setMinimumSize(const Size(800, 600));
 
-    // [v2.7.1] 应用户要求，移除 Windows 自带的主题色边框。
-    // 使用 setAsFrameless 可以完全移除系统边框且我们自制的窗体缩放和透明动画依旧可以运作！
-    await windowManager.setAsFrameless();
-    await windowManager.setHasShadow(false); // 关闭系统阴影，我们将使用 Flutter 原生绘制悬浮散发阴影
-
-    // [v2.7.0] 彻底解耦背景层。不强制塞入 Colors.black。
-    // 这可以让 Windows 透出底层实现真彩色透明窗口与自定义壁纸容器交互。
+    // [v3.0.0] 严禁调用 setAsFrameless() 导致丢失系统原生拉伸边框与贴靠布局 (Snap Layouts)
+    await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
+    await windowManager.setHasShadow(true);
     await windowManager.setBackgroundColor(Colors.transparent);
 
-    // 强制设置窗口大小和位置
     await windowManager.setSize(const Size(1024, 768));
     await windowManager.center();
 
-    // 检查最大化状态
     _isMaximized = await windowManager.isMaximized();
     windowsGlobalIsMaximized.value = _isMaximized;
     if (mounted) {
       setState(() {});
     }
 
-    debugPrint('✅ 窗口初始化完成: 1024x768, 可调整大小, 启用动画');
+    debugPrint('✅ Windows DWM 原生窗口初始化完成: 1024x768, 交通灯模式已激活');
   }
 
   @override
   void dispose() {
-    _windowAnimController.dispose();
     windowManager.removeListener(this);
     super.dispose();
   }
 
-  /// [v2.2.0修复3] 窗口最大化
   @override
   void onWindowMaximize() {
     windowsGlobalIsMaximized.value = true;
     setState(() => _isMaximized = true);
-    debugPrint('窗口已最大化');
   }
 
   @override
   void onWindowUnmaximize() {
     windowsGlobalIsMaximized.value = false;
     setState(() => _isMaximized = false);
-    debugPrint('窗口已还原');
   }
 
-  /// [v2.3.0修复] 窗口关闭 - 最小化到托盘而不退出进程
   @override
   Future<void> onWindowClose() async {
-    // 阻止窗口关闭，改为隐藏到托盘
-    // [v2.5.3] 添加恢复窗口时的放大淡入动画，完成自定义最小化/恢复闭环
-    await _windowAnimController.forward();
-    await windowManager.hide();
-
-    // 进入后台模式
-    final tray = WindowsTrayService();
-    // [v2.8.0] 传入课程列表以便发送后台通知
     final provider = Provider.of<ScheduleProvider>(context, listen: false);
-    await tray.enterBackgroundMode(courses: provider.courses);
-
+    final courses = provider.courses;
+    // 隐藏至托盘，不触发自绘多余动画
+    await windowManager.hide();
+    final tray = WindowsTrayService();
+    await tray.enterBackgroundMode(courses: courses);
     debugPrint('🌙 窗口已最小化到托盘，进程继续运行');
   }
 
-  // [v2.8.6] 最小化动画后重置控制器，方便后续恢复
   void _handleMinimize() async {
-    await _windowAnimController.forward();
+    // 由系统 DWM 硬件合成器原生最小化，0 顿挫
     await windowManager.minimize();
-    _windowAnimController.reset();
   }
 
-  // [v2.5.3/v2.8.6] 监听窗口从托盘或任务栏恢复
-  @override
-  void onWindowRestore() async {
-    setState(() {});
-    _windowAnimController.reset();
-    debugPrint('🌟 窗口已恢复(DWM原生重绘)');
-  }
-
-  @override
-  void onWindowFocus() {
-    setState(() {});
-    _windowAnimController.reset();
-  }
-
-  // [v2.8.6] 最大化由 Windows DWM 原生渲染引擎接管，严禁透明度归零，彻底根除瞬间黑屏闪烁
   void _handleMaximize() async {
     if (_isMaximized) {
       await windowManager.unmaximize();
@@ -308,58 +150,63 @@ class _WindowsCustomWindowState extends State<WindowsCustomWindow>
   }
 
   @override
+  void onWindowRestore() {
+    setState(() {});
+  }
+
+  @override
+  void onWindowFocus() {
+    setState(() {});
+  }
+
+  @override
   Widget build(BuildContext context) {
-    // 阴影和圆角现已整体被 main.dart 接管以覆盖壁纸，此处直接返回无背景色 Scaffold 即可
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Column(
         children: [
+          // 顶部：macOS 27 Golden Gate 风格一体化微透标题栏
           _buildTitleBar(),
+
+          // 主体：全屏多页面自适应展示 + 悬浮流体玻璃导航
           Expanded(
-            child: Navigator(
-              key: _localNavigatorKey,
-              initialRoute: '/',
-              onGenerateRoute: (settings) {
-                // [v2.5.9修复] 使用 PageRouteBuilder + opaque:false
-                // MaterialPageRoute 默认包裹一个 MaterialType.canvas (纯白) Material，
-                // 会遮挡透明的 Scaffold 和玻璃背景层，形成 "白色遮罩"。
-                return PageRouteBuilder(
-                  opaque: false,
-                  pageBuilder: (context, animation, secondaryAnimation) {
-                    return Scaffold(
-                      backgroundColor: Colors.transparent,
-                      body: Row(
-                        children: [
-                          // [v2.9.2] 彻底拔除侧边栏的滚动条与滚动能力
-                          // 即使加了 NeverScrollableScrollPhysics，桌面端默认注入的 Scrollbar
-                          // 的滑块依然可能被鼠标强行拖动。使用 ScrollConfiguration 彻底隐藏。
-                          ScrollConfiguration(
-                            behavior: ScrollConfiguration.of(
-                              context,
-                            ).copyWith(scrollbars: false),
-                            child: SingleChildScrollView(
-                              physics: const NeverScrollableScrollPhysics(),
-                              child: ConstrainedBox(
-                                constraints: BoxConstraints(
-                                  minHeight:
-                                      MediaQuery.of(context).size.height - 40,
-                                ),
-                                child: IntrinsicHeight(child: _buildSidebar()),
-                              ),
-                            ),
-                          ),
-                          Expanded(
-                            child: Padding(
-                              padding: const EdgeInsets.all(16.0),
-                              child: _buildContent(),
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                );
-              },
+            child: Stack(
+              children: [
+                // 1. 全出血多页面流畅切换容器（课程、日历、设置）
+                RepaintBoundary(
+                  key: TransparentMaterialPageRoute.contentBoundaryKey,
+                  child: DirectionalMotionBlurSwitcher(
+                    selectedIndex: _selectedIndex,
+                    builder: (context, index) {
+                      if (index == 0) {
+                        return const WindowsScheduleScreen();
+                      } else if (index == 1) {
+                        return const CalendarViewScreen();
+                      } else {
+                        return const SettingsMainScreen();
+                      }
+                    },
+                  ),
+                ),
+
+                // 2. 左下角：官方 GlassTabBar 双标签触控栏（课程、日历）
+                Positioned(
+                  left: 20.0,
+                  bottom: 18.0,
+                  child: RepaintBoundary(
+                    child: _buildLandscapeLeftNav(context),
+                  ),
+                ),
+
+                // 3. 右下角：官方圆形液态玻璃设置按钮（52x52）
+                Positioned(
+                  right: 20.0,
+                  bottom: 18.0,
+                  child: RepaintBoundary(
+                    child: _buildLandscapeSettingsButton(context),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -367,154 +214,226 @@ class _WindowsCustomWindowState extends State<WindowsCustomWindow>
     );
   }
 
-  /// 标题栏
+  /// [v3.0.0] macOS 27 Golden Gate 风格一体化微透标题栏
   Widget _buildTitleBar() {
+    final provider = context.watch<ScheduleProvider>();
+    final currentWeek = provider.currentWeek;
+    final weekText = currentWeek > 0 ? '第 $currentWeek 周' : '';
+
     return DragToMoveArea(
       child: Container(
         height: 40,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.05),
+          color: Colors.white.withValues(alpha: 0.04),
           border: Border(
-            bottom: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+            bottom: BorderSide(
+              color: Colors.white.withValues(alpha: 0.08),
+              width: 0.5,
+            ),
           ),
         ),
         child: Row(
           children: [
-            const SizedBox(width: 16),
-            Icon(Icons.school, color: Theme.of(context).primaryColor, size: 16),
+            // macOS 27 Golden Gate 风格一体化红黄绿交通灯 (内嵌于左上角黄金分割区)
+            MacosTrafficLights(
+              onClose: () => windowManager.close(),
+              onMinimize: _handleMinimize,
+              onMaximize: _handleMaximize,
+            ),
+            const SizedBox(width: 18),
+            Container(
+              width: 1,
+              height: 14,
+              color: Colors.white.withValues(alpha: 0.15),
+            ),
+            const SizedBox(width: 14),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: Image.asset(
+                'assets/icon.png',
+                width: 16,
+                height: 16,
+                filterQuality: FilterQuality.medium,
+              ),
+            ),
             const SizedBox(width: 8),
             const Text(
-              "CourseWidgets",
+              "CourseWidgets Beta",
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
+                letterSpacing: 0.2,
               ),
             ),
+            if (weekText.isNotEmpty) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).primaryColor.withValues(alpha: 0.20),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  weekText,
+                  style: TextStyle(
+                    color: Theme.of(context).primaryColor.withValues(alpha: 0.95),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
             const Spacer(),
-            // 自定义窗口按钮
-            _buildWindowButton(
-              Icons.remove,
-              _handleMinimize,
-            ), // [v2.5.0] 使用原生最小化
-            _buildWindowButton(
-              _isMaximized ? Icons.filter_none : Icons.crop_square,
-              _handleMaximize,
-            ),
-            _buildWindowButton(
-              Icons.close,
-              () => windowManager.close(), // 触发 onWindowClose 隐藏到托盘
-              isClose: true,
-            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildWindowButton(
-    IconData icon,
-    VoidCallback onTap, {
-    bool isClose = false,
-  }) {
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          width: 46,
-          height: 40,
-          color: Colors.transparent, // 可以改为 hover 时有浅色背景
-          child: Icon(
-            icon,
-            size: 16,
-            color: isClose ? Colors.redAccent : Colors.white70,
-          ),
-        ),
-      ),
-    );
-  }
+  /// [v3.0.0-alpha25] Windows 桌面端左下角官方 GlassTabBar 双标签 touch bar（课程、日历）
+  Widget _buildLandscapeLeftNav(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = Theme.of(context).primaryColor;
 
-  /// 侧边栏
-  Widget _buildSidebar() {
-    return Container(
-      width: 80,
-      margin: const EdgeInsets.symmetric(vertical: 16),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          _buildNavItem(0, Icons.grid_view, "课程"),
-          const SizedBox(height: 24),
-          _buildNavItem(1, Icons.calendar_today, "日历"),
-          const Spacer(),
-          _buildNavItem(2, Icons.settings, "设置"),
-          const SizedBox(height: 16),
+    return SizedBox(
+      width: 180.0,
+      height: 52.0,
+      child: GlassTabBar.bottom(
+        selectedIndex: _selectedIndex == 2 ? 0 : _selectedIndex,
+        showIndicator: _selectedIndex != 2,
+        onTabSelected: (index) {
+          HapticFeedback.selectionClick();
+          setState(() => _selectedIndex = index);
+        },
+        quality: GlassQuality.premium,
+        backgroundQuality: GlassQuality.premium,
+        maskingQuality: MaskingQuality.high,
+        barBorderRadius: 999.0,
+        indicatorBorderRadius: 999.0,
+        adaptiveBrightness: false,
+        barHeight: 52.0,
+        horizontalPadding: 0.0,
+        verticalPadding: 0.0,
+        magnification: 1.15,
+        innerBlur: 0.0,
+        interactionBehavior: GlassInteractionBehavior.full,
+        settings: const LiquidGlassSettings(
+          thickness: 24.0,
+          blur: 0.3,
+          chromaticAberration: 0.12,
+          lightIntensity: 0.75,
+          refractiveIndex: 1.48,
+          saturation: 1.15,
+          ambientStrength: 0.35,
+          ambientRim: 0.0,
+          fresnelStrength: 0.0,
+          glassColor: Color(0x10FFFFFF),
+        ),
+        indicatorColor: isDark
+            ? primaryColor.withValues(alpha: 0.24)
+            : primaryColor.withValues(alpha: 0.16),
+        indicatorSettings: LiquidGlassSettings(
+          thickness: 28.0,
+          blur: 0.0,
+          refractiveIndex: 1.50,
+          lightIntensity: 0.70,
+          ambientStrength: 0.25,
+          ambientRim: 0.0,
+          fresnelStrength: 0.0,
+          chromaticAberration: 0.10,
+          edgeAbsorption: 0.0,
+          glassColor: isDark
+              ? primaryColor.withValues(alpha: 0.08)
+              : primaryColor.withValues(alpha: 0.05),
+          shadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.38 : 0.16),
+              blurRadius: 22.0,
+              spreadRadius: -1.0,
+              offset: const Offset(0, 4.0),
+            ),
+          ],
+        ),
+        tabs: const [
+          GlassTab(
+            icon: Icon(CupertinoIcons.square_grid_2x2),
+            activeIcon: Icon(CupertinoIcons.square_grid_2x2_fill),
+            label: '课程',
+          ),
+          GlassTab(
+            icon: Icon(CupertinoIcons.calendar),
+            activeIcon: Icon(CupertinoIcons.calendar_today),
+            label: '日历',
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildNavItem(int index, IconData icon, String tooltip) {
-    final isSelected = _selectedIndex == index;
-    // [v2.5.8 优化] Windows侧边栏：不要底板，只保留按钮，并加上悬浮阴影
-    return Tooltip(
-      message: tooltip,
-      waitDuration: const Duration(milliseconds: 500),
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            if (isSelected)
-              BoxShadow(
-                color: Theme.of(context).primaryColor.withValues(alpha: 0.3),
-                blurRadius: 15,
-                spreadRadius: 2,
-              )
-            else
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.2),
-                blurRadius: 10,
-                spreadRadius: 0,
-                offset: const Offset(0, 4),
-              ),
-          ],
-        ),
-        child: GlassButton.custom(
-          onTap: () => setState(() => _selectedIndex = index),
-          width: 48,
-          height: 48,
-          style: GlassButtonStyle.filled,
-          settings: LiquidGlassSettings(
-            glassColor: isSelected
-                ? Theme.of(context).primaryColor.withValues(alpha: 0.4)
-                : Colors.white.withValues(alpha: 0.05),
-            blur: 15,
-            thickness: 20.0,
+  /// [v3.0.0-alpha25] Windows 桌面端右下角纯透镜液态玻璃设置按钮（52x52圆形），物理弹簧灵动缩放，杜绝任何实色/Material遮罩
+  Widget _buildLandscapeSettingsButton(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = Theme.of(context).primaryColor;
+    final isSelected = _selectedIndex == 2;
+
+    return GlassButton.custom(
+      width: 52.0,
+      height: 52.0,
+      useOwnLayer: true,
+      shape: const LiquidOval(),
+      quality: GlassQuality.premium,
+      stretch: 0.20,
+      interactionScale: 1.12,
+      showOverlayColor: false,
+      ambientBaseLight: 0.0,
+      onTap: () {
+        HapticFeedback.selectionClick();
+        setState(() {
+          if (_selectedIndex == 2) {
+            _selectedIndex = 0;
+          } else {
+            _selectedIndex = 2;
+          }
+        });
+      },
+      settings: LiquidGlassSettings(
+        thickness: 16.0,
+        blur: 0.3,
+        refractiveIndex: 1.44,
+        edgeAbsorption: 0.10,
+        chromaticAberration: 0.12,
+        lightIntensity: 0.75,
+        ambientStrength: 0.35,
+        ambientRim: 0.0,
+        fresnelStrength: 0.0,
+        saturation: 1.15,
+        glassColor: isSelected
+            ? primaryColor.withValues(alpha: isDark ? 0.32 : 0.22)
+            : (isDark ? const Color(0x28101216) : const Color(0x25FFFFFF)),
+        shadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.38 : 0.14),
+            blurRadius: 18.0,
+            spreadRadius: -1.0,
+            offset: const Offset(0, 4.0),
           ),
-          shape: const LiquidRoundedSuperellipse(borderRadius: 16),
-          child: Center(
-            child: Icon(
-              icon,
-              color: isSelected
-                  ? Colors.white
-                  : Colors.white.withValues(alpha: 0.7),
-              size: 24,
-            ),
+        ],
+      ),
+      child: Center(
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 200),
+          child: Icon(
+            isSelected ? CupertinoIcons.gear_alt_fill : CupertinoIcons.gear_alt,
+            key: ValueKey(isSelected),
+            size: 22.0,
+            color: isSelected
+                ? (isDark ? Colors.white : primaryColor)
+                : (isDark ? Colors.white70 : const Color(0xFF4A4E58)),
           ),
         ),
       ),
-    );
-  }
-
-  /// 内容区域
-  Widget _buildContent() {
-    return IndexedStack(
-      index: _selectedIndex,
-      children: const [
-        WindowsScheduleScreen(),
-        CalendarViewScreen(),
-        SettingsMainScreen(),
-      ],
     );
   }
 }

@@ -1,23 +1,30 @@
-﻿#include <flutter/dart_project.h>
+#include <flutter/dart_project.h>
 #include <flutter/flutter_view_controller.h>
 #include <windows.h>
+#include <shobjidl.h>
 
 #include "flutter_window.h"
 #include "utils.h"
+#include "resource.h"
 
 int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
                       _In_ wchar_t *command_line, _In_ int show_command) {
+  // 显式声明全局 AppUserModelID，使 Windows 任务栏与 Action Center 通知精准匹配图标
+  SetCurrentProcessExplicitAppUserModelID(L"CourseWidgets Beta");
+
   // Attach to console when present (e.g., 'flutter run') or create a
   // new console when running with a debugger.
   if (!::AttachConsole(ATTACH_PARENT_PROCESS) && ::IsDebuggerPresent()) {
     CreateAndAttachConsole();
   }
 
-  // [v2.7.0] 确保单实例运行 - 如果已有程序在运行，唤回窗口并退出当前实例
-  HANDLE hMutex = CreateMutex(NULL, TRUE, L"CourseWidgets_SingleInstance_Mutex");
+  // Single instance check for CourseWidgets Beta
+  HANDLE hMutex = CreateMutex(NULL, TRUE, L"CourseWidgetsBeta_SingleInstance_Mutex");
   if (GetLastError() == ERROR_ALREADY_EXISTS) {
-    // 寻找已经存在的窗口并将其置于前台
-    HWND existingHwnd = FindWindow(L"FLUTTER_RUNNER_WIN32_WINDOW", L"课程表");
+    HWND existingHwnd = FindWindow(L"FLUTTER_RUNNER_WIN32_WINDOW", L"CourseWidgets Beta");
+    if (!existingHwnd) {
+      existingHwnd = FindWindow(L"FLUTTER_RUNNER_WIN32_WINDOW", L"CourseWidgets");
+    }
     if (existingHwnd) {
       if (IsIconic(existingHwnd)) {
         ShowWindow(existingHwnd, SW_RESTORE);
@@ -39,35 +46,32 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
 
   project.set_dart_entrypoint_arguments(std::move(command_line_arguments));
 
-  // 启用Impeller渲染引擎（Windows）
-  // Flutter 3.40+ 默认支持Impeller，通过环境变量确保启用
+  // Enable Impeller graphics engine
   _wputenv(L"FLUTTER_ENABLE_IMPELLER=1");
 
   FlutterWindow window(project);
   Win32Window::Point origin(10, 10);
   Win32Window::Size size(1280, 720);
   
-  // 设置窗口标题和图标
-  if (!window.Create(L"课程表", origin, size)) {
+  // Set window title and icon
+  if (!window.Create(L"CourseWidgets Beta", origin, size)) {
     return EXIT_FAILURE;
   }
   
-  // 设置窗口样式 - 隐藏原生标题栏
   HWND hwnd = window.GetHandle();
-  
-  // 获取窗口当前样式
-  LONG_PTR style = GetWindowLongPtr(hwnd, GWL_STYLE);
-  // 移除标题栏和边框
-  style &= ~(WS_CAPTION | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU);
-  SetWindowLongPtr(hwnd, GWL_STYLE, style);
-  
-  // 设置窗口扩展样式 - 透明效果
-  LONG_PTR exStyle = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
-  exStyle |= WS_EX_LAYERED;
-  SetWindowLongPtr(hwnd, GWL_EXSTYLE, exStyle);
-  
-  // 设置窗口透明度（Mica效果需要）
-  SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA);
+  HINSTANCE hInst = GetModuleHandle(nullptr);
+  HICON hIconBig = (HICON)LoadImage(hInst, MAKEINTRESOURCE(IDI_APP_ICON), IMAGE_ICON,
+                                    GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON),
+                                    LR_DEFAULTCOLOR);
+  HICON hIconSmall = (HICON)LoadImage(hInst, MAKEINTRESOURCE(IDI_APP_ICON), IMAGE_ICON,
+                                      GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON),
+                                      LR_DEFAULTCOLOR);
+  if (hIconBig) {
+    SendMessage(hwnd, WM_SETICON, ICON_BIG, (LPARAM)hIconBig);
+  }
+  if (hIconSmall) {
+    SendMessage(hwnd, WM_SETICON, ICON_SMALL, (LPARAM)hIconSmall);
+  }
   
   window.SetQuitOnClose(true);
 
