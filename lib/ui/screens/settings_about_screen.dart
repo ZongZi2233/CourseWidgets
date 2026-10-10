@@ -8,8 +8,10 @@ import 'dart:io';
 import 'dart:convert';
 import '../widgets/liquid_components.dart' as liquid;
 import '../widgets/liquid_toast.dart';
+import '../widgets/immersive_status_bar_backdrop.dart';
 import '../../utils/glass_settings_helper.dart';
 import '../../utils/responsive_utils.dart';
+import 'package:smooth_scroll_multiplatform/smooth_scroll_multiplatform.dart';
 
 /// [修复7] iOS 26 液态玻璃风格关于软件页面
 class SettingsAboutScreen extends StatefulWidget {
@@ -55,46 +57,25 @@ class _SettingsAboutScreenState extends State<SettingsAboutScreen>
     final secondaryTextColor = isDark ? Colors.white70 : const Color(0xFF555B68);
     final tertiaryTextColor = isDark ? Colors.white54 : const Color(0xFF8A909E);
 
+    final topPadding = MediaQuery.paddingOf(context).top + 54;
+
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Stack(
         children: [
-          Column(
-          children: [
-            // Header
-            SafeArea(
-              bottom: false,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 14,
-                ),
-                child: Row(
-                  children: [
-                    if (ResponsiveUtils.isDesktopOrLandscape(context)) const SizedBox(width: 56),
-                    Text(
-                      '关于软件',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: primaryTextColor,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            // Content
-            Expanded(
-              child: FadeTransition(
+          // 1. 全出血自由滑动内容区
+          Positioned.fill(
+            child: DynMouseScroll(
+              durationMS: 250,
+              scrollSpeed: 1.2,
+              builder: (context, controller, physics) => FadeTransition(
                 opacity: _fadeAnimation,
                 child: SlideTransition(
                   position: _slideAnimation,
                   child: ListView(
-                    padding: const EdgeInsets.all(20),
-                    // [v2.6.3] 全平台禁止滚动，自适应布局
-                    physics: const NeverScrollableScrollPhysics(),
+                    controller: controller,
+                    physics: physics,
+                    padding: EdgeInsets.fromLTRB(20, topPadding, 20, 100),
                     children: [
                       liquid.HyperOSCard(
                         padding: const EdgeInsets.all(32),
@@ -210,17 +191,44 @@ class _SettingsAboutScreenState extends State<SettingsAboutScreen>
                       ),
                     ),
 
-                    const SizedBox(
-                      height: 100,
-                    ), // Bottom padding for navigation bar
+                    const SizedBox(height: 100),
                   ],
                 ),
               ),
             ),
           ),
-        ],
-      ),
-          // [v2.9.7] 悬浮右下角返回按钮
+        ),
+
+          // 2. 状态栏微模糊避让 (0..48dp)
+          const ImmersiveStatusBarBackdrop(),
+
+          // 3. 悬浮标题栏
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                child: Row(
+                  children: [
+                    if (ResponsiveUtils.isDesktopOrLandscape(context)) const SizedBox(width: 56),
+                    Text(
+                      '关于软件',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: primaryTextColor,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          // 4. [v2.9.7] 悬浮右下角返回按钮
           const liquid.FloatingLiquidBackButton(),
         ],
       ),

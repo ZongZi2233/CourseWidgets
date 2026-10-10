@@ -107,6 +107,7 @@ class GlassIconButton extends StatelessWidget {
     this.focusNode,
     this.autofocus = false,
     this.semanticLabel,
+    this.pressDarken = false,
   });
 
   // Default icon colors are resolved at build time from CupertinoColors.label
@@ -237,6 +238,9 @@ class GlassIconButton extends StatelessWidget {
   /// Critical for icon buttons which otherwise have no textual content.
   final String? semanticLabel;
 
+  /// Whether the button surface darkens on press instead of brightening.
+  final bool pressDarken;
+
   @override
   Widget build(BuildContext context) {
     final effectiveIconSize = iconSize ?? (size * 0.5);
@@ -276,6 +280,7 @@ class GlassIconButton extends StatelessWidget {
       focusNode: focusNode,
       autofocus: autofocus,
       label: semanticLabel ?? '',
+      pressDarken: pressDarken,
       child: iconWidget,
     );
   }

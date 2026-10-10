@@ -32,12 +32,6 @@ class TabletSideBar extends StatelessWidget {
               ? const Color(0x33101216)
               : const Color(0x44FFFFFF),
           borderRadius: SquircleGeometry.smoothRadius(24),
-          border: Border.all(
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.12)
-                : Colors.white.withValues(alpha: 0.50),
-            width: 0.8,
-          ),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: isDark ? 0.30 : 0.08),
@@ -49,7 +43,7 @@ class TabletSideBar extends StatelessWidget {
         child: ClipRRect(
           borderRadius: SquircleGeometry.smoothRadius(24),
           child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 18.0, sigmaY: 18.0),
+            filter: ImageFilter.blur(sigmaX: 2.0, sigmaY: 2.0),
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 16),
               child: Column(

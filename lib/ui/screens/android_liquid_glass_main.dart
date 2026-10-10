@@ -5,12 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import '../../providers/schedule_provider.dart';
-import '../../constants/version.dart';
 import '../../constants/theme_constants.dart';
 import '../../services/live_notification_service_v2.dart';
-import '../../services/data_import_service.dart';
-import '../../models/course_event.dart';
-import '../../models/schedule_config.dart';
 import '../../utils/responsive_utils.dart';
 import '../../main.dart' hide globalUseDarkMode; // [v2.6.0] 引用全局 routeObserver
 import 'course_edit_screen.dart';
@@ -19,10 +15,11 @@ import 'settings_main_screen.dart';
 import 'android_schedule_config_screen.dart';
 import '../widgets/liquid_components.dart' as liquid;
 import '../transitions/smooth_slide_transitions.dart';
-import '../widgets/glass_context_menu.dart';
 import '../widgets/tablet_sidebar.dart';
 import '../widgets/weekly_schedule_grid.dart';
 import '../widgets/immersive_status_bar_backdrop.dart';
+import '../animations/app_motion.dart';
+import '../../services/theme_service.dart' as theme;
 class AndroidLiquidGlassMain extends StatefulWidget {
   const AndroidLiquidGlassMain({super.key});
   @override
@@ -32,21 +29,12 @@ class AndroidLiquidGlassMain extends StatefulWidget {
 class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
     with RouteAware {
   int _currentIndex = 0;
-  late final PageController _pageController = PageController();
   bool _isBottomNavVisible = true;
   final ValueNotifier<bool> _isBackgroundFrozen = ValueNotifier<bool>(false);
-  final DataImportService _importService = DataImportService();
 
   void _onTabSelected(int index) {
     if (_currentIndex == index) return;
     setState(() => _currentIndex = index);
-    if (_pageController.hasClients) {
-      _pageController.animateToPage(
-        index,
-        duration: const Duration(milliseconds: 320),
-        curve: Curves.easeOutCubic,
-      );
-    }
   }
 
   @override
@@ -131,7 +119,6 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
     routeObserver.unsubscribe(this); // [v2.6.0] 卸载路由监听
     _isBackgroundFrozen.dispose();
     _scheduleProvider?.removeListener(_onScheduleChanged);
-    _pageController.dispose();
     // 停止通知服务
     LiveNotificationServiceV2().dispose();
     super.dispose();
@@ -189,29 +176,15 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
           Expanded(
             child: RepaintBoundary(
               key: TransparentMaterialPageRoute.contentBoundaryKey,
-              child: PageView(
-                controller: _pageController,
-                physics: const NeverScrollableScrollPhysics(),
-                children: [
-                  TickerMode(
-                    enabled: _currentIndex == 0,
-                    child: RepaintBoundary(
-                      child: _buildTabletSchedulePage(),
-                    ),
-                  ),
-                  TickerMode(
-                    enabled: _currentIndex == 1,
-                    child: const RepaintBoundary(
-                      child: CalendarViewScreen(),
-                    ),
-                  ),
-                  TickerMode(
-                    enabled: _currentIndex == 2,
-                    child: const RepaintBoundary(
-                      child: SettingsMainScreen(),
-                    ),
-                  ),
-                ],
+              child: DirectionalMotionBlurSwitcher(
+                selectedIndex: _currentIndex,
+                builder: (context, index) {
+                  return index == 0
+                      ? _buildTabletSchedulePage()
+                      : (index == 1
+                          ? const CalendarViewScreen()
+                          : const SettingsMainScreen());
+                },
               ),
             ),
           ),
@@ -222,6 +195,9 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
 
   /// 手机布局
   Widget _buildPhoneLayout(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isLandscapePhone = ResponsiveUtils.isLandscapePhone(context);
+
     return Scaffold(
       resizeToAvoidBottomInset: false, // [v2.8.6] 软键盘弹出时防止底层背景被压缩或上移漂移
       backgroundColor: Colors.transparent,
@@ -230,214 +206,301 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
         children: [
           RepaintBoundary(
             key: TransparentMaterialPageRoute.contentBoundaryKey,
-            child: PageView(
-              controller: _pageController,
-              physics: const NeverScrollableScrollPhysics(),
-              children: [
-                TickerMode(
-                  enabled: _currentIndex == 0,
-                  child: RepaintBoundary(
-                    child: _buildSchedulePage(),
-                  ),
-                ),
-                TickerMode(
-                  enabled: _currentIndex == 1,
-                  child: const RepaintBoundary(
-                    child: CalendarViewScreen(),
-                  ),
-                ),
-                TickerMode(
-                  enabled: _currentIndex == 2,
-                  child: RepaintBoundary(
-                    child: _buildPageWithHeader(2, const SettingsMainScreen(), '设置'),
-                  ),
-                ),
-              ],
+            child: DirectionalMotionBlurSwitcher(
+              selectedIndex: _currentIndex,
+              builder: (context, index) {
+                if (index == 0) {
+                  return _buildSchedulePage();
+                } else if (index == 1) {
+                  // [v3.0.0-alpha17 彻底消除重叠UI] CalendarViewScreen 自带完整晶透顶栏，直接挂载绝不二次叠加顶栏
+                  return const CalendarViewScreen();
+                } else {
+                  return const SettingsMainScreen();
+                }
+              },
             ),
           ),
-          // [v3.0.0] 物理状态栏 (0..48dp) 顶级沉浸式微模糊避让
-          const ImmersiveStatusBarBackdrop(),
+          // [v3.0.0] 物理状态栏 (0..48dp) 顶级沉浸式微模糊避让 (非横屏时生效)
+          if (!isLandscapePhone) const ImmersiveStatusBarBackdrop(),
+
+          // [v3.0.0-alpha23] 手机横屏模式：左下角官方 GlassTabBar 双标签 touch bar + 右下角圆形官方液态玻璃设置按钮，上下左右零挤占
+          if (isLandscapePhone) ...[
+            // 左下角：官方 GlassTabBar 双按钮玻璃导航栏（课程、日历）
+            Positioned(
+              left: 16 + MediaQuery.of(context).padding.left,
+              bottom: 14 + MediaQuery.of(context).padding.bottom,
+              child: AnimatedSlide(
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeOutCubic,
+                offset: _isBottomNavVisible ? Offset.zero : const Offset(0, 1.4),
+                child: RepaintBoundary(
+                  child: _buildLandscapeLeftNav(context),
+                ),
+              ),
+            ),
+
+            // 右下角：官方圆形液态玻璃设置按钮，高度 52x52，与左下角严格水平对齐
+            Positioned(
+              right: 16 + MediaQuery.of(context).padding.right,
+              bottom: 14 + MediaQuery.of(context).padding.bottom,
+              child: AnimatedSlide(
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeOutCubic,
+                offset: _isBottomNavVisible ? Offset.zero : const Offset(0, 1.4),
+                child: RepaintBoundary(
+                  child: _buildLandscapeSettingsButton(context),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
-      // 官方原生旗舰 GlassTabBar.bottom 专用导航栏
-      bottomNavigationBar: SafeArea(
-        bottom: true,
-        top: false,
-        child: AnimatedSlide(
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOutCubic,
-          offset: _isBottomNavVisible ? Offset.zero : const Offset(0, 1.2),
-          child: RepaintBoundary(
-            child: GlassTabBar.bottom(
-              selectedIndex: _currentIndex,
-              onTabSelected: (index) {
-                HapticFeedback.selectionClick();
-                _onTabSelected(index);
-              },
-              quality: GlassQuality.premium,
-              maskingQuality: MaskingQuality.high,
-              barBorderRadius: 999.0,
-              indicatorBorderRadius: 999.0,
-              adaptiveBrightness: false, // [v2.8.9] 禁用实时纹理反读消除卡顿，保持流畅 120 FPS
-              barHeight: 64.0,
-              horizontalPadding: 16.0,
-              verticalPadding: 8.0,
-              magnification: 1.12,
-              interactionBehavior: GlassInteractionBehavior.full,
-              settings: const LiquidGlassSettings(
-                thickness: 24.0,
-                blur: 1.5,
-                chromaticAberration: 0.15,
-                lightIntensity: 0.70,
-                refractiveIndex: 1.46,
-                saturation: 1.20,
-                ambientStrength: 0.45,
-                ambientRim: 0.0,
-                fresnelStrength: 0.0,
-                glassColor: Color(0x18FFFFFF),
-              ),
-              // [v2.8.4] 遵循官方演示：采用 100% 纯澈透光的物理凸透镜滑块（blur: 0，无任何高斯模糊浑浊感）
-              indicatorSettings: AnimatedGlassIndicator.baseIndicatorSettings,
-              tabs: const [
-                GlassTab(
-                  icon: Icon(CupertinoIcons.square_grid_2x2),
-                  activeIcon: Icon(CupertinoIcons.square_grid_2x2_fill),
-                  label: '课程',
-                ),
-                GlassTab(
-                  icon: Icon(CupertinoIcons.calendar),
-                  activeIcon: Icon(CupertinoIcons.calendar_today),
-                  label: '日历',
-                ),
-                GlassTab(
-                  icon: Icon(CupertinoIcons.gear_alt),
-                  activeIcon: Icon(CupertinoIcons.gear_alt_fill),
-                  label: '设置',
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// 手机端单页面动态渲染，彻底杜绝多页面在 GPU 着色器中叠加
-  Widget _buildCurrentPhonePage() {
-    switch (_currentIndex) {
-      case 0:
-        return _buildSchedulePage();
-      case 1:
-        return const CalendarViewScreen();
-      case 2:
-        return _buildPageWithHeader(2, const SettingsMainScreen(), '设置');
-      default:
-        return _buildSchedulePage();
-    }
-  }
-
-  /// 平板端单页面动态渲染
-  Widget _buildCurrentTabletPage() {
-    switch (_currentIndex) {
-      case 0:
-        return _buildTabletSchedulePage();
-      case 1:
-        return const CalendarViewScreen();
-      case 2:
-        return const SettingsMainScreen();
-      default:
-        return _buildTabletSchedulePage();
-    }
-  }
-
-  /// 平板模式的课程页面（本周网格视图）
-  Widget _buildTabletSchedulePage() {
-    return const SafeArea(
-      child: Padding(
-        padding: EdgeInsets.all(20),
-        child: WeeklyScheduleGrid(),
-      ),
-    );
-  }
-
-  /// 优雅的次级页面顶部包裹栏（日历、设置）
-  Widget _buildPageWithHeader(int index, Widget child, String title) {
-    return Stack(
-      children: [
-        Positioned.fill(
-          child: child,
-        ),
-        Positioned(
-          top: 0,
-          left: 0,
-          right: 0,
-          child: SafeArea(
-            bottom: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-              child: Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.08),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
+      // 竖屏时使用官方原生旗舰 GlassTabBar.bottom；横屏手机使用完全浮动双角布局，彻底释放高度
+      bottomNavigationBar: isLandscapePhone
+          ? null
+          : SafeArea(
+              bottom: true,
+              top: false,
+              child: AnimatedSlide(
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeOutCubic,
+                offset: _isBottomNavVisible ? Offset.zero : const Offset(0, 1.2),
+                child: RepaintBoundary(
+                  child: GlassTabBar.bottom(
+                    selectedIndex: _currentIndex,
+                    onTabSelected: (index) {
+                      HapticFeedback.selectionClick();
+                      _onTabSelected(index);
+                    },
+                    quality: GlassQuality.premium, // [v3.0.0-alpha19] 全时 100% 极客 Premium 材质，杜绝任何运动降级
+                    backgroundQuality: GlassQuality.premium,
+                    maskingQuality: MaskingQuality.high,
+                    barBorderRadius: 999.0,
+                    indicatorBorderRadius: 999.0,
+                    adaptiveBrightness: false, // [v2.8.9] 禁用实时纹理反读消除卡顿，保持流畅 120 FPS
+                    barHeight: 64.0,
+                    horizontalPadding: 16.0,
+                    verticalPadding: 8.0,
+                    magnification: 1.15,
+                    innerBlur: 0.0, // [v3.0.0-alpha19] 绝对消除滑块底衬残留模糊，零 blur 纯净晶体透镜
+                    interactionBehavior: GlassInteractionBehavior.full,
+                    settings: const LiquidGlassSettings(
+                      thickness: 24.0,
+                      blur: 0.3, // [v3.0.0-alpha20] 极低 blur 几乎完全通透，只靠 3D 折射与色散勾勒边缘
+                      chromaticAberration: 0.12,
+                      lightIntensity: 0.75,
+                      refractiveIndex: 1.48,
+                      saturation: 1.15,
+                      ambientStrength: 0.35,
+                      ambientRim: 0.0,
+                      fresnelStrength: 0.0,
+                      glassColor: Color(0x10FFFFFF),
                     ),
-                  ],
-                ),
-                child: GlassContainer(
-                  useOwnLayer: true,
-                  quality: GlassQuality.premium,
-                  shape: const LiquidRoundedSuperellipse(borderRadius: 20),
-                  settings: const LiquidGlassSettings(
-                    glassColor: Color(0x12FFFFFF),
-                    blur: 2.5,
-                    thickness: 20.0,
-                    refractiveIndex: 1.45,
-                    lightIntensity: 0.70,
-                    ambientStrength: 0.45,
-                    ambientRim: 0.0,
-                    fresnelStrength: 0.05,
-                    saturation: 1.20,
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-                    child: Row(
-                      children: [
-                        Text(
-                          title,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.3,
-                          ),
-                        ),
-                        const Spacer(),
-                        liquid.LiquidCard(
-                          borderRadius: 10,
-                          padding: 5,
-                          styleType: liquid.LiquidStyleType.micro,
-                          quality: GlassQuality.standard,
-                          child: Text(
-                            'v$appVersion',
-                            style: const TextStyle(
-                              color: Colors.white70,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
+                    // [v3.0.0-alpha21] 静态（未触发）呈现实体主题色柔和指示胶囊，按下瞬间平滑激活 3D 凸透镜大范围折射
+                    indicatorColor: isDark
+                        ? Theme.of(context).primaryColor.withValues(alpha: 0.24)
+                        : Theme.of(context).primaryColor.withValues(alpha: 0.16),
+                    indicatorSettings: LiquidGlassSettings(
+                      thickness: 28.0,
+                      blur: 0.0, // [v3.0.0-alpha19] 滑块绝对零模糊（0.0 blur）
+                      refractiveIndex: 1.50, // 真实光学玻璃高折射率
+                      lightIntensity: 0.70,
+                      ambientStrength: 0.25,
+                      ambientRim: 0.0, // 消除人造白边描边
+                      fresnelStrength: 0.0, // 消除掠射角人造白边
+                      chromaticAberration: 0.10, // 优雅物理色散勾勒边缘
+                      edgeAbsorption: 0.0,
+                      glassColor: isDark
+                          ? Theme.of(context).primaryColor.withValues(alpha: 0.08)
+                          : Theme.of(context).primaryColor.withValues(alpha: 0.05),
+                      shadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: isDark ? 0.38 : 0.16),
+                          blurRadius: 22.0,
+                          spreadRadius: -1.0,
+                          offset: const Offset(0, 4.0),
                         ),
                       ],
                     ),
+                    tabs: const [
+                      GlassTab(
+                        icon: Icon(CupertinoIcons.square_grid_2x2),
+                        activeIcon: Icon(CupertinoIcons.square_grid_2x2_fill),
+                        label: '课程',
+                      ),
+                      GlassTab(
+                        icon: Icon(CupertinoIcons.calendar),
+                        activeIcon: Icon(CupertinoIcons.calendar_today),
+                        label: '日历',
+                      ),
+                      GlassTab(
+                        icon: Icon(CupertinoIcons.gear_alt),
+                        activeIcon: Icon(CupertinoIcons.gear_alt_fill),
+                        label: '设置',
+                      ),
+                    ],
                   ),
                 ),
               ),
             ),
+    );
+  }
+
+  /// [v3.0.0-alpha23] 横屏手机左下角官方 GlassTabBar 双标签 touch bar（课程、日历）
+  Widget _buildLandscapeLeftNav(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = Theme.of(context).primaryColor;
+
+    return SizedBox(
+      width: 180.0,
+      height: 52.0,
+      child: GlassTabBar.bottom(
+        selectedIndex: _currentIndex == 2 ? 0 : _currentIndex,
+        showIndicator: _currentIndex != 2,
+        onTabSelected: (index) {
+          HapticFeedback.selectionClick();
+          _onTabSelected(index);
+        },
+        quality: GlassQuality.premium,
+        backgroundQuality: GlassQuality.premium,
+        maskingQuality: MaskingQuality.high,
+        barBorderRadius: 999.0,
+        indicatorBorderRadius: 999.0,
+        adaptiveBrightness: false,
+        barHeight: 52.0,
+        horizontalPadding: 0.0,
+        verticalPadding: 0.0,
+        magnification: 1.15,
+        innerBlur: 0.0,
+        interactionBehavior: GlassInteractionBehavior.full,
+        settings: const LiquidGlassSettings(
+          thickness: 24.0,
+          blur: 0.3,
+          chromaticAberration: 0.12,
+          lightIntensity: 0.75,
+          refractiveIndex: 1.48,
+          saturation: 1.15,
+          ambientStrength: 0.35,
+          ambientRim: 0.0,
+          fresnelStrength: 0.0,
+          glassColor: Color(0x10FFFFFF),
+        ),
+        indicatorColor: isDark
+            ? primaryColor.withValues(alpha: 0.24)
+            : primaryColor.withValues(alpha: 0.16),
+        indicatorSettings: LiquidGlassSettings(
+          thickness: 28.0,
+          blur: 0.0,
+          refractiveIndex: 1.50,
+          lightIntensity: 0.70,
+          ambientStrength: 0.25,
+          ambientRim: 0.0,
+          fresnelStrength: 0.0,
+          chromaticAberration: 0.10,
+          edgeAbsorption: 0.0,
+          glassColor: isDark
+              ? primaryColor.withValues(alpha: 0.08)
+              : primaryColor.withValues(alpha: 0.05),
+          shadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.38 : 0.16),
+              blurRadius: 22.0,
+              spreadRadius: -1.0,
+              offset: const Offset(0, 4.0),
+            ),
+          ],
+        ),
+        tabs: const [
+          GlassTab(
+            icon: Icon(CupertinoIcons.square_grid_2x2),
+            activeIcon: Icon(CupertinoIcons.square_grid_2x2_fill),
+            label: '课程',
+          ),
+          GlassTab(
+            icon: Icon(CupertinoIcons.calendar),
+            activeIcon: Icon(CupertinoIcons.calendar_today),
+            label: '日历',
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// [v3.0.0-alpha25] 横屏手机右下角纯透镜液态玻璃设置按钮（52x52圆形），物理弹簧灵动缩放，杜绝任何实色/Material遮罩
+  Widget _buildLandscapeSettingsButton(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = Theme.of(context).primaryColor;
+    final isSelected = _currentIndex == 2;
+
+    return GlassButton.custom(
+      width: 52.0,
+      height: 52.0,
+      useOwnLayer: true,
+      shape: const LiquidOval(),
+      quality: GlassQuality.premium,
+      stretch: 0.20,
+      interactionScale: 1.12,
+      showOverlayColor: false,
+      ambientBaseLight: 0.0,
+      onTap: () {
+        HapticFeedback.selectionClick();
+        if (_currentIndex == 2) {
+          _onTabSelected(0);
+        } else {
+          _onTabSelected(2);
+        }
+      },
+      settings: LiquidGlassSettings(
+        thickness: 16.0,
+        blur: 0.3,
+        refractiveIndex: 1.44,
+        edgeAbsorption: 0.10,
+        chromaticAberration: 0.12,
+        lightIntensity: 0.75,
+        ambientStrength: 0.35,
+        ambientRim: 0.0,
+        fresnelStrength: 0.0,
+        saturation: 1.15,
+        glassColor: isSelected
+            ? primaryColor.withValues(alpha: isDark ? 0.32 : 0.22)
+            : (isDark ? const Color(0x28101216) : const Color(0x25FFFFFF)),
+        shadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.38 : 0.14),
+            blurRadius: 18.0,
+            spreadRadius: -1.0,
+            offset: const Offset(0, 4.0),
+          ),
+        ],
+      ),
+      child: Center(
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 200),
+          child: Icon(
+            isSelected ? CupertinoIcons.gear_alt_fill : CupertinoIcons.gear_alt,
+            key: ValueKey(isSelected),
+            size: 22.0,
+            color: isSelected
+                ? (isDark ? Colors.white : primaryColor)
+                : (isDark ? Colors.white70 : const Color(0xFF4A4E58)),
           ),
         ),
-      ],
+      ),
+    );
+  }
+
+
+  /// 平板模式的课程页面（本周网格视图）
+  Widget _buildTabletSchedulePage() {
+    return Consumer<ScheduleProvider>(
+      builder: (context, provider, _) => const SafeArea(
+        child: Padding(
+          padding: EdgeInsets.all(20),
+          child: WeeklyScheduleGrid(
+            key: ValueKey('weekly_schedule_grid_tablet_main'),
+          ),
+        ),
+      ),
     );
   }
 
@@ -445,75 +508,73 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
   Widget _buildSchedulePage() {
     return Consumer<ScheduleProvider>(
         builder: (context, provider, _) {
-          // [v2.9.7 星期栏抬高接近顶栏] 顶部安全留白调整至 top + 54，布局更紧致
-          final topPadding = MediaQuery.of(context).padding.top + 54;
-          final isDark = Theme.of(context).brightness == Brightness.dark;
+          final isLandscapePhone = ResponsiveUtils.isLandscapePhone(context);
+          // [v3.0.0-alpha23] 横屏模式彻底移除大标题栏，仅保留左上角节次星期交汇处的悬浮日期胶囊，释放全幅垂直空间
+          final topPadding = isLandscapePhone
+              ? (MediaQuery.of(context).padding.top + 6)
+              : (MediaQuery.of(context).padding.top + 54);
 
           return Stack(
             children: [
               // 课程网格本周看板：全屏铺满，上下纵向滚动，平滑穿过顶栏与底栏
               Positioned.fill(
-                child: RepaintBoundary(
-                  child: WeeklyScheduleGrid(
-                    key: const ValueKey('weekly_grid_phone_main'),
-                    showControlBar: false,
-                    isPhone: true,
-                    contentPadding: EdgeInsets.only(
-                      top: topPadding,
-                      bottom: 186, // [v2.9.7] 为进一步抬高的浮动胶囊 Dock 留出安全滚动距离
-                      left: 2,
-                      right: 2,
-                    ),
+                child: WeeklyScheduleGrid(
+                  key: const ValueKey('weekly_schedule_grid_phone_main'),
+                  showControlBar: false,
+                  isPhone: true,
+                  contentPadding: EdgeInsets.only(
+                    top: topPadding,
+                    bottom: isLandscapePhone
+                        ? (MediaQuery.of(context).padding.bottom + 72)
+                        : 186, // [v2.9.7] 为进一步抬高的浮动胶囊 Dock 留出安全滚动距离
+                    left: isLandscapePhone ? (MediaQuery.of(context).padding.left + 4) : 2,
+                    right: isLandscapePhone ? (MediaQuery.of(context).padding.right + 4) : 2,
                   ),
                 ),
               ),
 
-              // [v3.0.0] 顶部状态栏避让已整体移至屏幕物理最顶层 0..48dp (ImmersiveStatusBarBackdrop)，此处不再放置局部生硬截断带
-              Positioned(
-                bottom: 64, // 导航栏上方
-                left: 0,
-                right: 0,
-                height: 56,
-                child: IgnorePointer(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Colors.transparent,
-                          (isDark ? Colors.black.withValues(alpha: 0.28) : Colors.white.withValues(alpha: 0.25)),
-                        ],
+              // 顶部悬浮标题栏：轻量品牌与日期指示（仅竖屏展示，横屏由左上角胶囊承接）
+              if (!isLandscapePhone)
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  child: SafeArea(
+                    bottom: false,
+                    left: true,
+                    right: true,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 6, 16, 4),
+                      child: RepaintBoundary(
+                        child: _buildModernTopBar(provider),
                       ),
                     ),
                   ),
                 ),
-              ),
 
-              // 顶部悬浮标题栏：轻量品牌与日期指示，独立 RepaintBoundary 缓存
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                child: SafeArea(
-                  bottom: false,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 6, 16, 4),
+
+              // 底部悬浮横向胶囊控制 Dock：
+              // 竖屏模式：抬高至 bottom: 120，靠右对齐放置与底栏保持舒适距离
+              // 横屏手机模式：居中对齐在 bottom: 14 + padding.bottom，与左侧导航胶囊及右侧设置按钮在同一水平线上
+              if (isLandscapePhone)
+                Positioned(
+                  bottom: 14 + MediaQuery.of(context).padding.bottom,
+                  left: 0,
+                  right: 0,
+                  child: Center(
                     child: RepaintBoundary(
-                      child: _buildModernTopBar(provider),
+                      child: _buildFloatingBottomActionDock(provider),
                     ),
                   ),
+                )
+              else
+                Positioned(
+                  bottom: 120,
+                  right: 16,
+                  child: RepaintBoundary(
+                    child: _buildFloatingBottomActionDock(provider),
+                  ),
                 ),
-              ),
-
-              // [v2.9.7] 底部悬浮横向胶囊控制 Dock：抬高至 bottom: 120，靠右对齐放置与底栏保持舒适距离
-              Positioned(
-                bottom: 120,
-                right: 16,
-                child: RepaintBoundary(
-                  child: _buildFloatingBottomActionDock(provider),
-                ),
-              ),
             ],
           );
         },
@@ -534,11 +595,11 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
       ),
       child: GlassContainer(
         useOwnLayer: true,
-        quality: GlassQuality.premium,
+        quality: theme.ThemeService().glassQuality,
         shape: const LiquidRoundedSuperellipse(borderRadius: 18),
         settings: LiquidGlassSettings(
           glassColor: isDark ? const Color(0x1812151B) : const Color(0x18FFFFFF),
-          blur: 3.5,
+          blur: 0.5,
           thickness: 18.0,
           refractiveIndex: 1.44,
           lightIntensity: 0.70,
@@ -607,9 +668,11 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
   /// 布局：（（+）（＜）（第 X 周 ▾）（＞）（…））
   Widget _buildFloatingBottomActionDock(ScheduleProvider provider) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final weeks = provider.availableWeeks;
-    final canPrev = weeks.isNotEmpty && provider.currentWeek > weeks.first;
-    final canNext = weeks.isNotEmpty && provider.currentWeek < weeks.last;
+    final weeks = provider.availableWeeks.isNotEmpty
+        ? provider.availableWeeks
+        : List.generate(25, (i) => i + 1);
+    final canPrev = provider.currentWeek > weeks.first;
+    final canNext = provider.currentWeek < weeks.last;
 
     return Container(
       decoration: BoxDecoration(
@@ -618,30 +681,29 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
       ),
       child: GlassContainer(
         useOwnLayer: true,
-        quality: GlassQuality.premium,
+        quality: theme.ThemeService().glassQuality,
         shape: const LiquidRoundedSuperellipse(borderRadius: 26),
         settings: LiquidGlassSettings(
           glassColor: isDark
               ? const Color(0x35101216)
               : const Color(0x30FFFFFF),
-          blur: 5.0,
+          blur: 0.5,
           thickness: 20.0,
-          refractiveIndex: 1.45,
-          lightIntensity: 0.75,
-          ambientStrength: 0.45,
+          refractiveIndex: 1.42,
+          lightIntensity: 0.35,
+          ambientStrength: 0.20,
           ambientRim: 0.0,
           fresnelStrength: 0.0,
-          edgeAbsorption: 0.0,
+          edgeAbsorption: 0.06,
         ),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // 1. (+) 添加课程按钮 (纯净无边框，柔粉弥散阴影)
-              GestureDetector(
+              // 1. (+) 添加课程按钮 (纯净无边框，柔粉弥散阴影，Spring 跟手弹性)
+              SpringTouchFeedback(
                 onTap: () {
-                  HapticFeedback.selectionClick();
                   Navigator.push(
                     context,
                     TransparentMaterialPageRoute(
@@ -649,7 +711,6 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                     ),
                   );
                 },
-                behavior: HitTestBehavior.opaque,
                 child: Container(
                   width: 36,
                   height: 36,
@@ -667,23 +728,28 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
               ),
               const SizedBox(width: 6),
 
-              // 2. (＜) 上一周按钮 (纯净无边框，漫反射微阴影)
-              GestureDetector(
+              // 2. (＜) 上一周按钮 (晶透液态玻璃微透晶体，Spring 跟手弹性)
+              SpringTouchFeedback(
                 onTap: canPrev
                     ? () {
                         HapticFeedback.selectionClick();
                         provider.setCurrentWeek(provider.currentWeek - 1);
                       }
                     : null,
-                behavior: HitTestBehavior.opaque,
                 child: Container(
                   width: 36,
                   height: 36,
                   decoration: BoxDecoration(
                     color: isDark
-                        ? Colors.white.withValues(alpha: canPrev ? 0.10 : 0.04)
-                        : (canPrev ? const Color(0xFFEFF1F5) : const Color(0xFFF7F8FA)),
+                        ? Colors.white.withValues(alpha: canPrev ? 0.12 : 0.04)
+                        : (canPrev ? Colors.white.withValues(alpha: 0.55) : Colors.white.withValues(alpha: 0.22)),
                     borderRadius: BorderRadius.circular(18),
+                    border: Border.all(
+                      color: isDark
+                          ? Colors.white.withValues(alpha: canPrev ? 0.12 : 0.04)
+                          : Colors.white.withValues(alpha: canPrev ? 0.70 : 0.35),
+                      width: 0.8,
+                    ),
                     boxShadow: canPrev ? liquid.HyperOSShadows.pill(isDark) : null,
                   ),
                   child: Icon(
@@ -697,10 +763,9 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
               ),
               const SizedBox(width: 6),
 
-              // 3. (第 X 周 ▾) 核心选择胶囊 (纯净无边框，柔粉漫反射阴影)
-              GestureDetector(
+              // 3. (第 X 周 ▾) 核心选择胶囊 (纯净无边框，柔粉漫反射阴影，Spring 跟手弹性)
+              SpringTouchFeedback(
                 onTap: () => _showWeekPickerSheet(context, provider),
-                behavior: HitTestBehavior.opaque,
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
                   height: 36,
@@ -734,23 +799,28 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
               ),
               const SizedBox(width: 6),
 
-              // 4. (＞) 下一周按钮 (纯净无边框，漫反射微阴影)
-              GestureDetector(
+              // 4. (＞) 下一周按钮 (晶透液态玻璃微透晶体，Spring 跟手弹性)
+              SpringTouchFeedback(
                 onTap: canNext
                     ? () {
                         HapticFeedback.selectionClick();
                         provider.setCurrentWeek(provider.currentWeek + 1);
                       }
                     : null,
-                behavior: HitTestBehavior.opaque,
                 child: Container(
                   width: 36,
                   height: 36,
                   decoration: BoxDecoration(
                     color: isDark
-                        ? Colors.white.withValues(alpha: canNext ? 0.10 : 0.04)
-                        : (canNext ? const Color(0xFFEFF1F5) : const Color(0xFFF7F8FA)),
+                        ? Colors.white.withValues(alpha: canNext ? 0.12 : 0.04)
+                        : (canNext ? Colors.white.withValues(alpha: 0.55) : Colors.white.withValues(alpha: 0.22)),
                     borderRadius: BorderRadius.circular(18),
+                    border: Border.all(
+                      color: isDark
+                          ? Colors.white.withValues(alpha: canNext ? 0.12 : 0.04)
+                          : Colors.white.withValues(alpha: canNext ? 0.70 : 0.35),
+                      width: 0.8,
+                    ),
                     boxShadow: canNext ? liquid.HyperOSShadows.pill(isDark) : null,
                   ),
                   child: Icon(
@@ -768,18 +838,37 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
               GlassMenu(
                 menuWidth: 170,
                 menuBorderRadius: 20,
+                quality: theme.ThemeService().glassQuality,
+                settings: LiquidGlassSettings(
+                  glassColor: isDark
+                      ? const Color(0x35101216)
+                      : const Color(0x30FFFFFF),
+                  blur: 4.0,
+                  thickness: 18.0,
+                  refractiveIndex: 1.35,
+                  lightIntensity: 0.35,
+                  ambientStrength: 0.20,
+                  ambientRim: 0.0,
+                  fresnelStrength: 0.0,
+                  edgeAbsorption: 0.06,
+                ),
                 triggerBuilder: (context, toggleMenu) {
-                  return GestureDetector(
+                  return SpringTouchFeedback(
                     onTap: toggleMenu,
-                    behavior: HitTestBehavior.opaque,
                     child: Container(
                       width: 36,
                       height: 36,
                       decoration: BoxDecoration(
                         color: isDark
-                            ? Colors.white.withValues(alpha: 0.10)
-                            : const Color(0xFFEFF1F5),
+                            ? Colors.white.withValues(alpha: 0.12)
+                            : Colors.white.withValues(alpha: 0.55),
                         borderRadius: BorderRadius.circular(18),
+                        border: Border.all(
+                          color: isDark
+                              ? Colors.white.withValues(alpha: 0.12)
+                              : Colors.white.withValues(alpha: 0.70),
+                          width: 0.8,
+                        ),
                         boxShadow: liquid.HyperOSShadows.pill(isDark),
                       ),
                       child: Icon(
@@ -828,470 +917,11 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
     );
   }
 
-  /// 现代紧凑星期日历选择器（顶部胶囊式）
-  Widget _buildModernDaySelector(ScheduleProvider provider) {
-    final daysCount = provider.currentConfig.showWeekends ? 7 : 5;
-    final weekdayNames = ['一', '二', '三', '四', '五', '六', '日'];
-    final semesterStart = provider.semesterStartDate;
-    final weekOffset = (provider.currentWeek - 1) * 7;
-
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.07),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: GlassContainer(
-        useOwnLayer: true,
-        quality: GlassQuality.premium,
-        shape: const LiquidRoundedSuperellipse(borderRadius: 18),
-        settings: const LiquidGlassSettings(
-          glassColor: Color(0x12FFFFFF),
-          blur: 2.5,
-          thickness: 18.0,
-          refractiveIndex: 1.45,
-          lightIntensity: 0.70,
-          ambientStrength: 0.45,
-          ambientRim: 0.0,
-          fresnelStrength: 0.05,
-          saturation: 1.20,
-        ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: List.generate(daysCount, (index) {
-              final day = index + 1;
-              final isSelected = day == provider.currentDay;
-              final dayDate = semesterStart.add(Duration(days: weekOffset + day - 1));
-              final dateLabel = '${dayDate.month}/${dayDate.day}';
-
-              return Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 2),
-                  child: GestureDetector(
-                    onTap: () {
-                      HapticFeedback.selectionClick();
-                      provider.setCurrentDay(day);
-                    },
-                    behavior: HitTestBehavior.opaque,
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 220),
-                      curve: Curves.easeOutCubic,
-                      padding: const EdgeInsets.symmetric(vertical: 6),
-                      decoration: BoxDecoration(
-                        color: isSelected
-                            ? AppThemeColors.babyPink.withValues(alpha: 0.35)
-                            : Colors.transparent,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: isSelected
-                              ? Colors.white.withValues(alpha: 0.4)
-                              : Colors.transparent,
-                          width: 0.8,
-                        ),
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            weekdayNames[index],
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                              color: isSelected ? Colors.white : Colors.white70,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            dateLabel,
-                            style: TextStyle(
-                              fontSize: 9,
-                              fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                              color: isSelected
-                                  ? Colors.white.withValues(alpha: 0.85)
-                                  : Colors.white38,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            }),
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// [v2.7.6] 安全解析节次文本，兼容 CourseEvent 时间戳与 ScheduleConfigModel
-  String _getCourseSectionText(dynamic course, dynamic config) {
-    try {
-      if (course is CourseEvent) {
-        final startDt = DateTime.fromMillisecondsSinceEpoch(course.startTime);
-        final endDt = DateTime.fromMillisecondsSinceEpoch(course.endTime);
-        final startMinutes = startDt.hour * 60 + startDt.minute;
-        final endMinutes = endDt.hour * 60 + endDt.minute;
-
-        int? startSec;
-        int? endSec;
-
-        if (config is ScheduleConfigModel) {
-          final Map<int, int> startTimes = Map<int, int>.from(config.sectionStartTimes);
-          final Map<int, int> durations = Map<int, int>.from(config.sectionDurations);
-          final int defaultDur = config.defaultDuration;
-
-          for (final entry in startTimes.entries) {
-            if ((entry.value - startMinutes).abs() <= 15) {
-              startSec = entry.key;
-              break;
-            }
-          }
-
-          if (startSec != null) {
-            for (final entry in startTimes.entries) {
-              final dur = durations[entry.key] ?? defaultDur;
-              final secEnd = entry.value + dur;
-              if ((secEnd - endMinutes).abs() <= 15) {
-                endSec = entry.key;
-                break;
-              }
-            }
-            endSec ??= startSec;
-            return startSec == endSec ? '第$startSec节' : '$startSec-$endSec节';
-          }
-        }
-      } else {
-        final dynamic c = course;
-        if (c.startSection != null) {
-          final int start = c.startSection;
-          final int step = (c.step != null && c.step > 0) ? c.step : 1;
-          return '$start-${start + step - 1}节';
-        }
-      }
-    } catch (_) {}
-
-    final timeStr = course.timeStr?.toString() ?? '';
-    final parts = timeStr.split('-');
-    return parts.isNotEmpty ? parts[0].trim() : '课程';
-  }
-
-  /// [v2.8.0] 遵循官方“Glass is a platter, not a wrapper”原则的高性能混色背板课程卡片，消除滚动掉帧并自适应文字对比度
-  Widget _buildModernCourseCard(dynamic course, [dynamic config]) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final primaryTextColor = isDark ? Colors.white : const Color(0xFF1A1A2E);
-    final secondaryTextColor =
-        isDark ? Colors.white70 : const Color(0x991A1A2E);
-
-    final timeStr = course.timeStr?.toString() ?? '';
-    final timeStart = timeStr.contains('-')
-        ? timeStr.split('-')[0].trim()
-        : timeStr;
-    final timeEnd = timeStr.contains('-')
-        ? timeStr.split('-')[1].trim()
-        : '';
-    final sectionText = _getCourseSectionText(course, config);
-
-    return RepaintBoundary(
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: 12),
-        child: liquid.HyperOSCard(
-          cornerRadius: 20,
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-                // 左侧时间胶囊条
-                Container(
-                  width: 58,
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  decoration: BoxDecoration(
-                    color: isDark
-                        ? Colors.white.withValues(alpha: 0.08)
-                        : Colors.white.withValues(alpha: 0.16),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        timeStart,
-                        style: TextStyle(
-                          color: isDark ? Colors.white : const Color(0xFF1A1A2E),
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      if (timeEnd.isNotEmpty) ...[
-                        const SizedBox(height: 1),
-                        Text(
-                          timeEnd,
-                          style: TextStyle(
-                            color: isDark
-                                ? Colors.white.withValues(alpha: 0.8)
-                                : const Color(0x991A1A2E),
-                            fontSize: 10,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 3),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 5,
-                          vertical: 1.5,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? AppThemeColors.babyPink.withValues(alpha: 0.35)
-                              : AppThemeColors.babyPink.withValues(alpha: 0.25),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          sectionText,
-                          style: TextStyle(
-                            color: isDark ? Colors.white : const Color(0xFF1A1A2E),
-                            fontSize: 9,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(width: 14),
-
-                // 中间课程详情
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        course.name,
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 16,
-                          color: primaryTextColor,
-                          letterSpacing: 0.2,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          if (course.location.trim().isNotEmpty && !course.location.contains('未知'))
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 7,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: isDark
-                                    ? Colors.white.withValues(alpha: 0.08)
-                                    : Colors.black.withValues(alpha: 0.05),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    CupertinoIcons.location_solid,
-                                    size: 11,
-                                    color: AppThemeColors.babyPink,
-                                  ),
-                                  const SizedBox(width: 3),
-                                  Text(
-                                    course.location,
-                                    style: TextStyle(
-                                      color: secondaryTextColor,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          if (course.location.trim().isNotEmpty &&
-                              !course.location.contains('未知') &&
-                              course.teacher.isNotEmpty)
-                            const SizedBox(width: 8),
-                          if (course.teacher.isNotEmpty)
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  CupertinoIcons.person_fill,
-                                  size: 11,
-                                  color: isDark
-                                      ? Colors.white54
-                                      : const Color(0x8A1A1A2E),
-                                ),
-                                const SizedBox(width: 3),
-                                Text(
-                                  course.teacher,
-                                  style: TextStyle(
-                                    color: secondaryTextColor,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w400,
-                                  ),
-                                ),
-                              ],
-                            ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-
-                  // 右侧操作菜单
-                  GlassContextMenu(
-                    items: [
-                      GlassContextMenuItem(
-                        title: '编辑课程',
-                        icon: CupertinoIcons.pencil,
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            TransparentMaterialPageRoute(
-                              builder: (_) => CourseEditScreen(course: course),
-                            ),
-                          );
-                        },
-                      ),
-                      GlassContextMenuItem(
-                        title: '删除本节课程',
-                        icon: CupertinoIcons.delete,
-                        isDestructive: true,
-                        onTap: () async {
-                          final provider = Provider.of<ScheduleProvider>(
-                            context,
-                            listen: false,
-                          );
-                          await _importService.deleteCourse(course);
-                          await provider.loadSavedData();
-                          if (mounted) {
-                            liquid.showLiquidToast(context, '已删除本节课程');
-                          }
-                        },
-                      ),
-                      GlassContextMenuItem(
-                        title: '删除所有本课程',
-                        icon: CupertinoIcons.trash,
-                        isDestructive: true,
-                        onTap: () async {
-                          final provider = Provider.of<ScheduleProvider>(
-                            context,
-                            listen: false,
-                          );
-                          await _importService.deleteAllCoursesWithName(course.name);
-                          await provider.loadSavedData();
-                          if (mounted) {
-                            liquid.showLiquidToast(context, '已删除所有${course.name}课程');
-                          }
-                        },
-                      ),
-                    ],
-                    trigger: Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        color: isDark
-                            ? Colors.white.withValues(alpha: 0.12)
-                            : Colors.black.withValues(alpha: 0.05),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: isDark
-                              ? Colors.white.withValues(alpha: 0.16)
-                              : Colors.black.withValues(alpha: 0.08),
-                          width: 0.8,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: isDark ? 0.20 : 0.04),
-                            blurRadius: 6,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: Center(
-                        child: Icon(
-                          CupertinoIcons.ellipsis,
-                          color: isDark ? Colors.white : const Color(0xFF1A1A2E),
-                          size: 16,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      }
-
-  /// 优雅的无课程占位视图
-  Widget _buildEmptyCourseView() {
-    final isDark = Theme.of(context).brightness == Brightness.dark || globalDarkModeNotifier.value;
-    return SizedBox(
-      height: MediaQuery.of(context).size.height * 0.45,
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 64,
-              height: 64,
-              decoration: BoxDecoration(
-                color: isDark ? const Color(0x20000000) : Colors.white.withValues(alpha: 0.06),
-                borderRadius: BorderRadius.circular(22),
-                border: Border.all(
-                  color: isDark ? const Color(0x35000000) : const Color(0x10000000),
-                  width: 0.8,
-                ),
-              ),
-              child: Icon(
-                CupertinoIcons.sparkles,
-                size: 30,
-                color: AppThemeColors.babyPink.withValues(alpha: 0.8),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              '今天没有课',
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.8),
-                fontSize: 17,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              '享受自由时光，好好休息吧~',
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.45),
-                fontSize: 13,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   /// [v2.9.6] 优雅的周次选择浮层（打开瞬间冻结背景控件离屏渲染提升帧率，退出动画完成后平滑解锁）
   Future<void> _showWeekPickerSheet(BuildContext context, ScheduleProvider provider) async {
-    final weeks = provider.availableWeeks;
-    if (weeks.isEmpty) return;
+    final weeks = provider.availableWeeks.isNotEmpty
+        ? provider.availableWeeks
+        : List.generate(25, (i) => i + 1);
 
     _isBackgroundFrozen.value = true;
     try {
@@ -1302,6 +932,10 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
         isScrollControlled: true,
         builder: (ctx) {
           final isDark = Theme.of(ctx).brightness == Brightness.dark;
+          final titleColor = isDark ? Colors.white : const Color(0xFF1E2128);
+          final closeColor = isDark ? Colors.white70 : const Color(0xFF555B68);
+          final closeBg = isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05);
+
           return ClipRRect(
             borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
             child: BackdropFilter(
@@ -1312,116 +946,112 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                       ? const Color(0xB8161922)
                       : Colors.white.withValues(alpha: 0.85),
                   borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-                  border: Border(
-                    top: BorderSide(
-                      color: isDark
-                          ? const Color(0x35000000)
-                          : const Color(0x12000000),
-                      width: 0.8,
-                    ),
-                  ),
                 ),
                 child: SafeArea(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          '选择学期周次',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                          ),
+                        Row(
+                          children: [
+                            Text(
+                              '选择学期周次',
+                              style: TextStyle(
+                                color: titleColor,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const Spacer(),
+                            GestureDetector(
+                              onTap: () => Navigator.pop(ctx),
+                              child: Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: closeBg,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  CupertinoIcons.xmark,
+                                  size: 14,
+                                  color: closeColor,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                        const Spacer(),
-                        GestureDetector(
-                          onTap: () => Navigator.pop(ctx),
-                          child: Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.1),
-                              shape: BoxShape.circle,
+                        const SizedBox(height: 16),
+                        ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxHeight: MediaQuery.of(context).size.height * 0.4,
+                          ),
+                          child: GridView.builder(
+                            shrinkWrap: true,
+                            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 4,
+                              mainAxisSpacing: 10,
+                              crossAxisSpacing: 10,
+                              childAspectRatio: 1.8,
                             ),
-                            child: const Icon(
-                              CupertinoIcons.xmark,
-                              size: 14,
-                              color: Colors.white70,
-                            ),
+                            itemCount: weeks.length,
+                            itemBuilder: (context, idx) {
+                              final week = weeks[idx];
+                              final isCur = week == provider.currentWeek;
+                              final unselectedBg = isDark
+                                  ? Colors.white.withValues(alpha: 0.08)
+                                  : const Color(0xFFF0F2F6);
+                              final unselectedText = isDark
+                                  ? Colors.white70
+                                  : const Color(0xFF555B68);
+
+                              return SpringTouchFeedback(
+                                onTap: () {
+                                  HapticFeedback.selectionClick();
+                                  _isBackgroundFrozen.value = false;
+                                  provider.setCurrentWeek(week);
+                                  Navigator.pop(ctx);
+                                },
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    gradient: isCur
+                                        ? LinearGradient(
+                                            colors: [
+                                              AppThemeColors.babyPink.withValues(alpha: 0.5),
+                                              AppThemeColors.softCoral.withValues(alpha: 0.4),
+                                            ],
+                                          )
+                                        : null,
+                                    color: isCur ? null : unselectedBg,
+                                    borderRadius: BorderRadius.circular(12),
+                                    boxShadow: isCur
+                                        ? liquid.HyperOSShadows.pill(isDark, accentColor: AppThemeColors.babyPink)
+                                        : null,
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: Text(
+                                    '第$week周',
+                                    style: TextStyle(
+                                      color: isCur ? Colors.white : unselectedText,
+                                      fontSize: 13,
+                                      fontWeight: isCur ? FontWeight.w700 : FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 16),
-                    ConstrainedBox(
-                      constraints: BoxConstraints(
-                        maxHeight: MediaQuery.of(context).size.height * 0.4,
-                      ),
-                      child: GridView.builder(
-                        shrinkWrap: true,
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 4,
-                          mainAxisSpacing: 10,
-                          crossAxisSpacing: 10,
-                          childAspectRatio: 1.8,
-                        ),
-                        itemCount: weeks.length,
-                        itemBuilder: (context, idx) {
-                          final week = weeks[idx];
-                          final isCur = week == provider.currentWeek;
-                          return GestureDetector(
-                            onTap: () {
-                              HapticFeedback.selectionClick();
-                              _isBackgroundFrozen.value = false;
-                              provider.setCurrentWeek(week);
-                              Navigator.pop(ctx);
-                            },
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 150),
-                              decoration: BoxDecoration(
-                                gradient: isCur
-                                    ? LinearGradient(
-                                        colors: [
-                                          AppThemeColors.babyPink.withValues(alpha: 0.5),
-                                          AppThemeColors.softCoral.withValues(alpha: 0.4),
-                                        ],
-                                      )
-                                    : null,
-                                color: isCur
-                                    ? null
-                                    : Colors.white.withValues(alpha: 0.08),
-                                borderRadius: BorderRadius.circular(12),
-                                boxShadow: isCur
-                                    ? liquid.HyperOSShadows.pill(isDark, accentColor: AppThemeColors.babyPink)
-                                    : null,
-                              ),
-                              alignment: Alignment.center,
-                              child: Text(
-                                '第$week周',
-                                style: TextStyle(
-                                  color: isCur ? Colors.white : Colors.white70,
-                                  fontSize: 13,
-                                  fontWeight: isCur ? FontWeight.w700 : FontWeight.w500,
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ),
-          ),
-        ),
+          );
+        },
       );
-    },
-  );
     } finally {
       if (mounted) {
         _isBackgroundFrozen.value = false;

@@ -19,7 +19,7 @@ class MigrationStep {
 /// 替代原先分散、不可控的 ALTER TABLE 与手动建表检查，
 /// 严格保证迁移的事务性、顺序性与幂等性。
 class MigrationRunner {
-  static const int kTargetSchemaVersion = 3;
+  static const int kTargetSchemaVersion = 4;
 
   /// 迁移序列
   static final List<MigrationStep> _migrations = [
@@ -35,7 +35,9 @@ class MigrationRunner {
             location TEXT,
             teacher TEXT,
             startTime INTEGER NOT NULL,
-            endTime INTEGER NOT NULL
+            endTime INTEGER NOT NULL,
+            startSection INTEGER,
+            endSection INTEGER
           )
         ''');
       },
@@ -89,6 +91,29 @@ class MigrationRunner {
             created_at INTEGER NOT NULL
           )
         ''');
+      },
+    ),
+
+    // Version 4: courses 增加 startSection 与 endSection 字段，固化课节语义信息杜绝时间移位
+    MigrationStep(
+      version: 4,
+      description: '向 courses 表添加 startSection 与 endSection 字段',
+      migrate: (db) async {
+        try {
+          final columns = await db.rawQuery('PRAGMA table_info(courses)');
+          final hasStartSection = columns.any((c) => c['name'] == 'startSection');
+          if (!hasStartSection) {
+            await db.execute('ALTER TABLE courses ADD COLUMN startSection INTEGER');
+            debugPrint('✅ [MigrationRunner] 已向 courses 表添加 startSection 字段');
+          }
+          final hasEndSection = columns.any((c) => c['name'] == 'endSection');
+          if (!hasEndSection) {
+            await db.execute('ALTER TABLE courses ADD COLUMN endSection INTEGER');
+            debugPrint('✅ [MigrationRunner] 已向 courses 表添加 endSection 字段');
+          }
+        } catch (e) {
+          debugPrint('⚠️ [MigrationRunner] 检查 courses 节次字段跳过: $e');
+        }
       },
     ),
   ];
@@ -145,6 +170,12 @@ class MigrationRunner {
       final columns = await db.rawQuery('PRAGMA table_info(courses)');
       if (!columns.any((c) => c['name'] == 'teacher')) {
         await db.execute('ALTER TABLE courses ADD COLUMN teacher TEXT');
+      }
+      if (!columns.any((c) => c['name'] == 'startSection')) {
+        await db.execute('ALTER TABLE courses ADD COLUMN startSection INTEGER');
+      }
+      if (!columns.any((c) => c['name'] == 'endSection')) {
+        await db.execute('ALTER TABLE courses ADD COLUMN endSection INTEGER');
       }
 
       // 检查 schedule_history

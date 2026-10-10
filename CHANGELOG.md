@@ -2,6 +2,234 @@
 
 本文档记录 CourseWidgets 各版本更新的动态活动演进，重点关注架构改进、渲染优化、故障诊断与教务抓取能力提升。
 
+## [v3.0.0] - 2026-10-10 (Build 3000 正式版)
+
+### 1. WebView 教务会话与凭据持久化 (Persistent WebView Cookies & Credentials)
+- **Windows (WebView2) 独立环境落盘**：显式调用 `WebviewController.initializeEnvironment(userDataPath: webviewDataDir.path)`，将用户数据统一绑定至 `%APPDATA%/.../webview2_profile` 专用目录，实现 Session Cookie、LocalStorage 与 Chromium 密码管理器物理持久化；
+- **Android 第三方 Cookie 穿透**：开启 `cookieManager.setAcceptThirdPartyCookies(true)`，彻底打通高校教务跨子域 CAS / IAM 单点登录鉴权链路；
+- **跨平台表单凭据自动保存与回填**：注入教务登录态监听脚本，基于 MMKV 安全加密存储账号密码，实现高校教务系统“记住密码”与二次打开一键自动填充。
+
+### 2. 课时设置界面中性玻璃美学统一 (Pure Translucent Schedule Config)
+- **拔除突兀亮蓝底色**：彻底移除“对齐课表”与“智慧推算”按钮的亮蓝色渐变（`0xFF00C9FF`、`0xFF4FACFE`），全量统一为沉稳克制的微透中性液态玻璃风格（浅色 6% 微透、深色 12% 晶透白），与界面其他操作按钮及全局 HyperOS / iOS 26 质感完全融为一体。
+
+### 3. 课程详情弹窗磨砂液态玻璃质感恢复 (Frosted Liquid Glass Detail Actions)
+- **磨砂透光质感重构**：底部“编辑课程”与“关闭”按钮告别生硬纯实色，重构为微透磨砂玻璃晶体（`ClipRRect` + `BackdropFilter` 16 sigma），边缘辅以细晶微高光与 `SpringTouchFeedback` 物理跟手微缩放动效，兼顾文字极高对比度与背景透光质感。
+
+### 4. 全域 LiquidGlassDialog 物理弹簧进场动效与全屏模糊 (SpringBounce Dialog Engine)
+- **彻底消除直接闪现与跳闪**：移除内外部嵌套动画冲突，拔除内层重复缩放，消灭“下半部跳闪”与“直接闪现”底层缺陷；
+- **全屏动态模糊 + 高张力物理弹簧**：统一升级为 `AppCurves.springBounce` 曲线（360ms）驱动，初速度饱满且具备自然微过冲；全屏背景搭载动态增长至 18 sigma 的 `BackdropFilter`；
+- **超椭圆液态玻璃卡片**：对话框本体采用 28dp 超椭圆曲率、双层物理阴影、24 sigma 磨砂玻璃与高光边缘，质感纯净通透。
+
+### 5. 多格式课表导入导出无损闭环与零破坏迁移 (Import/Export Loop & SQLite Schema v4)
+- **核心课程语义节次固化 (Schema v4)**：数据库 `courses` 表持久化 `startSection`（起始节次）与 `endSection`（结束节次），`MigrationRunner` 平滑推进至 Schema Version 4，从根本上解决修改课时作息导致“早八课被吃掉、第二节大课前移”的移位问题；
+- **ICS 日历双向无损流通**：遵循 RFC 5545 标准，导出时自动内嵌 `X-SCHEDULE-CONFIG` 与 `X-SECTION` 自定义标签，支持将当前活动课表一键导出为 `.ics` 日历文件，实现跨设备、跨应用（系统日历、ClassIsland 等）无损双向导入与回环；
+- **第三方 HTML 与 JSON 备份全链路兼容**：支持导入醒目课表 (WakeUp)、小爱课表及各类高校网页 HTML 导出文件；支持全量课表与作息配置 JSON 备份与一键无损还原；
+- **严密测试保障**：新增 `test/import_export_v4_test.dart` 自动化测试，覆盖 Schema 迁移、ICS 节次回环、HTML 位串解析及 JSON 备份全链路，测试 100% 绿灯通过。
+
+### 6. 开源协议升级与主线合并 (AGPL-3.0 License & Main Line Convergence)
+- **开源许可证升级**：全面升级为 GNU Affero General Public License v3.0 (AGPL-3.0)；
+- **版本正式定名**：应用版本正式发布为 **`v3.0.0` (Build `3000`)**；
+- **主线全量合并**：完成由 `v3beta` 分支向 `main` 主线的合并迁移，后续迭代直接在 `main` 主线开展。
+
+## [v3.0.0-alpha27] - 2026-10-10
+
+### 1. 核心课程语义节次持久化与移位吃课 Bug 根治 (Course Semantic Section Persistence & Zero Time Drift)
+- **底层架构深度重构**：`CourseEvent` 数据模型与 SQLite `courses` 表全面新增持久化 `startSection`（起始节次）与 `endSection`（结束节次）字段；
+- **数据库 Schema 迁移升级 (Version 4)**：`MigrationRunner` 严格推进至 Schema Version 4，通过 `ALTER TABLE courses ADD COLUMN startSection INTEGER;` 及 `endSection` 保证存量与新数据库结构无缝演进；
+- **教务抓取固化节次**：WebView 教务抓取解析导入时，直接将已解析出的语义节次写入 `CourseEvent` 固化落盘；
+- **彻底根治吃课与移位**：重构 `ScheduleProvider._recalculateAllTimestamps` 与 `WeeklyScheduleGrid` 排版布局，优先依据课程固有的 `startSection`/`endSection` 直接对齐新作息，严禁使用基于时间差最小值的模糊猜测吸附算法，彻底杜绝修改第一节课作息（如 8:00->8:30）后第二大节被误吸附至第二节并覆盖吃掉第一节课的问题；
+- **课时设置输入优化**：去除输入框击键即触发静默推算的逻辑，仅在确认保存或失焦时生效，防止残缺字符破坏作息时间。
+
+### 2. 课时配置界面 Emoji 彻底清除 (Schedule Config Pure Typography)
+- **纯净专业排版**：全面拔除课时设置界面中“对齐课表”、“智慧推算”等按钮与提示消息上的 Emoji（如 🔄, ✨），恢复纯粹克制的现代排版风格。
+
+### 3. 课表切周按钮互斥保护与悬浮 Dock 晶透玻璃升级 (Weekly Navigation Mutex & Translucent Crystal Dock)
+- **切周互斥令牌保护**：在 `WeeklyScheduleGrid` 中引入 `_programmaticScrollToken` 单调序列号机制，点击“上一周”/“下一周”时程序性滚动锁定，`onPageChanged` 在动画期间严禁反向回写或打断 Provider 状态，彻底根治点击切周按钮无法切周或画面回弹问题；
+- **悬浮 Dock 按钮告别死白**：将底部悬浮胶囊中的 `<`、`>`、`...` 按钮由原先死白实色 `0xFFEFF1F5` 全面重构为微透液态玻璃晶体（浅色模式 55% 晶透白 + 70% 边缘高光，深色模式 12% 晶透白），与柔粉主题色胶囊完美交融。
+
+### 4. 课程详情模态弹窗视口自适应与操作按钮高保真呈现 (Course Detail Viewport & High-Contrast Buttons)
+- **视口截断问题根治**：在 `WeeklyScheduleGrid._showCourseDetail` 中为 `showModalBottomSheet` 开启 `isScrollControlled: true`，并包裹在 `SingleChildScrollView` 与弹性视口中，彻底打破 Flutter 原生模态底板默认 50% 屏幕高度截断上限；
+- **按钮渲染高保真**：“编辑课程”按钮升级为高饱和柔粉胶囊 + 纯白文字，“关闭”按钮升级为微透晶体容器 + 深色文字，配合 `SpringTouchFeedback` 物理跟手反馈，深浅色模式下均 100% 完整可见且字迹清晰。
+
+### 5. 全域 LiquidGlassDialog 物理弹簧进场动效统一 (Universal Spring Dialog Transition)
+- **自包含 320ms Spring 进场动画**：将 `LiquidGlassDialog` 升级为具备独立 `AnimationController` 的组件，无论业务层通过 `LiquidGlassDialog.show` 还是原生 `showDialog` 调用，均自动呈现 0.88x->1.0x 缩放 + 淡入的物理弹簧进场曲线；
+- **深浅色主题自适应**：底板玻璃与文字颜色根据当前主题明暗动态自适应，彻底消除浅色模式下弹窗背景过暗或与内容冲突问题。
+
+## [v3.0.0-alpha26] - 2026-10-10
+
+### 1. 构建号严格锁定与升级 (Build VersionCode Alignment)
+- **版本号升级至 v3.0.0-alpha26 (Build 2326)**：在 `android/app/build.gradle.kts` 中通过 `(output as? ApkVariantOutput)?.versionCodeOverride = targetVersionCode` 强制覆写 Flutter Gradle split-per-abi 默认叠加的 +2000 offset，AAPT 输出校验 versionCode 精准对齐 2326。
+
+### 2. 左右切页光栅缓存冻结与动态质量降级 (Transition Glass Black-Borders Elimination)
+- **解耦平移动画与着色器 FBO 采样**：在 `DirectionalMotionBlurSwitcher` 平移动画运行期间，为进退场页面注入 `GlassTheme(data: GlassThemeVariant.minimal)`，瞬间切入无着色器开销的微透磨砂回退路径并冻结光栅缓存；动画结束且动态模糊解除时无缝恢复原生 `premium` 着色器树，彻底消灭切页瞬间玻璃组件变黑与黑边拉扯。
+
+### 3. 课表底部明暗分界线彻底消除 (Schedule Bottom Boundary Clean)
+- **拔除残存底栏阴影条**：彻底移除 `android_liquid_glass_main.dart` 中原本覆盖在课表底部的 `Positioned(bottom: 64, height: 56)` 渐变色块，课表网格上下贯通全屏，杜绝切页时页面突兀变亮或变暗。
+
+### 4. 正弦钟形双曲透镜边缘折射重构 (Smooth Sine-Bell Refraction Shader)
+- **消除边缘错位断崖与文字扭曲**：重构 `interactive_indicator.frag` 片段着色器折射方程，引入正弦钟形曲线 `pow(sin(bevelT * pi), 1.4)`，确保外轮廓边缘与中心平整区域位移精确平滑归零，仅在倒角弧面产生 3..7px 的光学物理偏折，文字与图标不再产生断裂感。
+
+### 5. 周次选择与课程详情弹出菜单玻璃化升级 (Glass Popups & High-Contrast Controls)
+- **周次选择弹窗微透化**：移除死白实色卡片，改用 `ClipRRect` + `BackdropFilter` 微透磨砂液态玻璃弹窗，适配深浅色模式高对比度周次按钮；
+- **课程详情弹窗高对比度重构**：采用微透磨砂底板，“编辑课程”按钮采用高饱和主题底色 + 纯白粗体字，“关闭”按钮采用微透底板 + 深色文字，浅色模式下字迹边界清晰可辨。
+
+### 6. 液态玻璃 Dialog 弹簧进场与圆角统一 (Spring Dialog Transition & Unified Corner Radius)
+- **320ms 弹簧进场动效**：改用 `showGeneralDialog` 驱动，弹窗自带缩放淡入物理弹簧曲线；
+- **视觉规格统一**：统一弹窗卡片圆角为 24dp、内部操作按钮为 14dp；剔除双重嵌套图层合成消灭闪烁。
+
+### 7. 课程时间编辑框与选择器视觉调优 (Inputs & Pickers Visual Refinement)
+- **明确边界 LiquidInput**：课表编辑界面时间输入框采用具备底板边界的 `LiquidInput`；超长文本通过 `FittedBox(fit: BoxFit.scaleDown)` + `maxLines: 1` 自动等比缩放字号，杜绝折行变形；
+- **通透日期选择器**：三大模态选择器浅色底板不透明度调降至 38% 微透磨砂玻璃（`0x62FFFFFF`），增加通透晶体边框与柔和投影。
+
+### 8. 返回按钮与横屏/Windows 设置按钮果冻拉伸回弹恢复 (Fluid Jelly Stretch & Zero Material Overlay)
+- **消除纯色遮罩**：在 `GlassButton` 中新增 `showOverlayColor: false`，彻底消除按压时的黑白遮罩；
+- **恢复物理形变**：在 `FloatingLiquidBackButton` 与横屏/Windows 设置按钮中恢复 `GlassButton.custom`（`stretch: 0.20~0.25`, `interactionScale: 1.12`），手指按压与拖拽时呈现灵动果冻拉伸与物理弹簧回弹。
+
+## [v3.0.0-alpha25] - 2026-10-10
+
+### 1. 横屏与 Windows 设置按钮彻底去纯色遮罩，打造灵动物理透镜玻璃球 (Pure Lens Settings Button & Spring Feedback)
+- **彻底去除 Material 纯色遮罩与暗化层**：排查发现 `GlassButton` 内置的 `pressDarken: true` 会在手指按下瞬间叠加一层 `ColoredBox` 纯黑/纯白遮罩（并伴随拖拽主题色蒙层），完全遮蔽了底层玻璃光影。全面重构为 `SpringTouchFeedback` + `GlassContainer(shape: LiquidOval(), useOwnLayer: true)` 纯凸透镜折射管线；
+- **纯物理弹簧触控**：按下产生自然的 0.90x 弹性收缩与 `AppCurves.springBounce` 灵动物理回弹，杜绝任何实色/Material 涂层，呈现纯净透明晶体物理质感。
+
+### 2. 返回按钮纯透镜液态玻璃化升级 (Pure Liquid Glass Floating Back Button)
+- **恢复通透高光与真实折射**：二级页面右下角 `FloatingLiquidBackButton` 同步全面升级为 `SpringTouchFeedback` + `GlassContainer` 纯透镜折射；
+- **杜绝任何按压变暗遮罩**：彻底消灭按下时覆盖在玻璃上的实色遮罩，无论手指处于静止、轻压还是滑动状态，底层 3D 折射与边缘微色散始终 100% 清晰通透，配合物理回弹如水滴般灵动。
+
+### 3. Windows 桌面端导航栏与布局全量迁移 (Desktop Unified Dual-Corner Navigation & Responsive Layout)
+- **彻底告别老旧侧边栏**：移除 Windows 端原本 76px 宽的旧式 `_buildSidebar()`，窗口内容区全出血展开；
+- **全量同步 Android 横屏双角悬浮导航**：
+  - 左下角：官方原生 `GlassTabBar.bottom` Touch Bar（课程、日历双标签，52dp 高度，带 3D 凸透镜折射与高光胶囊）；
+  - 右下角：独立圆形纯透镜液态玻璃设置按钮（52x52dp，水平基准对齐，点击在课程与设置间丝滑切换）；
+- **彻底根治 Windows 二级页面无法打开的问题**：
+  - 移除此前在 `WindowsCustomWindow` 内部多余嵌套的 `Navigator(key: _localNavigatorKey)`，消除路由与高度限制；
+  - 修复 `NewSettingsScreen` 中 Stack 子组件裸放导致的无界高度隐患，增加 `Positioned.fill` 约束；
+  - 统一打通二级页面全局路由跳转，二级页面右下角均挂载纯透镜玻璃返回按钮，一键丝滑 pop；
+- **全屏与双栏自适应对齐**：课表全屏撑满，日历页面自适应 45%:55% 双栏（左侧精简月历看板，右侧全天日程详情），设置中心 50%:50% 核心功能与数据/关于双栏，底部统一预留 76dp 浮动安全避让。
+
+### 4. 课表日期指示器排版微调 (Schedule Grid Date Badge Alignment)
+- **竖屏模式隐藏左上角胶囊**：竖屏模式下左上角星期栏与时间栏交界处采用透明占位（因为顶部已有完整标题栏展示日期周次），消除视觉冗余；
+- **横屏模式加长悬浮玻璃胶囊**：横屏模式下宽度调整为 56~60dp，精美排版“X月X日 周X”，字体与比例更加协调舒展。
+
+### 5. 浅色模式主界面切页帧率与动画曲线优化 (Light Mode Frame Rate & Curves Tuning)
+- **解耦全屏壁纸高斯卷积**：`DirectionalMotionBlurSwitcher` 切页容器内将全屏壁纸移出 `ImageFiltered`，避免切页时每帧对静态超清壁纸重复进行昂贵的双线性高斯卷积，并为进退场页面挂载 `RepaintBoundary` 光栅缓存；
+- **动效曲线全面升级**：升级 `AppCurves`，启动更迅速、减速更深厚、停靠回弹更富有弹性；
+- **静态分析与测试**：`flutter analyze lib/` 0 错误 0 警告；29/29 自动化测试用例 100% 通过。
+
+### 6. 项目文件整理与发布归档 (Workspace Cleanup & Release Archive)
+- **根目录文件归类整理**：将根目录下散落的 Markdown 调优文档移入 `docs/` 目录；
+- **依赖与配置规范**：确认 `.gitignore` 准确排除所有构建临时文件夹与产物；
+- **全平台构建归档**：
+  - Android Release APK (ARM64): 59.05 MB (`f44c51edbcc2e761e239777c81de19cf88982a9760b702dd98e5129aa7d26281`)
+  - Windows Release ZIP (x64): 55.04 MB (`fd528868ee9cc4b901aa3369183e2751834bc5d1d0ae281f1db253d8dbd370d3`)
+  - 清单文件 `release/RELEASE_MANIFEST.json` 同步更新完毕。
+
+## [v3.0.0-alpha23] - 2026-10-10
+
+### 1. 悬浮返回按钮官方真 3D 液态玻璃重构 (Official 3D Liquid Glass Back Button)
+- **恢复官方原生 3D 液态玻璃管线**：彻底推翻 2D 扁平截图伪玻璃，接入 `liquid_glass_widgets` 官方核心 `GlassButton(useOwnLayer: true)` 凸透镜折射管线（`n=1.50`, `thickness: 24`, `chromaticAberration: 0.12`）；
+- **0ms 跟手触控反馈与深浅色模式自适应**：支持 0ms 触控弹性膨胀 (`1.08x`) 与表面暗化物理下沉 (`pressDarken: true`)，移除主题色杂光污染；返回箭头在浅色与深色模式下自适应对比度颜色（深色模式纯白、浅色模式深色），消除不可见问题。
+
+### 2. Windows 桌面端二级设置页面打不开根治 (Fix Windows Secondary Page Assertion Crash)
+- **消灭 Flutter 断言崩溃**：定位此前 `TransparentMaterialPageRoute` 继承自 `MaterialPageRoute` 并在构造时覆写 `opaque = false` 引发 Flutter 原生 `assert(opaque)` 崩溃（导致 Windows 端点击任何二级页面均直接阻断路由跳转）；
+- **重构为标准 PageRoute<T>**：重构继承自 `PageRoute<T>` 并正确实现 `buildPage` 和 `buildTransitions`，通过全量单元与集成导航测试（100% Passed），彻底打通 Windows 与桌面端所有二级页面的跳转与返回。
+
+### 3. 横屏模式导航栏与独立设置悬浮按钮重构 (Landscape Dual-Corner Floating Navigation)
+- **左下角官方 GlassTabBar Touch Bar**：手机横屏模式下左下角采用官方原生 `GlassTabBar.bottom`（课程、日历双标签，52dp 高度，999 圆角），保留放大镜物理滑块与流体指示器；
+- **右下角独立圆形 GlassButton 设置按钮**：右下角采用官方圆形 52x52 纯净液态玻璃按钮，与左下角导航栏在水平基准线上严格对齐（`bottom: 14 + padding.bottom`），支持点击进入设置与高亮状态同步，上下左右零挤占。
+
+### 4. 横屏与 Windows 桌面端 UI 限界深度重构（全新双栏美学） (Landscape & Desktop Dual-Column Aesthetics)
+- **主课表界面**：横屏模式彻底移除大顶部标题栏，将“X月X日 周X”精简嵌入左上角节次时间列与星期行交叉的空白区域，以微型悬浮玻璃胶囊（`_buildCornerDateBadge`）呈现，释放全部垂直空间给课程网格；
+- **日历看板**：横屏自适应左右分栏，左侧 45% 容纳缩减至左侧的完整日历顶栏（月份切换、今天速达、月/周切换）与整月日历网格，右侧 55% 展开选中日期的全天日程与课程详情；
+- **设置中心**：横屏及 Windows 宽屏模式下将原本垂直拉长的单列列表重构为左右对称双栏（左栏：核心功能设置；右栏：数据与关于），并移除外层多余的 `AdaptiveLiquidGlassLayer`，消除双重 FBO 离屏消耗与背景错位；
+- **多端对齐**：Android 横屏的全部布局与交互改进无缝同步至 Windows 桌面端。
+
+### 5. 浅色模式过曝消除与满帧 120 FPS 优化 (Light Mode Frame Rate & Overexposure Fix)
+- **消除浅色模式转场白光过曝**：转场 `AppBackgroundLayer` 显式设为 `tintColor: Colors.transparent`，切页动态模糊最大值调优至 18.0px；
+- **根除浅色模式 GPU 离屏渲染瓶颈**：优化 `adaptive_glass.dart` 避免无谓的 `ClipPath` CPU 计算，移除浅色模式默认注入的 3 次 `saveLayer` SDF 离屏阴影，渲染管线平齐深色模式，满帧 120 FPS 运行。
+
+### 6. 发布归档与版本校验 (Release Archive & SHA-256)
+- **版本正式发布**：版本号升级为 `v3.0.0-alpha23+2323`；
+- **全量自动化测试**：28 项单元测试与集成测试 100% 通过；`flutter analyze` 零错误；
+- **全平台 Release 产物发布**：
+  - Android Release APK (ARM64): 59.05 MB (`07aea21af29daf6d819dd54f5f6e99d823542df3fe0dcc6bfd6ae994349055d7`)
+  - Windows Release ZIP (x64): 55.00 MB (`ad7027ede2e32e9b98d11857719fe18385e28bbc885c28da611d92e37e37436a`)
+
+## [v3.0.0-alpha22] - 2026-10-09
+
+### 1. 导航栏滑块 0ms 触控零延迟响应，彻底根除粘滞感 (Zero Touch Latency & Instant Indicator Trigger)
+- **消除触碰粘滞与延迟出现**：排查发现此前滑块激活由 300ms 物理弹簧缓慢从 0.0 起速驱动透明度，导致手指按下前 100ms 滑块处于半透明微弱状态、产生严重粘滞与延迟感；
+- **首帧 0ms 硬件级光速触发**：重构 `AnimatedGlassIndicator` 与 `tab_bar_bottom_internal.dart`，引入 `isInteracting` 信号。在手指接触屏幕的第一帧（`onPointerDown`）立刻将有效透明度拉满至 1.0，实现 0ms 毫秒级即时触发 3D 凸透镜流体折射；
+- **着陆停靠平滑交接**：仅在手指抬起且滑块完成位移、减速停靠至目标标签末端时，才平滑淡出交接给静止态主题色背景胶囊，兼具极速干脆的触控反馈与极致美学的静默展示。
+
+### 2. 动效曲线与动态模糊升级：400ms 深刻非线性贝塞尔与平滑正弦钟形全周期 (Expressive Bezier & Bell-Curve Motion Blur)
+- **更深刻、明显的非线性贝塞尔曲线**：重构 `AppCurves.pageSlide` 为 `Cubic(0.32, 0.0, 0.12, 1.0)` 与 `pageSlideReverse` 为 `Cubic(0.32, 0.0, 0.15, 1.0)`。前 25% 蓄力加速，中段极速巡航，后 45% 呈现极具张力与高级感的丝滑停靠减速，转场动效更深刻、更富有韵律感；
+- **全周期平滑动态模糊（清晰 -> 模糊 -> 清晰）**：彻底推翻此前模糊在前半段瞬间暴增、中途提前消失的单边缺陷，重构 `MotionBlurTransition` 与 `DirectionalMotionBlurSwitcher` 为对称平滑的正弦非线性钟形包络函数（$\sin(t \cdot \pi)^{1.25}$）。转场启动时肉眼可见地从清晰平滑过渡到最大 26.0px 动态模糊流光，减速停靠时肉眼可见地从模糊温润消散为超清静止画面，由清晰到模糊、模糊到清晰的过渡充分且舒缓；
+- **周次切换双向平滑速度追踪**：`PageControllerMotionBlur` 重构为连续双向速度追踪与 260ms `easeOutCubic` 柔和衰减，彻底杜绝切周动态模糊的生硬闪断或滞后停顿。
+
+### 3. HyperOSCard 共享背景精准对齐与低分辨率静态高斯模糊重构 (Pixel-Perfect Shared Backdrop & Static Mipmap Blur)
+- **Mipmap 一次性离屏高斯模糊重构**：针对低分辨率壁纸 mipmap 未经充分模糊直接展示产生噪点锯齿的问题，将 `StaticBlurredWallpaperService` 烘焙尺寸提升至 540px，并在离屏阶段对其执行彻底的静态一次性高斯大模糊（`sigma: 18.0`），彻底消融低分辨率锯齿，呈现纯正温润的磨砂毛玻璃底板；并在服务初始化时立即并发启动烘焙，保障首帧就绪；
+- **根除卡片与背景 Backdrop 错位及 UI 撕裂**：彻底移除此前对水平坐标进行取模（`% screenSize.width`）与对垂直坐标进行 `clamp(0, height)` 的错误限制（此前导致卡片滑出屏幕顶部或打开弹窗时坐标发生截断撕裂）；改用精准绝对屏幕坐标变换矩阵（`offset - globalOffset`）与全局参考尺寸（`refSize`），确保 `HyperOSCard` 无论在多周滑动、二级页面转场还是模态弹窗打开期间，其背景纹理与底层全屏动态壁纸 100% 像素级对齐，彻底终结 UI 断裂与错位。
+
+### 4. 发布归档与版本校验 (Release Archive & SHA-256)
+- **版本正式发布**：升级至 `v3.0.0-alpha22+322`；
+- **全量自动化测试**：单元测试 27/27 全绿通过；Flutter Analyze 0 致命错误；
+- **全平台 Release 产物构建**：完成 Android ARM64 Release APK (59.05 MB) 与 Windows x64 Release ZIP (55.00 MB) 的构建与归档，更新校验清单。
+
+## [v3.0.0-alpha21] - 2026-10-09
+
+### 1. 底栏滑块静态柔和主题色胶囊与常驻预渲染流体折射 (Quiet Minimal Capsule & Pre-Rendered Fluid Glass Indicator)
+- **静态状态隐去折射白边**：彻底解决底栏滑块在静默未触发时产生大范围突兀凸透镜折射与生硬高光边的问题。滑块在静止未按压时以 Minimal/Standard 模式呈现温润的主题色半透明胶囊指示器，完全无违和感；
+- **着色器管线常驻预热预渲染 (Pre-rendered)**：废除强制 `effectiveFade = 1.0` 的旧逻辑，改用基于物理按压/拖拽 spring 的 `effectiveFade = fade.clamp(0.0, 1.0)` 结合常驻挂载 `Opacity`。底层 GPU 凸透镜折射着色器常驻预热预编译，按下或拖拽瞬间毫秒级平滑淡入展开 3D 凸透镜大范围流体折射，松开后丝滑淡出，全程零冷启动掉帧、稳定锁定 120 FPS；
+- **双层主题色美学染色**：静止状态下以主题色柔和胶囊指示当前位置，激活时透镜以微主题色染色折射背景与外壳，达到极佳的视觉与触控反馈。
+
+### 2. 动效曲线与动态模糊时长延展，非线性贝塞尔平滑衰减 (380ms Bezier Motion Curves & Smooth Blur Decay)
+- **非线性贝塞尔曲线韵律**：将课表左右切周动画与三大主界面切换时长均由原本急促的 280~320ms 延展至标准的 380ms，配合 `AppCurves.pageSlide`（`cubic(0.2, 0.0, 0.0, 1.0)`）与 `Curves.easeOutCubic`，使转场具备充分的启动加速与从容减速停靠韵律，贝塞尔曲线质感拉满；
+- **消除动态模糊突变闪断**：重构 `PageControllerMotionBlur` 模糊衰减引擎，废弃原本粗暴的 60ms 速度归零定时器，重构为独立的 `AnimationController` + 220ms `Curves.easeOutCubic` 柔和非线性衰减。切周停止时模糊如晨雾般自然消散，彻底告别“瞬间最高模糊、停下一瞬间立刻消失”的生硬突变；
+- **页面切换动态模糊尾部平滑淡出**：`DirectionalMotionBlurSwitcher` 在转场后 35% 区间加入 tailFade 优雅减速淡出，转场过程如丝绸般丝滑。
+
+### 3. 返回按钮官方级质感打磨：全透镜大范围折射与按压膨胀下沉 (Official-Grade Liquid Glass Back Button)
+- **真实背景大范围凸透镜折射**：悬浮返回按钮（`FloatingLiquidBackButton`）与顶栏返回按钮（`LiquidBackButton`）的厚度曲率提升至 48.0 / 38.0，折射率设定为物理真实值 `n=1.50`，菲涅尔反射强度 `0.25`，边缘环境光 `0.12`，微量色散 `0.12`。透镜全域呈现真实弯曲折射，底层滑过的课表文字与图形产生极致逼真的放大镜光学变形；
+- **按压膨胀与下沉变暗动效**：
+  - 按压放大动效：交互缩放比重构为 `interactionScale: 1.10`（按压瞬间弹簧膨胀放大 1.10 倍，释放回弹），彻底取代原本缩小的陈旧交互；
+  - 物理下沉变暗：全面支持 `pressDarken: true`，按压时在玻璃表面叠加物理深色下沉遮罩，配合柔和的主题色高光外溢与悬浮漫反射阴影，完美还原官方原生液态玻璃按钮的交互质感。
+
+### 4. 发布归档与版本校验 (Release Archive & SHA-256)
+- **版本正式发布**：升级至 `v3.0.0-alpha21+321`；
+- **编译与自动化测试**：单元测试 27/27 全绿通过；Flutter Analyze 0 致命错误；
+- **全平台 Release 产物构建**：完成 Android ARM64 Release APK (59.05 MB) 与 Windows x64 Release ZIP (55.00 MB) 的构建与归档，更新校验清单。
+
+## [v3.0.0-alpha20] - 2026-10-09
+
+### 1. 官方现场 Backdrop 折射彻底纳入底栏与真实背景 (Official BackdropFilter Layer & Navigation Shell Refraction)
+- **恢复原生现场 BackdropFilterLayer**：彻底清除滑块透镜使用离屏截取静态壁纸作为 `captureImage` 的旁路分支，将 `captureImage` 显式置为 `null`，全面回归官方原生的现场 `BackdropFilterLayer` 渲染架构；
+- **底栏外壳与图标真实纳入折射**：滑块透镜不再只折射底层壁纸，而是将底栏毛玻璃外壳、未选中/选中图标与文字光效、以及动态桌面背景完整纳入折射透镜采样，光学折射、菲涅尔轮廓与微量色散呈现官方原生 Liquid Glass 纯正质感，彻底消除假壁纸折射与突兀硬边。
+
+### 2. 彻底根除滑块掉帧与 GPU 阻塞，恢复满帧 120 FPS (Zero-Frame-Drop & 120 FPS Fluid Motion)
+- **阻断光栅线程每帧 toImageSync 阻塞**：彻底移除 Impeller Premium 模式下在 `GlassEffect` 中被错误激活的 `_ticker`，杜绝每帧在光栅线程执行全屏离屏纹理抓取所引发的 GPU 管道气泡与严重掉帧；
+- **满血流体物理体验**：滑块在 120Hz 旗舰设备上不论是快速拖拽、弹性阻尼还是跨标签平滑动画，全程稳定保持 120 FPS 满帧流体运行，彻底恢复极速响应与零卡顿体验。
+
+### 3. 根除周次切换 UI 刷新冻结，完美保留 1D 水平高斯动态模糊 (Zero Freeze Week Switching & Directional Motion Blur)
+- **解耦 Reparent 与 ImageFiltered 挂载架构**：彻底重构 `PageControllerMotionBlur`，废弃此前在滚动阶段依据速度频繁增删/卸载 `ImageFiltered` 的旧机制；改用持久常驻挂载的 `ImageFiltered(enabled: hasBlur)` 搭配 `ValueNotifier<double>` 与 `ValueListenableBuilder` 监听，保证 `PageView` 及其 `RenderViewport` 在动画全程永不发生 reparent；
+- **保护滚动活动与手势分配链**：确保底层 `ScrollActivity` 与手势触摸 arena 不被任何父级重建打断，彻底消除切换周次后课表画面冻结、必须切出主界面才能强制刷新的严重 Bug；
+- **子树唯一稳定标识**：`WeeklyScheduleGrid` 赋予各周子树显式 `KeyedSubtree(key: ValueKey<int>(week))`，确保视口切换页面时即时准确重组；
+- **灵动贝塞尔 1D 动态模糊**：在完全消除冻结的同时，保留了具有非线性淡入淡出特性的 1D 水平高斯动态模糊（最大 sigma 14.0），兼顾顶级美学动效与工程级稳定性。
+
+### 4. 根除三大主界面切换“变亮再变暗”视觉闪烁 (Eliminated Page Transition Brightness Flash)
+- **清除转场底层背景不一致叠加层**：查明三大主界面切换转场时先变亮后变暗的根本原因在于 `slidingStack` 底层的 `AppBackgroundLayer` 默认附加了 21% 白色叠加层（`0x35FFFFFF`）；
+- **全链路颜色像素级对齐**：在 `DirectionalMotionBlurSwitcher` 的底部背景层显式配置 `tintColor: Colors.transparent`，确保页面滑动转场全程与主界面静止状态下的底层壁纸亮度与色彩 100% 像素级对齐，彻底根除变亮变暗断层。
+
+### 5. 全局玻璃通透化与超微模糊质感升级 (Ultra-Transparent Pure Glass Aesthetic)
+- **大幅调低全局模糊半径**：响应极致通透清澈的视觉诉求，调低所有玻璃组件的模糊半径，使其几乎完全通透透明，主要依靠 3D 棱镜折射（Refraction）、高光边缘与微量色散构建空间层级：
+  - 标准卡片、底栏外壳与侧边栏毛玻璃 blur 由 2.0 降至 0.3；
+  - 按钮与输入框毛玻璃 blur 由 1.0 降至 0.2；
+  - 对话框与周次控制器毛玻璃 blur 降至 0.5；
+  - 静态背景烘焙预模糊 sigma 降至 1.5，深色叠加层由 0x35 降至 0x18；
+- **彻底告别白雾发灰**：玻璃材质通透纯净，如液态水晶般通透清爽。
+
+### 6. 发布归档与版本校验 (Release Archive & SHA-256)
+- **版本正式发布**：升级至 `v3.0.0-alpha20+320`；
+- **编译与自动化测试**：单元测试 12/12 全绿通过；完成 Android ARM64 Release APK (59.05 MB) 与 Windows x64 Release ZIP (55.00 MB) 的构建与发布归档，完整更新 `RELEASE_MANIFEST.json`。
+
 ## [v2.10.0] - 2026-09-15
 
 ### 1. Live Update 状态栏胶囊下课秒级倒计时恢复 (Capsule Chronometer Countdown Restoration)

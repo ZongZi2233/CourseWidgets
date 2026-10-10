@@ -7,6 +7,9 @@ class CourseEvent {
   final int startTime;    // 开始时间戳 (毫秒)
   final int endTime;      // 结束时间戳 (毫秒)
 
+  final int? startSection; // [v3.0.0] 语义起始节次 (1..13)，固化课程节次杜绝时间重算移位
+  final int? endSection;   // [v3.0.0] 语义结束节次 (1..13)
+
   CourseEvent({
     this.id,
     required this.name,
@@ -14,7 +17,31 @@ class CourseEvent {
     required this.teacher,
     required this.startTime,
     required this.endTime,
+    this.startSection,
+    this.endSection,
   });
+
+  CourseEvent copyWith({
+    int? id,
+    String? name,
+    String? location,
+    String? teacher,
+    int? startTime,
+    int? endTime,
+    int? startSection,
+    int? endSection,
+  }) {
+    return CourseEvent(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      location: location ?? this.location,
+      teacher: teacher ?? this.teacher,
+      startTime: startTime ?? this.startTime,
+      endTime: endTime ?? this.endTime,
+      startSection: startSection ?? this.startSection,
+      endSection: endSection ?? this.endSection,
+    );
+  }
 
   // 转为 Map 存入 SQLite
   Map<String, dynamic> toMap() {
@@ -25,6 +52,8 @@ class CourseEvent {
       'teacher': teacher,
       'startTime': startTime,
       'endTime': endTime,
+      'startSection': startSection,
+      'endSection': endSection,
     };
   }
 
@@ -37,6 +66,14 @@ class CourseEvent {
       return 0;
     }
 
+    int? parseSection(dynamic v) {
+      if (v == null) return null;
+      if (v is int) return v;
+      if (v is num) return v.toInt();
+      if (v is String) return int.tryParse(v);
+      return null;
+    }
+
     return CourseEvent(
       id: (map['id'] is num)
           ? (map['id'] as num).toInt()
@@ -46,6 +83,8 @@ class CourseEvent {
       teacher: map['teacher']?.toString() ?? '',
       startTime: parseTime(map['startTime']),
       endTime: parseTime(map['endTime']),
+      startSection: parseSection(map['startSection']),
+      endSection: parseSection(map['endSection']),
     );
   }
 

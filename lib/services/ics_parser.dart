@@ -101,11 +101,32 @@ class IcsParser {
       }
     }
 
+    // 解析节次信息 (X-SECTION 或 DESCRIPTION 中的节次标注)
+    final description = eventData['description']?.toString() ?? '';
+    int? parsedStartSection;
+    int? parsedEndSection;
+
+    final xSection = eventData['x-section']?.toString();
+    if (xSection != null && xSection.isNotEmpty) {
+      final parts = xSection.split('-');
+      parsedStartSection = int.tryParse(parts.first);
+      parsedEndSection = parts.length > 1 ? int.tryParse(parts.last) : parsedStartSection;
+    } else if (description.isNotEmpty) {
+      final sectionMatch = RegExp(r'(?:节次[:：]|第)(\d+)(?:[-~到至](\d+))?节?').firstMatch(description);
+      if (sectionMatch != null) {
+        parsedStartSection = int.tryParse(sectionMatch.group(1) ?? '');
+        final endStr = sectionMatch.group(2);
+        parsedEndSection = endStr != null ? int.tryParse(endStr) : parsedStartSection;
+      }
+    }
+
     // 从描述中提取老师，如果有类似于 "实1301 王梅" 这样的模式
     if (teacher.isEmpty) {
-      final description = eventData['description']?.toString() ?? '';
       if (description.isNotEmpty) {
+        // 先剥离可能存在的节次信息，避免将“节次:第1-2节”误认成教师
         final cleanDesc = description
+            .replaceAll(RegExp(r'节次[:：][^\s\\]*'), '')
+            .replaceAll(RegExp(r'第?\s*\d+(?:[-~到至]\d+)?\s*节'), '')
             .replaceAll(RegExp(r'\\n|\n|\\r|\r'), ' ')
             .replaceAll(RegExp(r'\s+'), ' ')
             .trim();
@@ -186,6 +207,8 @@ class IcsParser {
               teacher: teacher,
               startTime: localStart.millisecondsSinceEpoch,
               endTime: localEnd.millisecondsSinceEpoch,
+              startSection: parsedStartSection,
+              endSection: parsedEndSection,
             ),
           );
         }
@@ -199,6 +222,8 @@ class IcsParser {
             teacher: teacher,
             startTime: startUtc.toLocal().millisecondsSinceEpoch,
             endTime: endUtc.toLocal().millisecondsSinceEpoch,
+            startSection: parsedStartSection,
+            endSection: parsedEndSection,
           ),
         );
       }
@@ -211,6 +236,8 @@ class IcsParser {
           teacher: teacher,
           startTime: startUtc.toLocal().millisecondsSinceEpoch,
           endTime: endUtc.toLocal().millisecondsSinceEpoch,
+          startSection: parsedStartSection,
+          endSection: parsedEndSection,
         ),
       );
     }

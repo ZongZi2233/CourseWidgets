@@ -1,6 +1,5 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import '../../providers/schedule_provider.dart';
@@ -28,7 +27,8 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
       backgroundColor: Colors.transparent,
       body: Stack(
         children: [
-          AdaptiveLiquidGlassLayer(
+          Positioned.fill(
+            child: AdaptiveLiquidGlassLayer(
             quality: ThemeService().glassQuality,
             settings: const LiquidGlassSettings(
               blur: 3.0,
@@ -123,19 +123,20 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
                           onTap: _pickSemesterStartDate,
                         ),
                       ]);
-                    },
-                  ),
-                ],
+                      },
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
       const liquid.FloatingLiquidBackButton(),
     ],
   ),
 );
-  }
+}
 
   Widget _buildSectionTitle(String title) {
     return Padding(

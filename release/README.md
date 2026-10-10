@@ -1,18 +1,18 @@
-# CourseWidgets v3.0.0-alpha12 (Build 312) Release 产物发布归档
+# CourseWidgets v3.0.0-alpha27 (Build 2327) Release 产物发布归档
 
-> **生成时间**: 2026-10-08 23:24:24  
-> **版本号**: `3.0.0-alpha12` (`312`)  
+> **生成时间**: 2026-10-10 18:05:31  
+> **版本号**: `3.0.0-alpha27` (`2327`)  
 
 ## 产物下载与校验列表
 
 | 平台 | 文件名 | 体积 | SHA256 校验和 |
 | :--- | :--- | :--- | :--- |
-| Android | `CourseWidgets-v3.0.0-alpha12-android-arm64-v8a.apk` | 59.05 MB | `1aaf5f5af6a4b6b4...2d70f643` |
-| Windows | `CourseWidgets-v3.0.0-alpha12-windows-x64.zip` | 54.98 MB | `32c25469d6a377ed...4f842304` |
+| Android | `CourseWidgets-v3.0.0-alpha27-android-arm64-v8a.apk` | 59.05 MB | `a048327b826efca6...626b5436` |
+| Windows | `CourseWidgets-v3.0.0-alpha27-windows-x64.zip` | 55.04 MB | `bdac103bc97964cc...2b4a14cd` |
 
 ## 完整校验和 (SHA-256)
 
 ```text
-1aaf5f5af6a4b6b44e2a229fbb561c028bbe6f942768bbc4ee1e06da2d70f643  CourseWidgets-v3.0.0-alpha12-android-arm64-v8a.apk
-32c25469d6a377ed3c23d61dda5d3863118fb0a01bbe642319ef766a4f842304  CourseWidgets-v3.0.0-alpha12-windows-x64.zip
+a048327b826efca62b9c638ff215e70981ea514f4a7288fcff28d8ad626b5436  CourseWidgets-v3.0.0-alpha27-android-arm64-v8a.apk
+bdac103bc97964cccdf591fadf9b5427d873d9d18aff22fdae4721272b4a14cd  CourseWidgets-v3.0.0-alpha27-windows-x64.zip
 ```

@@ -40,8 +40,14 @@ android {
         
         versionCode = flutterVersionCode.toInt()
         versionName = flutterVersionName
-        
-        // 移除abiFilters，使用splits进行ABI拆分
+    }
+
+    applicationVariants.all {
+        val targetVersionCode = (defaultConfig.versionCode ?: 1)
+        outputs.all {
+            @Suppress("DEPRECATION")
+            (this as? com.android.build.gradle.api.ApkVariantOutput)?.versionCodeOverride = targetVersionCode
+        }
     }
 
     signingConfigs {

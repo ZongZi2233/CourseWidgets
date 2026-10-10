@@ -222,18 +222,22 @@ class GlassThemeHelpers {
   }
 
   /// Returns the lower of [quality] and [ceiling] using the correct ordinal.
-  static GlassQuality _applyCeiling(
+  static GlassQuality applyCeiling(
       GlassQuality quality, GlassQuality ceiling) {
-    return _qualityOrdinal(quality) > _qualityOrdinal(ceiling)
+    return qualityOrdinal(quality) > qualityOrdinal(ceiling)
         ? ceiling
         : quality;
   }
+
+  static GlassQuality _applyCeiling(
+      GlassQuality quality, GlassQuality ceiling) =>
+      applyCeiling(quality, ceiling);
 
   /// Quality ordinal for comparison. Higher = better visual quality.
   ///
   /// **Must NOT use [GlassQuality.index]** — the enum declaration order is
   /// `standard=0, premium=1, minimal=2` which is non-monotonic with quality.
-  static int _qualityOrdinal(GlassQuality q) {
+  static int qualityOrdinal(GlassQuality q) {
     switch (q) {
       case GlassQuality.premium:
         return 2;

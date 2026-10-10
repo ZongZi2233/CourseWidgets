@@ -34,7 +34,7 @@ class GlassEffect extends StatefulWidget {
     this.quality = GlassQuality.standard,
     this.densityFactor = 0.0,
     this.backgroundKey,
-    this.ambientRim = 0.1,
+    this.ambientRim = 0.0,
     this.baseAlphaMultiplier = 0.2,
     this.edgeAlphaMultiplier = 0.4,
     this.rimThickness = 0.5,
@@ -242,29 +242,32 @@ class _GlassEffectState extends State<GlassEffect>
   GlobalKey? get _effectiveKey => widget.backgroundKey ?? _cachedScopeKey;
 
   void _updateTicker() {
-    // Background capture requirements:
-    //  1. Widget is actively interacting (cost only paid during gesture)
-    //  2. A valid capture key is available
-    //  3. blur > 0 — when blur is 0 the component intentionally uses synthetic
-    //     glass (e.g. GlassSwitch thumb). Capturing the background would let the
-    //     green track bleed through as a dark/tinted frosted overlay, which
-    //     contradicts the intended white glass bloom effect.
+    final bool isImpeller = !kIsWeb && GlassEffect._canUseImpeller;
+    // [v3.0.0-alpha20] 官方原生现场 BackdropFilterLayer 通道：
+    // 在 Impeller 引擎与 Premium 材质下，直接透过现场场景图层，将实际底层背景与导航栏本身
+    // （磨砂底板、未选中/选中图标与光效）完整纳入 Backdrop 进行物理 3D 弯曲折射。
+    // 彻底停用 toImageSync() 离屏截图通道与每帧常驻 Ticker，彻底消灭 GPU 管道阻塞与掉帧，
+    // 恢复满帧 120 FPS 顶级丝滑体验。
+    if (isImpeller && widget.quality == GlassQuality.premium) {
+      if (_ticker.isActive) {
+        _ticker.stop();
+        _backgroundImage?.dispose();
+        _backgroundImage = null;
+      }
+      return;
+    }
+
     final bool shouldCapture = widget.interactionIntensity > 0.01 &&
-        _effectiveKey != null &&
-        widget.settings.blur > 0.0;
+        _effectiveKey != null;
     if (shouldCapture) {
       if (!_ticker.isActive) {
         _ticker.start();
-        // debugPrint(
-        //     '[GlassEffect] 📸 Starting capture loop. Intensity: ${widget.interactionIntensity.toStringAsFixed(2)}');
       }
     } else {
       if (_ticker.isActive) {
         _ticker.stop();
         _backgroundImage?.dispose();
         _backgroundImage = null;
-        // debugPrint(
-        //     '[GlassEffect] 📸 Interaction finished, cleared snapshot.');
       }
     }
   }
@@ -508,8 +511,8 @@ class _GlassEffectState extends State<GlassEffect>
         shape: widget.shape,
         settings: widget.settings,
         clipExpansion: widget.clipExpansion,
-        captureImage: _backgroundImage,
-        captureOriginInScreenSpace: _lastCapturePosition ?? Offset.zero,
+        captureImage: null, // [v3.0.0-alpha20] 走原生 BackdropFilterLayer 现场通道，纳入真实背景与导航栏本身，彻底解决掉帧
+        captureOriginInScreenSpace: Offset.zero,
         child: widget.child,
       );
       // coverage:ignore-end

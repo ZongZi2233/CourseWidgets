@@ -150,7 +150,7 @@ class GlassDialog extends StatelessWidget {
           'GlassDialog must have 1-3 actions',
         );
 
-  static const _actionButtonShape = LiquidRoundedSuperellipse(borderRadius: 12);
+  static const _actionButtonShape = LiquidRoundedSuperellipse(borderRadius: 14);
 
   // Cache default colors to avoid allocations
   static const _defaultGlowColor =
@@ -186,7 +186,7 @@ class GlassDialog extends StatelessWidget {
 
   /// Maximum width of the dialog in logical pixels.
   ///
-  /// Defaults to 280 (iOS standard alert width).
+  /// Defaults to 300.
   final double maxWidth;
 
   // ===========================================================================
@@ -221,41 +221,7 @@ class GlassDialog extends StatelessWidget {
   // Static Show Method
   // ===========================================================================
 
-  /// Shows a glass dialog.
-  ///
-  /// Returns a [Future] that resolves to the value (if any) passed to
-  /// [Navigator.pop] when the dialog is dismissed.
-  ///
-  /// Parameters:
-  /// - [context]: Build context for showing the dialog
-  /// - [title]: Title text (optional)
-  /// - [message]: Message text (optional)
-  /// - [content]: Custom content widget (optional)
-  /// - [actions]: Action buttons (required, 1-3 actions)
-  /// - [settings]: Glass effect settings (null uses defaults)
-  /// - [quality]: Rendering quality (defaults to standard)
-  /// - [barrierDismissible]: Whether tapping outside dismisses (default: false)
-  /// - [barrierColor]: Color of the modal barrier (defaults to black54)
-  /// - [maxWidth]: Maximum width of dialog (default: 280)
-  ///
-  /// Example:
-  /// ```dart
-  /// final result = await GlassDialog.show<bool>(
-  ///   context: context,
-  ///   title: 'Confirm',
-  ///   message: 'Are you sure?',
-  ///   actions: [
-  ///     GlassDialogAction(
-  ///       label: 'Cancel',
-  ///       onPressed: () => Navigator.pop(context, false),
-  ///     ),
-  ///     GlassDialogAction(
-  ///       label: 'Confirm',
-  ///       onPressed: () => Navigator.pop(context, true),
-  ///     ),
-  ///   ],
-  /// );
-  /// ```
+  /// Shows a liquid glass dialog with snappy spring entrance animation.
   static Future<T?> show<T>({
     required BuildContext context,
     required List<GlassDialogAction> actions,
@@ -266,12 +232,25 @@ class GlassDialog extends StatelessWidget {
     GlassQuality quality = GlassQuality.standard,
     bool barrierDismissible = false,
     Color? barrierColor,
-    double maxWidth = 280,
+    double maxWidth = 300,
   }) {
-    return showCupertinoDialog<T>(
+    return showGeneralDialog<T>(
       context: context,
       barrierDismissible: barrierDismissible,
-      builder: (context) => GlassDialog(
+      barrierLabel: 'Dismiss',
+      barrierColor: barrierColor ?? CupertinoColors.black.withValues(alpha: 0.35),
+      transitionDuration: const Duration(milliseconds: 320),
+      transitionBuilder: (dialogCtx, anim1, anim2, child) {
+        final curved = const Cubic(0.20, 1.18, 0.38, 1.0).transform(anim1.value);
+        return Transform.scale(
+          scale: 0.88 + 0.12 * curved,
+          child: Opacity(
+            opacity: anim1.value.clamp(0.0, 1.0),
+            child: child,
+          ),
+        );
+      },
+      pageBuilder: (dialogCtx, anim1, anim2) => GlassDialog(
         title: title,
         message: message,
         content: content,
@@ -296,56 +275,53 @@ class GlassDialog extends StatelessWidget {
         constraints: BoxConstraints(maxWidth: maxWidth),
         child: GlassCard(
           useOwnLayer: true,
+          shape: const LiquidRoundedSuperellipse(borderRadius: 24),
           settings: settings,
           quality: effectiveQuality,
-          padding: const EdgeInsets.all(20),
-          child: AdaptiveLiquidGlassLayer(
-            settings: settings ?? const LiquidGlassSettings(),
-            quality: effectiveQuality,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Title
-                if (title != null) ...[
-                  Text(
-                    title!,
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: CupertinoColors.label.resolveFrom(context),
-                    ),
-                    textAlign: TextAlign.center,
+          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Title
+              if (title != null) ...[
+                Text(
+                  title!,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: CupertinoColors.label.resolveFrom(context),
                   ),
-                  const SizedBox(height: 8),
-                ],
-
-                // Message
-                if (message != null) ...[
-                  Text(
-                    message!,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color:
-                          CupertinoColors.secondaryLabel.resolveFrom(context),
-                      height: 1.4,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 8),
-                ],
-
-                // Custom content
-                if (content != null) ...[
-                  content!,
-                  const SizedBox(height: 8),
-                ],
-
-                const SizedBox(height: 12),
-
-                // Actions
-                _buildActions(context),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
               ],
-            ),
+
+              // Message
+              if (message != null) ...[
+                Text(
+                  message!,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color:
+                        CupertinoColors.secondaryLabel.resolveFrom(context),
+                    height: 1.4,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+              ],
+
+              // Custom content
+              if (content != null) ...[
+                content!,
+                const SizedBox(height: 8),
+              ],
+
+              const SizedBox(height: 16),
+
+              // Actions
+              _buildActions(context),
+            ],
           ),
         ),
       ),

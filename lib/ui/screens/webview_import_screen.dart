@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:webview_flutter/webview_flutter.dart' as wf;
 import 'package:webview_flutter_android/webview_flutter_android.dart';
@@ -714,6 +715,99 @@ class _WebviewImportScreenState extends State<WebviewImportScreen> {
     }
   }
 
+  void _saveCredential(String host, String user, String pass) {
+    if (host.isEmpty || user.isEmpty || pass.isEmpty) return;
+    _mmkv.encodeString('saved_cred_user_$host', user);
+    _mmkv.encodeString('saved_cred_pass_$host', pass);
+    _recordConsoleLog('[CREDENTIAL] 已成功持久化保存 $host 的教务系统登录凭据 (账号: $user)');
+  }
+
+  void _injectCredentialAndAutofill() {
+    final uri = Uri.tryParse(_currentUrl);
+    if (uri == null || uri.host.isEmpty) return;
+    final host = uri.host;
+    final savedUser = _mmkv.decodeString('saved_cred_user_$host');
+    final savedPass = _mmkv.decodeString('saved_cred_pass_$host');
+
+    final js = '''
+      (function() {
+        try {
+          // 1. 自动勾选“记住我”/“记住密码”/“自动登录”选项
+          var remCheckboxes = document.querySelectorAll('input[type="checkbox"]');
+          for (var i = 0; i < remCheckboxes.length; i++) {
+            var cb = remCheckboxes[i];
+            var idOrName = ((cb.id || '') + ' ' + (cb.name || '')).toLowerCase();
+            if (idOrName.indexOf('remember') !== -1 || idOrName.indexOf('rem') !== -1 || idOrName.indexOf('save') !== -1 || idOrName.indexOf('auto') !== -1) {
+              if (!cb.checked) {
+                cb.checked = true;
+                cb.dispatchEvent(new Event('change', { bubbles: true }));
+              }
+            }
+          }
+
+          // 2. 如果存在本地暂存的凭据，执行自动回填
+          var uVal = ${savedUser != null ? jsonEncode(savedUser) : 'null'};
+          var pVal = ${savedPass != null ? jsonEncode(savedPass) : 'null'};
+          if (uVal && pVal) {
+            var userInp = document.querySelector('input[name*="user"], input[name*="account"], input[id*="user"], input[id*="account"], input[name*="login"], input[name="yhm"]') || document.querySelector('input[type="text"]');
+            var passInp = document.querySelector('input[type="password"]');
+            if (userInp && passInp) {
+              if (!userInp.value) {
+                userInp.value = uVal;
+                userInp.dispatchEvent(new Event('input', { bubbles: true }));
+                userInp.dispatchEvent(new Event('change', { bubbles: true }));
+              }
+              if (!passInp.value) {
+                passInp.value = pVal;
+                passInp.dispatchEvent(new Event('input', { bubbles: true }));
+                passInp.dispatchEvent(new Event('change', { bubbles: true }));
+              }
+            }
+          }
+
+          // 3. 安装凭据保存捕获监听器
+          if (!window._cw_cred_captured_installed) {
+            window._cw_cred_captured_installed = true;
+            function postCred() {
+              try {
+                var p = document.querySelector('input[type="password"]');
+                var u = document.querySelector('input[name*="user"], input[name*="account"], input[id*="user"], input[id*="account"], input[name*="login"], input[name="yhm"]') || document.querySelector('input[type="text"]');
+                if (u && u.value && p && p.value) {
+                  var payload = JSON.stringify({
+                    type: 'saveCredential',
+                    host: window.location.host,
+                    user: u.value,
+                    pass: p.value
+                  });
+                  if (window.CourseWidgetsBridge) {
+                    window.CourseWidgetsBridge.postMessage(payload);
+                  } else if (window.chrome && window.chrome.webview) {
+                    window.chrome.webview.postMessage(payload);
+                  }
+                }
+              } catch(e) {}
+            }
+            window.addEventListener('submit', postCred, true);
+            document.addEventListener('click', function(e) {
+              var t = e.target;
+              if (t && (t.type === 'submit' || (t.id && t.id.toLowerCase().indexOf('login') !== -1) || (t.innerText && (t.innerText.indexOf('登录') !== -1 || t.innerText.indexOf('Log') !== -1)))) {
+                postCred();
+              }
+            }, true);
+          }
+        } catch(ex) {}
+      })();
+    ''';
+
+    if (Platform.isWindows || Platform.isMacOS) {
+      if (_isDesktopInitialized) {
+        _desktopController.executeScript(js);
+      }
+    } else {
+      _mobileController?.runJavaScript(js);
+    }
+  }
+
   void _initMobileWebView() {
     _mobileController = wf.WebViewController()
       ..setBackgroundColor(const Color(0xFF1A1A1A))
@@ -723,10 +817,22 @@ class _WebviewImportScreenState extends State<WebviewImportScreen> {
       )
       // [v2.7.0] 允许用户在桌面视图中双指缩放
       ..enableZoom(true)
-      // [v2.7.5] 注册 CourseWidgetsBridge 原生桥接通道，用于跨端异步通信
+      // [v2.7.5] 注册 CourseWidgetsBridge 原生桥接通道，用于跨端异步通信与凭据持久化
       ..addJavaScriptChannel(
         'CourseWidgetsBridge',
         onMessageReceived: (wf.JavaScriptMessage message) {
+          try {
+            final data = jsonDecode(message.message);
+            if (data is Map && data['type'] == 'saveCredential') {
+              final host = data['host']?.toString();
+              final user = data['user']?.toString();
+              final pass = data['pass']?.toString();
+              if (host != null && host.isNotEmpty && user != null && pass != null) {
+                _saveCredential(host, user, pass);
+              }
+              return;
+            }
+          } catch (_) {}
           if (_bridgeCompleter != null && !_bridgeCompleter!.isCompleted) {
             _bridgeCompleter!.complete(message.message);
           }
@@ -741,15 +847,18 @@ class _WebviewImportScreenState extends State<WebviewImportScreen> {
       androidController.setSupportMultipleWindows(false);
       androidController.setTextZoom(100);
       androidController.setMixedContentMode(MixedContentMode.alwaysAllow);
+      // [v3.0.0] 启用第三方 Cookie 跨域支持，确保 CAS 单点登录认证状态顺利持久化
+      final cookieManager = wf.WebViewCookieManager();
+      if (cookieManager.platform is AndroidWebViewCookieManager) {
+        (cookieManager.platform as AndroidWebViewCookieManager)
+            .setAcceptThirdPartyCookies(androidController, true);
+      }
       // [v2.7.6] 监听并记录 Android WebView 内核 Console 报错与警告
       androidController.setOnConsoleMessage((msg) {
         final level = msg.level.name.toUpperCase();
         _recordConsoleLog('[$level] ${msg.message}');
       });
     }
-
-    // [v2.6.4] Android WebView 默认持久化 Cookie 到 app_webview/ 目录
-    // 无需额外配置，重新打开应用后登录状态仍有效
 
     _mobileController!.setNavigationDelegate(
       wf.NavigationDelegate(
@@ -784,6 +893,7 @@ class _WebviewImportScreenState extends State<WebviewImportScreen> {
               _isLoading = false;
             });
             _mobileController?.runJavaScript(_kDesktopSpoofJs);
+            _injectCredentialAndAutofill();
           }
         },
         onNavigationRequest: (wf.NavigationRequest request) {
@@ -810,6 +920,20 @@ class _WebviewImportScreenState extends State<WebviewImportScreen> {
 
   Future<void> _initDesktopWebView() async {
     try {
+      // [v3.0.0] Windows WebView2 环境初始化：显式指定持久化 userDataPath，确保密码与 Cookie 完美记住
+      final appSupport = await getApplicationSupportDirectory();
+      final webviewDataDir = Directory('${appSupport.path}/webview2_profile');
+      if (!webviewDataDir.existsSync()) {
+        webviewDataDir.createSync(recursive: true);
+      }
+      try {
+        await ww.WebviewController.initializeEnvironment(
+          userDataPath: webviewDataDir.path,
+        );
+      } catch (e) {
+        debugPrint('Webview environment already initialized: $e');
+      }
+
       await _desktopController.initialize();
       _desktopController.url.listen((url) {
         if (mounted) {
@@ -823,13 +947,29 @@ class _WebviewImportScreenState extends State<WebviewImportScreen> {
           setState(() {
             _isLoading = state == ww.LoadingState.loading;
           });
+          if (state == ww.LoadingState.navigationCompleted) {
+            _injectCredentialAndAutofill();
+          }
         }
+      });
+      _desktopController.webMessage.listen((message) {
+        try {
+          final data = (message is String) ? jsonDecode(message) : message;
+          if (data is Map && data['type'] == 'saveCredential') {
+            final host = data['host']?.toString();
+            final user = data['user']?.toString();
+            final pass = data['pass']?.toString();
+            if (host != null && host.isNotEmpty && user != null && pass != null) {
+              _saveCredential(host, user, pass);
+            }
+          }
+        } catch (_) {}
       });
       setState(() {
         _isDesktopInitialized = true;
       });
     } catch (e) {
-      debugPrint('Desktop Webview Error: \$e');
+      debugPrint('Desktop Webview Error: $e');
     }
   }
 

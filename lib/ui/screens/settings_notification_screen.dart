@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
-import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import '../../services/notification_manager.dart';
 import '../../services/data_import_service.dart';
 import '../../services/theme_service.dart';
 import '../../utils/glass_settings_helper.dart';
 import '../widgets/liquid_components.dart' as liquid;
+import '../widgets/immersive_status_bar_backdrop.dart';
 import 'package:smooth_scroll_multiplatform/smooth_scroll_multiplatform.dart';
 
 /// [v2.2.8] 课程通知设置页面
@@ -43,130 +43,123 @@ class _SettingsNotificationScreenState
   @override
   Widget build(BuildContext context) {
     final isDark = ThemeService().isDarkMode;
+    final topPadding = MediaQuery.paddingOf(context).top + 54;
+
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Stack(
         children: [
-          AdaptiveLiquidGlassLayer(
-            quality: ThemeService().glassQuality,
-            settings: const LiquidGlassSettings(
-              blur: 3.0,
-              thickness: 24.0,
-              glassColor: Color(0x0EFFFFFF),
-              lightIntensity: 0.70,
-              ambientStrength: 0.45,
-              ambientRim: 0.0,
-              fresnelStrength: 0.0,
-              saturation: 1.20,
-              refractiveIndex: 1.46,
-            ),
-            child: Column(
-              children: [
-                // Header
-                SafeArea(
-                  bottom: false,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                    child: Row(
-                      children: [
-                        Text(
-                          '课程通知',
-                          style: TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                            color: GlassSettingsHelper.getTextColor(context),
-                          ),
-                        ),
-                      ],
+          // 1. 全出血自由滑动内容区：穿透顶栏与状态栏，消除截断，满帧 120 FPS
+          Positioned.fill(
+            child: DynMouseScroll(
+              durationMS: 250,
+              scrollSpeed: 1.2,
+              builder: (context, controller, physics) => ListView(
+                controller: controller,
+                padding: EdgeInsets.fromLTRB(16, topPadding, 16, 100),
+                physics: physics,
+                children: [
+                  _buildSectionHeader('通知提醒与实况', isDark),
+                  _buildCardGroup([
+                    _buildSwitchRow(
+                      title: '启用课程通知',
+                      subtitle: '在课程开始前提醒你',
+                      icon: CupertinoIcons.bell_fill,
+                      value: _notificationEnabled,
+                      onChanged: (value) async {
+                        setState(() => _notificationEnabled = value);
+                        await _notificationManager.setNotificationEnabled(value);
+                      },
+                      isDark: isDark,
                     ),
-                  ),
-                ),
-
-                // Content
-                Expanded(
-                  child: DynMouseScroll(
-                    durationMS: 250,
-                    scrollSpeed: 1.2,
-                    builder: (context, controller, physics) => ListView(
-                      controller: controller,
-                      padding: const EdgeInsets.all(16),
-                      physics: physics,
-                      children: [
-                        _buildSectionHeader('通知提醒与实况', isDark),
-                        _buildCardGroup([
-                          _buildSwitchRow(
-                            title: '启用课程通知',
-                            subtitle: '在课程开始前提醒你',
-                            icon: CupertinoIcons.bell_fill,
-                            value: _notificationEnabled,
-                            onChanged: (value) async {
-                              setState(() => _notificationEnabled = value);
-                              await _notificationManager.setNotificationEnabled(value);
-                            },
-                            isDark: isDark,
-                          ),
-                          _buildSwitchRow(
-                            title: '双次提醒',
-                            subtitle: '在上课前 5 分钟再次提醒',
-                            icon: CupertinoIcons.bell_circle_fill,
-                            value: _doubleReminder,
-                            onChanged: (value) async {
-                              setState(() => _doubleReminder = value);
-                              await _notificationManager.setDoubleReminder(value);
-                            },
-                            isDark: isDark,
-                          ),
-                          _buildSwitchRow(
-                            title: '开启实况通知 (Live Activities)',
-                            subtitle: 'Android 16 实时活动与 iOS 灵动岛常驻支持',
-                            icon: CupertinoIcons.sparkles,
-                            value: _liveActivitiesEnabled,
-                            onChanged: (value) async {
-                              setState(() => _liveActivitiesEnabled = value);
-                              await _notificationManager.setLiveActivitiesEnabled(value);
-                            },
-                            isDark: isDark,
-                          ),
-                        ], isDark),
-
-                        const SizedBox(height: 20),
-
-                        _buildSectionHeader('系统日历同步', isDark),
-                        _buildCardGroup([
-                          _buildActionRow(
-                            title: '同步课表到系统日程 (ICS)',
-                            subtitle: '一键将全学期课程表同步导入到手机自带系统日历',
-                            icon: CupertinoIcons.calendar_badge_plus,
-                            onTap: () async {
-                              HapticFeedback.selectionClick();
-                              liquid.showLiquidToast(context, '正在生成课表并拉起系统日历...');
-                              final success = await DataImportService().openIcsInSystemCalendar();
-                              if (context.mounted) {
-                                if (success) {
-                                  liquid.showLiquidToast(context, '已拉起系统日历，请在日历中确认导入');
-                                } else {
-                                  liquid.showLiquidToast(context, '拉起系统日历失败，请检查日程应用');
-                                }
-                              }
-                            },
-                            isDark: isDark,
-                          ),
-                        ], isDark),
-
-                        const SizedBox(height: 20),
-
-                        // Live Activities 说明
-                        _buildInfoCard(),
-
-                        const SizedBox(height: 100),
-                      ],
+                    _buildSwitchRow(
+                      title: '双次提醒',
+                      subtitle: '在上课前 5 分钟再次提醒',
+                      icon: CupertinoIcons.bell_circle_fill,
+                      value: _doubleReminder,
+                      onChanged: (value) async {
+                        setState(() => _doubleReminder = value);
+                        await _notificationManager.setDoubleReminder(value);
+                      },
+                      isDark: isDark,
                     ),
-                  ),
-                ),
-              ],
+                    _buildSwitchRow(
+                      title: '开启实况通知 (Live Activities)',
+                      subtitle: 'Android 16 实时活动与 iOS 灵动岛常驻支持',
+                      icon: CupertinoIcons.sparkles,
+                      value: _liveActivitiesEnabled,
+                      onChanged: (value) async {
+                        setState(() => _liveActivitiesEnabled = value);
+                        await _notificationManager.setLiveActivitiesEnabled(value);
+                      },
+                      isDark: isDark,
+                    ),
+                  ], isDark),
+
+                  const SizedBox(height: 20),
+
+                  _buildSectionHeader('系统日历同步', isDark),
+                  _buildCardGroup([
+                    _buildActionRow(
+                      title: '同步课表到系统日程 (ICS)',
+                      subtitle: '一键将全学期课程表同步导入到手机自带系统日历',
+                      icon: CupertinoIcons.calendar_badge_plus,
+                      onTap: () async {
+                        HapticFeedback.selectionClick();
+                        liquid.showLiquidToast(context, '正在生成课表并拉起系统日历...');
+                        final success = await DataImportService().openIcsInSystemCalendar();
+                        if (context.mounted) {
+                          if (success) {
+                            liquid.showLiquidToast(context, '已拉起系统日历，请在日历中确认导入');
+                          } else {
+                            liquid.showLiquidToast(context, '拉起系统日历失败，请检查日程应用');
+                          }
+                        }
+                      },
+                      isDark: isDark,
+                    ),
+                  ], isDark),
+
+                  const SizedBox(height: 20),
+
+                  // Live Activities 说明
+                  _buildInfoCard(),
+
+                  const SizedBox(height: 100),
+                ],
+              ),
             ),
           ),
-          // [v2.9.7] 悬浮右下角返回按钮
+
+          // 2. 状态栏微模糊避让 (0..48dp)
+          const ImmersiveStatusBarBackdrop(),
+
+          // 3. 悬浮标题栏
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                child: Row(
+                  children: [
+                    Text(
+                      '课程通知',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: GlassSettingsHelper.getTextColor(context),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          // 4. [v2.9.7] 悬浮右下角返回按钮
           const liquid.FloatingLiquidBackButton(),
         ],
       ),

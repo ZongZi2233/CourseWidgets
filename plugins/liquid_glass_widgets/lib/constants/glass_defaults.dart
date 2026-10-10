@@ -18,11 +18,11 @@ class GlassDefaults {
   /// Default glass thickness for most widgets (30.0)
   static const double thickness = 30.0;
 
-  /// Default blur amount for glass effects (3.0)
-  static const double blur = 3.0;
+  /// Default blur amount for glass effects (4.5)
+  static const double blur = 4.5;
 
-  /// Default light intensity for specular highlights (2.0)
-  static const double lightIntensity = 2.0;
+  /// Default light intensity for specular highlights (0.35)
+  static const double lightIntensity = 0.35;
 
   /// Default chromatic aberration amount (0.5)
   static const double chromaticAberration = 0.5;

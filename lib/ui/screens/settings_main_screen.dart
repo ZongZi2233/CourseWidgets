@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import '../../services/theme_service.dart';
 import '../../utils/responsive_utils.dart';
 import 'new_settings_screen.dart';
@@ -22,95 +21,167 @@ class _SettingsMainScreenState extends State<SettingsMainScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = ThemeService().isDarkMode;
-    final isTablet = ResponsiveUtils.isTabletMode(context);
 
-    // [v2.9.8] 自适应顶部间距：平板16，手机80（避开悬浮毛玻璃顶栏64pt并保留16pt呼吸距离，彻底消除重叠）
-    final topPadding = isTablet ? 16.0 : 80.0;
+    final isLandscapePhone = ResponsiveUtils.isLandscapePhone(context);
+    final isDesktopOrTablet = ResponsiveUtils.isTabletMode(context) ||
+        ResponsiveUtils.isDesktopOrLandscape(context);
+    final isLandscape = ResponsiveUtils.isLandscape(context) || isDesktopOrTablet;
+
+    // 自适应顶部与底部内边距：横屏/桌面端贴顶紧凑，手机竖屏预留顶部标题栏与浮动Dock
+    final double topPadding;
+    if (isDesktopOrTablet || isLandscapePhone) {
+      topPadding = 16.0;
+    } else {
+      topPadding = 80.0;
+    }
+
+    final double bottomPadding;
+    if (isLandscapePhone || isDesktopOrTablet) {
+      bottomPadding = MediaQuery.paddingOf(context).bottom + 76.0;
+    } else {
+      bottomPadding = 120.0;
+    }
 
     return Scaffold(
       backgroundColor: Colors.transparent,
       extendBody: true,
-      body: Stack(
+      body: SafeArea(
+        top: false,
+        bottom: false,
+        child: isLandscape
+            ? _buildLandscapeLayout(isDark, topPadding, bottomPadding)
+            : _buildPortraitLayout(isDark, topPadding, bottomPadding),
+      ),
+    );
+  }
+
+  /// [v3.0.0-alpha23] 横屏与桌面端左右双栏自适应布局（左栏核心功能，右栏数据与关于）
+  Widget _buildLandscapeLayout(bool isDark, double topPadding, double bottomPadding) {
+    return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(
+        parent: AlwaysScrollableScrollPhysics(),
+      ),
+      padding: EdgeInsets.fromLTRB(20, topPadding, 20, bottomPadding),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // [v2.10.0] 彻底移除视口预模糊壁纸，让全局高清壁纸清晰透显，与主课表视觉统一
-          ValueListenableBuilder<GlassQuality>(
-            valueListenable: ThemeService.globalGlassQualityNotifier,
-            builder: (context, glassQuality, _) {
-              return AdaptiveLiquidGlassLayer(
-                quality: glassQuality,
-                settings: const LiquidGlassSettings(
-                  blur: 3.0,
-                  thickness: 24.0,
-                  glassColor: Color(0x0EFFFFFF),
-                  lightIntensity: 0.70,
-                  ambientStrength: 0.45,
-                  ambientRim: 0.0,
-                  fresnelStrength: 0.0,
-                  saturation: 1.20,
-                  refractiveIndex: 1.46,
-                ),
-                child: CustomScrollView(
-                  physics: const BouncingScrollPhysics(
-                    parent: AlwaysScrollableScrollPhysics(),
+          // 左栏：核心功能设置 (50%)
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildSectionHeader('核心功能设置', isDark),
+                _buildCardGroup([
+                  _buildSettingsRow(
+                    title: '课程设置',
+                    subtitle: '添加课程、学期配置、课时配置',
+                    icon: Icons.school_rounded,
+                    onTap: () => _navigateTo(const NewSettingsScreen()),
+                    isDark: isDark,
                   ),
-                  slivers: [
-                    SliverSafeArea(
-                      bottom: false,
-                      sliver: SliverPadding(
-                        padding: EdgeInsets.fromLTRB(16, topPadding, 16, 120),
-                        sliver: SliverList(
-                          delegate: SliverChildListDelegate([
-                            _buildSectionHeader('核心功能设置', isDark),
-                            _buildCardGroup([
-                              _buildSettingsRow(
-                                title: '课程设置',
-                                subtitle: '添加课程、学期配置、课时配置',
-                                icon: Icons.school_rounded,
-                                onTap: () => _navigateTo(const NewSettingsScreen()),
-                                isDark: isDark,
-                              ),
-                              _buildSettingsRow(
-                                title: '课程通知',
-                                subtitle: '提醒时间、双次提醒、Live Activities',
-                                icon: Icons.notifications_rounded,
-                                onTap: () => _navigateTo(const SettingsNotificationScreen()),
-                                isDark: isDark,
-                              ),
-                              _buildSettingsRow(
-                                title: '通用设置',
-                                subtitle: '外观、全局玻璃画质、个性化',
-                                icon: Icons.tune_rounded,
-                                onTap: () => _navigateTo(const SettingsGeneralScreen()),
-                                isDark: isDark,
-                              ),
-                            ]),
-                            const SizedBox(height: 20),
-                            _buildSectionHeader('数据与关于', isDark),
-                            _buildCardGroup([
-                              _buildSettingsRow(
-                                title: '数据管理',
-                                subtitle: '导入导出、历史备份、清理数据',
-                                icon: Icons.cloud_sync_rounded,
-                                onTap: () => _navigateTo(const SettingsDataScreen()),
-                                isDark: isDark,
-                              ),
-                              _buildSettingsRow(
-                                title: '关于软件',
-                                subtitle: '版本信息、开源协议、检查更新',
-                                icon: Icons.info_outline_rounded,
-                                onTap: () => _navigateTo(const SettingsAboutScreen()),
-                                isDark: isDark,
-                              ),
-                            ]),
-                          ]),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
+                  _buildSettingsRow(
+                    title: '课程通知',
+                    subtitle: '提醒时间、双次提醒、Live Activities',
+                    icon: Icons.notifications_rounded,
+                    onTap: () => _navigateTo(const SettingsNotificationScreen()),
+                    isDark: isDark,
+                  ),
+                  _buildSettingsRow(
+                    title: '通用设置',
+                    subtitle: '外观、全局玻璃画质、个性化',
+                    icon: Icons.tune_rounded,
+                    onTap: () => _navigateTo(const SettingsGeneralScreen()),
+                    isDark: isDark,
+                  ),
+                ]),
+              ],
+            ),
           ),
+          const SizedBox(width: 16),
+          // 右栏：数据与关于 (50%)
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildSectionHeader('数据与关于', isDark),
+                _buildCardGroup([
+                  _buildSettingsRow(
+                    title: '数据管理',
+                    subtitle: '导入导出、历史备份、清理数据',
+                    icon: Icons.cloud_sync_rounded,
+                    onTap: () => _navigateTo(const SettingsDataScreen()),
+                    isDark: isDark,
+                  ),
+                  _buildSettingsRow(
+                    title: '关于软件',
+                    subtitle: '版本信息、开源协议、检查更新',
+                    icon: Icons.info_outline_rounded,
+                    onTap: () => _navigateTo(const SettingsAboutScreen()),
+                    isDark: isDark,
+                  ),
+                ]),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 手机竖屏经典单列滚动布局
+  Widget _buildPortraitLayout(bool isDark, double topPadding, double bottomPadding) {
+    return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(
+        parent: AlwaysScrollableScrollPhysics(),
+      ),
+      padding: EdgeInsets.fromLTRB(16, topPadding, 16, bottomPadding),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildSectionHeader('核心功能设置', isDark),
+          _buildCardGroup([
+            _buildSettingsRow(
+              title: '课程设置',
+              subtitle: '添加课程、学期配置、课时配置',
+              icon: Icons.school_rounded,
+              onTap: () => _navigateTo(const NewSettingsScreen()),
+              isDark: isDark,
+            ),
+            _buildSettingsRow(
+              title: '课程通知',
+              subtitle: '提醒时间、双次提醒、Live Activities',
+              icon: Icons.notifications_rounded,
+              onTap: () => _navigateTo(const SettingsNotificationScreen()),
+              isDark: isDark,
+            ),
+            _buildSettingsRow(
+              title: '通用设置',
+              subtitle: '外观、全局玻璃画质、个性化',
+              icon: Icons.tune_rounded,
+              onTap: () => _navigateTo(const SettingsGeneralScreen()),
+              isDark: isDark,
+            ),
+          ]),
+          const SizedBox(height: 20),
+          _buildSectionHeader('数据与关于', isDark),
+          _buildCardGroup([
+            _buildSettingsRow(
+              title: '数据管理',
+              subtitle: '导入导出、历史备份、清理数据',
+              icon: Icons.cloud_sync_rounded,
+              onTap: () => _navigateTo(const SettingsDataScreen()),
+              isDark: isDark,
+            ),
+            _buildSettingsRow(
+              title: '关于软件',
+              subtitle: '版本信息、开源协议、检查更新',
+              icon: Icons.info_outline_rounded,
+              onTap: () => _navigateTo(const SettingsAboutScreen()),
+              isDark: isDark,
+            ),
+          ]),
         ],
       ),
     );

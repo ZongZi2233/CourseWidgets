@@ -1,16 +1,16 @@
 import 'dart:io';
-import 'package:flutter/material.dart';
-import '../main.dart' show globalDarkModeNotifier;
+import '../main.dart' show globalDarkModeNotifier, globalBackgroundPath;
+export '../main.dart' show globalBackgroundPath;
 
-/// 当前版本：[v3.0.0-alpha12] 架构重构内测版 - 全局双模玻璃切换、无极变深渐进模糊状态栏、去描边无界阴影
-const String appVersion = '3.0.0-alpha12';
-const int buildNumber = 312;
+/// 当前版本：[v3.0.0 正式版] 主线正式发布（Build 3000）
+const String appVersion = '3.0.0';
+const int buildNumber = 3000;
 const String copyright = '© 2025-2026 CourseWidgets. All rights reserved.';
 
 // 全局状态
 bool get globalUseDarkMode => globalDarkModeNotifier.value;
 set globalUseDarkMode(bool v) => globalDarkModeNotifier.value = v;
-ValueNotifier<String?> globalBackgroundPath = ValueNotifier<String?>(null);
+
 
 // 全局背景加载
 Future<void> loadGlobalBackground() async {

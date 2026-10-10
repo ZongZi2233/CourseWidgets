@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../widgets/weekly_schedule_grid.dart';
-import '../transitions/smooth_slide_transitions.dart';
 
 /// [v3.0.0] CourseWidgets Windows 桌面端课表界面
 /// 架构收敛：委托核心 WeeklyScheduleGrid 统一渲染课表网格与微乳亚克力底板。
@@ -10,9 +9,8 @@ class WindowsScheduleScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return RepaintBoundary(
-      key: TransparentMaterialPageRoute.contentBoundaryKey,
-      child: const Padding(
+    return const RepaintBoundary(
+      child: Padding(
         padding: EdgeInsets.only(top: 4.0, bottom: 8.0, left: 4.0, right: 4.0),
         child: WeeklyScheduleGrid(
           showControlBar: true,

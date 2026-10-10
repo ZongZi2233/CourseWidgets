@@ -1,4 +1,4 @@
-import 'dart:ui';
+import 'dart:ui' as ui;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -6,78 +6,60 @@ import '../../constants/theme_constants.dart';
 import '../../services/theme_service.dart';
 import 'liquid_components.dart' as liquid;
 
-/// [v3.0.0] 通用全屏多层高斯模糊模态弹窗外壳
-/// 提供真正的背景组件光学折射与高斯模糊，彻底告别假模糊与掉帧卡顿
+/// [v3.0.0-alpha13] 通用模态弹窗外壳 (支持真正底层组件 Backdrop 采样与 120 FPS 极速交互)
 Future<T?> _showModalGlassSheet<T>({
   required BuildContext context,
   required Widget child,
 }) {
   final isTablet = MediaQuery.of(context).size.shortestSide >= 600;
+  final isDark = ThemeService().isDarkMode;
+
   return showGeneralDialog<T>(
     context: context,
     barrierDismissible: true,
     barrierLabel: 'Dismiss',
-    barrierColor: Colors.black.withValues(alpha: 0.35),
+    barrierColor: Colors.black.withValues(alpha: isDark ? 0.32 : 0.20),
     transitionDuration: const Duration(milliseconds: 240),
     pageBuilder: (ctx, anim1, anim2) => const SizedBox.shrink(),
     transitionBuilder: (ctx, anim1, anim2, _) {
-      final isDark = ThemeService().isDarkMode;
       final curvedAnim = CurvedAnimation(parent: anim1, curve: Curves.easeOutCubic);
-      return Stack(
-        children: [
-          // 1. 全局多层高斯模糊遮罩：对底层的所有组件（文字、卡片、按钮）进行真正的物理高斯模糊
-          FadeTransition(
-            opacity: anim1,
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-              child: Container(
-                color: isDark
-                    ? Colors.black.withValues(alpha: 0.28)
-                    : Colors.white.withValues(alpha: 0.18),
-              ),
-            ),
-          ),
-          // 2. 居中对话框 (平板/桌面) 或 底部悬浮卡片 (手机)
-          if (isTablet)
-            Center(
-              child: ScaleTransition(
-                scale: Tween<double>(begin: 0.92, end: 1.0).animate(curvedAnim),
+      return Center(
+        child: isTablet
+            ? ScaleTransition(
+                scale: Tween<double>(begin: 0.94, end: 1.0).animate(curvedAnim),
                 child: FadeTransition(
                   opacity: anim1,
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 440),
+                    constraints: const BoxConstraints(maxWidth: 420),
                     child: Material(
-                      color: Colors.transparent,
+                      type: MaterialType.transparency,
                       child: child,
                     ),
                   ),
                 ),
-              ),
-            )
-          else
-            Align(
-              alignment: Alignment.bottomCenter,
-              child: SlideTransition(
-                position: Tween<Offset>(
-                  begin: const Offset(0, 0.22),
-                  end: Offset.zero,
-                ).animate(curvedAnim),
-                child: FadeTransition(
-                  opacity: anim1,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 28),
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 500),
-                      child: Material(
-                        color: Colors.transparent,
-                        child: child,
+              )
+            : Align(
+                alignment: Alignment.bottomCenter,
+                child: SlideTransition(
+                  position: Tween<Offset>(
+                    begin: const Offset(0, 0.20),
+                    end: Offset.zero,
+                  ).animate(curvedAnim),
+                  child: FadeTransition(
+                    opacity: anim1,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 480),
+                        child: Material(
+                          type: MaterialType.transparency,
+                          child: child,
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
-        ],
       );
     },
   );
@@ -191,113 +173,136 @@ Future<DateTime?> showLiquidGlassDatePicker({
 
   final result = await _showModalGlassSheet<bool>(
     context: context,
-    child: liquid.HyperOSCard(
-      cornerRadius: 28,
-      useBlur: true,
-      shadows: liquid.HyperOSShadows.modal(isDark),
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                '选择日期',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: isDark ? Colors.white : const Color(0xFF1A1A2E),
-                ),
+    child: ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 20.0, sigmaY: 20.0),
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: isDark
+                ? const Color(0xB8141720)
+                : const Color(0x62FFFFFF),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.15)
+                  : Colors.white.withValues(alpha: 0.70),
+              width: 1.0,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.10),
+                blurRadius: 28,
+                spreadRadius: -2,
+                offset: const Offset(0, 8),
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          SizedBox(
-            height: 200,
-            child: CupertinoTheme(
-              data: CupertinoThemeData(
-                brightness: isDark ? Brightness.dark : Brightness.light,
-                textTheme: CupertinoTextThemeData(
-                  dateTimePickerTextStyle: TextStyle(
-                    fontSize: 19,
-                    color: isDark ? Colors.white : const Color(0xFF1A1A2E),
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              child: CupertinoDatePicker(
-                mode: CupertinoDatePickerMode.date,
-                initialDateTime: initialDate,
-                minimumDate: DateTime(2020, 1, 1),
-                maximumDate: DateTime(2035, 12, 31),
-                onDateTimeChanged: (date) {
-                  HapticFeedback.selectionClick();
-                  selectedDate = date;
-                },
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Row(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Expanded(
-                child: TextButton(
-                  onPressed: () => Navigator.pop(context, false),
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    '选择日期',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white : const Color(0xFF1A1A2E),
                     ),
                   ),
-                  child: Text(
-                    '取消',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: isDark ? Colors.white60 : Colors.black54,
+                ],
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                height: 200,
+                child: CupertinoTheme(
+                  data: CupertinoThemeData(
+                    brightness: isDark ? Brightness.dark : Brightness.light,
+                    textTheme: CupertinoTextThemeData(
+                      dateTimePickerTextStyle: TextStyle(
+                        fontSize: 19,
+                        color: isDark ? Colors.white : const Color(0xFF1A1A2E),
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
+                  ),
+                  child: CupertinoDatePicker(
+                    mode: CupertinoDatePickerMode.date,
+                    initialDateTime: initialDate,
+                    minimumDate: DateTime(2020, 1, 1),
+                    maximumDate: DateTime(2035, 12, 31),
+                    onDateTimeChanged: (date) {
+                      HapticFeedback.selectionClick();
+                      selectedDate = date;
+                    },
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                flex: 2,
-                child: InkWell(
-                  onTap: () {
-                    HapticFeedback.lightImpact();
-                    Navigator.pop(context, true);
-                  },
-                  borderRadius: BorderRadius.circular(16),
-                  child: Ink(
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: AppThemeColors.babyPink,
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppThemeColors.babyPink.withValues(alpha: 0.35),
-                          blurRadius: 12,
-                          offset: const Offset(0, 4),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
                         ),
-                      ],
-                    ),
-                    child: const Center(
+                      ),
                       child: Text(
-                        '确定',
+                        '取消',
                         style: TextStyle(
-                          color: Colors.white,
                           fontSize: 15,
-                          fontWeight: FontWeight.bold,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.white60 : Colors.black54,
                         ),
                       ),
                     ),
                   ),
-                ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    flex: 2,
+                    child: InkWell(
+                      onTap: () {
+                        HapticFeedback.lightImpact();
+                        Navigator.pop(context, true);
+                      },
+                      borderRadius: BorderRadius.circular(16),
+                      child: Ink(
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: AppThemeColors.babyPink,
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppThemeColors.babyPink.withValues(alpha: 0.35),
+                              blurRadius: 12,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: const Center(
+                          child: Text(
+                            '确定',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
-        ],
+        ),
       ),
     ),
   );
@@ -366,87 +371,110 @@ Future<int?> showLiquidGlassWeekdayPicker({
 
   final result = await _showModalGlassSheet<bool>(
     context: context,
-    child: liquid.HyperOSCard(
-      cornerRadius: 28,
-      useBlur: true,
-      shadows: liquid.HyperOSShadows.modal(isDark),
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            '选择星期',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: isDark ? Colors.white : const Color(0xFF1A1A2E),
+    child: ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 20.0, sigmaY: 20.0),
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: isDark
+                ? const Color(0xB8141720)
+                : const Color(0x62FFFFFF),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.15)
+                  : Colors.white.withValues(alpha: 0.70),
+              width: 1.0,
             ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.10),
+                blurRadius: 28,
+                spreadRadius: -2,
+                offset: const Offset(0, 8),
+              ),
+            ],
           ),
-          const SizedBox(height: 8),
-          LiquidGlassWeekdayPicker(
-            initialWeekday: initialWeekday,
-            onWeekdayChanged: (w) => selectedWeekday = w,
-          ),
-          const SizedBox(height: 16),
-          Row(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Expanded(
-                child: TextButton(
-                  onPressed: () => Navigator.pop(context, false),
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
-                  child: Text(
-                    '取消',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: isDark ? Colors.white60 : Colors.black54,
-                    ),
-                  ),
+              Text(
+                '选择星期',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.white : const Color(0xFF1A1A2E),
                 ),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                flex: 2,
-                child: InkWell(
-                  onTap: () {
-                    HapticFeedback.lightImpact();
-                    Navigator.pop(context, true);
-                  },
-                  borderRadius: BorderRadius.circular(16),
-                  child: Ink(
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: AppThemeColors.babyPink,
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppThemeColors.babyPink.withValues(alpha: 0.35),
-                          blurRadius: 12,
-                          offset: const Offset(0, 4),
+              const SizedBox(height: 8),
+              LiquidGlassWeekdayPicker(
+                initialWeekday: initialWeekday,
+                onWeekdayChanged: (w) => selectedWeekday = w,
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
                         ),
-                      ],
-                    ),
-                    child: const Center(
+                      ),
                       child: Text(
-                        '确定',
+                        '取消',
                         style: TextStyle(
-                          color: Colors.white,
                           fontSize: 15,
-                          fontWeight: FontWeight.bold,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.white60 : Colors.black54,
                         ),
                       ),
                     ),
                   ),
-                ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    flex: 2,
+                    child: InkWell(
+                      onTap: () {
+                        HapticFeedback.lightImpact();
+                        Navigator.pop(context, true);
+                      },
+                      borderRadius: BorderRadius.circular(16),
+                      child: Ink(
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: AppThemeColors.babyPink,
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppThemeColors.babyPink.withValues(alpha: 0.35),
+                              blurRadius: 12,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: const Center(
+                          child: Text(
+                            '确定',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
-        ],
+        ),
       ),
     ),
   );
@@ -683,109 +711,132 @@ Future<DateTime?> showLiquidGlassCalendarPicker({
 
   final result = await _showModalGlassSheet<bool>(
     context: context,
-    child: liquid.HyperOSCard(
-      cornerRadius: 28,
-      useBlur: true,
-      shadows: liquid.HyperOSShadows.modal(isDark),
-      padding: const EdgeInsets.all(22),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                '选择开学日期',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: isDark ? Colors.white : const Color(0xFF1A1A2E),
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: AppThemeColors.babyPink.withValues(alpha: isDark ? 0.22 : 0.14),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  '第 1 周起始基准',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: isDark ? Colors.white : AppThemeColors.babyPink,
-                  ),
-                ),
+    child: ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 20.0, sigmaY: 20.0),
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: isDark
+                ? const Color(0xB8141720)
+                : const Color(0x62FFFFFF),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.15)
+                  : Colors.white.withValues(alpha: 0.70),
+              width: 1.0,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.10),
+                blurRadius: 28,
+                spreadRadius: -2,
+                offset: const Offset(0, 8),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          LiquidGlassCalendarPicker(
-            initialDate: initialDate,
-            onDateChanged: (date) {
-              selectedDate = date;
-            },
-          ),
-          const SizedBox(height: 18),
-          Row(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Expanded(
-                child: TextButton(
-                  onPressed: () => Navigator.pop(context, false),
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
-                  child: Text(
-                    '取消',
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    '选择开学日期',
                     style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: isDark ? Colors.white60 : Colors.black54,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white : const Color(0xFF1A1A2E),
                     ),
                   ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                flex: 2,
-                child: InkWell(
-                  onTap: () {
-                    HapticFeedback.lightImpact();
-                    Navigator.pop(context, true);
-                  },
-                  borderRadius: BorderRadius.circular(16),
-                  child: Ink(
-                    height: 48,
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
-                      color: AppThemeColors.babyPink,
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppThemeColors.babyPink.withValues(alpha: 0.35),
-                          blurRadius: 12,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
+                      color: AppThemeColors.babyPink.withValues(alpha: isDark ? 0.22 : 0.14),
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Center(
+                    child: Text(
+                      '第 1 周起始基准',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? Colors.white : AppThemeColors.babyPink,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              LiquidGlassCalendarPicker(
+                initialDate: initialDate,
+                onDateChanged: (date) {
+                  selectedDate = date;
+                },
+              ),
+              const SizedBox(height: 18),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
                       child: Text(
-                        '确定',
+                        '取消',
                         style: TextStyle(
-                          color: Colors.white,
                           fontSize: 15,
-                          fontWeight: FontWeight.bold,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.white60 : Colors.black54,
                         ),
                       ),
                     ),
                   ),
-                ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    flex: 2,
+                    child: InkWell(
+                      onTap: () {
+                        HapticFeedback.lightImpact();
+                        Navigator.pop(context, true);
+                      },
+                      borderRadius: BorderRadius.circular(16),
+                      child: Ink(
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: AppThemeColors.babyPink,
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppThemeColors.babyPink.withValues(alpha: 0.35),
+                              blurRadius: 12,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: const Center(
+                          child: Text(
+                            '确定',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
-        ],
+        ),
       ),
     ),
   );

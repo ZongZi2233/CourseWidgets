@@ -336,6 +336,12 @@ class DataImportService {
                 teacher: (item['teacher'] ?? '').toString().trim(),
                 startTime: sTime,
                 endTime: eTime,
+                startSection: item['startSection'] is num
+                    ? (item['startSection'] as num).toInt()
+                    : int.tryParse(item['startSection']?.toString() ?? ''),
+                endSection: item['endSection'] is num
+                    ? (item['endSection'] as num).toInt()
+                    : int.tryParse(item['endSection']?.toString() ?? ''),
               ),
             );
             continue;
@@ -470,6 +476,8 @@ class DataImportService {
                 teacher: group.teacher,
                 startTime: startTime.millisecondsSinceEpoch,
                 endTime: endTime.millisecondsSinceEpoch,
+                startSection: startSection,
+                endSection: endSection,
               ),
             );
           }
@@ -660,6 +668,46 @@ class DataImportService {
       return filePath;
     } catch (e) {
       debugPrint('导出ICS失败: $e');
+      return null;
+    }
+  }
+
+  /// [v3.0.0] 导出当前正在显示的课表为ICS日历文件（即使没有保存过历史记录，也能直接导出）
+  Future<String?> exportCurrentScheduleToIcs() async {
+    try {
+      final courses = await DatabaseHelper.instance.getAllCourses();
+      if (courses.isEmpty) return null;
+
+      final icsContent = DatabaseHelper.instance.generateIcsFromCourses(courses);
+
+      String exportDir;
+      try {
+        if (Platform.isWindows) {
+          final appData = Platform.environment['USERPROFILE'] ?? '.';
+          exportDir = join(appData, 'Documents', 'ScheduleExports');
+        } else if (Platform.isAndroid) {
+          exportDir = '/storage/emulated/0/Download';
+        } else {
+          exportDir = '.';
+        }
+
+        final dir = Directory(exportDir);
+        if (!await dir.exists()) {
+          await dir.create(recursive: true);
+        }
+      } catch (e) {
+        exportDir = '.';
+      }
+
+      final fileName =
+          'schedule_export_${DateTime.now().millisecondsSinceEpoch}.ics';
+      final filePath = join(exportDir, fileName);
+
+      await File(filePath).writeAsString(icsContent);
+      debugPrint('当前课表已成功导出为ICS: $filePath');
+      return filePath;
+    } catch (e) {
+      debugPrint('导出当前课表为ICS失败: $e');
       return null;
     }
   }

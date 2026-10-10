@@ -10,7 +10,6 @@ import '../../constants/theme_constants.dart';
 import '../widgets/liquid_components.dart';
 import '../widgets/liquid_glass_pickers.dart';
 import '../widgets/liquid_toast.dart';
-import '../../utils/glass_settings_helper.dart';
 import 'package:smooth_scroll_multiplatform/smooth_scroll_multiplatform.dart';
 import '../../utils/responsive_utils.dart';
 
@@ -239,32 +238,17 @@ class _CourseEditScreenState extends State<CourseEditScreen> {
     );
   }
 
-  // [v2.1.7] 使用GlassTextField替代LiquidInput用于时间输入
+  // [v3.0.0-alpha25] 使用带半透底板与圆角边框的 LiquidInput 进行时间输入，清晰可见杜绝透明隐形
   Widget _buildTimeInput(
     TextEditingController controller,
     String label,
     Color textColor,
   ) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(left: 4, bottom: 8),
-          child: Text(
-            label,
-            style: TextStyle(
-              color: textColor.withValues(alpha: 0.7),
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ),
-        GlassTextField(
-          controller: controller,
-          placeholder: 'HH:MM',
-          keyboardType: TextInputType.datetime,
-        ),
-      ],
+    return LiquidInput(
+      controller: controller,
+      label: label,
+      icon: CupertinoIcons.time,
+      placeholder: 'HH:MM',
     );
   }
 
@@ -401,23 +385,21 @@ class _CourseEditScreenState extends State<CourseEditScreen> {
     if (widget.course == null) return;
 
     // 确认删除
-    final confirm = await showDialog<bool>(
+    final confirm = await LiquidGlassDialog.show<bool>(
       context: context,
-      builder: (_) => LiquidGlassDialog(
-        title: '确认删除',
-        content: const Text('确定要删除这门课程吗？'),
-        actions: [
-          GlassDialogAction(
-            label: '取消',
-            onPressed: () => Navigator.pop(context, false),
-          ),
-          GlassDialogAction(
-            label: '删除',
-            isPrimary: true,
-            onPressed: () => Navigator.pop(context, true),
-          ),
-        ],
-      ),
+      title: '确认删除',
+      content: const Text('确定要删除这门课程吗？'),
+      actions: [
+        GlassDialogAction(
+          label: '取消',
+          onPressed: () => Navigator.pop(context, false),
+        ),
+        GlassDialogAction(
+          label: '删除',
+          isPrimary: true,
+          onPressed: () => Navigator.pop(context, true),
+        ),
+      ],
     );
 
     if (confirm != true) return;

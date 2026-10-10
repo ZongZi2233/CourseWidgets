@@ -175,19 +175,21 @@ void main() async {
     }
   }
 
-  // [v2.7.0] 初始化着色器质量偏好（必须在 LiquidGlass 初始化之前）
-  final shaderStorage = StorageService();
-  GlassEffect.useHighPerformanceShader =
-      shaderStorage.getBool('high_performance_shader') ?? false;
-  AppLogger.render(
-    '🎨 着色器模式: ${GlassEffect.useHighPerformanceShader ? "高性能" : "高质量"}',
-  );
+  // [v3.0.0-alpha18] 强制使用完整 3D 渲染着色器 (Premium)，杜绝高性能 2D 降级
+  GlassEffect.useHighPerformanceShader = false;
+  AppLogger.render('🎨 着色器模式: 旗舰高质量 (Premium)');
 
-  // [v2.4.1/v2.7.8] 初始化 Liquid Glass (支持 Windows Impeller/ANGLE 与移动端高帧率预热)
+  // [v2.4.1/v2.7.8/v3.0.0-alpha14] 初始化 Liquid Glass (支持 120Hz 预算校准与移动端高帧率预热)
   await LiquidGlassWidgets.initialize(
     warmUpMode: GlassWarmUpMode.always,
   );
-  AppLogger.render('LiquidGlassWidgets 初始化与着色器预热完毕');
+  GlassPerformanceMonitor.rasterBudget = const Duration(microseconds: 8333); // 120Hz
+  GlassPerformanceMonitor.sustainedFrameThreshold = 120;
+  AppLogger.render('LiquidGlassWidgets 初始化与着色器预热完毕 (120Hz 预算已校准)');
+
+  // [v3.0.0-alpha13] 预编译 ProgressiveBlur 状态栏无极渐变模糊着色器
+  await ProgressiveBlur.preload();
+  AppLogger.render('ProgressiveBlur 着色器预编译完毕');
 
   // [v3.0.0] 初始化全局静态单次壁纸模糊烘焙服务
   StaticBlurredWallpaperService.instance.initialize();
@@ -268,14 +270,26 @@ void main() async {
   await loadGlobalBackground();
   await ThemeService().refreshMonetColors();
 
+  // [v3.0.0-alpha18] 全时全刻强制 Premium 旗舰材质，彻底禁用运行时自动降级
+  ThemeService.globalGlassQualityNotifier.value = GlassQuality.premium;
+  final storage = StorageService();
+  await storage.setString('glass_quality', GlassQuality.premium.name);
+  await storage.setString('global_glass_quality', GlassQuality.premium.name);
+
   runApp(
-    Phoenix(
-      child: MultiProvider(
-        providers: [
-          ChangeNotifierProvider(create: (_) => ScheduleProvider()),
-          ChangeNotifierProvider.value(value: ThemeService()),
-        ],
-        child: const MyApp(),
+    LiquidGlassWidgets.wrap(
+      child: Phoenix(
+        child: MultiProvider(
+          providers: [
+            ChangeNotifierProvider(create: (_) => ScheduleProvider()),
+            ChangeNotifierProvider.value(value: ThemeService()),
+          ],
+          child: const MyApp(),
+        ),
+      ),
+      adaptiveQuality: false, // 严禁自动降级，保持 100% 全时全刻 Premium
+      theme: GlassThemeData.simple(
+        quality: GlassQuality.premium,
       ),
     ),
   );
@@ -388,79 +402,85 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
             return Consumer<ThemeService>(
               builder: (context, themeService, child) {
-                return material.MaterialApp(
+                final lightMaterialTheme = material.ThemeData(
+                  useMaterial3: true,
+                  brightness: material.Brightness.light,
+                  scaffoldBackgroundColor: material.Colors.transparent,
+                  colorScheme: material.ColorScheme.fromSeed(
+                    seedColor: themeService.primaryColor,
+                    brightness: material.Brightness.light,
+                  ),
+                  fontFamily: (Platform.isWindows || Platform.isMacOS)
+                      ? 'PingFangSC'
+                      : null,
+                  fontFamilyFallback: (Platform.isWindows || Platform.isMacOS)
+                      ? const ['SFPro']
+                      : null,
+                  textTheme: const material.TextTheme(
+                    titleLarge: TextStyle(fontWeight: FontWeight.bold),
+                    titleMedium: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  pageTransitionsTheme: const material.PageTransitionsTheme(
+                    builders: {
+                      material.TargetPlatform.android:
+                          SmoothSlideTransitionsBuilder(),
+                      material.TargetPlatform.iOS:
+                          SmoothSlideTransitionsBuilder(),
+                      material.TargetPlatform.windows:
+                          SmoothSlideTransitionsBuilder(),
+                    },
+                  ),
+                );
+
+                final darkMaterialTheme = material.ThemeData(
+                  useMaterial3: true,
+                  brightness: material.Brightness.dark,
+                  scaffoldBackgroundColor: material.Colors.transparent,
+                  colorScheme: material.ColorScheme.fromSeed(
+                    seedColor: themeService.primaryColor,
+                    brightness: material.Brightness.dark,
+                  ),
+                  fontFamily: (Platform.isWindows || Platform.isMacOS)
+                      ? 'PingFangSC'
+                      : null,
+                  fontFamilyFallback: (Platform.isWindows || Platform.isMacOS)
+                      ? const ['SFPro']
+                      : null,
+                  textTheme: const material.TextTheme(
+                    titleLarge: TextStyle(fontWeight: FontWeight.bold),
+                    titleMedium: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  pageTransitionsTheme: const material.PageTransitionsTheme(
+                    builders: {
+                      material.TargetPlatform.android:
+                          SmoothSlideTransitionsBuilder(),
+                      material.TargetPlatform.iOS:
+                          SmoothSlideTransitionsBuilder(),
+                      material.TargetPlatform.windows:
+                          SmoothSlideTransitionsBuilder(),
+                    },
+                  ),
+                );
+
+                // [v3.0.0-alpha17] 彻底杜绝全局 MaterialApp，完全迁移至旗舰级 CupertinoApp 根应用
+                return CupertinoApp(
                   debugShowCheckedModeBanner: false,
                   navigatorObservers: [routeObserver],
-                  themeMode: isDarkMode
-                      ? material.ThemeMode.dark
-                      : material.ThemeMode.light,
-              theme: material.ThemeData(
-                useMaterial3: true,
-                brightness: material.Brightness.light,
-                scaffoldBackgroundColor: material.Colors.transparent,
-                colorScheme: material.ColorScheme.fromSeed(
-                  seedColor: themeService.primaryColor,
-                  brightness: material.Brightness.light,
-                ),
-                // [v2.4.4] 全局字体：仅在桌面端强制使用 PingFangSC/SFPro 以避免移动端字体文件被打包带来的体积膨胀
-                // [v2.7.0] 移动端恢复系统默认字体 (Roboto/San Francisco)
-                fontFamily: (Platform.isWindows || Platform.isMacOS)
-                    ? 'PingFangSC'
-                    : null,
-                fontFamilyFallback: (Platform.isWindows || Platform.isMacOS)
-                    ? const ['SFPro']
-                    : null,
-                // [v2.4.4] 全局加粗标题
-                textTheme: const material.TextTheme(
-                  titleLarge: TextStyle(fontWeight: FontWeight.bold),
-                  titleMedium: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                // [v2.9.3] 统一使用 SmoothSlideTransitionsBuilder，杜绝双弹
-                pageTransitionsTheme: const material.PageTransitionsTheme(
-                  builders: {
-                    material.TargetPlatform.android:
-                        SmoothSlideTransitionsBuilder(),
-                    material.TargetPlatform.iOS:
-                        SmoothSlideTransitionsBuilder(),
-                    material.TargetPlatform.windows:
-                        SmoothSlideTransitionsBuilder(),
-                  },
-                ),
-              ),
-              darkTheme: material.ThemeData(
-                useMaterial3: true,
-                brightness: material.Brightness.dark,
-                scaffoldBackgroundColor: material.Colors.transparent,
-                colorScheme: material.ColorScheme.fromSeed(
-                  seedColor: themeService.primaryColor,
-                  brightness: material.Brightness.dark,
-                ),
-                fontFamily: (Platform.isWindows || Platform.isMacOS)
-                    ? 'PingFangSC'
-                    : null,
-                fontFamilyFallback: (Platform.isWindows || Platform.isMacOS)
-                    ? const ['SFPro']
-                    : null,
-                textTheme: const material.TextTheme(
-                  titleLarge: TextStyle(fontWeight: FontWeight.bold),
-                  titleMedium: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                pageTransitionsTheme: const material.PageTransitionsTheme(
-                  builders: {
-                    material.TargetPlatform.android:
-                        SmoothSlideTransitionsBuilder(),
-                    material.TargetPlatform.iOS:
-                        SmoothSlideTransitionsBuilder(),
-                    material.TargetPlatform.windows:
-                        SmoothSlideTransitionsBuilder(),
-                  },
-                ),
-              ),
-              // [v2.4.9] Windows 平滑滚动 — BouncingScrollPhysics + 鼠标拖拽
-              scrollBehavior: Platform.isWindows
-                  ? _SmoothWindowsScrollBehavior()
-                  : null,
-              builder: (context, child) {
+                  theme: CupertinoThemeData(
+                    brightness: isDarkMode ? Brightness.dark : Brightness.light,
+                    primaryColor: themeService.primaryColor,
+                    scaffoldBackgroundColor: Colors.transparent,
+                    barBackgroundColor: Colors.transparent,
+                  ),
+                  localizationsDelegates: const [
+                    material.DefaultMaterialLocalizations.delegate,
+                    DefaultCupertinoLocalizations.delegate,
+                    DefaultWidgetsLocalizations.delegate,
+                  ],
+                  scrollBehavior: Platform.isWindows
+                      ? _SmoothWindowsScrollBehavior()
+                      : null,
+                  builder: (context, child) {
                 // [v2.9.0] 智能视口物理分辨率自适应：根据屏幕尺寸与 devicePixelRatio 动态按需解码，杜绝无意义显存浪费
                 ImageProvider resolveAdaptiveImage(ImageProvider rawProvider) {
                   final mq = MediaQuery.maybeOf(context);
@@ -553,10 +573,13 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 // [v2.4.1] 隔离背景层，防止二级页面切换时引发玻璃滤镜的重绘掉帧
                 backgroundWidget = RepaintBoundary(child: backgroundWidget);
 
-                // 如果是桌面端，仅对内容层（而非背景）进行缩放和渐隐
-                final Widget innerContent = material.Material(
-                  type: material.MaterialType.transparency,
-                  child: child ?? const SizedBox(),
+                // 为 CupertinoApp 下的所有子页面注入配套的 Material Theme 和透明底板
+                final Widget innerContent = material.Theme(
+                  data: isDarkMode ? darkMaterialTheme : lightMaterialTheme,
+                  child: material.Material(
+                    type: material.MaterialType.transparency,
+                    child: child ?? const SizedBox(),
+                  ),
                 );
 
                 Widget contentWidget = innerContent;

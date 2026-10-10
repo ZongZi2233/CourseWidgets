@@ -5,6 +5,9 @@ import 'package:flutter/cupertino.dart';
 import '../../src/renderer/internal/glass_materialize_scope.dart';
 import '../../src/renderer/liquid_glass_renderer.dart';
 import '../../theme/glass_theme.dart';
+import '../../theme/glass_theme_data.dart';
+import '../../theme/glass_theme_helpers.dart';
+import 'glass_adaptive_scope.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
 import '../../types/glass_quality.dart';
@@ -187,6 +190,19 @@ class AdaptiveGlass extends StatelessWidget {
       return Opacity(opacity: 0.0, child: content);
     }
 
+    // ---- RESOLVE EFFECTIVE QUALITY FROM THEME & ADAPTIVE SCOPE ----
+    final themeQuality = GlassThemeData.of(context).qualityFor(context);
+    final adaptiveData = GlassAdaptiveScopeData.maybeOf(context);
+    var effectiveQuality = quality;
+    if (themeQuality != null) {
+      effectiveQuality =
+          GlassThemeHelpers.applyCeiling(effectiveQuality, themeQuality);
+    }
+    if (adaptiveData != null) {
+      effectiveQuality =
+          GlassThemeHelpers.applyCeiling(effectiveQuality, adaptiveData.effectiveQuality);
+    }
+
     // ---- MINIMAL FAST-PATH ---------------------------------------------------
     // GlassQuality.minimal bypasses all custom shaders. Renders via
     // _FrostedFallback: ClipPath(ShapeBorderClipper) + BackdropFilter + tint.
@@ -200,7 +216,7 @@ class AdaptiveGlass extends StatelessWidget {
     // one tier that actually blurs over a PlatformView. This finally delivers
     // the "live BackdropFilter path" the canUsePremiumShader comment promises.
     // --------------------------------------------------------------------------
-    if (quality == GlassQuality.minimal || platformViewBackdrop) {
+    if (effectiveQuality == GlassQuality.minimal || platformViewBackdrop) {
       return _wrapWithDecorations(
         context,
         baseSettings,
@@ -257,7 +273,7 @@ class AdaptiveGlass extends StatelessWidget {
     // are evaluated before the platform shader-support query (_canUseImpeller).
     final bool canUsePremiumShader = !kIsWeb &&
         !platformViewBackdrop &&
-        quality == GlassQuality.premium &&
+        effectiveQuality == GlassQuality.premium &&
         _canUseImpeller;
 
     if (!canUsePremiumShader) {
@@ -280,7 +296,7 @@ class AdaptiveGlass extends StatelessWidget {
       // Normalization only makes sense when adapting Premium-tuned settings to
       // Standard; if the caller already knows they're on Standard, their values
       // must be passed through unchanged so tuning sliders take full effect.
-      final bool skipNormalization = quality == GlassQuality.standard;
+      final bool skipNormalization = effectiveQuality == GlassQuality.standard;
 
       final LiquidGlassSettings normalizedSettings;
       if (skipNormalization) {
@@ -349,7 +365,7 @@ class AdaptiveGlass extends StatelessWidget {
           backgroundKey: scopeBackgroundKey,
           child: InheritedLiquidGlass(
             settings: effectiveSettings,
-            quality: quality,
+            quality: effectiveQuality,
             isBlurProvidedByAncestor: true,
             child: content,
           ),
@@ -408,9 +424,9 @@ class AdaptiveGlass extends StatelessWidget {
       final useFallbackShadow = kIsWeb;
 
       final shadows =
-          (isDark || _FrostedFallback._isFlatEdge(shape) || useFallbackShadow)
+          (isDark || _FrostedFallback._isFlatEdge(shape) || useFallbackShadow || baseSettings.shadowElevation <= 0)
               ? const <BoxShadow>[]
-              : baseSettings.effectiveShadow;
+              : (baseSettings.shadow ?? const <BoxShadow>[]);
 
       Widget premium = LiquidGlass.withOwnLayer(
         shape: shape,
@@ -483,7 +499,7 @@ class AdaptiveGlass extends StatelessWidget {
 
     // Resolve the shadow from settings (per-widget or inherited).
     final shadows = baseSettings.effectiveShadow;
-    if (shadows.isEmpty) return glass;
+    if (shadows.isEmpty || baseSettings.shadowElevation <= 0.0) return glass;
 
     // Extract border radius from the shape for the shadow decoration.
     final borderRadius = _borderRadiusFromShape(shape);
@@ -496,17 +512,19 @@ class AdaptiveGlass extends StatelessWidget {
         glass,
 
         // 2. The drop shadow (painted on top, but inverse-clipped so it only
-        // appears OUTSIDE the glass). This prevents the glass from blurring its
-        // own shadow, which would otherwise create a dirty dark rim.
+        // appears OUTSIDE the glass). Cached in RepaintBoundary to avoid repeated
+        // CPU path clipping and shadow re-rasterization on every frame in light mode.
         Positioned.fill(
           child: IgnorePointer(
-            child: ClipPath(
-              clipBehavior: Clip.antiAlias,
-              clipper: _InverseShapeClipper(shape),
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  borderRadius: borderRadius,
-                  boxShadow: shadows,
+            child: RepaintBoundary(
+              child: ClipPath(
+                clipBehavior: Clip.antiAlias,
+                clipper: _InverseShapeClipper(shape),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: borderRadius,
+                    boxShadow: shadows,
+                  ),
                 ),
               ),
             ),

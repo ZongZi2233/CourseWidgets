@@ -91,7 +91,7 @@ void main() {
   if (uHasBackground > 0.5) {
     bg = texture(uTexture, localRefracted / uBackgroundSize).rgb;
   } else {
-    bg = vec3(0.9);
+    bg = uGlassColor.rgb;
   }
   
   // ---- LIGHTING (with simplified Fresnel) ----
@@ -99,20 +99,21 @@ void main() {
   float keyHighlight = pow(max(edgeLightCatch, 0.0), 6.0) * uLightIntensity * 1.5;
   float rimBrightness = uAmbientRim + keyHighlight;
   
-  // ---- FRESNEL EDGE GLOW (simplified) ----
-  // Approximate Fresnel: brighter at edges where normal is perpendicular to view
-  // Uses edgeInfluence as a proxy for the Fresnel term (cheaper than full dot product)
+  float rimGate = clamp(uAmbientRim * 10.0, 0.0, 1.0);
+  float glowGate = clamp(uGlowIntensity * 2.0, 0.0, 1.0);
   float fresnelTerm = edgeInfluence * edgeInfluence; // squared for sharper falloff
-  float fresnelGlow = fresnelTerm * uLightIntensity * 0.35;
+  float fresnelGlow = fresnelTerm * uLightIntensity * 0.35 * glowGate;
   rimBrightness += fresnelGlow;
   
   // ---- HAIRLINE RIM ----
+  // Physical lens contour mask (always defines geometric boundary without relying on artificial white paint)
   float borderMask = 1.0 - smoothstep(0.0, smoothing * uRimSmoothing, distFromEdge - uRimThickness);
-  vec3 rimColor = vec3(1.0) * rimBrightness * (uAmbientRim * 8.0);
+  // Glassy subtle reflection catch: transparent lens edge, avoiding opaque chalky white rims
+  vec3 rimColor = mix(bg * 1.3, vec3(1.0), 0.28) * (0.35 + keyHighlight * 0.45);
   
   // ---- COMPOSITE ----
-  vec3 finalColor = bg * 0.6;
-  finalColor += rimColor * borderMask;
+  vec3 finalColor = bg * 0.65;
+  finalColor += rimColor * borderMask * 0.6;
   // Fresnel contribution to body (subtle edge brightening)
   finalColor += vec3(fresnelGlow * 0.15) * edgeInfluence;
   finalColor = mix(finalColor, finalColor + uGlassColor.rgb * 0.2, uGlassColor.a);
@@ -126,8 +127,8 @@ void main() {
   
   float glassAlpha = mix(baseAlpha, edgeAlpha, edgeInfluence);
   // Fresnel boosts edge alpha slightly for that glassy edge catch
-  glassAlpha += fresnelTerm * 0.1;
-  glassAlpha = max(glassAlpha, borderMask * 0.9);
+  glassAlpha += fresnelTerm * 0.1 * glowGate;
+  glassAlpha = max(glassAlpha, borderMask * 0.88);
   float alpha = glassAlpha * mask;
   
   fragColor = vec4(finalColor * alpha, alpha);

@@ -9,6 +9,7 @@ import '../../constants/theme_constants.dart';
 import '../../services/theme_service.dart'; // Added this import
 import '../widgets/liquid_components.dart' as liquid;
 import '../widgets/liquid_toast.dart';
+import '../widgets/immersive_status_bar_backdrop.dart';
 import 'package:flutter_phoenix/flutter_phoenix.dart';
 import 'webview_import_screen.dart';
 import '../../services/app_logger.dart';
@@ -23,55 +24,22 @@ class SettingsDataScreen extends StatelessWidget {
     final dataImportService = DataImportService();
     final isDark = ThemeService().isDarkMode; // Added this line
 
+    final topPadding = MediaQuery.paddingOf(context).top + 54;
+
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Stack(
         children: [
-          AdaptiveLiquidGlassLayer(
-            quality: ThemeService().glassQuality,
-            settings: const LiquidGlassSettings(
-              blur: 3.0,
-              thickness: 24.0,
-              glassColor: Color(0x0EFFFFFF),
-              lightIntensity: 0.70,
-              ambientStrength: 0.45,
-              ambientRim: 0.0,
-              fresnelStrength: 0.0,
-              saturation: 1.20,
-              refractiveIndex: 1.46,
-            ),
-            child: Column(
-              children: [
-                SafeArea(
-                  bottom: false,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 14,
-                    ),
-                    child: Row(
-                      children: [
-                        Text(
-                          '数据管理',
-                          style: TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                            color: isDark ? Colors.white : const Color(0xFF1B1D24),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: DynMouseScroll(
-                    durationMS: 250,
-                    scrollSpeed: 1.2,
-                    builder: (context, controller, physics) => ListView(
-                      controller: controller,
-                      padding: const EdgeInsets.all(16),
-                      physics: physics,
-                      children: [
+          // 1. 全出血自由滑动内容区：穿透顶栏与状态栏，消除截断，满帧 120 FPS
+          Positioned.fill(
+            child: DynMouseScroll(
+              durationMS: 250,
+              scrollSpeed: 1.2,
+              builder: (context, controller, physics) => ListView(
+                controller: controller,
+                padding: EdgeInsets.fromLTRB(16, topPadding, 16, 100),
+                physics: physics,
+                children: [
                         // [v3.0.0] 大卡片 1：数据导入
                         _buildSectionHeader('数据导入', isDark),
                         _buildCardGroup([
@@ -159,18 +127,11 @@ class SettingsDataScreen extends StatelessWidget {
                             '供手机日历与其他应用同步显示',
                             Icons.ios_share_rounded,
                             () async {
-                              final activeSchedule =
-                                  await dataImportService.getActiveSchedule();
-                              if (activeSchedule != null) {
-                                final path = await dataImportService
-                                    .exportHistoryToIcs(activeSchedule['id']);
-                                if (path != null && context.mounted) {
-                                  _showToast(context, 'ICS 已导出到:\n$path');
-                                }
-                              } else {
-                                if (context.mounted) {
-                                  _showToast(context, '未找到当前课表');
-                                }
+                              final path = await dataImportService.exportCurrentScheduleToIcs();
+                              if (path != null && context.mounted) {
+                                _showToast(context, 'ICS 日历已成功导出到:\n$path');
+                              } else if (context.mounted) {
+                                _showToast(context, '当前课表为空，无法导出');
                               }
                             },
                             isDark,
@@ -239,14 +200,40 @@ class SettingsDataScreen extends StatelessWidget {
                     ),
                   ),
                 ),
-              ],
+
+          // 2. 状态栏微模糊避让 (0..48dp)
+          const ImmersiveStatusBarBackdrop(),
+
+          // 3. 悬浮标题栏
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                child: Row(
+                  children: [
+                    Text(
+                      '数据管理',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? Colors.white : Colors.black87,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
-      // [v2.9.7] 悬浮右下角返回按钮
-      const liquid.FloatingLiquidBackButton(),
-    ],
-  ),
-);
+
+          // 4. [v2.9.7] 悬浮右下角返回按钮
+          const liquid.FloatingLiquidBackButton(),
+        ],
+      ),
+    );
   }
 
   // [v2.2.2] 历史记录对话框

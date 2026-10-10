@@ -199,29 +199,20 @@ void main() {
   
   float distFromEdge = abs(dist);
   
-  // TWEAK: edgeZone - How far from the edge the distortion extends (logical px)
-  //   Smaller = sharper transition, concentrated at very edge
-  //   Larger = softer, more gradual effect spreading inward
-  float edgeZone = 14.0;
+  // [v3.0.0-alpha25] 光学透镜倒角折射区：聚焦于圆角倒角边缘（避免整块卡片中心被非线性扭曲）
+  float edgeZone = max(6.0, min(uCornerRadius, 18.0));
+  float bevelT = clamp(distFromEdge / edgeZone, 0.0, 1.0);
   
-  // Calculate influence: 1.0 at edge, 0.0 at edgeZone pixels inward
-  float edgeInfluence = smoothstep(edgeZone, 0.0, distFromEdge);
+  // 钟形双曲透镜剖面：外轮廓 edge = 0 时折射偏移平滑归零（消灭边缘断崖硬切与采样撕裂），
+  // 在倒角弧面处达到峰值光折射，在平整内部自然无缝过渡回零（消灭内部采样错位）
+  float edgeInfluence = sin(bevelT * 3.14159265);
+  edgeInfluence = pow(edgeInfluence, 1.4);
   
-  // TWEAK: Quadratic falloff makes the bend gentler (less abrupt)
-  //   Use edgeInfluence directly for sharper edge effect
-  //   Use edgeInfluence * edgeInfluence for gentler, more natural curve
-  //   Use pow(edgeInfluence, 3.0) for even gentler effect
-  edgeInfluence = edgeInfluence * edgeInfluence;
+  // 真实光学折射偏折位移（标定至 3.0 ~ 7.0 物理逻辑像素，高精度对齐采样大小）
+  float refractionDelta = max(uRefractiveIndex, 1.0) - 1.0;
+  float bendStrength = (0.55 + refractionDelta * 1.8) * (0.85 + uInteractionIntensity * 0.40);
   
-  // TWEAK: bendStrength - Overall refraction intensity
-  //   Base (0.9): stronger edge lens distortion, closer to Impeller volumetric warp
-  //   Range: 0.45 (rest) → 1.17 (fully pressed)
-  float bendStrength = 0.9 * (0.5 + uInteractionIntensity * 0.7);
-  
-  // TWEAK: The final multiplier (uSize.y * 0.35) scales by widget height
-  //   0.35 means max offset is 35% of widget height
-  //   Increase for more dramatic effect, decrease for subtler
-  vec2 edgeOffsetLogical = surfaceNormal * edgeInfluence * bendStrength * uSize.y * 0.35;
+  vec2 edgeOffsetLogical = surfaceNormal * edgeInfluence * bendStrength * (clamp(uThickness, 8.0, 24.0) * 0.28);
   vec2 edgeOffsetUV = edgeOffsetLogical / uBackgroundSize;
   
   // Apply refraction offset along the surface normal.
@@ -239,12 +230,9 @@ void main() {
   // --------------------------------------------------------------------------
   // CHROMATIC ABERRATION
   // --------------------------------------------------------------------------
-  // Separates RGB channels slightly at edges, creating a subtle prism effect.
-  // Red shifts one way, blue shifts the opposite, green stays centered.
-  
-  // TWEAK: (0.12) - subtle chromatic shift for "Apple style" refraction
+  // 边缘物理棱镜微色散：随折射率同步放大，仅靠微量色散与自然高光勾勒清澈边缘
   vec2 distort = surfaceNormal * edgeInfluence * uChromaticAberration;
-  vec2 chromaticShift = distort * 0.12; 
+  vec2 chromaticShift = distort * 0.16 * (1.0 + refractionDelta * 1.5); 
   
   vec3 bg;
   if (uHasBackground > 0.5) {
@@ -344,8 +332,7 @@ void main() {
   vec3 finalColor = (uHasBackground > 0.5) ? (bg * bgBoost) : bg;
   
   // Rim highlight: primary + secondary bevel definition collapsed to one operation.
-  // Was: finalColor += rimColor * borderMask; finalColor += rimColor * borderMask * 0.5;
-  // 1.5× is mathematically identical with one fewer MAD per border fragment.
+  // 1.5× provides subtle physical glass specular catch without artificial white outline.
   finalColor += rimColor * borderMask * 1.5;
 
   // Add fresnel glow — uGlowIntensity controls how visible the glass-edge luminosity is.
