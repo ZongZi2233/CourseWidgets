@@ -24,7 +24,7 @@ class SettingsDataScreen extends StatelessWidget {
     final dataImportService = DataImportService();
     final isDark = ThemeService().isDarkMode; // Added this line
 
-    final topPadding = MediaQuery.paddingOf(context).top + 54;
+    final topPadding = MediaQuery.paddingOf(context).top + 60;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -204,7 +204,7 @@ class SettingsDataScreen extends StatelessWidget {
           // 2. 状态栏微模糊避让 (0..48dp)
           const ImmersiveStatusBarBackdrop(),
 
-          // 3. 悬浮标题栏
+          // 3. 悬浮大圆角矩形玻璃标题胶囊（点击可返回，消除裸字悬浮感）
           Positioned(
             top: 0,
             left: 0,
@@ -212,17 +212,10 @@ class SettingsDataScreen extends StatelessWidget {
             child: SafeArea(
               bottom: false,
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: Row(
-                  children: [
-                    Text(
-                      '数据管理',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: isDark ? Colors.white : Colors.black87,
-                      ),
-                    ),
+                  children: const [
+                    liquid.FloatingGlassHeaderButton(title: '数据管理'),
                   ],
                 ),
               ),

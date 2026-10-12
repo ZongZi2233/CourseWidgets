@@ -10,6 +10,7 @@ import '../../constants/theme_constants.dart';
 import '../widgets/liquid_components.dart';
 import '../widgets/liquid_glass_pickers.dart';
 import '../widgets/liquid_toast.dart';
+import '../widgets/immersive_status_bar_backdrop.dart';
 import 'package:smooth_scroll_multiplatform/smooth_scroll_multiplatform.dart';
 import '../../utils/responsive_utils.dart';
 
@@ -67,52 +68,27 @@ class _CourseEditScreenState extends State<CourseEditScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDark ? Colors.white : const Color(0xFF1A1A2E);
+    final topPadding = MediaQuery.paddingOf(context).top + 60;
 
     return Scaffold(
       backgroundColor: Colors.transparent, // 必须透明
       resizeToAvoidBottomInset: true, // 允许自身表单根据输入法滚动避让
       body: Stack(
         children: [
-          Column(
-              children: [
-                // Header
-                SafeArea(
-                  bottom: false,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 14,
-                    ),
-                    child: Row(
-                      children: [
-                        if (ResponsiveUtils.isDesktopOrLandscape(context)) const SizedBox(width: 56),
-                        Text(
-                          widget.course == null ? '添加课程' : '编辑课程',
-                          style: TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                            color: textColor,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-                // Content - 注入 RepaintBoundary 确保转场 120 FPS 满帧
-                Expanded(
-                  child: RepaintBoundary(
-                    child: DynMouseScroll(
-                      durationMS: 250,
-                      scrollSpeed: 1.2,
-                      builder: (context, controller, physics) =>
-                          SingleChildScrollView(
-                      controller: controller,
-                      padding: const EdgeInsets.all(20),
-                      physics: physics,
-                      child: Form(
-                        key: _formKey,
-                        child: Column(
+          // 1. 全出血自由滑动内容区：穿透顶栏与状态栏，消除截断
+          Positioned.fill(
+            child: RepaintBoundary(
+              child: DynMouseScroll(
+                durationMS: 250,
+                scrollSpeed: 1.2,
+                builder: (context, controller, physics) =>
+                    SingleChildScrollView(
+                  controller: controller,
+                  padding: EdgeInsets.fromLTRB(20, topPadding, 20, 100),
+                  physics: physics,
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             _buildSectionTitle('基本信息', textColor),
@@ -209,19 +185,41 @@ class _CourseEditScreenState extends State<CourseEditScreen> {
                             ),
                             const SizedBox(height: 40),
                           ],
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
+
+          // 2. 状态栏微模糊避让 (0..48dp)
+          const ImmersiveStatusBarBackdrop(),
+
+          // 3. 悬浮大圆角矩形玻璃标题胶囊（点击可返回，消除裸字悬浮感）
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  children: [
+                    FloatingGlassHeaderButton(
+                      title: widget.course == null ? '添加课程' : '编辑课程',
+                    ),
+                  ],
+                ),
+              ),
             ),
-          ],
-        ),
-      // [v2.9.7] 悬浮右下角返回按钮
-      const FloatingLiquidBackButton(),
-    ],
-  ),
-);
+          ),
+
+          // 4. [v2.9.7] 悬浮右下角返回按钮
+          const FloatingLiquidBackButton(),
+        ],
+      ),
+    );
   }
 
   Widget _buildSectionTitle(String title, Color textColor) {

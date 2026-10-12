@@ -10,7 +10,7 @@
 int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
                       _In_ wchar_t *command_line, _In_ int show_command) {
   // 显式声明全局 AppUserModelID，使 Windows 任务栏与 Action Center 通知精准匹配图标
-  SetCurrentProcessExplicitAppUserModelID(L"CourseWidgets Beta");
+  SetCurrentProcessExplicitAppUserModelID(L"CourseWidgets");
 
   // Attach to console when present (e.g., 'flutter run') or create a
   // new console when running with a debugger.
@@ -18,12 +18,12 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
     CreateAndAttachConsole();
   }
 
-  // Single instance check for CourseWidgets Beta
-  HANDLE hMutex = CreateMutex(NULL, TRUE, L"CourseWidgetsBeta_SingleInstance_Mutex");
+  // Single instance check for CourseWidgets
+  HANDLE hMutex = CreateMutex(NULL, TRUE, L"CourseWidgets_SingleInstance_Mutex");
   if (GetLastError() == ERROR_ALREADY_EXISTS) {
-    HWND existingHwnd = FindWindow(L"FLUTTER_RUNNER_WIN32_WINDOW", L"CourseWidgets Beta");
+    HWND existingHwnd = FindWindow(L"FLUTTER_RUNNER_WIN32_WINDOW", L"CourseWidgets");
     if (!existingHwnd) {
-      existingHwnd = FindWindow(L"FLUTTER_RUNNER_WIN32_WINDOW", L"CourseWidgets");
+      existingHwnd = FindWindow(L"FLUTTER_RUNNER_WIN32_WINDOW", L"CourseWidgets Beta");
     }
     if (existingHwnd) {
       if (IsIconic(existingHwnd)) {
@@ -54,7 +54,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   Win32Window::Size size(1280, 720);
   
   // Set window title and icon
-  if (!window.Create(L"CourseWidgets Beta", origin, size)) {
+  if (!window.Create(L"CourseWidgets", origin, size)) {
     return EXIT_FAILURE;
   }
   

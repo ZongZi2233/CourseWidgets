@@ -57,7 +57,7 @@ class _SettingsAboutScreenState extends State<SettingsAboutScreen>
     final secondaryTextColor = isDark ? Colors.white70 : const Color(0xFF555B68);
     final tertiaryTextColor = isDark ? Colors.white54 : const Color(0xFF8A909E);
 
-    final topPadding = MediaQuery.paddingOf(context).top + 54;
+    final topPadding = MediaQuery.paddingOf(context).top + 60;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -202,7 +202,7 @@ class _SettingsAboutScreenState extends State<SettingsAboutScreen>
           // 2. 状态栏微模糊避让 (0..48dp)
           const ImmersiveStatusBarBackdrop(),
 
-          // 3. 悬浮标题栏
+          // 3. 悬浮大圆角矩形玻璃标题胶囊（点击可返回，消除裸字悬浮感）
           Positioned(
             top: 0,
             left: 0,
@@ -210,18 +210,10 @@ class _SettingsAboutScreenState extends State<SettingsAboutScreen>
             child: SafeArea(
               bottom: false,
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: Row(
-                  children: [
-                    if (ResponsiveUtils.isDesktopOrLandscape(context)) const SizedBox(width: 56),
-                    Text(
-                      '关于软件',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: primaryTextColor,
-                      ),
-                    ),
+                  children: const [
+                    liquid.FloatingGlassHeaderButton(title: '关于软件'),
                   ],
                 ),
               ),
@@ -515,7 +507,7 @@ class _SettingsAboutScreenState extends State<SettingsAboutScreen>
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '当前为最新开发版 v$appVersion',
+                    '当前为正式版 v$appVersion',
                     style: TextStyle(
                       fontSize: 12,
                       color: isDark ? Colors.white60 : Colors.black54,

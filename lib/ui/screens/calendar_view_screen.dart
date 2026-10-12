@@ -93,52 +93,48 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
     return content;
   }
 
-  /// [v3.0.0-alpha23] 横屏自适应左右双栏分屏（Android横屏与Windows桌面完全对齐）
+  /// [v3.0.0 正式版] 横屏自适应左右双栏全幅分屏（零边界截断，无需预留dock栏死区）
   /// 左栏：精简晶透顶栏 + 完整月历网格
   /// 右栏：选中日期的课程日程详情列表
   Widget _buildLandscapeLayout(ScheduleProvider provider) {
-    final bottomInset = MediaQuery.paddingOf(context).bottom + 76.0;
+    final topPadding = MediaQuery.paddingOf(context).top + 8.0;
+    final bottomPadding = MediaQuery.paddingOf(context).bottom + 12.0;
 
-    return SafeArea(
-      bottom: false,
-      left: false,
-      right: false,
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(
-          16 + MediaQuery.paddingOf(context).left,
-          8,
-          16 + MediaQuery.paddingOf(context).right,
-          bottomInset,
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 左侧：缩减至左侧的完整日历顶栏与日期网格 (45%)
-            Expanded(
-              flex: 45,
-              child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _buildHeader(horizontalPadding: 0, compact: true),
-                    const SizedBox(height: 8),
-                    liquid.HyperOSCard(
-                      padding: const EdgeInsets.all(12),
-                      child: _buildCalendarGrid(provider),
-                    ),
-                  ],
-                ),
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        16 + MediaQuery.paddingOf(context).left,
+        topPadding,
+        16 + MediaQuery.paddingOf(context).right,
+        bottomPadding,
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 左侧：缩减至左侧的完整日历顶栏与日期网格 (45%)
+          Expanded(
+            flex: 45,
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildHeader(horizontalPadding: 0, compact: true),
+                  const SizedBox(height: 8),
+                  liquid.HyperOSCard(
+                    padding: const EdgeInsets.all(12),
+                    child: _buildCalendarGrid(provider),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(width: 14),
-            // 右侧：选定日期课程列表 (55%)
-            Expanded(
-              flex: 55,
-              child: _buildSelectedDateCourses(provider),
-            ),
-          ],
-        ),
+          ),
+          const SizedBox(width: 14),
+          // 右侧：选定日期课程列表 (55%)
+          Expanded(
+            flex: 55,
+            child: _buildSelectedDateCourses(provider, isLandscape: true),
+          ),
+        ],
       ),
     );
   }
@@ -542,7 +538,7 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
   }
 
   /// 选定日期的课程日程流（彻底废除嵌套 BackdropFilter，改用高性能轻量晶透卡片）
-  Widget _buildSelectedDateCourses(ScheduleProvider provider) {
+  Widget _buildSelectedDateCourses(ScheduleProvider provider, {bool isLandscape = false}) {
     if (_selectedDate == null) return const SizedBox.shrink();
     final date = _selectedDate!;
     final courses = _getCoursesForDate(date, provider.courses);
@@ -600,7 +596,12 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
           child: courses.isEmpty
               ? _buildEmptyState(isDark)
               : ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 120),
+                  padding: EdgeInsets.fromLTRB(
+                    16,
+                    4,
+                    16,
+                    isLandscape ? (16 + MediaQuery.paddingOf(context).bottom) : 120,
+                  ),
                   physics: const BouncingScrollPhysics(),
                   itemCount: courses.length,
                   itemBuilder: (context, index) {

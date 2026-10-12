@@ -64,13 +64,7 @@ class _IosLiquidGlassMainState extends State<IosLiquidGlassMain> {
       );
     }
 
-    final isTablet = ResponsiveUtils.isTabletMode(context);
-
-    if (isTablet) {
-      return _buildTabletLayout(context);
-    } else {
-      return _buildPhoneLayout(context);
-    }
+    return _buildPhoneLayout(context);
   }
 
   /// iPad 布局

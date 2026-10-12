@@ -233,7 +233,7 @@ void main() async {
       }
 
       await localNotifier.setup(
-        appName: 'CourseWidgets Beta',
+        appName: 'CourseWidgets',
         shortcutPolicy: ShortcutPolicy.requireCreate,
       );
     }

@@ -1,7 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import '../../providers/schedule_provider.dart';
 import '../../services/theme_service.dart';
 import 'android_schedule_config_screen.dart';
@@ -9,6 +8,7 @@ import 'course_edit_screen.dart';
 import '../widgets/liquid_components.dart' as liquid;
 import '../transitions/smooth_slide_transitions.dart';
 import '../widgets/liquid_glass_pickers.dart';
+import '../widgets/immersive_status_bar_backdrop.dart';
 import '../../utils/glass_settings_helper.dart';
 
 class NewSettingsScreen extends StatefulWidget {
@@ -23,53 +23,18 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final topPadding = MediaQuery.paddingOf(context).top + 60;
+
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Stack(
         children: [
+          // 1. 全出血自由滑动内容区
           Positioned.fill(
-            child: AdaptiveLiquidGlassLayer(
-            quality: ThemeService().glassQuality,
-            settings: const LiquidGlassSettings(
-              blur: 3.0,
-              thickness: 24.0,
-              glassColor: Color(0x0EFFFFFF),
-              lightIntensity: 0.70,
-              ambientStrength: 0.45,
-              ambientRim: 0.0,
-              fresnelStrength: 0.0,
-              saturation: 1.20,
-              refractiveIndex: 1.46,
-            ),
-            child: Column(
+            child: ListView(
+              padding: EdgeInsets.fromLTRB(16, topPadding, 16, 100),
+              physics: const BouncingScrollPhysics(),
               children: [
-                SafeArea(
-                  bottom: false,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 14,
-                    ),
-                    child: Row(
-                      children: [
-                        Text(
-                          '课程设置',
-                          style: TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                            color: _textColor,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.all(16),
-                physics: const BouncingScrollPhysics(),
-                children: [
                   _buildSectionTitle('课程管理'),
                   _buildCardGroup([
                     _buildSettingRow(
@@ -123,20 +88,39 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
                           onTap: _pickSemesterStartDate,
                         ),
                       ]);
-                      },
-                    ),
+                    },
+                  ),
+                ],
+              ),
+            ),
+
+          // 2. 状态栏微模糊避让 (0..48dp)
+          const ImmersiveStatusBarBackdrop(),
+
+          // 3. 悬浮大圆角矩形玻璃标题胶囊（点击可返回，消除裸字悬浮感）
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  children: const [
+                    liquid.FloatingGlassHeaderButton(title: '课程设置'),
                   ],
                 ),
               ),
-            ],
+            ),
           ),
-        ),
+
+          // 4. [v2.9.7] 悬浮右下角返回按钮
+          const liquid.FloatingLiquidBackButton(),
+        ],
       ),
-      const liquid.FloatingLiquidBackButton(),
-    ],
-  ),
-);
-}
+    );
+  }
 
   Widget _buildSectionTitle(String title) {
     return Padding(

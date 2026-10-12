@@ -24,8 +24,8 @@ android {
     }
 
     defaultConfig {
-        // [v3.0.0-alpha1] 独立测试包名，支持与 v2.x 稳定版无冲突并存安装测试
-        applicationId = "com.zongzi.schedule.beta"
+        // [v3.0.0 正式版] 主线正式发布包名
+        applicationId = "com.zongzi.schedule"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = 35  // Android 15

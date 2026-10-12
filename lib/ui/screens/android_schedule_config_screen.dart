@@ -317,7 +317,7 @@ class AndroidScheduleConfigScreenState
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDark ? Colors.white : const Color(0xFF1A1A2E);
 
-    final topPadding = widget.showNavigation ? (MediaQuery.paddingOf(context).top + 54) : 0.0;
+    final topPadding = widget.showNavigation ? (MediaQuery.paddingOf(context).top + 60) : 0.0;
     final defaultPadding = EdgeInsets.fromLTRB(16, topPadding > 0 ? topPadding : 16, 16, 100);
 
     return PopScope(
@@ -632,18 +632,13 @@ class AndroidScheduleConfigScreenState
                 bottom: false,
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 12,
+                    horizontal: 16,
+                    vertical: 8,
                   ),
                   child: Row(
                     children: [
-                      Text(
-                        '课时配置',
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                          color: textColor,
-                        ),
+                      const liquid.FloatingGlassHeaderButton(
+                        title: '课时配置',
                       ),
                       const Spacer(),
                       liquid.LiquidButton(

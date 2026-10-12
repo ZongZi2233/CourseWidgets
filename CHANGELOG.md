@@ -2,31 +2,45 @@
 
 本文档记录 CourseWidgets 各版本更新的动态活动演进，重点关注架构改进、渲染优化、故障诊断与教务抓取能力提升。
 
-## [v3.0.0] - 2026-10-10 (Build 3000 正式版)
+## [v3.0.0] - 2026-10-12 (Build 3000 正式版)
 
-### 1. WebView 教务会话与凭据持久化 (Persistent WebView Cookies & Credentials)
+### 1. 正式包名与全平台应用名称就位 (Production Package & Binary Identity)
+- **Android 正式应用包名**：`applicationId` 彻底去除测试版后缀，正式发布为 `com.zongzi.schedule`，应用名称统一为 `CourseWidgets`；
+- **Windows 桌面端二进制正式发布**：输出文件名正式定为 `CourseWidgets.exe`，内部产品名、OriginalFilename、`AppUserModelID`、单实例互斥体名称（`CourseWidgets_SingleInstance_Mutex`）及窗口标题全量更新为 `CourseWidgets`；
+- **版本关于文案正式化**：关于页面“检查新版本”卡片副标题更正为“当前为正式版 v3.0.0”，彻底移除开发版标记。
+
+### 2. 平板与手机横屏架构全域统一 (Unified Responsive Landscape Architecture)
+- **彻底废除老旧平板侧边栏**：废弃包含 76px 侧边栏与固定 padding 网格的旧式 `_buildTabletLayout`，平板与手机横竖屏统一使用新一代自适应流式布局；
+- **双角悬浮 Touch Bar 全面接管**：平板在横屏下 100% 呈现与手机/桌面端一致的双角悬浮双标签导航胶囊与设置按钮，释放 100% 垂直与水平显示区域，课表全出血铺满。
+
+### 3. 日历页面横屏死区消除与流式铺满 (Calendar View Zero-Deadzone Edge-to-Edge)
+- **消除 Dock 避让死区**：彻底移除横屏模式下为 dock 预留的 `76.0dp` 截断死区与不必要的外部 `SafeArea` 限制；
+- **双栏舒展流式展示**：左侧月历卡片与右侧日程详情列表全幅铺满展示，ListView 内边距按横屏动态收拢，在小屏手机、宽屏折叠屏与平板横屏下完全杜绝裁切截断。
+
+### 4. 设置主页横屏状态栏避让优化 (Settings Screen Landscape Inset Optimization)
+- **根治状态栏字头碰撞**：设置页横屏下顶部间距升级为 `MediaQuery.paddingOf(context).top + 18.0` 并补充左右横向安全区内边距，彻底解决“核心功能设置”大标题与系统状态栏图标叠压碰撞。
+
+### 5. 全域悬浮玻璃标题返回胶囊落地 (Universal FloatingGlassHeaderButton)
+- **消除半空裸字悬浮感**：新增 20dp 超椭圆微透磨砂玻璃胶囊组件 `FloatingGlassHeaderButton`，内嵌 `chevron_left` 返回箭头与页面标题，支持 `SpringTouchFeedback` 跟手弹簧动效与一键返回上一页；
+- **全子页面统一普及**：全面应用至课程通知、通用设置、数据管理、关于软件、课时配置、课程设置（NewSettingsScreen）；
+- **全幅贯通穿透滑动**：子页面列表贯通至顶部，向上滑动时平滑穿入玻璃胶囊与状态栏下方，质感与交互体验高度统一。
+
+### 6. 课程编辑页面全出血重构 (CourseEditScreen Full-Bleed Layout)
+- **消除顶部边界裁断**：移除外层硬性边界，重构为全幅 `Positioned.fill` 表单滚动视口与顶部 `ImmersiveStatusBarBackdrop` 微模糊背景；
+- **大标题升级胶囊返回**：“添加课程/编辑课程”标题无缝采用 `FloatingGlassHeaderButton`，支持点按返回上一页，兼顾沉浸感与易用性。
+
+### 7. WebView 教务会话与凭据持久化 (Persistent WebView Cookies & Credentials)
 - **Windows (WebView2) 独立环境落盘**：显式调用 `WebviewController.initializeEnvironment(userDataPath: webviewDataDir.path)`，将用户数据统一绑定至 `%APPDATA%/.../webview2_profile` 专用目录，实现 Session Cookie、LocalStorage 与 Chromium 密码管理器物理持久化；
 - **Android 第三方 Cookie 穿透**：开启 `cookieManager.setAcceptThirdPartyCookies(true)`，彻底打通高校教务跨子域 CAS / IAM 单点登录鉴权链路；
 - **跨平台表单凭据自动保存与回填**：注入教务登录态监听脚本，基于 MMKV 安全加密存储账号密码，实现高校教务系统“记住密码”与二次打开一键自动填充。
 
-### 2. 课时设置界面中性玻璃美学统一 (Pure Translucent Schedule Config)
-- **拔除突兀亮蓝底色**：彻底移除“对齐课表”与“智慧推算”按钮的亮蓝色渐变（`0xFF00C9FF`、`0xFF4FACFE`），全量统一为沉稳克制的微透中性液态玻璃风格（浅色 6% 微透、深色 12% 晶透白），与界面其他操作按钮及全局 HyperOS / iOS 26 质感完全融为一体。
-
-### 3. 课程详情弹窗磨砂液态玻璃质感恢复 (Frosted Liquid Glass Detail Actions)
-- **磨砂透光质感重构**：底部“编辑课程”与“关闭”按钮告别生硬纯实色，重构为微透磨砂玻璃晶体（`ClipRRect` + `BackdropFilter` 16 sigma），边缘辅以细晶微高光与 `SpringTouchFeedback` 物理跟手微缩放动效，兼顾文字极高对比度与背景透光质感。
-
-### 4. 全域 LiquidGlassDialog 物理弹簧进场动效与全屏模糊 (SpringBounce Dialog Engine)
-- **彻底消除直接闪现与跳闪**：移除内外部嵌套动画冲突，拔除内层重复缩放，消灭“下半部跳闪”与“直接闪现”底层缺陷；
-- **全屏动态模糊 + 高张力物理弹簧**：统一升级为 `AppCurves.springBounce` 曲线（360ms）驱动，初速度饱满且具备自然微过冲；全屏背景搭载动态增长至 18 sigma 的 `BackdropFilter`；
-- **超椭圆液态玻璃卡片**：对话框本体采用 28dp 超椭圆曲率、双层物理阴影、24 sigma 磨砂玻璃与高光边缘，质感纯净通透。
-
-### 5. 多格式课表导入导出无损闭环与零破坏迁移 (Import/Export Loop & SQLite Schema v4)
+### 8. 多格式课表导入导出无损闭环与零破坏迁移 (Import/Export Loop & SQLite Schema v4)
 - **核心课程语义节次固化 (Schema v4)**：数据库 `courses` 表持久化 `startSection`（起始节次）与 `endSection`（结束节次），`MigrationRunner` 平滑推进至 Schema Version 4，从根本上解决修改课时作息导致“早八课被吃掉、第二节大课前移”的移位问题；
 - **ICS 日历双向无损流通**：遵循 RFC 5545 标准，导出时自动内嵌 `X-SCHEDULE-CONFIG` 与 `X-SECTION` 自定义标签，支持将当前活动课表一键导出为 `.ics` 日历文件，实现跨设备、跨应用（系统日历、ClassIsland 等）无损双向导入与回环；
 - **第三方 HTML 与 JSON 备份全链路兼容**：支持导入醒目课表 (WakeUp)、小爱课表及各类高校网页 HTML 导出文件；支持全量课表与作息配置 JSON 备份与一键无损还原；
-- **严密测试保障**：新增 `test/import_export_v4_test.dart` 自动化测试，覆盖 Schema 迁移、ICS 节次回环、HTML 位串解析及 JSON 备份全链路，测试 100% 绿灯通过。
+- **严密测试保障**：自动化测试套件（33项）全部绿灯通过，覆盖 Schema 迁移、ICS 节次回环、HTML 位串解析及 JSON 备份全链路。
 
-### 6. 开源协议升级与主线合并 (AGPL-3.0 License & Main Line Convergence)
+### 9. 开源协议升级与主线合并 (AGPL-3.0 License & Main Line Convergence)
 - **开源许可证升级**：全面升级为 GNU Affero General Public License v3.0 (AGPL-3.0)；
 - **版本正式定名**：应用版本正式发布为 **`v3.0.0` (Build `3000`)**；
 - **主线全量合并**：完成由 `v3beta` 分支向 `main` 主线的合并迁移，后续迭代直接在 `main` 主线开展。

@@ -128,10 +128,8 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
   Widget build(BuildContext context) {
     // [v2.8.5 彻底消灭启动黑屏与白屏停滞] 立即绘制主界面布局，数据异步装载完毕后自动驱动刷新
 
-    final isTablet = ResponsiveUtils.isTabletMode(context);
-    final Widget rootLayout = isTablet
-        ? _buildTabletLayout(context)
-        : _buildPhoneLayout(context);
+    // [v3.0.0 正式版] 手机与平板全域统一响应式架构：横屏全量采用双角浮动导航与全幅贯通课表，彻底告别老旧侧边栏
+    final Widget rootLayout = _buildPhoneLayout(context);
 
     // [v2.9.0] 彻底关闭陀螺仪持续重绘，提供丝滑稳定 120 FPS
     return GlassMotionScope(
@@ -196,7 +194,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
   /// 手机布局
   Widget _buildPhoneLayout(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final isLandscapePhone = ResponsiveUtils.isLandscapePhone(context);
+    final isLandscape = ResponsiveUtils.isLandscape(context);
 
     return Scaffold(
       resizeToAvoidBottomInset: false, // [v2.8.6] 软键盘弹出时防止底层背景被压缩或上移漂移
@@ -221,10 +219,10 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
             ),
           ),
           // [v3.0.0] 物理状态栏 (0..48dp) 顶级沉浸式微模糊避让 (非横屏时生效)
-          if (!isLandscapePhone) const ImmersiveStatusBarBackdrop(),
+          if (!isLandscape) const ImmersiveStatusBarBackdrop(),
 
-          // [v3.0.0-alpha23] 手机横屏模式：左下角官方 GlassTabBar 双标签 touch bar + 右下角圆形官方液态玻璃设置按钮，上下左右零挤占
-          if (isLandscapePhone) ...[
+          // [v3.0.0-alpha23] 横屏模式：左下角官方 GlassTabBar 双标签 touch bar + 右下角圆形官方液态玻璃设置按钮，上下左右零挤占
+          if (isLandscape) ...[
             // 左下角：官方 GlassTabBar 双按钮玻璃导航栏（课程、日历）
             Positioned(
               left: 16 + MediaQuery.of(context).padding.left,
@@ -255,8 +253,8 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
           ],
         ],
       ),
-      // 竖屏时使用官方原生旗舰 GlassTabBar.bottom；横屏手机使用完全浮动双角布局，彻底释放高度
-      bottomNavigationBar: isLandscapePhone
+      // 竖屏时使用官方原生旗舰 GlassTabBar.bottom；横屏模式使用完全浮动双角布局，彻底释放高度
+      bottomNavigationBar: isLandscape
           ? null
           : SafeArea(
               bottom: true,
@@ -508,9 +506,9 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
   Widget _buildSchedulePage() {
     return Consumer<ScheduleProvider>(
         builder: (context, provider, _) {
-          final isLandscapePhone = ResponsiveUtils.isLandscapePhone(context);
+          final isLandscape = ResponsiveUtils.isLandscape(context);
           // [v3.0.0-alpha23] 横屏模式彻底移除大标题栏，仅保留左上角节次星期交汇处的悬浮日期胶囊，释放全幅垂直空间
-          final topPadding = isLandscapePhone
+          final topPadding = isLandscape
               ? (MediaQuery.of(context).padding.top + 6)
               : (MediaQuery.of(context).padding.top + 54);
 
@@ -519,22 +517,22 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
               // 课程网格本周看板：全屏铺满，上下纵向滚动，平滑穿过顶栏与底栏
               Positioned.fill(
                 child: WeeklyScheduleGrid(
-                  key: const ValueKey('weekly_schedule_grid_phone_main'),
+                  key: const ValueKey('weekly_schedule_grid_main'),
                   showControlBar: false,
                   isPhone: true,
                   contentPadding: EdgeInsets.only(
                     top: topPadding,
-                    bottom: isLandscapePhone
+                    bottom: isLandscape
                         ? (MediaQuery.of(context).padding.bottom + 72)
                         : 186, // [v2.9.7] 为进一步抬高的浮动胶囊 Dock 留出安全滚动距离
-                    left: isLandscapePhone ? (MediaQuery.of(context).padding.left + 4) : 2,
-                    right: isLandscapePhone ? (MediaQuery.of(context).padding.right + 4) : 2,
+                    left: isLandscape ? (MediaQuery.of(context).padding.left + 4) : 2,
+                    right: isLandscape ? (MediaQuery.of(context).padding.right + 4) : 2,
                   ),
                 ),
               ),
 
               // 顶部悬浮标题栏：轻量品牌与日期指示（仅竖屏展示，横屏由左上角胶囊承接）
-              if (!isLandscapePhone)
+              if (!isLandscape)
                 Positioned(
                   top: 0,
                   left: 0,
@@ -555,8 +553,8 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
 
               // 底部悬浮横向胶囊控制 Dock：
               // 竖屏模式：抬高至 bottom: 120，靠右对齐放置与底栏保持舒适距离
-              // 横屏手机模式：居中对齐在 bottom: 14 + padding.bottom，与左侧导航胶囊及右侧设置按钮在同一水平线上
-              if (isLandscapePhone)
+              // 横屏模式：居中对齐在 bottom: 14 + padding.bottom，与左侧导航胶囊及右侧设置按钮在同一水平线上
+              if (isLandscape)
                 Positioned(
                   bottom: 14 + MediaQuery.of(context).padding.bottom,
                   left: 0,

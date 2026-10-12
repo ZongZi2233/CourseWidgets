@@ -43,7 +43,7 @@ class _SettingsNotificationScreenState
   @override
   Widget build(BuildContext context) {
     final isDark = ThemeService().isDarkMode;
-    final topPadding = MediaQuery.paddingOf(context).top + 54;
+    final topPadding = MediaQuery.paddingOf(context).top + 60;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -134,7 +134,7 @@ class _SettingsNotificationScreenState
           // 2. 状态栏微模糊避让 (0..48dp)
           const ImmersiveStatusBarBackdrop(),
 
-          // 3. 悬浮标题栏
+          // 3. 悬浮大圆角矩形玻璃标题胶囊（点击可返回，消除裸字悬浮感）
           Positioned(
             top: 0,
             left: 0,
@@ -142,17 +142,10 @@ class _SettingsNotificationScreenState
             child: SafeArea(
               bottom: false,
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: Row(
-                  children: [
-                    Text(
-                      '课程通知',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: GlassSettingsHelper.getTextColor(context),
-                      ),
-                    ),
+                  children: const [
+                    liquid.FloatingGlassHeaderButton(title: '课程通知'),
                   ],
                 ),
               ),

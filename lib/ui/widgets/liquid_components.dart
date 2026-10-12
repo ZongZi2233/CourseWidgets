@@ -797,6 +797,92 @@ class FloatingLiquidBackButton extends StatelessWidget {
   }
 }
 
+/// [v3.0.0 正式版] 统一悬浮大圆角矩形玻璃标题与返回胶囊按钮 (FloatingGlassHeaderButton)
+/// 
+/// 1. 采用大圆角矩形超椭圆晶透玻璃 (20dp)，搭载轻量模糊与高光边框；
+/// 2. 左侧配备返回箭头，右侧呈现加粗标题，点击触发返回与触觉反馈；
+/// 3. 支持挂载在 Positioned 顶部悬浮栏中，消除生硬的裸字悬浮感，统一全应用二级页面设计语言。
+class FloatingGlassHeaderButton extends StatelessWidget {
+  final String title;
+  final VoidCallback? onBack;
+  final Widget? trailing;
+
+  const FloatingGlassHeaderButton({
+    super.key,
+    required this.title,
+    this.onBack,
+    this.trailing,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? Colors.white : const Color(0xFF1D2129);
+
+    return SpringTouchFeedback(
+      onTap: () {
+        HapticFeedback.lightImpact();
+        if (onBack != null) {
+          onBack!();
+        } else {
+          Navigator.maybePop(context);
+        }
+      },
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              color: isDark
+                  ? Colors.black.withValues(alpha: 0.35)
+                  : Colors.white.withValues(alpha: 0.65),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.16)
+                    : Colors.white.withValues(alpha: 0.85),
+                width: 0.8,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.06),
+                  blurRadius: 14,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  CupertinoIcons.chevron_left,
+                  size: 18,
+                  color: textColor.withValues(alpha: 0.9),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                    color: textColor,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+                if (trailing != null) ...[
+                  const SizedBox(width: 8),
+                  trailing!,
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 /// [v3.0.0] 自研组件化无描边物理悬浮阴影系统 (Rimless Elevation Shadows)
 /// 对齐 Moyue 与 Apple VisionOS 光学漫反射哲学：
