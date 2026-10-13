@@ -15,8 +15,84 @@ import android.util.Log
 object LiveUpdateNotificationManager {
     const val CHANNEL_ID = "live_course_updates_v3"
     const val NOTIFICATION_ID = 1000
+    const val REMINDER_CHANNEL_ID = "course_reminders"
+    const val REMINDER_NOTIFICATION_ID = 1001
     const val PREFS_NAME = "cw_live_update_prefs"
     const val KEY_UPCOMING_COURSES = "upcoming_courses_json"
+
+    /**
+     * [v3.0.1] 发送高优先级主动唤醒课程提醒通知（含声音、振动、横幅弹窗与亮屏）
+     */
+    fun postReminderAlert(
+        context: Context,
+        title: String,
+        body: String,
+        courseName: String,
+        location: String,
+        startTime: Long
+    ) {
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                REMINDER_CHANNEL_ID,
+                "课程即将开始提醒",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "课程即将开始的高优先级强提醒（响铃与振动）"
+                setShowBadge(true)
+                enableLights(true)
+                lightColor = 0xFFFF5252.toInt()
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 350, 150, 350)
+                setSound(
+                    android.provider.Settings.System.DEFAULT_NOTIFICATION_URI,
+                    android.media.AudioAttributes.Builder()
+                        .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION_EVENT)
+                        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build()
+                )
+            }
+            notificationManager.createNotificationChannel(channel)
+        }
+
+        val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+        }
+        val pendingIntent = launchIntent?.let {
+            PendingIntent.getActivity(context, REMINDER_NOTIFICATION_ID, it, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        }
+
+        val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Notification.Builder(context, REMINDER_CHANNEL_ID)
+        } else {
+            @Suppress("DEPRECATION")
+            Notification.Builder(context)
+        }
+
+        builder.setContentTitle(title)
+            .setContentText(body)
+            .setStyle(Notification.BigTextStyle().bigText(body))
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setAutoCancel(true)
+            .setPriority(Notification.PRIORITY_MAX)
+            .setCategory(Notification.CATEGORY_EVENT)
+            .setVisibility(Notification.VISIBILITY_PUBLIC)
+
+        if (pendingIntent != null) {
+            builder.setContentIntent(pendingIntent)
+            builder.setFullScreenIntent(pendingIntent, false)
+        }
+
+        try {
+            val appIconBitmap = BitmapFactory.decodeResource(context.resources, R.mipmap.ic_launcher)
+            if (appIconBitmap != null) {
+                builder.setLargeIcon(appIconBitmap)
+            }
+        } catch (_: Exception) {}
+
+        notificationManager.notify(REMINDER_NOTIFICATION_ID, builder.build())
+        Log.d("CourseWidgets", "🔔 [LiveUpdate] 已发送主动唤醒提醒通知: $title - $courseName")
+    }
 
     fun postNotification(
         context: Context,

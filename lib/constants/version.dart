@@ -2,9 +2,9 @@ import 'dart:io';
 import '../main.dart' show globalDarkModeNotifier, globalBackgroundPath;
 export '../main.dart' show globalBackgroundPath;
 
-/// 当前版本：[v3.0.0 正式版] 主线正式发布（Build 3000）
-const String appVersion = '3.0.0';
-const int buildNumber = 3000;
+/// 当前版本：[v3.0.1 正式版] 主线正式发布（Build 3001）
+const String appVersion = '3.0.1';
+const int buildNumber = 3001;
 const String copyright = '© 2025-2026 CourseWidgets. All rights reserved.';
 
 // 全局状态

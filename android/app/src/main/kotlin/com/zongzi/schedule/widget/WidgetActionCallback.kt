@@ -28,5 +28,6 @@ class SwitchDayActionCallback : ActionCallback {
         prefs.edit().putInt(KEY_DAY_OFFSET, newOffset).apply()
 
         ScheduleGlanceWidget().update(context, glanceId)
+        ScheduleWidgetReceiver.updateAll(context)
     }
 }

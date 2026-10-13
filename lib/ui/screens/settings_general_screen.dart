@@ -352,29 +352,27 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
                   children: [
                     // [v3.0.0] 外观设置大卡片（合并自适应与强制深色）
                     _buildSection('外观'),
-                    if (!Platform.isWindows) ...[
-                      _buildCardGroup([
-                        _buildSwitchRow(
-                          '自适应深色模式',
-                          '跟随系统设置',
-                          CupertinoIcons.circle_righthalf_fill,
-                          _adaptiveDarkMode,
-                          _toggleAdaptiveMode,
+                    _buildCardGroup([
+                      _buildSwitchRow(
+                        '自适应深色模式',
+                        '跟随系统设置',
+                        CupertinoIcons.circle_righthalf_fill,
+                        _adaptiveDarkMode,
+                        _toggleAdaptiveMode,
+                      ),
+                      IgnorePointer(
+                        ignoring: _adaptiveDarkMode,
+                        child: _buildSwitchRow(
+                          '强制深色模式',
+                          '手动覆盖系统设置',
+                          CupertinoIcons.moon_fill,
+                          globalUseDarkMode,
+                          _toggleDarkMode,
+                          disabled: _adaptiveDarkMode,
                         ),
-                        IgnorePointer(
-                          ignoring: _adaptiveDarkMode,
-                          child: _buildSwitchRow(
-                            '强制深色模式',
-                            '手动覆盖系统设置',
-                            CupertinoIcons.moon_fill,
-                            globalUseDarkMode,
-                            _toggleDarkMode,
-                            disabled: _adaptiveDarkMode,
-                          ),
-                        ),
-                      ]),
-                      const SizedBox(height: 20),
-                    ],
+                      ),
+                    ]),
+                    const SizedBox(height: 20),
 
                     // [v3.0.0] 主题色大卡片
                     _buildSection('主题色'),

@@ -70,6 +70,19 @@ object WidgetAlarmScheduler {
         var hasActiveOrNearCourse = false
         var nextWakeup = Long.MAX_VALUE
 
+        // 计算次日凌晨 (00:00:05) 自动唤醒，确保跨日时日期指示与今日看板准时刷新
+        val midnightCal = java.util.Calendar.getInstance().apply {
+            add(java.util.Calendar.DAY_OF_YEAR, 1)
+            set(java.util.Calendar.HOUR_OF_DAY, 0)
+            set(java.util.Calendar.MINUTE, 0)
+            set(java.util.Calendar.SECOND, 5)
+            set(java.util.Calendar.MILLISECOND, 0)
+        }
+        val nextMidnight = midnightCal.timeInMillis
+        if (nextMidnight > now) {
+            nextWakeup = nextMidnight
+        }
+
         for (i in 0 until courses.length()) {
             val c = courses.getJSONObject(i)
             val st = c.optLong("startTime", 0L)

@@ -69,19 +69,20 @@ class ScheduleGlanceWidget : GlanceAppWidget() {
 
         val monthDayFmt = SimpleDateFormat("M月d日", Locale.CHINA)
         val weekFmt = SimpleDateFormat("E", Locale.CHINA)
-        val dateDisplay = if (dayOffset == 0) {
-            "${monthDayFmt.format(targetDate)} ${weekFmt.format(targetDate)}"
-        } else if (dayOffset == 1) {
-            "明天 · ${weekFmt.format(targetDate)}"
-        } else if (dayOffset == -1) {
-            "昨天 · ${weekFmt.format(targetDate)}"
-        } else {
-            "${monthDayFmt.format(targetDate)} ${weekFmt.format(targetDate)}"
+        val dateDisplay = when (dayOffset) {
+            0 -> "今天 · ${monthDayFmt.format(targetDate)}"
+            1 -> "明天 · ${monthDayFmt.format(targetDate)}"
+            -1 -> "昨天 · ${monthDayFmt.format(targetDate)}"
+            else -> "${weekFmt.format(targetDate)} · ${monthDayFmt.format(targetDate)}"
         }
 
         val courseData = loadTargetCourseData(context, targetCal, dayOffset)
 
         provideContent {
+            val launchIntent = Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            }
+
             Box(
                 modifier = GlanceModifier
                     .fillMaxSize()
@@ -91,26 +92,27 @@ class ScheduleGlanceWidget : GlanceAppWidget() {
                 Column(
                     modifier = GlanceModifier.fillMaxSize()
                 ) {
-                    // 顶部导航栏：日期指示徽章 + 交互切日控制胶囊
+                    // 顶部导航栏：精简日期指示 + 交互切日胶囊 (严密控制尺寸杜绝右侧溢出)
                     Row(
-                        modifier = GlanceModifier.fillMaxWidth().padding(bottom = 6.dp),
+                        modifier = GlanceModifier.fillMaxWidth().padding(bottom = 5.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
                             text = dateDisplay,
+                            maxLines = 1,
                             style = TextStyle(
                                 color = ColorProvider(Color.White),
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp
+                                fontSize = 11.sp
                             )
                         )
                         Spacer(modifier = GlanceModifier.defaultWeight())
 
-                        // 切日前一天 (加宽触控热区)
+                        // 切日前一天 (28×24dp 紧凑轻触胶囊)
                         Box(
                             modifier = GlanceModifier
-                                .width(34.dp)
-                                .height(28.dp)
+                                .width(28.dp)
+                                .height(24.dp)
                                 .background(ImageProvider(R.drawable.bg_glass_badge))
                                 .clickable(
                                     actionRunCallback<SwitchDayActionCallback>(
@@ -124,17 +126,17 @@ class ScheduleGlanceWidget : GlanceAppWidget() {
                                 style = TextStyle(
                                     color = ColorProvider(Color.White),
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 15.sp
+                                    fontSize = 14.sp
                                 )
                             )
                         }
-                        Spacer(modifier = GlanceModifier.width(4.dp))
+                        Spacer(modifier = GlanceModifier.width(3.dp))
 
                         // 回到今天
                         Box(
                             modifier = GlanceModifier
-                                .width(34.dp)
-                                .height(28.dp)
+                                .width(28.dp)
+                                .height(24.dp)
                                 .background(ImageProvider(R.drawable.bg_glass_badge))
                                 .clickable(
                                     actionRunCallback<SwitchDayActionCallback>(
@@ -148,17 +150,17 @@ class ScheduleGlanceWidget : GlanceAppWidget() {
                                 style = TextStyle(
                                     color = ColorProvider(if (dayOffset == 0) Color(0xFFFF9A9E) else Color.White),
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 11.sp
+                                    fontSize = 10.sp
                                 )
                             )
                         }
-                        Spacer(modifier = GlanceModifier.width(4.dp))
+                        Spacer(modifier = GlanceModifier.width(3.dp))
 
                         // 切日后一天
                         Box(
                             modifier = GlanceModifier
-                                .width(34.dp)
-                                .height(28.dp)
+                                .width(28.dp)
+                                .height(24.dp)
                                 .background(ImageProvider(R.drawable.bg_glass_badge))
                                 .clickable(
                                     actionRunCallback<SwitchDayActionCallback>(
@@ -172,19 +174,20 @@ class ScheduleGlanceWidget : GlanceAppWidget() {
                                 style = TextStyle(
                                     color = ColorProvider(Color.White),
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 15.sp
+                                    fontSize = 14.sp
                                 )
                             )
                         }
                     }
 
-                    // 核心课程卡片内容区：点击唤醒主应用本体
+                    // 核心课程卡片内容区：采用 defaultWeight() 杜绝 Column 底部溢出与炸排版！
                     Box(
                         modifier = GlanceModifier
-                            .fillMaxSize()
+                            .defaultWeight()
+                            .fillMaxWidth()
                             .background(ImageProvider(R.drawable.bg_glass_card))
-                            .padding(8.dp)
-                            .clickable(actionStartActivity(Intent(context, MainActivity::class.java)))
+                            .padding(horizontal = 8.dp, vertical = 6.dp)
+                            .clickable(actionStartActivity(launchIntent))
                     ) {
                         if (courseData != null) {
                             val timeFmt = SimpleDateFormat("HH:mm", Locale.getDefault())
@@ -203,33 +206,33 @@ class ScheduleGlanceWidget : GlanceAppWidget() {
                                         style = TextStyle(
                                             color = ColorProvider(courseData.statusColor),
                                             fontWeight = FontWeight.Bold,
-                                            fontSize = 10.sp
+                                            fontSize = 9.sp
                                         ),
                                         modifier = GlanceModifier
                                             .background(ImageProvider(R.drawable.bg_glass_badge))
-                                            .padding(horizontal = 5.dp, vertical = 2.dp)
+                                            .padding(horizontal = 5.dp, vertical = 1.dp)
                                     )
                                     Spacer(modifier = GlanceModifier.defaultWeight())
                                     Text(
                                         text = timeStr,
                                         style = TextStyle(
-                                            color = ColorProvider(Color(0xD0FFFFFF)),
-                                            fontSize = 11.sp,
+                                            color = ColorProvider(Color(0xD9FFFFFF)),
+                                            fontSize = 10.sp,
                                             fontWeight = FontWeight.Medium
                                         )
                                     )
                                 }
 
-                                Spacer(modifier = GlanceModifier.height(4.dp))
+                                Spacer(modifier = GlanceModifier.height(3.dp))
 
-                                // 课程名称
+                                // 课程名称 (单行省略，杜绝双行高度撑爆 2×2 卡片)
                                 Text(
                                     text = courseData.name,
-                                    maxLines = 2,
+                                    maxLines = 1,
                                     style = TextStyle(
                                         color = ColorProvider(Color.White),
                                         fontWeight = FontWeight.Bold,
-                                        fontSize = 14.sp
+                                        fontSize = 13.sp
                                     )
                                 )
 
@@ -251,13 +254,13 @@ class ScheduleGlanceWidget : GlanceAppWidget() {
                                     maxLines = 1,
                                     style = TextStyle(
                                         color = ColorProvider(Color(0xB3FFFFFF)),
-                                        fontSize = 11.sp
+                                        fontSize = 10.sp
                                     )
                                 )
 
                                 // 正在上课时的进度条
                                 if (courseData.isOngoing) {
-                                    Spacer(modifier = GlanceModifier.height(3.dp))
+                                    Spacer(modifier = GlanceModifier.height(2.dp))
                                     LinearProgressIndicator(
                                         progress = (courseData.progressPercent / 100f).coerceIn(0f, 1f),
                                         modifier = GlanceModifier.fillMaxWidth().height(3.dp),
@@ -279,15 +282,15 @@ class ScheduleGlanceWidget : GlanceAppWidget() {
                                     style = TextStyle(
                                         color = ColorProvider(Color.White),
                                         fontWeight = FontWeight.Bold,
-                                        fontSize = 13.sp
+                                        fontSize = 12.sp
                                     )
                                 )
-                                Spacer(modifier = GlanceModifier.height(3.dp))
+                                Spacer(modifier = GlanceModifier.height(2.dp))
                                 Text(
                                     text = if (dayOffset == 0) "轻点 › 翻阅明日日程" else "享受自由时光，好好休息吧~",
                                     style = TextStyle(
                                         color = ColorProvider(Color(0x99FFFFFF)),
-                                        fontSize = 10.sp
+                                        fontSize = 9.sp
                                     )
                                 )
                                 Spacer(modifier = GlanceModifier.defaultWeight())

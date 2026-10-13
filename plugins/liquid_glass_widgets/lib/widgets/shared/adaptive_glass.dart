@@ -8,7 +8,8 @@ import '../../theme/glass_theme.dart';
 import '../../theme/glass_theme_data.dart';
 import '../../theme/glass_theme_helpers.dart';
 import 'glass_adaptive_scope.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart'
+    show kIsWeb, defaultTargetPlatform, TargetPlatform;
 
 import '../../types/glass_quality.dart';
 import '../../utils/glass_performance_monitor.dart';
@@ -288,15 +289,18 @@ class AdaptiveGlass extends StatelessWidget {
       // Calculate density factor for shader (0.0 = normal, 1.0 = elevated)
       final double densityFactor = shouldElevate ? 1.0 : 0.0;
 
+      final bool isDesktop = !kIsWeb &&
+          (defaultTargetPlatform == TargetPlatform.windows ||
+              defaultTargetPlatform == TargetPlatform.macOS ||
+              defaultTargetPlatform == TargetPlatform.linux);
+
       // Normalise settings for the 2D lightweight shader to prevent it from looking
       // overpowering when the user has tuned their settings for the 3D premium shader.
       //
-      // BYPASS: When quality is explicitly GlassQuality.standard, the settings
-      // are already calibrated for the Standard renderer — skip normalization.
-      // Normalization only makes sense when adapting Premium-tuned settings to
-      // Standard; if the caller already knows they're on Standard, their values
-      // must be passed through unchanged so tuning sliders take full effect.
-      final bool skipNormalization = effectiveQuality == GlassQuality.standard;
+      // [v3.0.1 电脑端玻璃效果满血全开]
+      // 桌面端算力充沛且用户要求开满玻璃效果：跳过厚度削减与高光压制，提供 100% 真实物理厚度与光影折射！
+      final bool skipNormalization =
+          effectiveQuality == GlassQuality.standard || isDesktop;
 
       final LiquidGlassSettings normalizedSettings;
       if (skipNormalization) {
@@ -339,8 +343,9 @@ class AdaptiveGlass extends StatelessWidget {
               blur: normalizedSettings.effectiveBlur,
               visibility: normalizedSettings.visibility,
               saturation: normalizedSettings.effectiveSaturation,
-              ambientStrength:
-                  (normalizedSettings.effectiveAmbientStrength * 0.4)
+              ambientStrength: isDesktop
+                  ? normalizedSettings.effectiveAmbientStrength
+                  : (normalizedSettings.effectiveAmbientStrength * 0.4)
                       .clamp(0.0, 1.0),
               glowIntensity: normalizedSettings.glowIntensity,
               // Preserve whiten through the elevation rebuild; otherwise the
@@ -350,7 +355,11 @@ class AdaptiveGlass extends StatelessWidget {
               whitenGated: normalizedSettings.whitenGated,
               bodyMode: normalizedSettings.bodyMode,
             )
-          : normalizedSettings;
+          : (isDesktop
+              ? normalizedSettings.copyWith(
+                  ambientStrength: normalizedSettings.effectiveAmbientStrength,
+                )
+              : normalizedSettings);
 
       final scopeBackgroundKey = LiquidGlassScope.of(context);
 

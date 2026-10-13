@@ -163,131 +163,43 @@ class _WindowsCustomWindowState extends State<WindowsCustomWindow>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: Column(
+      body: Stack(
         children: [
-          // 顶部：macOS 27 Golden Gate 风格一体化微透标题栏
-          _buildTitleBar(),
+          // 1. 全出血多页面流畅切换容器（课程、日历、设置）
+          RepaintBoundary(
+            key: TransparentMaterialPageRoute.contentBoundaryKey,
+            child: DirectionalMotionBlurSwitcher(
+              selectedIndex: _selectedIndex,
+              builder: (context, index) {
+                if (index == 0) {
+                  return const WindowsScheduleScreen();
+                } else if (index == 1) {
+                  return const CalendarViewScreen();
+                } else {
+                  return const SettingsMainScreen();
+                }
+              },
+            ),
+          ),
 
-          // 主体：全屏多页面自适应展示 + 悬浮流体玻璃导航
-          Expanded(
-            child: Stack(
-              children: [
-                // 1. 全出血多页面流畅切换容器（课程、日历、设置）
-                RepaintBoundary(
-                  key: TransparentMaterialPageRoute.contentBoundaryKey,
-                  child: DirectionalMotionBlurSwitcher(
-                    selectedIndex: _selectedIndex,
-                    builder: (context, index) {
-                      if (index == 0) {
-                        return const WindowsScheduleScreen();
-                      } else if (index == 1) {
-                        return const CalendarViewScreen();
-                      } else {
-                        return const SettingsMainScreen();
-                      }
-                    },
-                  ),
-                ),
+          // 2. 左下角：官方 GlassTabBar 双标签触控栏（课程、日历）
+          Positioned(
+            left: 20.0,
+            bottom: 18.0,
+            child: RepaintBoundary(
+              child: _buildLandscapeLeftNav(context),
+            ),
+          ),
 
-                // 2. 左下角：官方 GlassTabBar 双标签触控栏（课程、日历）
-                Positioned(
-                  left: 20.0,
-                  bottom: 18.0,
-                  child: RepaintBoundary(
-                    child: _buildLandscapeLeftNav(context),
-                  ),
-                ),
-
-                // 3. 右下角：官方圆形液态玻璃设置按钮（52x52）
-                Positioned(
-                  right: 20.0,
-                  bottom: 18.0,
-                  child: RepaintBoundary(
-                    child: _buildLandscapeSettingsButton(context),
-                  ),
-                ),
-              ],
+          // 3. 右下角：官方圆形液态玻璃设置按钮（52x52）
+          Positioned(
+            right: 20.0,
+            bottom: 18.0,
+            child: RepaintBoundary(
+              child: _buildLandscapeSettingsButton(context),
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  /// [v3.0.0] macOS 27 Golden Gate 风格一体化微透标题栏
-  Widget _buildTitleBar() {
-    final provider = context.watch<ScheduleProvider>();
-    final currentWeek = provider.currentWeek;
-    final weekText = currentWeek > 0 ? '第 $currentWeek 周' : '';
-
-    return DragToMoveArea(
-      child: Container(
-        height: 40,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.04),
-          border: Border(
-            bottom: BorderSide(
-              color: Colors.white.withValues(alpha: 0.08),
-              width: 0.5,
-            ),
-          ),
-        ),
-        child: Row(
-          children: [
-            // macOS 27 Golden Gate 风格一体化红黄绿交通灯 (内嵌于左上角黄金分割区)
-            MacosTrafficLights(
-              onClose: () => windowManager.close(),
-              onMinimize: _handleMinimize,
-              onMaximize: _handleMaximize,
-            ),
-            const SizedBox(width: 18),
-            Container(
-              width: 1,
-              height: 14,
-              color: Colors.white.withValues(alpha: 0.15),
-            ),
-            const SizedBox(width: 14),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: Image.asset(
-                'assets/icon.png',
-                width: 16,
-                height: 16,
-                filterQuality: FilterQuality.medium,
-              ),
-            ),
-            const SizedBox(width: 8),
-            const Text(
-              "CourseWidgets Beta",
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0.2,
-              ),
-            ),
-            if (weekText.isNotEmpty) ...[
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).primaryColor.withValues(alpha: 0.20),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  weekText,
-                  style: TextStyle(
-                    color: Theme.of(context).primaryColor.withValues(alpha: 0.95),
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
-            const Spacer(),
-          ],
-        ),
       ),
     );
   }

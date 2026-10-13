@@ -616,18 +616,21 @@ class LiveNotificationServiceV2 {
             }
           } else if (c.startTime > nowMs) {
             final diffMs = c.startTime - nowMs;
-            if (diffMs <= 60 * 60 * 1000) {
-              // 开课前 60 分钟内：进入倒计时，每分钟精准刷新剩余时间
+            if (diffMs <= 45 * 60 * 1000) {
+              // 开课前 45 分钟内：进入倒计时，每分钟精准刷新剩余时间
               final wake = (nextMinuteMs < c.startTime) ? nextMinuteMs : c.startTime;
               if (nextWakeupMs == null || wake < nextWakeupMs) {
                 nextWakeupMs = wake;
               }
             } else {
-              // 开课前 60 分钟以上：休眠到课前 60 分钟准时唤醒开启倒计时
-              final sixtyMinBefore = c.startTime - 60 * 60 * 1000;
-              if (sixtyMinBefore > nowMs) {
-                if (nextWakeupMs == null || sixtyMinBefore < nextWakeupMs) {
-                  nextWakeupMs = sixtyMinBefore;
+              // [v3.0.1] 开课前 45 分钟以上：准时在 45 分钟倒计时、10 分钟强提醒、5 分钟复提醒与开课时刻唤醒
+              final fortyFiveMinBefore = c.startTime - 45 * 60 * 1000;
+              final tenMinBefore = c.startTime - 10 * 60 * 1000;
+              final fiveMinBefore = c.startTime - 5 * 60 * 1000;
+              final candidates = [fortyFiveMinBefore, tenMinBefore, fiveMinBefore, c.startTime].where((t) => t > nowMs);
+              for (final t in candidates) {
+                if (nextWakeupMs == null || t < nextWakeupMs) {
+                  nextWakeupMs = t;
                 }
               }
             }

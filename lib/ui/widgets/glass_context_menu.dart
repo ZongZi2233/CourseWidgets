@@ -30,7 +30,7 @@ class GlassContextMenu extends StatelessWidget {
       menuBorderRadius: 22.0,
       itemBorderRadius: 14.0,
       autoAdjustToScreen: true,
-      platformViewBackdrop: Platform.isWindows, // 仅 Windows 走降级，Android/iOS 恢复 Impeller 原生凸透镜边缘折射着色器
+      platformViewBackdrop: false, // [v3.0.1] 全平台全开凸透镜边缘折射着色器，不走降级
       quality: ThemeService().glassQuality,
       menuAlignment: menuAlignment ?? GlassMenuAlignment.none,
       selectionColor: isDark

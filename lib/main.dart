@@ -28,6 +28,7 @@ import 'ui/screens/macos_custom_window.dart'; // [v2.5.9] 新增macOS支持
 import 'ui/screens/onboarding_screen.dart';
 import 'ui/widgets/animated_splash_overlay.dart'; // [v3.0.0] 秒开开屏动效与并行渲染就绪门
 import 'ui/transitions/smooth_slide_transitions.dart'; // [v2.4.8] 平滑过渡动画
+import 'ui/widgets/windows_desktop_title_bar.dart'; // [v3.0.1] Windows 桌面持久顶栏
 import 'dart:async';
 import 'package:flutter_phoenix/flutter_phoenix.dart';
 
@@ -583,6 +584,14 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 );
 
                 Widget contentWidget = innerContent;
+                if (Platform.isWindows) {
+                  contentWidget = Column(
+                    children: [
+                      const WindowsDesktopTitleBar(),
+                      Expanded(child: innerContent),
+                    ],
+                  );
+                }
 
                 final coreStack = LiquidGlassScope.stack(
                   background: backgroundWidget,

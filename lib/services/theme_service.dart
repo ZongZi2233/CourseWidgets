@@ -95,20 +95,15 @@ class ThemeService extends ChangeNotifier {
     globalDarkModeNotifier.removeListener(_onBackgroundOrThemeChanged);
     globalDarkModeNotifier.addListener(_onBackgroundOrThemeChanged);
 
-    // 加载保存的主题模式 (Windows 端强制固定为莫奈取色)
-    if (Platform.isWindows) {
-      _themeMode = ThemeMode.monet;
-      await _storage.setString(StorageService.keyThemeMode, ThemeMode.monet.name);
+    // 加载保存的主题模式
+    final savedMode = _storage.getString(StorageService.keyThemeMode);
+    if (savedMode != null) {
+      _themeMode = ThemeMode.values.firstWhere(
+        (e) => e.name == savedMode,
+        orElse: () => ThemeMode.monet,
+      );
     } else {
-      final savedMode = _storage.getString(StorageService.keyThemeMode);
-      if (savedMode != null) {
-        _themeMode = ThemeMode.values.firstWhere(
-          (e) => e.name == savedMode,
-          orElse: () => ThemeMode.monet,
-        );
-      } else {
-        _themeMode = ThemeMode.monet;
-      }
+      _themeMode = ThemeMode.monet;
     }
 
     // [v2.9.5] 恢复颜色或从壁纸提取默认莫奈色调

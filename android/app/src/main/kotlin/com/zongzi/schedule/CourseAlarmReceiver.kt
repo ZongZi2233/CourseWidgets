@@ -67,7 +67,7 @@ class CourseAlarmReceiver : BroadcastReceiver() {
             }
         }
 
-        // [v3.0.0] 分钟级硬件闹钟精准对齐算法：上课期间或课前 60 分钟倒计时期间，每分钟准时唤醒刷新剩余时间
+        // [v3.0.1] 多阶段精准闹钟唤醒算法：保证课前 45 分钟倒计时、10 分钟强提醒、5 分钟复提醒与上课期间准时唤醒
         val nextMinute = ((now / 60000L) + 1L) * 60000L
         if (currentCourse != null) {
             val et = currentCourse.optLong("endTime", now)
@@ -75,13 +75,14 @@ class CourseAlarmReceiver : BroadcastReceiver() {
         } else if (nextCourse != null) {
             val st = nextCourse.optLong("startTime", now)
             val diffMs = st - now
-            if (diffMs <= 60 * 60 * 1000L) {
+            if (diffMs <= 45 * 60 * 1000L) {
                 nextWakeupTime = if (nextMinute < st) nextMinute else st
             } else {
-                val sixtyMinBefore = st - 60 * 60 * 1000L
-                if (sixtyMinBefore > now) {
-                    nextWakeupTime = sixtyMinBefore
-                }
+                val fortyFiveMinBefore = st - 45 * 60 * 1000L
+                val tenMinBefore = st - 10 * 60 * 1000L
+                val fiveMinBefore = st - 5 * 60 * 1000L
+                val candidates = listOf(fortyFiveMinBefore, tenMinBefore, fiveMinBefore, st).filter { it > now }
+                nextWakeupTime = candidates.minOrNull() ?: nextMinute
             }
         }
 
@@ -126,6 +127,57 @@ class CourseAlarmReceiver : BroadcastReceiver() {
 
             val locStr = if (loc.isNotEmpty() && !loc.contains("未知")) " ($loc)" else ""
             val startStr = timeFmt.format(Date(st))
+
+            // [v3.0.1 主动强提醒] 提前 10 分钟主动响铃/振动并点亮屏幕提醒
+            if (diffMin in 8..11) {
+                val remindedKey = "reminded_10m_$st"
+                if (!prefs.getBoolean(remindedKey, false)) {
+                    prefs.edit().putBoolean(remindedKey, true).apply()
+                    // 唤醒屏幕亮屏提示
+                    try {
+                        val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+                        @Suppress("DEPRECATION")
+                        val screenLock = powerManager?.newWakeLock(
+                            PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP or PowerManager.ON_AFTER_RELEASE,
+                            "CourseWidgets:ScreenWakeUp"
+                        )
+                        screenLock?.acquire(2000L)
+                    } catch (_: Exception) {}
+
+                    LiveUpdateNotificationManager.postReminderAlert(
+                        context = context,
+                        title = "10 分钟后上课 · $name",
+                        body = "$name$locStr\n将在 $startStr 正式开课，请提前带好物品出发",
+                        courseName = name,
+                        location = loc,
+                        startTime = st
+                    )
+                }
+            } else if (diffMin in 3..6) {
+                // 提前 5 分钟二次强提醒
+                val remindedKey = "reminded_5m_$st"
+                if (!prefs.getBoolean(remindedKey, false)) {
+                    prefs.edit().putBoolean(remindedKey, true).apply()
+                    try {
+                        val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+                        @Suppress("DEPRECATION")
+                        val screenLock = powerManager?.newWakeLock(
+                            PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP or PowerManager.ON_AFTER_RELEASE,
+                            "CourseWidgets:ScreenWakeUp"
+                        )
+                        screenLock?.acquire(2000L)
+                    } catch (_: Exception) {}
+
+                    LiveUpdateNotificationManager.postReminderAlert(
+                        context = context,
+                        title = "马上上课 · $name",
+                        body = "$name$locStr\n即将于 $startStr 开始上课，请尽快入座准备",
+                        courseName = name,
+                        location = loc,
+                        startTime = st
+                    )
+                }
+            }
 
             if (diffMin <= 45) {
                 val subText = if (diffMin > 0) "${diffMin}分钟后上课" else "马上开始"
