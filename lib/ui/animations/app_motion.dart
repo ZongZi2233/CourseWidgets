@@ -3,6 +3,106 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
+import '../widgets/app_background_layer.dart';
+
+/// [v3.1.4] 借鉴 FlClash (`prism_ui` `open_container.dart`) 的次级页面 SharedElement 源位置注册表
+///
+/// 当用户点击任何卡片 (`HyperOSCard`)、弹性按钮 (`SpringTouchFeedback`) 或屏幕任意触点时，
+/// 自动记录被点击组件在屏幕坐标系中的真实 [Rect] 与圆角半径 [cornerRadius]。
+/// 次级页面 (`TransparentMaterialPageRoute`) 推入时直接从该实际位置超椭圆展开至全屏，
+/// 返回（含手势预见性侧滑返回、左上角返回、系统返回、ESC）时平滑缩回该实际位置。
+class SharedElementSourceRegistry {
+  SharedElementSourceRegistry._();
+
+  static Rect? _lastWidgetRect;
+  static double _lastCornerRadius = 20.0;
+  static DateTime? _lastWidgetTime;
+
+  static Offset? _lastPointerPos;
+  static DateTime? _lastPointerTime;
+
+  /// 由全局根部 Listener 记录最近一次手指按下坐标（作为未显式包裹组件的兜底源位置）
+  static void recordPointerDown(Offset globalPosition) {
+    _lastPointerPos = globalPosition;
+    _lastPointerTime = DateTime.now();
+  }
+
+  /// 由可点击组件（如 HyperOSCard、SpringTouchFeedback）在触发 onTap 前自动记录自身真实屏幕矩形
+  static void recordFromContext(
+    BuildContext context, {
+    double cornerRadius = 20.0,
+  }) {
+    try {
+      final renderObject = context.findRenderObject();
+      if (renderObject is RenderBox && renderObject.hasSize && renderObject.attached) {
+        final size = renderObject.size;
+        if (size.width >= 16.0 && size.height >= 16.0) {
+          final topLeft = renderObject.localToGlobal(Offset.zero);
+          final rect = topLeft & size;
+          if (rect.left.isFinite &&
+              rect.top.isFinite &&
+              rect.width.isFinite &&
+              rect.height.isFinite) {
+            _lastWidgetRect = rect;
+            _lastCornerRadius = cornerRadius.clamp(8.0, 36.0);
+            _lastWidgetTime = DateTime.now();
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
+  /// 路由推入时消费最近一次点击的真实组件位置；若超时或全屏容器则回退至触点胶囊矩形
+  static ({Rect rect, double cornerRadius})? consumeSource(Size screenSize) {
+    final now = DateTime.now();
+
+    if (_lastWidgetRect != null && _lastWidgetTime != null) {
+      final ageMs = now.difference(_lastWidgetTime!).inMilliseconds;
+      final rect = _lastWidgetRect!;
+      _lastWidgetRect = null;
+      _lastWidgetTime = null;
+
+      // 过滤掉接近全屏的父容器，确保展开源是具体的按钮或卡片
+      final isSubScreenWidget = rect.width < screenSize.width * 0.96 &&
+          rect.height < screenSize.height * 0.85;
+      if (ageMs <= 750 && isSubScreenWidget) {
+        final double clampedLeft =
+            rect.left.clamp(0.0, math.max(0.0, screenSize.width - 24.0)).toDouble();
+        final double clampedTop =
+            rect.top.clamp(0.0, math.max(0.0, screenSize.height - 24.0)).toDouble();
+        final double clampedWidth =
+            rect.width.clamp(28.0, screenSize.width).toDouble();
+        final double clampedHeight =
+            rect.height.clamp(28.0, screenSize.height).toDouble();
+        return (
+          rect: Rect.fromLTWH(clampedLeft, clampedTop, clampedWidth, clampedHeight),
+          cornerRadius: _lastCornerRadius,
+        );
+      }
+    }
+
+    if (_lastPointerPos != null && _lastPointerTime != null) {
+      final ageMs = now.difference(_lastPointerTime!).inMilliseconds;
+      final pos = _lastPointerPos!;
+      _lastPointerPos = null;
+      _lastPointerTime = null;
+      if (ageMs <= 750 && screenSize.width > 0 && screenSize.height > 0) {
+        const w = 136.0;
+        const h = 52.0;
+        final double left =
+            (pos.dx - w / 2).clamp(12.0, math.max(12.0, screenSize.width - w - 12.0)).toDouble();
+        final double top =
+            (pos.dy - h / 2).clamp(12.0, math.max(12.0, screenSize.height - h - 12.0)).toDouble();
+        return (
+          rect: Rect.fromLTWH(left, top, w, h),
+          cornerRadius: 22.0,
+        );
+      }
+    }
+
+    return null;
+  }
+}
 
 /// [v3.1.0] 全局统一灵动非线性动画曲线系统与跟手物理引擎
 /// 对齐 Apple iOS 26 Fluid Motion、HyperOS 2.0 与 Miuix 阻尼弹簧动效规范
@@ -44,12 +144,11 @@ class AppCurves {
   }
 }
 
-/// [v3.1.3] 物理速度同步 + FlClash SnapshotWidget 静态光栅冻结的 1D 运动动态模糊组件
+/// [v3.1.4] 物理速度同步的 1D 运动动态模糊组件
 ///
-/// 架构特性：
-/// 1. 采用与 [AppCurves.pageSlide] 瞬时速度导数同相位的偏态钟形包络，适度收敛峰值模糊度 (maxBlur ≈ 5.0)；
-/// 2. 借鉴 FlClash (`prism_ui`) 核心架构：在动画进行期间开启 [SnapshotWidget] (`SnapshotMode.permissive`)，
-///    将运动子树冻结为单张 GPU 静态纹理，消除动画期间子树重绘及 BackdropFilter 采样透明底导致的明暗闪烁；
+/// 核心修复与架构特性：
+/// 1. 修复 v3.1.3 中 SnapshotWidget 包裹动态位移层导致进入次级页面只显示 1 帧的 Bug；
+/// 2. 采用与 [AppCurves.pageSlide] 瞬时速度导数同相位的偏态钟形包络，适度收敛峰值模糊度 (maxBlur ≈ 4.5)；
 /// 3. 量化 sigmaX 步进 (0.25px) 并缓存 ImageFilter 实例，落位尾段 (t > 0.88 或 sigmaX < 0.30) 自动关闭离屏层。
 class MotionBlurTransition extends StatefulWidget {
   final Animation<double> animation;
@@ -61,7 +160,7 @@ class MotionBlurTransition extends StatefulWidget {
     super.key,
     required this.animation,
     required this.child,
-    this.maxBlur = 5.0,
+    this.maxBlur = 4.5,
     this.isEntering = true,
   });
 
@@ -73,44 +172,6 @@ class _MotionBlurTransitionState extends State<MotionBlurTransition> {
   static final ImageFilter _zeroFilter = ImageFilter.blur(sigmaX: 0.0, sigmaY: 0.0);
   double _lastQuantizedSigma = 0.0;
   ImageFilter _cachedFilter = _zeroFilter;
-  late final SnapshotController _snapshotController;
-
-  @override
-  void initState() {
-    super.initState();
-    _snapshotController = SnapshotController(
-      allowSnapshotting: widget.animation.isAnimating,
-    );
-    widget.animation.addStatusListener(_onStatusChanged);
-  }
-
-  @override
-  void didUpdateWidget(MotionBlurTransition oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.animation != widget.animation) {
-      oldWidget.animation.removeStatusListener(_onStatusChanged);
-      widget.animation.addStatusListener(_onStatusChanged);
-      _updateSnapshotting();
-    }
-  }
-
-  void _onStatusChanged(AnimationStatus status) {
-    _updateSnapshotting();
-  }
-
-  void _updateSnapshotting() {
-    final moving = widget.animation.isAnimating;
-    if (_snapshotController.allowSnapshotting != moving) {
-      _snapshotController.allowSnapshotting = moving;
-    }
-  }
-
-  @override
-  void dispose() {
-    widget.animation.removeStatusListener(_onStatusChanged);
-    _snapshotController.dispose();
-    super.dispose();
-  }
 
   ImageFilter _resolveFilter(double quantizedSigma) {
     if (quantizedSigma <= 0.30) return _zeroFilter;
@@ -128,16 +189,9 @@ class _MotionBlurTransitionState extends State<MotionBlurTransition> {
 
   @override
   Widget build(BuildContext context) {
-    final snapshotChild = SnapshotWidget(
-      controller: _snapshotController,
-      mode: SnapshotMode.permissive,
-      autoresize: true,
-      child: widget.child,
-    );
-
     return AnimatedBuilder(
       animation: widget.animation,
-      child: snapshotChild,
+      child: widget.child,
       builder: (context, child) {
         final isReversing = widget.animation.status == AnimationStatus.reverse;
         final progress = widget.animation.value.clamp(0.0, 1.0);
@@ -145,7 +199,7 @@ class _MotionBlurTransitionState extends State<MotionBlurTransition> {
         final envelope = AppCurves.velocityBlurEnvelope(t);
         final rawSigma = envelope * widget.maxBlur;
         final quantizedSigma = (rawSigma * 4.0).roundToDouble() * 0.25;
-        final bool hasBlur = quantizedSigma > 0.30;
+        final bool hasBlur = widget.animation.isAnimating && quantizedSigma > 0.30;
 
         return ImageFiltered(
           enabled: hasBlur,
@@ -297,21 +351,31 @@ class _PageControllerMotionBlurState extends State<PageControllerMotionBlur>
     return ImageFiltered(
       enabled: hasBlur,
       imageFilter: _resolveFilter(_quantizedSigma),
-      child: widget.child,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (hasBlur)
+            const IgnorePointer(
+              child: AppBackgroundLayer(blur: 0.0, tintColor: Colors.transparent),
+            ),
+          widget.child,
+        ],
+      ),
     );
   }
 }
 
-/// [v3.1.3] 全面借鉴 FlClash (`chen08209/FlClash` & `prism_ui`) 的主导航切页引擎：
-/// 常驻预热页面池 + SnapshotWidget 静态 GPU 纹理冻结 + 速度包络 1D 动态模糊
+/// [v3.1.4] 全面借鉴 FlClash (`chen08209/FlClash` & `prism_ui`) 的主导航切页引擎：
+/// 常驻预热页面池 + 真实 GlassContainer 离屏壁纸逆位移补偿 + 速度包络 1D 动态模糊
 ///
 /// 核心突破：
 /// 1. 解决“课程页 ↔ 日历页”切页首帧掉帧：首帧渲染完成后自动在后台 Offstage 预热全部主页面并常驻保活，
-///    固定 Stack 槽位顺序 `[0, 1, 2]`，切页触发瞬间 **0 Widget 重建、0 Layout 布局、0 Element 重排**；
-/// 2. 借鉴 FlClash `SnapshotWidget` (`SnapshotMode.permissive`)：在页面离开静止位（切页动画进行中）时，
-///    将进出场页面直接冻结为单张静态 GPU 光栅纹理，彻底消除 Impeller 对移动页面的每帧全量重绘；
-/// 3. 恢复细腻丝滑的 1D 运动模糊 (`maxBlur: 4.5`)：在静态纹理快照外层施加水平方向速度导数模糊，
-///    既有高速切换的流光动感，又彻底杜绝“先变暗再变亮”闪烁。
+///    固定 Stack 槽位顺序 `[0, 1, 2]`，所有顶栏与悬浮按钮的真实 `GlassContainer` 法线几何贴图在启动时一次性烘焙常驻，
+///    切页触发瞬间 **0 Widget 重建、0 Layout 布局、0 法线贴图重烘焙**；
+/// 2. 彻底保留顶部栏与所有悬浮按钮的 100% 真实 3D 折射液态玻璃 (`GlassContainer` / `GlassButton`)：
+///    在 1D 动态模糊 (`ImageFiltered`) 开启期间，于离屏缓冲区底层自动注入反向抵消平移量的原画壁纸层，
+///    使移动中的 `GlassContainer` (`BackdropFilterLayer`) 实时折射屏幕原位的真实壁纸而非透明黑底，
+///    **100% 根除“先变暗再变亮”闪烁**！
 class DirectionalMotionBlurSwitcher extends StatefulWidget {
   final int selectedIndex;
   final int pageCount;
@@ -328,7 +392,7 @@ class DirectionalMotionBlurSwitcher extends StatefulWidget {
     this.pageCount = 3,
     this.duration = const Duration(milliseconds: 360),
     this.curve = AppCurves.pageSlide,
-    this.maxBlur = 4.5,
+    this.maxBlur = 4.2,
     this.downscaleFraction = 0.45,
   });
 
@@ -349,17 +413,8 @@ class _DirectionalMotionBlurSwitcherState
   late Animation<double> _animation;
 
   final Set<int> _activatedIndices = <int>{};
-  final Map<int, SnapshotController> _snapshotControllers =
-      <int, SnapshotController>{};
   double _lastQuantizedSigma = 0.0;
   ImageFilter _cachedFilter = _zeroFilter;
-
-  SnapshotController _controllerFor(int index) {
-    return _snapshotControllers.putIfAbsent(
-      index,
-      () => SnapshotController(allowSnapshotting: false),
-    );
-  }
 
   @override
   void initState() {
@@ -368,7 +423,6 @@ class _DirectionalMotionBlurSwitcherState
     _previousIndex = widget.selectedIndex;
     _isForward = true;
     _activatedIndices.add(_currentIndex);
-    _controllerFor(_currentIndex);
 
     _controller = AnimationController(
       vsync: this,
@@ -383,7 +437,6 @@ class _DirectionalMotionBlurSwitcherState
     _controller.addStatusListener((status) {
       if (status == AnimationStatus.completed ||
           status == AnimationStatus.dismissed) {
-        _setSnapshottingForTransition(false);
         if (mounted) {
           setState(() {});
         }
@@ -396,7 +449,6 @@ class _DirectionalMotionBlurSwitcherState
       if (!mounted) return;
       bool added = false;
       for (int i = 0; i < widget.pageCount; i++) {
-        _controllerFor(i);
         if (_activatedIndices.add(i)) {
           added = true;
         }
@@ -405,16 +457,6 @@ class _DirectionalMotionBlurSwitcherState
         setState(() {});
       }
     });
-  }
-
-  void _setSnapshottingForTransition(bool active) {
-    for (final entry in _snapshotControllers.entries) {
-      final shouldSnapshot = active &&
-          (entry.key == _currentIndex || entry.key == _previousIndex);
-      if (entry.value.allowSnapshotting != shouldSnapshot) {
-        entry.value.allowSnapshotting = shouldSnapshot;
-      }
-    }
   }
 
   @override
@@ -426,11 +468,6 @@ class _DirectionalMotionBlurSwitcherState
       _currentIndex = widget.selectedIndex;
       _activatedIndices.add(_currentIndex);
       _activatedIndices.add(_previousIndex);
-      _controllerFor(_currentIndex);
-      _controllerFor(_previousIndex);
-
-      // 开启 FlClash 同款静态纹理快照：运动中的进出场页面直接从单张 GPU 快照绘制
-      _setSnapshottingForTransition(true);
       _controller.forward(from: 0.0);
     }
   }
@@ -452,9 +489,6 @@ class _DirectionalMotionBlurSwitcherState
   @override
   void dispose() {
     _controller.dispose();
-    for (final c in _snapshotControllers.values) {
-      c.dispose();
-    }
     super.dispose();
   }
 
@@ -468,15 +502,10 @@ class _DirectionalMotionBlurSwitcherState
     );
     for (int i = 0; i < widget.pageCount; i++) {
       if (_activatedIndices.contains(i)) {
-        pageNodes[i] = SnapshotWidget(
-          key: ValueKey<String>('page_snapshot_$i'),
-          controller: _controllerFor(i),
-          mode: SnapshotMode.permissive,
-          autoresize: true,
-          child: RepaintBoundary(
-            child: Builder(
-              builder: (ctx) => widget.builder(ctx, i),
-            ),
+        pageNodes[i] = RepaintBoundary(
+          key: ValueKey<String>('page_boundary_$i'),
+          child: Builder(
+            builder: (ctx) => widget.builder(ctx, i),
           ),
         );
       }
@@ -542,6 +571,8 @@ class _DirectionalMotionBlurSwitcherState
       }
     }
 
+    final bool enableSlotBlur = isVisible && hasBlur;
+
     return Offstage(
       key: ValueKey<int>(index),
       offstage: !isVisible,
@@ -551,10 +582,27 @@ class _DirectionalMotionBlurSwitcherState
           ignoring: !isCurrent || isAnimating,
           child: FractionalTranslation(
             translation: translation,
-            child: ImageFiltered(
-              enabled: isVisible && hasBlur,
-              imageFilter: activeFilter,
-              child: pageNode,
+            child: ClipRect(
+              child: ImageFiltered(
+                enabled: enableSlotBlur,
+                imageFilter: activeFilter,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (enableSlotBlur)
+                      FractionalTranslation(
+                        translation: Offset(-translation.dx, -translation.dy),
+                        child: const IgnorePointer(
+                          child: AppBackgroundLayer(
+                            blur: 0.0,
+                            tintColor: Colors.transparent,
+                          ),
+                        ),
+                      ),
+                    pageNode,
+                  ],
+                ),
+              ),
             ),
           ),
         ),
@@ -563,7 +611,7 @@ class _DirectionalMotionBlurSwitcherState
   }
 }
 
-/// [v3.1.0] 实体物理 Spring 弹性触控反馈包装器 (跟手下沉与灵动回弹)
+/// [v3.1.4] 实体物理 Spring 弹性触控反馈包装器 (跟手下沉与灵动回弹 + 自动记录次级页面展开源位置)
 class SpringTouchFeedback extends StatefulWidget {
   final Widget child;
   final VoidCallback? onTap;
@@ -651,11 +699,19 @@ class _SpringTouchFeedbackState extends State<SpringTouchFeedback>
       onTapCancel: _handleTapCancel,
       onTap: () {
         HapticFeedback.selectionClick();
+        SharedElementSourceRegistry.recordFromContext(
+          context,
+          cornerRadius: 18.0,
+        );
         widget.onTap?.call();
       },
       onLongPress: widget.onLongPress != null
           ? () {
               HapticFeedback.mediumImpact();
+              SharedElementSourceRegistry.recordFromContext(
+                context,
+                cornerRadius: 18.0,
+              );
               widget.onLongPress?.call();
             }
           : null,

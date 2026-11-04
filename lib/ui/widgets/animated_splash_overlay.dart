@@ -15,10 +15,12 @@ import 'zero_flicker_splash_preloader.dart';
 /// 5. 【零常驻开销】：淡出完成后彻底从 Widget 树中卸载，日常使用 0 CPU / 0 GPU 负担。
 class AnimatedSplashOverlay extends StatefulWidget {
   final Widget child;
+  final ValueNotifier<bool>? startupReadyNotifier;
 
   const AnimatedSplashOverlay({
     super.key,
     required this.child,
+    this.startupReadyNotifier,
   });
 
   @override
@@ -73,9 +75,10 @@ class _AnimatedSplashOverlayState extends State<AnimatedSplashOverlay>
 
     // 建立对静态壁纸模糊服务的监听
     StaticBlurredWallpaperService.instance.addListener(_onBlurServiceChanged);
+    widget.startupReadyNotifier?.addListener(_onStartupReadyChanged);
 
-    // 安全超时保护：若后台数据或着色器异常，2500ms 强制开门揭晓主界面，确保永远不卡死
-    _safetyTimer = Timer(const Duration(milliseconds: 2500), () {
+    // 安全超时保护：若后台数据或着色器异常，3500ms 强制开门揭晓主界面，确保永远不卡死
+    _safetyTimer = Timer(const Duration(milliseconds: 3500), () {
       _triggerDismiss();
     });
 
@@ -104,14 +107,20 @@ class _AnimatedSplashOverlayState extends State<AnimatedSplashOverlay>
     _checkReadiness();
   }
 
+  void _onStartupReadyChanged() {
+    _checkReadiness();
+  }
+
   /// 综合判定渲染与数据准备完成度
   void _checkReadiness() {
     if (_isGatePassed || !mounted) return;
 
     final provider = _scheduleProvider;
-    final isDataReady = provider != null && !provider.isLoading;
+    final isStartupReady = widget.startupReadyNotifier?.value ?? true;
+    final isDataReady =
+        isStartupReady && provider != null && !provider.isLoading;
 
-    // [v3.0.0-alpha13] 数据加载完毕后立即放行开屏门禁，绝不让静态模糊异步烘焙阻塞首屏展现
+    // [v3.1.4] 后台启动任务与数据加载完毕后放行开屏门禁
     if (isDataReady) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
@@ -126,9 +135,9 @@ class _AnimatedSplashOverlayState extends State<AnimatedSplashOverlay>
     _isGatePassed = true;
     _safetyTimer?.cancel();
 
-    // 确保至少呈现优雅的品牌动效 650ms，杜绝闪跳
+    // 确保至少呈现优雅的品牌动效 680ms，杜绝闪跳
     final elapsedMs = DateTime.now().difference(_startTime).inMilliseconds;
-    final remainingMs = 650 - elapsedMs;
+    final remainingMs = 680 - elapsedMs;
 
     if (remainingMs > 0) {
       Future.delayed(Duration(milliseconds: remainingMs), () {
@@ -145,6 +154,7 @@ class _AnimatedSplashOverlayState extends State<AnimatedSplashOverlay>
   void dispose() {
     _safetyTimer?.cancel();
     _scheduleProvider?.removeListener(_onProviderChanged);
+    widget.startupReadyNotifier?.removeListener(_onStartupReadyChanged);
     StaticBlurredWallpaperService.instance.removeListener(_onBlurServiceChanged);
     _fadeController.dispose();
     super.dispose();

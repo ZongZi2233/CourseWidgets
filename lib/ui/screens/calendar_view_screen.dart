@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import '../../providers/schedule_provider.dart';
 import '../../models/course_event.dart';
 import '../../constants/theme_constants.dart';
 import '../../services/data_import_service.dart';
+import '../../services/theme_service.dart' as theme;
 import '../../utils/responsive_utils.dart';
 import '../widgets/liquid_components.dart' as liquid;
 import '../widgets/glass_context_menu.dart';
@@ -172,22 +174,32 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
 
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
-      child: liquid.HyperOSCard(
-        useBlur: true,
-        cornerRadius: 22,
-        padding: compact
-            ? const EdgeInsets.symmetric(horizontal: 10, vertical: 6)
-            : const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        color: isDark ? const Color(0x4512151B) : const Color(0x55FFFFFF),
-        border: BorderSide(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.14)
-              : Colors.white.withValues(alpha: 0.72),
-          width: 0.9,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(22),
+          boxShadow: liquid.HyperOSShadows.dock(isDark),
         ),
-        shadows: liquid.HyperOSShadows.dock(isDark),
-        child: Row(
-          children: [
+        child: GlassContainer(
+          shape: const LiquidRoundedSuperellipse(borderRadius: 22),
+          quality: theme.ThemeService().glassQuality,
+          padding: compact
+              ? const EdgeInsets.symmetric(horizontal: 10, vertical: 6)
+              : const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          settings: LiquidGlassSettings(
+            glassColor: isDark
+                ? const Color(0x2812151B)
+                : const Color(0x34FFFFFF),
+            blur: 1.5,
+            thickness: 14.0,
+            refractiveIndex: 1.45,
+            lightIntensity: 0.45,
+            ambientStrength: 0.25,
+            ambientRim: 0.12,
+            fresnelStrength: 0.22,
+            edgeAbsorption: 0.05,
+          ),
+          child: Row(
+            children: [
             // 上个月
             _buildNavButton(
               icon: CupertinoIcons.chevron_left,
@@ -285,6 +297,7 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
             ),
           ],
         ),
+      ),
       ),
     );
   }

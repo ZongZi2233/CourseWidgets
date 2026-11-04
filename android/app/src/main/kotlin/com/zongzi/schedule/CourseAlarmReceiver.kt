@@ -67,7 +67,17 @@ class CourseAlarmReceiver : BroadcastReceiver() {
             }
         }
 
-        // [v3.0.1] 多阶段精准闹钟唤醒算法：保证课前 45 分钟倒计时、10 分钟强提醒、5 分钟复提醒与上课期间准时唤醒
+        // [v3.1.4] 多阶段精准闹钟唤醒算法：新增次日零点 00:00:02 自动跨天唤醒，彻底消除过半夜 12 点后的星期/明日误解
+        val midnightCal = java.util.Calendar.getInstance().apply {
+            timeInMillis = now
+            set(java.util.Calendar.HOUR_OF_DAY, 0)
+            set(java.util.Calendar.MINUTE, 0)
+            set(java.util.Calendar.SECOND, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+            add(java.util.Calendar.DAY_OF_MONTH, 1)
+        }
+        val nextMidnightMs = midnightCal.timeInMillis + 2000L
+
         val nextMinute = ((now / 60000L) + 1L) * 60000L
         if (currentCourse != null) {
             val et = currentCourse.optLong("endTime", now)
@@ -81,9 +91,11 @@ class CourseAlarmReceiver : BroadcastReceiver() {
                 val fortyFiveMinBefore = st - 45 * 60 * 1000L
                 val tenMinBefore = st - 10 * 60 * 1000L
                 val fiveMinBefore = st - 5 * 60 * 1000L
-                val candidates = listOf(fortyFiveMinBefore, tenMinBefore, fiveMinBefore, st).filter { it > now }
-                nextWakeupTime = candidates.minOrNull() ?: nextMinute
+                val candidates = listOf(nextMidnightMs, fortyFiveMinBefore, tenMinBefore, fiveMinBefore, st).filter { it > now }
+                nextWakeupTime = candidates.minOrNull() ?: nextMidnightMs
             }
+        } else {
+            nextWakeupTime = nextMidnightMs
         }
 
         val timeFmt = SimpleDateFormat("HH:mm", Locale.getDefault())

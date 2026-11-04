@@ -18,6 +18,7 @@ ui.Image? _preloadedSplashUiImage;
 
 /// 在 runApp 之前直接从 rootBundle 同步解码开屏 Logo 为 [ui.Image]，保证开屏第 0 帧 100% 同步直绘。
 Future<void> preloadSplashIcon() async {
+  if (_preloadedSplashUiImage != null) return;
   try {
     final ByteData data = await rootBundle.load('assets/icon.png');
     final ui.Codec codec = await ui.instantiateImageCodec(
@@ -28,27 +29,6 @@ Future<void> preloadSplashIcon() async {
     final ui.FrameInfo frameInfo = await codec.getNextFrame();
     _preloadedSplashUiImage = frameInfo.image;
   } catch (_) {}
-
-  // 同时暖机 ImageCache 作为双重保障
-  final completer = Completer<void>();
-  final stream = kSplashIconProvider.resolve(ImageConfiguration.empty);
-  late final ImageStreamListener listener;
-  listener = ImageStreamListener(
-    (info, _) {
-      _preloadedSplashUiImage ??= info.image;
-      if (!completer.isCompleted) completer.complete();
-      stream.removeListener(listener);
-    },
-    onError: (error, stack) {
-      if (!completer.isCompleted) completer.complete();
-      stream.removeListener(listener);
-    },
-  );
-  stream.addListener(listener);
-  await completer.future.timeout(
-    const Duration(milliseconds: 600),
-    onTimeout: () {},
-  );
 }
 
 /// [v3.1.1] 零闪烁冷启动过渡屏 (Zero-Flicker Splash Preloader)

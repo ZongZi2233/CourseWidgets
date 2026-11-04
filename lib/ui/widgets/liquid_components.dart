@@ -1239,8 +1239,24 @@ class HyperOSCard extends StatelessWidget {
 
     if (onTap != null || onLongPress != null || feedbackType != MiuixPressFeedbackType.none) {
       cardContent = MiuixPressable(
-        onPressed: onTap,
-        onLongPress: onLongPress,
+        onPressed: onTap != null
+            ? () {
+                SharedElementSourceRegistry.recordFromContext(
+                  context,
+                  cornerRadius: cornerRadius,
+                );
+                onTap!();
+              }
+            : null,
+        onLongPress: onLongPress != null
+            ? () {
+                SharedElementSourceRegistry.recordFromContext(
+                  context,
+                  cornerRadius: cornerRadius,
+                );
+                onLongPress!();
+              }
+            : null,
         feedbackType: feedbackType,
         sinkAmount: 0.96,
         overlayColor: Colors.transparent,

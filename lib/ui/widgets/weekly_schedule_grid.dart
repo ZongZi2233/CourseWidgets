@@ -356,34 +356,44 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
           ),
           SpringTouchFeedback(
             onTap: () => _showWeekPicker(context, provider),
-            child: liquid.HyperOSCard(
-              useBlur: true,
-              cornerRadius: 14,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              color: isDark ? Colors.white.withValues(alpha: 0.14) : Colors.white.withValues(alpha: 0.48),
-              border: BorderSide(
-                color: isDark ? Colors.white.withValues(alpha: 0.14) : Colors.white.withValues(alpha: 0.72),
-                width: 0.8,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(14),
+                boxShadow: liquid.HyperOSShadows.pill(isDark),
               ),
-              shadows: liquid.HyperOSShadows.pill(isDark),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    '第 $week 周',
-                    style: TextStyle(
-                      color: isDark ? Colors.white : const Color(0xFF1E2128),
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
+              child: GlassContainer(
+                shape: const LiquidRoundedSuperellipse(borderRadius: 14),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                settings: LiquidGlassSettings(
+                  glassColor: isDark ? Colors.white.withValues(alpha: 0.12) : Colors.white.withValues(alpha: 0.40),
+                  blur: 1.5,
+                  thickness: 14,
+                  refractiveIndex: 1.45,
+                  lightIntensity: 0.45,
+                  ambientStrength: 0.25,
+                  ambientRim: 0.12,
+                  fresnelStrength: 0.22,
+                  edgeAbsorption: 0.05,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '第 $week 周',
+                      style: TextStyle(
+                        color: isDark ? Colors.white : const Color(0xFF1E2128),
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 4),
-                  Icon(
-                    CupertinoIcons.chevron_down,
-                    color: isDark ? Colors.white.withValues(alpha: 0.7) : const Color(0xFF555B68),
-                    size: 13,
-                  ),
-                ],
+                    const SizedBox(width: 4),
+                    Icon(
+                      CupertinoIcons.chevron_down,
+                      color: isDark ? Colors.white.withValues(alpha: 0.7) : const Color(0xFF555B68),
+                      size: 13,
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -624,18 +634,26 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
       width: width,
       height: 44,
       margin: const EdgeInsets.only(right: 3.0),
-      child: liquid.HyperOSCard(
-        useBlur: true,
-        cornerRadius: 13,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(13),
+        boxShadow: liquid.HyperOSShadows.pill(isDark),
+      ),
+      child: GlassContainer(
+        shape: const LiquidRoundedSuperellipse(borderRadius: 13),
         padding: EdgeInsets.zero,
-        color: isDark ? const Color(0x4512151B) : const Color(0x52FFFFFF),
-        border: BorderSide(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.14)
-              : Colors.white.withValues(alpha: 0.70),
-          width: 0.8,
+        settings: LiquidGlassSettings(
+          glassColor: isDark
+              ? const Color(0x2812151B)
+              : const Color(0x34FFFFFF),
+          blur: 1.5,
+          thickness: 12,
+          refractiveIndex: 1.42,
+          lightIntensity: 0.42,
+          ambientStrength: 0.25,
+          ambientRim: 0.10,
+          fresnelStrength: 0.20,
+          edgeAbsorption: 0.05,
         ),
-        shadows: liquid.HyperOSShadows.pill(isDark),
         child: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,

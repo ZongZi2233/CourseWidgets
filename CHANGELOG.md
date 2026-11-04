@@ -2,6 +2,25 @@
 
 本文档记录 CourseWidgets 各版本更新的动态活动演进，重点关注架构改进、渲染优化、故障诊断与教务抓取能力提升。
 
+## [v3.1.4] - 2026-11-05 (Build 3140 正式版)
+
+### 1. Windows 秒开加载动画与 Android 单层极速开屏重构 (Instant Windows Splash & Single-Layer Android Launch)
+- **解决 Windows 启动时长时间透明无动画空窗期**：重构 `main.dart` 与 `AnimatedSplashOverlay`、`ZeroFlickerSplashPreloader` 启动管线。桌面端（Windows/macOS/Linux）在完成轻量级配置读取后立即执行 `runApp()` 并于首帧立即展示窗口与 `AnimatedSplashOverlay` 呼吸加载动画（消除 `preloadSplashIcon` 600ms 冗余等待）；将数十 MB 的自定义字体（`SF-Pro.ttf` / `PingFangSC-Semibold.otf`）、液态玻璃着色器预热、SQLite 课表装载及系统托盘/桌面通知移至开屏动画下后台并行初始化，彻底根治透明空窗卡顿；
+- **消除 Android 端双层开屏动画**：Android 12+ 系统已原生提供 `LaunchTheme` 系统开屏动画，在 `main()` 中于原生开屏阶段并行完成着色器预热与课表数据装载，并在 Android 端移除第二层 Flutter `AnimatedSplashOverlay`，实现从系统单层开屏动画直达已就绪的主界面。
+
+### 2. 全面恢复顶部栏与所有悬浮组件的 100% 真实 3D 液态玻璃且动态模糊零变暗 (Authentic Floating Liquid Glass & Counter-Translated Backdrop)
+- **全面恢复顶部栏与悬浮按钮真液态玻璃**：将课程页顶部栏（`_buildModernTopBar`）、底部悬浮横向胶囊控制 Dock（`_buildFloatingBottomActionDock`）、横屏左上角日期徽章（`_buildCornerDateBadge`）、周次切换控制条（`_buildWeekControl`）以及日历页顶栏（`CalendarViewScreen._buildHeader`）全部恢复为 **100% 真实 `GlassContainer` / `GlassButton`（`GlassQuality.premium` 3D 折射液态玻璃）**；
+- **离屏逆位移壁纸补偿消除动态模糊变暗**：在 `DirectionalMotionBlurSwitcher` 与 `PageControllerMotionBlur` 的 `ImageFiltered` 离屏层底部注入反向抵消平移量的原画壁纸层（`FractionalTranslation(-translation)` + `AppBackgroundLayer`），确保随页面平移的真实 `GlassContainer` 在 1D 动态模糊期间依然 100% 折射屏幕原位的真实壁纸，彻底兼顾真液态玻璃质感、1D 运动模糊与零明暗闪烁。
+
+### 3. 借鉴 FlClash (`prism_ui`) 的次级页面 SharedElement 实际位置展开/缩回与全手势预见性侧滑返回 (SharedElement Container Morph & Predictive Back)
+- **修复进入次级页面只显示 1 帧动画的 Bug**：移除 `MotionBlurTransition` 外层导致动态位移被首帧静态冻结的 `SnapshotWidget`，改为内层恒定屏幕尺寸 `RepaintBoundary` 缓存；
+- **从实际点击位置展开与缩回 (`SharedElementSourceRegistry` + `_SharedElementMorphTransition`)**：对标 FlClash `open_container.dart`，在 `HyperOSCard`、`SpringTouchFeedback` 与全局触控监听器中自动记录被点击组件在屏幕上的真实 `Rect` 与圆角；进入次级页面时直接从被点击卡片/按钮的实际坐标超椭圆放大展开至全屏，退出（含左上角返回按钮、系统返回键、Windows `ESC`、侧滑松手）时平滑缩回并消融于该组件的实际位置；
+- **全场景预见性侧滑返回 + 1D 动态模糊**：同时接管 Android 14/15/16 系统级 `Predictive Back` 手势（`handleStartBackGesture` / `handleUpdateBackGestureProgress`）与跨平台左缘跟手拖拽；侧滑时次级页面实时跟手缩小、超椭圆圆角化、透出底层主页并叠加瞬时速度 1D 动态模糊，松手后直接从当前拖拽浮窗平滑飞回原点击组件位置。
+
+### 4. Android 16 实况通知 (Live Update) 星期显式标注与午夜跨天自动刷新 (Weekday-Explicit Live Update & Midnight Auto-Refresh)
+- **显式标注星期几（`今日周X` / `明日周X` / `后天周X`）**：重构 `LiveUpdateNotificationManager.kt` 与 `LiveNotificationServiceV2`，在预告次日/后续课程及今日待上课程（特别是半夜过 0 点后至早八课前）时，主标题与顶栏副标题显式注明 **`明日周三 08:00 · 09:35 下课`** 或 **`今日周三 08:00 · 09:35 下课`**，状态栏胶囊显示 **`周三X节`**，彻底消除半夜过 12 点后对“今天/明天”课程归属的误解；
+- **午夜 `00:00:02` 精准闹钟自动刷新**：在 `CourseAlarmReceiver.kt` 与 `LiveNotificationServiceV2` 的唤醒候选队列中新增次日零点 `00:00:02` 精准闹钟，跨过午夜 0 点瞬间自动将通知从“明日周X”切换为“今日周X”。
+
 ## [v3.1.3] - 2026-11-05 (Build 3130 正式版)
 
 ### 1. 全面借鉴 FlClash (`chen08209/FlClash` & `prism_ui`) 的主导航切页与静态光栅快照架构 (FlClash-Inspired Snapshot Page Switcher & Pre-warmed Pool)

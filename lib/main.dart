@@ -46,6 +46,14 @@ final ValueNotifier<String?> globalBackgroundPath = ValueNotifier<String?>(
 final ValueNotifier<bool> globalAcrylicBackdropNotifier =
     ValueNotifier<bool>(false);
 
+/// [v3.1.4] 全局启动就绪通知器（用于桌面端秒开加载动画与后台并行初始化门控）
+final ValueNotifier<bool> globalStartupReadyNotifier =
+    ValueNotifier<bool>(false);
+
+/// [v3.1.4] 桌面端自定义字体加载完成标记，触发字体就绪后平滑重绘
+final ValueNotifier<bool> globalDesktopFontsLoadedNotifier =
+    ValueNotifier<bool>(false);
+
 // [v2.6.0] 全局路由监听器，用于控制底部导航栏的显示与隐藏
 final RouteObserver<PageRoute> routeObserver = RouteObserver<PageRoute>();
 
@@ -169,111 +177,13 @@ void main() async {
   await ThemeService().initialize();
   AppLogger.ui('ThemeService 初始化完成');
 
-  // [v2.6.5反馈修复] 动态按需加载字体（仅在桌面端）以节省移动端打包空间
-  if (Platform.isWindows || Platform.isMacOS) {
-    try {
-      final sfProLoader = FontLoader('SFPro');
-      sfProLoader.addFont(rootBundle.load('assets/fonts/SF-Pro.ttf'));
-      await sfProLoader.load();
-
-      final pingFangLoader = FontLoader('PingFangSC');
-      pingFangLoader.addFont(
-        rootBundle.load('assets/fonts/PingFangSC-Semibold.otf'),
-      );
-      await pingFangLoader.load();
-      AppLogger.engine('Desktop Custom Fonts Loaded.');
-    } catch (e, st) {
-      AppLogger.error('FONT', 'Failed to load custom fonts: $e', e, st);
-    }
-  }
-
   // [v3.0.0-alpha18] 强制使用完整 3D 渲染着色器 (Premium)，杜绝高性能 2D 降级
   GlassEffect.useHighPerformanceShader = false;
   AppLogger.render('🎨 着色器模式: 旗舰高质量 (Premium)');
 
-  // [v2.4.1/v2.7.8/v3.0.0-alpha14] 初始化 Liquid Glass (支持 120Hz 预算校准与移动端高帧率预热)
-  await LiquidGlassWidgets.initialize(
-    warmUpMode: GlassWarmUpMode.always,
-  );
-  GlassPerformanceMonitor.rasterBudget = const Duration(microseconds: 8333); // 120Hz
-  GlassPerformanceMonitor.sustainedFrameThreshold = 120;
-  AppLogger.render('LiquidGlassWidgets 初始化与着色器预热完毕 (120Hz 预算已校准)');
-
-  // [v3.0.0-alpha13] 预编译 ProgressiveBlur 状态栏无极渐变模糊着色器
-  await ProgressiveBlur.preload();
-  AppLogger.render('ProgressiveBlur 着色器预编译完毕');
-
   // [v3.0.0] 初始化全局静态单次壁纸模糊烘焙服务
   StaticBlurredWallpaperService.instance.initialize();
   AppLogger.render('StaticBlurredWallpaperService 初始化完毕');
-
-  // [v2.2.9] 初始化后台任务服务（仅 Android）
-  if (Platform.isAndroid) {
-    try {
-      await BackgroundTaskService.initialize();
-      await BackgroundTaskService.registerPeriodicTask();
-      AppLogger.notif('Android 后台任务服务已启动');
-    } catch (e, st) {
-      AppLogger.error('BG_TASK', '后台任务服务启动失败: $e', e, st);
-    }
-  }
-
-  // [v2.7.0] 提前初始化全平台的聚合通知管理器
-  try {
-    await NotificationManager().initialize();
-    AppLogger.notif('系统通知管理器(NotificationManager)全局初始化完毕');
-  } catch (e, st) {
-    AppLogger.error('NOTIF', '系统通知管理器初始化失败: $e', e, st);
-  }
-
-  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
-    await windowManager.ensureInitialized();
-
-    // [v2.5.1/v3.0.0] 初始化本地桌面通知并清理失效快捷方式
-    if (Platform.isWindows) {
-      try {
-        final appData = Platform.environment['APPDATA'];
-        if (appData != null) {
-          final oldLnk = File('$appData\\Microsoft\\Windows\\Start Menu\\Programs\\CourseWidgets.lnk');
-          if (oldLnk.existsSync()) {
-            oldLnk.deleteSync();
-            debugPrint('🗑️ 已清除旧版失效快捷方式 CourseWidgets.lnk');
-          }
-        }
-      } catch (e) {
-        debugPrint('清理旧快捷方式异常: $e');
-      }
-
-      await localNotifier.setup(
-        appName: 'CourseWidgets',
-        shortcutPolicy: ShortcutPolicy.requireCreate,
-      );
-    }
-
-    // [v2.4.8] 使用 TitleBarStyle.hidden 替代 setAsFrameless()
-    const WindowOptions windowOptions = WindowOptions(
-      size: Size(1024, 768),
-      center: true,
-      skipTaskbar: false,
-      titleBarStyle: TitleBarStyle.hidden,
-      backgroundColor: Colors.transparent,
-    );
-    windowManager.waitUntilReadyToShow(windowOptions, () async {
-      await windowManager.setHasShadow(true);
-      await windowManager.setBackgroundColor(Colors.transparent);
-      await windowManager.show();
-      await windowManager.focus();
-    });
-
-    // [v2.3.0] Windows 托盘服务初始化
-    if (Platform.isWindows) {
-      await windowManager.setPreventClose(true);
-
-      final tray = WindowsTrayService();
-      await tray.initialize();
-      debugPrint('✅ Windows 托盘服务已在 main 中初始化');
-    }
-  }
 
   await loadGlobalBackground();
   await ThemeService().refreshMonetColors();
@@ -284,12 +194,51 @@ void main() async {
   await storage.setString('glass_quality', GlassQuality.premium.name);
   await storage.setString('global_glass_quality', GlassQuality.premium.name);
 
+  final scheduleProvider = ScheduleProvider();
+  final bool isDesktop =
+      Platform.isWindows || Platform.isLinux || Platform.isMacOS;
+
+  if (isDesktop) {
+    await windowManager.ensureInitialized();
+  } else {
+    // 移动端（Android/iOS）：在系统原生单层开屏画面期间并行完成着色器预热与课表数据装载，
+    // 确保原生开屏结束后直接进入已就绪的主界面，杜绝两层开屏动画！
+    await Future.wait([
+      LiquidGlassWidgets.initialize(warmUpMode: GlassWarmUpMode.always),
+      ProgressiveBlur.preload(),
+      scheduleProvider.loadSavedData(),
+    ]);
+    GlassPerformanceMonitor.rasterBudget =
+        const Duration(microseconds: 8333); // 120Hz
+    GlassPerformanceMonitor.sustainedFrameThreshold = 120;
+    globalStartupReadyNotifier.value = true;
+
+    // 后台异步启动通知与周期任务，不阻塞首帧
+    unawaited(() async {
+      if (Platform.isAndroid) {
+        try {
+          await BackgroundTaskService.initialize();
+          await BackgroundTaskService.registerPeriodicTask();
+          AppLogger.notif('Android 后台任务服务已启动');
+        } catch (e, st) {
+          AppLogger.error('BG_TASK', '后台任务服务启动失败: $e', e, st);
+        }
+      }
+      try {
+        await NotificationManager().initialize();
+        AppLogger.notif('系统通知管理器(NotificationManager)全局初始化完毕');
+      } catch (e, st) {
+        AppLogger.error('NOTIF', '系统通知管理器初始化失败: $e', e, st);
+      }
+    }());
+  }
+
   runApp(
     LiquidGlassWidgets.wrap(
       child: Phoenix(
         child: MultiProvider(
           providers: [
-            ChangeNotifierProvider(create: (_) => ScheduleProvider()),
+            ChangeNotifierProvider.value(value: scheduleProvider),
             ChangeNotifierProvider.value(value: ThemeService()),
           ],
           child: const MyApp(),
@@ -301,6 +250,100 @@ void main() async {
       ),
     ),
   );
+
+  // [v3.1.4] 桌面端（Windows/macOS/Linux）：首帧立即显现窗口并展示 AnimatedSplashOverlay 呼吸加载动画，
+  // 彻底解决 Windows 启动时长时间透明无动画空窗期问题！大字体、着色器、数据库、托盘全部在开屏动画下并行加载。
+  if (isDesktop) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      const WindowOptions windowOptions = WindowOptions(
+        size: Size(1024, 768),
+        center: true,
+        skipTaskbar: false,
+        titleBarStyle: TitleBarStyle.hidden,
+        backgroundColor: Colors.transparent,
+      );
+      windowManager.waitUntilReadyToShow(windowOptions, () async {
+        await windowManager.setHasShadow(true);
+        await windowManager.setBackgroundColor(Colors.transparent);
+        await windowManager.show();
+        await windowManager.focus();
+      });
+
+      try {
+        await Future.wait([
+          // 1. 异步并行加载桌面端大字体文件
+          () async {
+            if (Platform.isWindows || Platform.isMacOS) {
+              try {
+                final sfProLoader = FontLoader('SFPro');
+                sfProLoader.addFont(rootBundle.load('assets/fonts/SF-Pro.ttf'));
+                final pingFangLoader = FontLoader('PingFangSC');
+                pingFangLoader.addFont(
+                  rootBundle.load('assets/fonts/PingFangSC-Semibold.otf'),
+                );
+                await Future.wait([
+                  sfProLoader.load(),
+                  pingFangLoader.load(),
+                ]);
+                globalDesktopFontsLoadedNotifier.value = true;
+                AppLogger.engine('Desktop Custom Fonts Loaded.');
+              } catch (e, st) {
+                AppLogger.error('FONT', 'Failed to load custom fonts: $e', e, st);
+              }
+            }
+          }(),
+          // 2. 异步并行预热液态玻璃与渐变模糊着色器
+          () async {
+            await LiquidGlassWidgets.initialize(
+              warmUpMode: GlassWarmUpMode.always,
+            );
+            GlassPerformanceMonitor.rasterBudget =
+                const Duration(microseconds: 8333);
+            GlassPerformanceMonitor.sustainedFrameThreshold = 120;
+            await ProgressiveBlur.preload();
+            AppLogger.render('Desktop Shaders Initialized.');
+          }(),
+          // 3. 异步并行装载 SQLite 课表数据
+          scheduleProvider.loadSavedData(),
+        ]);
+      } catch (e, st) {
+        AppLogger.error('STARTUP', 'Desktop parallel startup error: $e', e, st);
+      } finally {
+        globalStartupReadyNotifier.value = true;
+      }
+
+      // 4. 托盘与桌面通知在开屏揭晓后异步挂载，零阻塞
+      unawaited(() async {
+        try {
+          await NotificationManager().initialize();
+        } catch (e, st) {
+          AppLogger.error('NOTIF', '系统通知管理器初始化失败: $e', e, st);
+        }
+        if (Platform.isWindows) {
+          try {
+            final appData = Platform.environment['APPDATA'];
+            if (appData != null) {
+              final oldLnk = File(
+                '$appData\\Microsoft\\Windows\\Start Menu\\Programs\\CourseWidgets.lnk',
+              );
+              if (oldLnk.existsSync()) {
+                oldLnk.deleteSync();
+              }
+            }
+            await localNotifier.setup(
+              appName: 'CourseWidgets',
+              shortcutPolicy: ShortcutPolicy.requireCreate,
+            );
+            await windowManager.setPreventClose(true);
+            await WindowsTrayService().initialize();
+            debugPrint('✅ Windows 托盘与通知服务后台初始化完成');
+          } catch (e) {
+            debugPrint('Windows 托盘/通知初始化异常: $e');
+          }
+        }
+      }());
+    });
+  }
 }
 
 class MyApp extends StatefulWidget {
@@ -635,9 +678,17 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                       );
                     }
 
-                    final coreStack = LiquidGlassScope.stack(
-                      background: backgroundWidget,
-                      content: contentWidget,
+                    final coreStack = Listener(
+                      behavior: HitTestBehavior.translucent,
+                      onPointerDown: (event) {
+                        SharedElementSourceRegistry.recordPointerDown(
+                          event.position,
+                        );
+                      },
+                      child: LiquidGlassScope.stack(
+                        background: backgroundWidget,
+                        content: contentWidget,
+                      ),
                     );
 
                     // [v3.1.0] Windows/macOS 窗口圆角：最大化时零裁剪，非最大化时采用硬件加速 ClipRRect
@@ -656,28 +707,52 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
                     return coreStack;
                   },
-                  home: AnimatedSplashOverlay(
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 450),
-                      switchInCurve: AppCurves.pageSlide,
-                      switchOutCurve: AppCurves.pageSlideReverse,
-                      transitionBuilder: (child, animation) {
-                        return FadeTransition(
-                          opacity: animation,
-                          child: child,
-                        );
-                      },
-                      child: _showOnboarding
-                          ? OnboardingScreen(
-                              key: const ValueKey('onboarding_screen'),
-                              onComplete: _completeOnboarding,
-                            )
-                          : KeyedSubtree(
-                              key: const ValueKey('home_screen'),
-                              child: _getHomeParams(),
-                            ),
-                    ),
-                  ),
+                  // [v3.1.4] Android 端已具备原生 SplashScreen，不再叠加第二层 Flutter 开屏动画，仅保留单层开屏；
+                  // Windows/桌面端则首帧立即呈现 AnimatedSplashOverlay，彻底消除透明空窗期。
+                  home: Platform.isAndroid
+                      ? AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 450),
+                          switchInCurve: AppCurves.pageSlide,
+                          switchOutCurve: AppCurves.pageSlideReverse,
+                          transitionBuilder: (child, animation) {
+                            return FadeTransition(
+                              opacity: animation,
+                              child: child,
+                            );
+                          },
+                          child: _showOnboarding
+                              ? OnboardingScreen(
+                                  key: const ValueKey('onboarding_screen'),
+                                  onComplete: _completeOnboarding,
+                                )
+                              : KeyedSubtree(
+                                  key: const ValueKey('home_screen'),
+                                  child: _getHomeParams(),
+                                ),
+                        )
+                      : AnimatedSplashOverlay(
+                          startupReadyNotifier: globalStartupReadyNotifier,
+                          child: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 450),
+                            switchInCurve: AppCurves.pageSlide,
+                            switchOutCurve: AppCurves.pageSlideReverse,
+                            transitionBuilder: (child, animation) {
+                              return FadeTransition(
+                                opacity: animation,
+                                child: child,
+                              );
+                            },
+                            child: _showOnboarding
+                                ? OnboardingScreen(
+                                    key: const ValueKey('onboarding_screen'),
+                                    onComplete: _completeOnboarding,
+                                  )
+                                : KeyedSubtree(
+                                    key: const ValueKey('home_screen'),
+                                    child: _getHomeParams(),
+                                  ),
+                          ),
+                        ),
                 );
               },
             );

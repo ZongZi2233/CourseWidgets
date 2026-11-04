@@ -673,8 +673,10 @@ object LiveUpdateNotificationManager {
                     TimelineSegment(weight = durMin, isBreak = false)
                 }
 
+                val todayWeekday = formatWeekday(now)
+
                 return LiveUpdateSnapshot(
-                    headerSubText = "$sectionLabel · $weekLabel",
+                    headerSubText = "今日$todayWeekday · $sectionLabel · $weekLabel",
                     shortCapsuleText = "剩${remainingMin}分",
                     heroTitleSpan = heroTitleSpan,
                     detailBodySpan = detailBodySpan,
@@ -698,32 +700,44 @@ object LiveUpdateNotificationManager {
                 val accentColor = 0xFFEB7A99.toInt()
                 val trackColor = 0xFF562939.toInt()
 
+                val todayWeekday = formatWeekday(now)
                 val sectionLabel = formatSectionLabel(nextCourse)
                 val breakStartMs = prevCourse?.endTime ?: max(todayStart, nextCourse.startTime - 45 * 60_000L)
-                val breakStartStr = if (prevCourse != null) {
-                    timeFmt.format(Date(prevCourse.endTime))
-                } else {
-                    timeFmt.format(Date(now))
-                }
                 val nextStartStr = timeFmt.format(Date(nextCourse.startTime))
+                val nextEndStr = timeFmt.format(Date(nextCourse.endTime))
                 val nextLoc = cleanLocation(nextCourse.location, "教室待定")
 
                 val totalBreakMs = max(1L, nextCourse.startTime - breakStartMs)
-                val progressFraction = ((now - breakStartMs).toFloat() / totalBreakMs.toFloat()).coerceIn(0.05f, 1f)
+                val progressFraction = if (prevCourse != null || now >= breakStartMs) {
+                    ((now - breakStartMs).toFloat() / totalBreakMs.toFloat()).coerceIn(0.05f, 1f)
+                } else {
+                    0.05f
+                }
                 val diffMin = max(1, ((nextCourse.startTime - now + 59_999L) / 60_000L).toInt())
 
-                val leftTag = if (prevCourse != null) "课间 " else "待上 "
-                val heroTitleSpan = SpannableStringBuilder()
-                    .appendStyled(leftTag, relativeSize = 0.68f, color = 0xFF9EA4B0.toInt(), bold = false)
-                    .appendStyled(breakStartStr, relativeSize = 1.36f, color = 0xFFD0D4DE.toInt(), bold = true)
-                    .appendStyled(" · ", relativeSize = 0.72f, color = 0xFF6E737D.toInt(), bold = false)
-                    .appendStyled(nextStartStr, relativeSize = 1.48f, color = accentColor, bold = true)
-                    .appendStyled(" 上课", relativeSize = 0.68f, color = 0xFF9EA4B0.toInt(), bold = false)
+                val heroTitleSpan = if (prevCourse != null) {
+                    val breakStartStr = timeFmt.format(Date(prevCourse.endTime))
+                    SpannableStringBuilder()
+                        .appendStyled("课间 ", relativeSize = 0.68f, color = 0xFF9EA4B0.toInt(), bold = false)
+                        .appendStyled(breakStartStr, relativeSize = 1.36f, color = 0xFFD0D4DE.toInt(), bold = true)
+                        .appendStyled(" · ", relativeSize = 0.72f, color = 0xFF6E737D.toInt(), bold = false)
+                        .appendStyled(nextStartStr, relativeSize = 1.48f, color = accentColor, bold = true)
+                        .appendStyled(" 上课", relativeSize = 0.68f, color = 0xFF9EA4B0.toInt(), bold = false)
+                } else {
+                    // 今日首节课前（尤其是半夜 00:00 过后）：显式标明「今日周X」与首节课起止时间，彻底消除过零点后的日期误解
+                    val prefixLabel = if (diffMin <= 45) "即将上课 " else "今日$todayWeekday "
+                    SpannableStringBuilder()
+                        .appendStyled(prefixLabel, relativeSize = 0.72f, color = 0xFF9EA4B0.toInt(), bold = true)
+                        .appendStyled(nextStartStr, relativeSize = 1.48f, color = accentColor, bold = true)
+                        .appendStyled(" · ", relativeSize = 0.72f, color = 0xFF6E737D.toInt(), bold = false)
+                        .appendStyled(nextEndStr, relativeSize = 1.36f, color = 0xFFD0D4DE.toInt(), bold = true)
+                        .appendStyled(" 下课", relativeSize = 0.68f, color = 0xFF9EA4B0.toInt(), bold = false)
+                }
 
                 val breakSubHint = if (prevCourse != null) {
                     "上节 ${prevCourse.name}"
                 } else {
-                    "今日共 ${todayCourses.size} 节"
+                    "今日$todayWeekday · 共 ${todayCourses.size} 节"
                 }
                 val detailBodySpan = SpannableStringBuilder()
                     .appendStyled(nextCourse.name, relativeSize = 1.38f, color = null, bold = true)
@@ -737,10 +751,10 @@ object LiveUpdateNotificationManager {
                     TimelineSegment(weight = durMin, isBreak = false)
                 }
 
-                val shortCapsule = if (diffMin <= 60) "${diffMin}分后" else nextStartStr
+                val shortCapsule = if (diffMin <= 60) "${diffMin}分后" else "$todayWeekday$nextStartStr"
 
                 return LiveUpdateSnapshot(
-                    headerSubText = "$sectionLabel · $weekLabel",
+                    headerSubText = "今日$todayWeekday · $sectionLabel · $weekLabel",
                     shortCapsuleText = shortCapsule,
                     heroTitleSpan = heroTitleSpan,
                     detailBodySpan = detailBodySpan,
@@ -768,6 +782,8 @@ object LiveUpdateNotificationManager {
             val startStr = timeFmt.format(Date(futureCourse.startTime))
             val endStr = timeFmt.format(Date(futureCourse.endTime))
             val relDay = formatRelativeDay(futureCourse.startTime, now)
+            val targetWeekday = formatWeekday(futureCourse.startTime)
+            val todayWeekday = formatWeekday(now)
             val locStr = cleanLocation(futureCourse.location, "教室待定")
             val sectionLabel = formatSectionLabel(futureCourse)
 
@@ -782,6 +798,7 @@ object LiveUpdateNotificationManager {
             val tStart = targetCal.timeInMillis
             val tEnd = tStart + 86_400_000L - 1L
             val targetDayCourses = allCourses.filter { it.startTime in tStart..tEnd }
+            val targetCount = targetDayCourses.size.coerceAtLeast(1)
             val segs = if (targetDayCourses.isNotEmpty()) {
                 targetDayCourses.map { c ->
                     TimelineSegment(((c.endTime - c.startTime) / 60000f).coerceIn(28f, 120f))
@@ -791,21 +808,27 @@ object LiveUpdateNotificationManager {
             }
 
             val heroTitleSpan = SpannableStringBuilder()
-                .appendStyled("$relDay ", relativeSize = 0.68f, color = 0xFF9EA4B0.toInt(), bold = false)
+                .appendStyled("$relDay ", relativeSize = 0.72f, color = 0xFF9EA4B0.toInt(), bold = true)
                 .appendStyled(startStr, relativeSize = 1.48f, color = accentColor, bold = true)
                 .appendStyled(" · ", relativeSize = 0.72f, color = 0xFF6E737D.toInt(), bold = false)
                 .appendStyled(endStr, relativeSize = 1.36f, color = 0xFF9E9EA6.toInt(), bold = true)
                 .appendStyled(" 下课", relativeSize = 0.68f, color = 0xFF9EA4B0.toInt(), bold = false)
 
+            val todayFinishHint = if (todayCourses.isNotEmpty()) {
+                "今日($todayWeekday)已下课 · ${relDay}共${targetCount}节"
+            } else {
+                "今日($todayWeekday)无课 · ${relDay}共${targetCount}节"
+            }
+
             val detailBodySpan = SpannableStringBuilder()
                 .appendStyled(futureCourse.name, relativeSize = 1.38f, color = null, bold = true)
                 .appendStyled("  ", relativeSize = 1.0f)
                 .appendStyled(locStr, relativeSize = 1.15f, color = accentColor, bold = true)
-                .appendStyled("   ｜ 今日课程已结束", relativeSize = 0.68f, color = 0xFF8A8F99.toInt(), bold = false)
+                .appendStyled("   ｜ $todayFinishHint", relativeSize = 0.68f, color = 0xFF8A8F99.toInt(), bold = false)
 
             return LiveUpdateSnapshot(
                 headerSubText = "$relDay · $sectionLabel · $weekLabel",
-                shortCapsuleText = "$relDay${targetDayCourses.size.coerceAtLeast(1)}节",
+                shortCapsuleText = "${targetWeekday}${targetCount}节",
                 heroTitleSpan = heroTitleSpan,
                 detailBodySpan = detailBodySpan,
                 smallIconRes = R.drawable.ic_live_walker,
@@ -1076,6 +1099,20 @@ object LiveUpdateNotificationManager {
         return cal.get(Calendar.HOUR_OF_DAY)
     }
 
+    private fun formatWeekday(epochMs: Long): String {
+        val cal = Calendar.getInstance().apply { timeInMillis = epochMs }
+        return when (cal.get(Calendar.DAY_OF_WEEK)) {
+            Calendar.MONDAY -> "周一"
+            Calendar.TUESDAY -> "周二"
+            Calendar.WEDNESDAY -> "周三"
+            Calendar.THURSDAY -> "周四"
+            Calendar.FRIDAY -> "周五"
+            Calendar.SATURDAY -> "周六"
+            Calendar.SUNDAY -> "周日"
+            else -> ""
+        }
+    }
+
     private fun formatRelativeDay(targetMs: Long, nowMs: Long): String {
         val nowCal = Calendar.getInstance().apply {
             timeInMillis = nowMs
@@ -1091,15 +1128,16 @@ object LiveUpdateNotificationManager {
             set(Calendar.SECOND, 0)
             set(Calendar.MILLISECOND, 0)
         }
+        val weekday = formatWeekday(targetMs)
         val diffDays = ((targetCal.timeInMillis - nowCal.timeInMillis) / 86_400_000L).toInt()
         return when (diffDays) {
-            0 -> "今天"
-            1 -> "明天"
-            2 -> "后天"
+            0 -> "今日$weekday"
+            1 -> "明日$weekday"
+            2 -> "后天$weekday"
             else -> {
                 val m = targetCal.get(Calendar.MONTH) + 1
                 val d = targetCal.get(Calendar.DAY_OF_MONTH)
-                "${m}月${d}日"
+                "${m}月${d}日 $weekday"
             }
         }
     }

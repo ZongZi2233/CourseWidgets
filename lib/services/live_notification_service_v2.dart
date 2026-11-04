@@ -359,21 +359,23 @@ class LiveNotificationServiceV2 {
     final nowDate = DateTime(now.year, now.month, now.day);
     final dayDiff = targetDate.difference(nowDate).inDays;
 
-    if (dayDiff == 0) return '今天';
-    if (dayDiff == 1) return '明天';
-    if (dayDiff == 2) return '后天';
-
     const weekDays = ['', '周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+    final weekday = weekDays[target.weekday.clamp(1, 7)];
+
+    if (dayDiff == 0) return '今日$weekday';
+    if (dayDiff == 1) return '明日$weekday';
+    if (dayDiff == 2) return '后天$weekday';
+
     final currentMonday = nowDate.subtract(Duration(days: nowDate.weekday - 1));
     final nextMonday = currentMonday.add(const Duration(days: 7));
     final nextNextMonday = nextMonday.add(const Duration(days: 7));
 
     if (targetDate.isBefore(nextMonday)) {
-      return weekDays[target.weekday];
+      return '本$weekday';
     } else if (targetDate.isBefore(nextNextMonday)) {
-      return '下${weekDays[target.weekday]}';
+      return '下$weekday';
     } else {
-      return '${target.month}月${target.day}日';
+      return '${target.month}月${target.day}日 $weekday';
     }
   }
 
@@ -670,7 +672,14 @@ class LiveNotificationServiceV2 {
         const MethodChannel liveChannel =
             MethodChannel('com.zongzi.schedule/live_update');
 
-        int? nextWakeupMs;
+        int? nextWakeupMs = DateTime(
+          now.year,
+          now.month,
+          now.day + 1,
+          0,
+          0,
+          2,
+        ).millisecondsSinceEpoch;
         final nextMinuteMs = ((nowMs ~/ 60000) + 1) * 60000;
         final futureCourses =
             _allCourses.where((c) => c.endTime > nowMs).toList()
