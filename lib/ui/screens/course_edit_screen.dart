@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
@@ -11,6 +12,8 @@ import '../widgets/liquid_components.dart';
 import '../widgets/liquid_glass_pickers.dart';
 import '../widgets/liquid_toast.dart';
 import '../widgets/immersive_status_bar_backdrop.dart';
+import '../widgets/windows_desktop_title_bar.dart'
+    show setWindowsDesktopTitle, clearWindowsDesktopTitle;
 import 'package:smooth_scroll_multiplatform/smooth_scroll_multiplatform.dart';
 import '../../utils/responsive_utils.dart';
 
@@ -38,6 +41,7 @@ class _CourseEditScreenState extends State<CourseEditScreen> {
   @override
   void initState() {
     super.initState();
+    setWindowsDesktopTitle(widget.course == null ? '添加课程' : '编辑课程');
     _nameController = TextEditingController(text: widget.course?.name ?? '');
     _locationController = TextEditingController(
       text: widget.course?.location ?? '',
@@ -65,10 +69,24 @@ class _CourseEditScreenState extends State<CourseEditScreen> {
   }
 
   @override
+  void dispose() {
+    clearWindowsDesktopTitle(widget.course == null ? '添加课程' : '编辑课程');
+    _nameController.dispose();
+    _locationController.dispose();
+    _teacherController.dispose();
+    _startTimeController.dispose();
+    _endTimeController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDark ? Colors.white : const Color(0xFF1A1A2E);
-    final topPadding = MediaQuery.paddingOf(context).top + 60;
+    final isDesktop =
+        Platform.isWindows || Platform.isMacOS || Platform.isLinux;
+    final topPadding =
+        isDesktop ? 20.0 : (MediaQuery.paddingOf(context).top + 60);
 
     return Scaffold(
       backgroundColor: Colors.transparent, // 必须透明
@@ -84,11 +102,14 @@ class _CourseEditScreenState extends State<CourseEditScreen> {
                 builder: (context, controller, physics) =>
                     SingleChildScrollView(
                   controller: controller,
-                  padding: EdgeInsets.fromLTRB(20, topPadding, 20, 100),
+                  padding: EdgeInsets.fromLTRB(20, topPadding, 20, isDesktop ? 32 : 100),
                   physics: physics,
-                  child: Form(
-                    key: _formKey,
-                    child: Column(
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 860),
+                      child: Form(
+                        key: _formKey,
+                        child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             _buildSectionTitle('基本信息', textColor),
@@ -190,33 +211,36 @@ class _CourseEditScreenState extends State<CourseEditScreen> {
                     ),
                   ),
                 ),
+                  ),
+                ),
               ),
 
           // 2. 状态栏微模糊避让 (0..48dp)
-          const ImmersiveStatusBarBackdrop(),
+          if (!isDesktop) const ImmersiveStatusBarBackdrop(),
 
-          // 3. 悬浮大圆角矩形玻璃标题胶囊（点击可返回，消除裸字悬浮感）
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: SafeArea(
-              bottom: false,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: Row(
-                  children: [
-                    FloatingGlassHeaderButton(
-                      title: widget.course == null ? '添加课程' : '编辑课程',
-                    ),
-                  ],
+          // 3. 悬浮大圆角矩形玻璃标题胶囊（仅移动端展示）
+          if (!isDesktop)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Row(
+                    children: [
+                      FloatingGlassHeaderButton(
+                        title: widget.course == null ? '添加课程' : '编辑课程',
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
 
-          // 4. [v2.9.7] 悬浮右下角返回按钮
-          const FloatingLiquidBackButton(),
+          // 4. [v2.9.7] 悬浮右下角返回按钮（仅移动端展示）
+          if (!isDesktop) const FloatingLiquidBackButton(),
         ],
       ),
     );

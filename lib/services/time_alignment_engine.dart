@@ -63,6 +63,8 @@ class TimeAlignmentEngine {
         teacher: course.teacher,
         startTime: shiftedStart.millisecondsSinceEpoch,
         endTime: shiftedEnd.millisecondsSinceEpoch,
+        startSection: course.startSection,
+        endSection: course.endSection,
       );
     }).toList();
   }

@@ -7,11 +7,11 @@ import '../models/course_event.dart';
 import '../services/storage_service.dart';
 import 'package:local_notifier/local_notifier.dart';
 
-/// [v2.2.8] 统一通知管理器
+/// [v2.2.8 / v3.1.0] 统一通知管理器
 /// 支持多平台、多种通知方式
 /// - Android API < 34: 双次提醒 + RemoteViews
-/// - Android API ≥ 34: Live Updates (通过 live_activities_service.dart)
-/// - iOS/iPadOS/macOS: Live Activities (通过 live_activities_service.dart)
+/// - Android API ≥ 34: Live Updates (通过 live_notification_service_v2.dart)
+/// - iOS/iPadOS/macOS: Live Activities
 /// - Windows: 系统通知
 class NotificationManager {
   static final NotificationManager _instance = NotificationManager._internal();
@@ -42,10 +42,8 @@ class NotificationManager {
     if (_isInitialized) return;
 
     try {
-      // 请求通知权限
       await _requestPermissions();
 
-      // 初始化插件
       const androidSettings = AndroidInitializationSettings(
         '@mipmap/ic_launcher',
       );
@@ -71,7 +69,6 @@ class NotificationManager {
         onDidReceiveNotificationResponse: _onNotificationTapped,
       );
 
-      // 创建通知通道
       if (Platform.isAndroid) {
         await _createAndroidChannels();
       }
@@ -108,7 +105,6 @@ class NotificationManager {
 
     if (androidPlugin == null) return;
 
-    // 课程提醒通道
     await androidPlugin.createNotificationChannel(
       const AndroidNotificationChannel(
         'course_reminder',
@@ -120,7 +116,6 @@ class NotificationManager {
       ),
     );
 
-    // 上课通知通道
     await androidPlugin.createNotificationChannel(
       const AndroidNotificationChannel(
         'course_ongoing',
@@ -136,7 +131,6 @@ class NotificationManager {
   /// 处理通知点击
   void _onNotificationTapped(NotificationResponse response) {
     debugPrint('📱 通知被点击: ${response.payload}');
-    // TODO: 导航到课程详情
   }
 
   /// 启动课程检查定时器
@@ -146,15 +140,12 @@ class NotificationManager {
       return;
     }
 
-    // 停止旧定时器
     _checkTimer?.cancel();
 
-    // 每分钟动态拉取最新课程数据进行检查
     _checkTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
       _checkUpcomingCourses(getCourses());
     });
 
-    // 立即检查一次
     _checkUpcomingCourses(getCourses());
 
     debugPrint('🔔 课程检查定时器已启动');
@@ -170,12 +161,10 @@ class NotificationManager {
       final courseTime = DateTime.fromMillisecondsSinceEpoch(course.startTime);
       final diff = courseTime.difference(now);
 
-      // 跳过已过期的课程
       if (diff.isNegative) continue;
 
       final courseId = course.id ?? course.startTime;
 
-      // 第一次提醒（提前 N 分钟）
       if (diff.inMinutes >= advanceMinutes - 1 &&
           diff.inMinutes <= advanceMinutes + 1) {
         if (!_notifiedCourses.contains(courseId)) {
@@ -184,16 +173,14 @@ class NotificationManager {
         }
       }
 
-      // 第二次提醒（上课前 5 分钟，仅 Android API < 34 和 Windows）
       if (doubleReminder && diff.inMinutes >= 4 && diff.inMinutes <= 6) {
-        final secondId = courseId + 1000000; // 避免 ID 冲突
+        final secondId = courseId + 1000000;
         if (!_notifiedCourses.contains(secondId)) {
           _sendCourseReminder(course, 5, isSecondReminder: true);
           _notifiedCourses.add(secondId);
         }
       }
 
-      // 清理已过期的通知记录
       if (diff.inMinutes < -60) {
         _notifiedCourses.remove(courseId);
         _notifiedCourses.remove(courseId + 1000000);
@@ -289,7 +276,6 @@ class NotificationManager {
     required String title,
     required String body,
   }) async {
-    // [v2.6.0.19/v3.0.0] 使用专门应对裸 EXE 的 local_notifier，由应用快捷方式与 EXE 原生图标自动呈现
     try {
       final cleanTitle = title.replaceAll(RegExp(r'<[^>]*>'), '');
       final cleanBody = body.replaceAll(RegExp(r'<[^>]*>'), '');
@@ -384,6 +370,9 @@ class NotificationManager {
   // ==================== Live Activities 设置 ====================
 
   static const String keyLiveActivitiesEnabled = 'live_activities_enabled';
+  static const String keyLiveProgressStyle = 'live_progress_style';
+  static const String styleCenteredDots = 'centered_dots';
+  static const String styleDurationSegments = 'duration_segments';
 
   /// Live Activities 是否启用（默认开启）
   bool get isLiveActivitiesEnabled {
@@ -395,10 +384,20 @@ class NotificationManager {
     await _storage.setBool(keyLiveActivitiesEnabled, enabled);
   }
 
+  /// [v3.1.0] 获取实况通知时间轴进度条样式
+  /// - `'centered_dots'`: 居中样式（当前课居中，其余缩成圆点，默认）
+  /// - `'duration_segments'`: 按时长分段
+  String get liveProgressStyle {
+    return _storage.getString(keyLiveProgressStyle) ?? styleCenteredDots;
+  }
+
+  /// [v3.1.0] 设置实况通知时间轴进度条样式
+  Future<void> setLiveProgressStyle(String style) async {
+    await _storage.setString(keyLiveProgressStyle, style);
+  }
+
   // ==================== [v2.8.0] Windows 通知简报系统 ====================
 
-  /// [v2.8.0] 应用启动时发送每日课程简报
-  /// [v2.9.0修复] 用 year/month/day 精确匹配今天，而非 weekday（避免跨周课程重复计数）
   Future<void> sendDailyBriefing(List<CourseEvent> allCourses) async {
     if (!Platform.isWindows) return;
     if (!_isInitialized) await initialize();
@@ -409,7 +408,6 @@ class NotificationManager {
       final todayEnd = todayStart.add(const Duration(days: 1));
       final tomorrowEnd = todayEnd.add(const Duration(days: 1));
 
-      // 筛选今天剩余的课程（精确按日期）
       final todayCourses = allCourses.where((c) {
         final courseTime = DateTime.fromMillisecondsSinceEpoch(c.startTime);
         return courseTime.isAfter(now) && courseTime.isBefore(todayEnd);
@@ -428,7 +426,6 @@ class NotificationManager {
             .join('\n');
         body = '你今天接下来还有 ${todayCourses.length} 节课：\n$courseList';
       } else {
-        // 今天没课了，看看明天
         final tomorrowCourses = allCourses.where((c) {
           final courseTime = DateTime.fromMillisecondsSinceEpoch(c.startTime);
           return courseTime.isAfter(todayEnd) &&
@@ -455,8 +452,6 @@ class NotificationManager {
     }
   }
 
-  /// [v2.8.0] 进入后台时发送提示通知（含下节课倒计时）
-  /// [v2.9.0修复] 只在今天范围内查找下一节课
   Future<void> sendBackgroundNotice(List<CourseEvent> allCourses) async {
     if (!Platform.isWindows) return;
     if (!_isInitialized) await initialize();
@@ -465,12 +460,10 @@ class NotificationManager {
       final now = DateTime.now();
       final todayEnd = DateTime(now.year, now.month, now.day + 1);
 
-      // 找到今天剩余的下一节课
       CourseEvent? nextCourse;
       Duration? minDiff;
       for (var c in allCourses) {
         final courseTime = DateTime.fromMillisecondsSinceEpoch(c.startTime);
-        // 只看今天的、还没开始的课
         if (courseTime.isBefore(now) || courseTime.isAfter(todayEnd)) continue;
         final diff = courseTime.difference(now);
         if (minDiff == null || diff < minDiff) {
@@ -498,7 +491,6 @@ class NotificationManager {
     }
   }
 
-  /// [v2.8.0] 增强版课程检查：20/15/10/5分钟分级提醒
   void startEnhancedCourseCheck(List<CourseEvent> Function() getCourses) {
     if (!isNotificationEnabled) return;
     _checkTimer?.cancel();
@@ -506,14 +498,12 @@ class NotificationManager {
     _checkTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
       _enhancedCheckUpcomingCourses(getCourses());
     });
-    // 立即检查一次
     _enhancedCheckUpcomingCourses(getCourses());
     debugPrint('增强型课程检查定时器已启动（20/15/10/5 分钟分级提醒）');
   }
 
   void _enhancedCheckUpcomingCourses(List<CourseEvent> courses) {
     final now = DateTime.now();
-    // 提醒阈值（分钟）
     const thresholds = [20, 15, 10, 5];
 
     for (var course in courses) {
@@ -542,7 +532,6 @@ class NotificationManager {
         }
       }
 
-      // 清理过期记录
       if (diff.inMinutes < -60) {
         for (var t in thresholds) {
           _notifiedCourses.remove(courseId + t * 10000);

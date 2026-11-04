@@ -6,8 +6,10 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import androidx.glance.appwidget.GlanceAppWidget
+import androidx.glance.appwidget.GlanceAppWidgetManager
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
-import androidx.glance.appwidget.updateAll
+import androidx.glance.appwidget.state.updateAppWidgetState
+import androidx.glance.state.PreferencesGlanceStateDefinition
 import com.zongzi.schedule.LiveUpdateNotificationManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -15,7 +17,10 @@ import kotlinx.coroutines.launch
 import org.json.JSONArray
 
 /**
- * [v3.0.0] 课表桌面小组件广播接收器与精准分钟级生命周期调度
+ * [v3.1.0] 课表桌面小组件广播接收器与精准分钟级生命周期调度
+ * 修复：
+ * 1. 引入 goAsync() 保活广播协程，防止系统在挂起函数完成前冻结进程；
+ * 2. 每次刷新时递增 GLANCE_KEY_REFRESH_TICK，强制已处于活跃 Session 的小组件触发重组读取最新课程数据。
  */
 class ScheduleWidgetReceiver : GlanceAppWidgetReceiver() {
     override val glanceAppWidget: GlanceAppWidget = ScheduleGlanceWidget()
@@ -24,13 +29,33 @@ class ScheduleWidgetReceiver : GlanceAppWidgetReceiver() {
         const val ACTION_SCHEDULE_WIDGET_UPDATE = "com.zongzi.schedule.widget.ACTION_UPDATE"
         const val ACTION_WIDGET_TICK = "com.zongzi.schedule.widget.ACTION_MINUTE_TICK"
 
+        suspend fun refreshAllNow(context: Context) {
+            try {
+                val manager = GlanceAppWidgetManager(context)
+                val glanceIds = manager.getGlanceIds(ScheduleGlanceWidget::class.java)
+                val sp = context.getSharedPreferences(SwitchDayActionCallback.PREFS_NAME, Context.MODE_PRIVATE)
+                val savedOffset = sp.getInt(SwitchDayActionCallback.KEY_DAY_OFFSET, 0)
+                val tick = System.currentTimeMillis()
+
+                for (id in glanceIds) {
+                    updateAppWidgetState(context, PreferencesGlanceStateDefinition, id) { prefs ->
+                        prefs.toMutablePreferences().apply {
+                            if (this[SwitchDayActionCallback.GLANCE_KEY_DAY_OFFSET] == null) {
+                                this[SwitchDayActionCallback.GLANCE_KEY_DAY_OFFSET] = savedOffset
+                            }
+                            this[SwitchDayActionCallback.GLANCE_KEY_REFRESH_TICK] = tick
+                        }
+                    }
+                    ScheduleGlanceWidget().update(context, id)
+                }
+            } catch (_: Exception) {}
+            WidgetAlarmScheduler.scheduleNextTick(context)
+        }
+
         fun updateAll(context: Context) {
             CoroutineScope(Dispatchers.Main).launch {
-                try {
-                    ScheduleGlanceWidget().updateAll(context)
-                } catch (_: Exception) {}
+                refreshAllNow(context)
             }
-            WidgetAlarmScheduler.scheduleNextTick(context)
         }
     }
 
@@ -41,20 +66,25 @@ class ScheduleWidgetReceiver : GlanceAppWidgetReceiver() {
             action == ACTION_WIDGET_TICK ||
             action == Intent.ACTION_TIME_TICK ||
             action == Intent.ACTION_TIME_CHANGED ||
+            action == Intent.ACTION_TIMEZONE_CHANGED ||
             action == Intent.ACTION_DATE_CHANGED ||
             action == Intent.ACTION_SCREEN_ON ||
             action == Intent.ACTION_USER_PRESENT
         ) {
-            updateAll(context)
+            val pendingResult = goAsync()
+            CoroutineScope(Dispatchers.Main).launch {
+                try {
+                    refreshAllNow(context)
+                } finally {
+                    try {
+                        pendingResult.finish()
+                    } catch (_: Exception) {}
+                }
+            }
         }
     }
 }
 
-/**
- * 现代小组件分钟级精准更新调度器
- * 智能探测当前是否有课程进行或即将开始（45分钟内），
- * 仅在活跃周期执行分钟级精确唤醒，非活跃周期安睡，杜绝不必要的耗电。
- */
 object WidgetAlarmScheduler {
     fun scheduleNextTick(context: Context) {
         val prefs = context.getSharedPreferences(LiveUpdateNotificationManager.PREFS_NAME, Context.MODE_PRIVATE)
@@ -70,7 +100,6 @@ object WidgetAlarmScheduler {
         var hasActiveOrNearCourse = false
         var nextWakeup = Long.MAX_VALUE
 
-        // 计算次日凌晨 (00:00:05) 自动唤醒，确保跨日时日期指示与今日看板准时刷新
         val midnightCal = java.util.Calendar.getInstance().apply {
             add(java.util.Calendar.DAY_OF_YEAR, 1)
             set(java.util.Calendar.HOUR_OF_DAY, 0)
@@ -88,13 +117,11 @@ object WidgetAlarmScheduler {
             val st = c.optLong("startTime", 0L)
             val et = c.optLong("endTime", 0L)
             if (st <= now && et > now) {
-                // 正在上课中，需分钟级刷新进度与倒计时
                 hasActiveOrNearCourse = true
                 break
             } else if (st > now) {
                 val diffMin = (st - now) / 60000
                 if (diffMin <= 45) {
-                    // 临近开课（45分钟内），开启分钟级倒计时刷新
                     hasActiveOrNearCourse = true
                     break
                 }
@@ -118,7 +145,6 @@ object WidgetAlarmScheduler {
 
         try {
             if (hasActiveOrNearCourse) {
-                // 精准对齐下一分钟起点 (+500ms 缓冲)
                 val nextMinute = ((now / 60000) + 1) * 60000 + 500
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                     alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, nextMinute, pendingIntent)
@@ -135,4 +161,3 @@ object WidgetAlarmScheduler {
         } catch (_: Exception) {}
     }
 }
-

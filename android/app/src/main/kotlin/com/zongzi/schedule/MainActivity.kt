@@ -15,7 +15,7 @@ class MainActivity : FlutterActivity() {
     private val THEME_CHANNEL = "com.zongzi.schedule/theme"
     private val IMAGE_PICKER_CHANNEL = "com.zongzi.schedule/image_picker"
     private val LIVE_UPDATE_CHANNEL = "com.zongzi.schedule/live_update"
-    
+
     private var pendingResult: MethodChannel.Result? = null
     private val PICK_IMAGE_REQUEST = 1001
 
@@ -28,8 +28,8 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        
-        // Android 16 Promoted Ongoing Live Updates 通道
+
+        // Android 16 Promoted Ongoing Live Updates & 桌面小组件同步通道
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, LIVE_UPDATE_CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "postPromotedLiveUpdate" -> {
@@ -44,14 +44,33 @@ class MainActivity : FlutterActivity() {
                     val whenTime = call.argument<Long>("whenTime")
                     val usesChronometer = call.argument<Boolean>("usesChronometer") ?: false
 
+                    val prefsEditor = getSharedPreferences(
+                        LiveUpdateNotificationManager.PREFS_NAME,
+                        android.content.Context.MODE_PRIVATE
+                    ).edit()
+
                     val upcomingCoursesJson = call.argument<String>("upcomingCoursesJson")
-                    if (upcomingCoursesJson != null && upcomingCoursesJson.isNotEmpty()) {
-                        getSharedPreferences(LiveUpdateNotificationManager.PREFS_NAME, android.content.Context.MODE_PRIVATE)
-                            .edit()
-                            .putString(LiveUpdateNotificationManager.KEY_UPCOMING_COURSES, upcomingCoursesJson)
-                            .apply()
+                    if (!upcomingCoursesJson.isNullOrEmpty()) {
+                        prefsEditor.putString(LiveUpdateNotificationManager.KEY_UPCOMING_COURSES, upcomingCoursesJson)
+                    }
+                    val currentWeek = call.argument<Int>("currentWeek")
+                    if (currentWeek != null && currentWeek > 0) {
+                        prefsEditor.putInt(LiveUpdateNotificationManager.KEY_CURRENT_WEEK, currentWeek)
+                    }
+                    val semesterStartMs = call.argument<Long>("semesterStartMs")
+                    if (semesterStartMs != null && semesterStartMs > 0L) {
+                        prefsEditor.putLong(LiveUpdateNotificationManager.KEY_SEMESTER_START_MS, semesterStartMs)
+                    }
+                    val progressStyle = call.argument<String>("progressStyle")
+                    if (!progressStyle.isNullOrEmpty()) {
+                        prefsEditor.putString(LiveUpdateNotificationManager.KEY_PROGRESS_STYLE, progressStyle)
+                    }
+                    prefsEditor.apply()
+
+                    if (!upcomingCoursesJson.isNullOrEmpty()) {
                         com.zongzi.schedule.widget.ScheduleWidgetReceiver.updateAll(this)
                     }
+
                     val nextWakeupMs = call.argument<Long>("nextWakeupMs")
                     if (nextWakeupMs != null && nextWakeupMs > System.currentTimeMillis()) {
                         LiveUpdateNotificationManager.scheduleNextAlarm(this, nextWakeupMs)
@@ -76,6 +95,31 @@ class MainActivity : FlutterActivity() {
                         result.error("LIVE_UPDATE_ERROR", e.message, null)
                     }
                 }
+                "syncWidgetSchedule" -> {
+                    val prefsEditor = getSharedPreferences(
+                        LiveUpdateNotificationManager.PREFS_NAME,
+                        android.content.Context.MODE_PRIVATE
+                    ).edit()
+                    val upcomingCoursesJson = call.argument<String>("upcomingCoursesJson")
+                    if (upcomingCoursesJson != null) {
+                        prefsEditor.putString(LiveUpdateNotificationManager.KEY_UPCOMING_COURSES, upcomingCoursesJson)
+                    }
+                    val currentWeek = call.argument<Int>("currentWeek")
+                    if (currentWeek != null && currentWeek > 0) {
+                        prefsEditor.putInt(LiveUpdateNotificationManager.KEY_CURRENT_WEEK, currentWeek)
+                    }
+                    val semesterStartMs = call.argument<Long>("semesterStartMs")
+                    if (semesterStartMs != null && semesterStartMs > 0L) {
+                        prefsEditor.putLong(LiveUpdateNotificationManager.KEY_SEMESTER_START_MS, semesterStartMs)
+                    }
+                    val progressStyle = call.argument<String>("progressStyle")
+                    if (!progressStyle.isNullOrEmpty()) {
+                        prefsEditor.putString(LiveUpdateNotificationManager.KEY_PROGRESS_STYLE, progressStyle)
+                    }
+                    prefsEditor.apply()
+                    com.zongzi.schedule.widget.ScheduleWidgetReceiver.updateAll(this)
+                    result.success(true)
+                }
                 "scheduleNextAlarm" -> {
                     val triggerAtMs = call.argument<Long>("triggerAtMs") ?: 0L
                     if (triggerAtMs > System.currentTimeMillis()) {
@@ -86,7 +130,8 @@ class MainActivity : FlutterActivity() {
                 "cancelLiveUpdate" -> {
                     val id = call.argument<Int>("id") ?: 1000
                     try {
-                        val notificationManager = getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+                        val notificationManager =
+                            getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
                         notificationManager.cancel(id)
                         LiveUpdateNotificationManager.cancelAlarm(this)
                         com.zongzi.schedule.widget.ScheduleWidgetReceiver.updateAll(this)
@@ -107,7 +152,7 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
-        
+
         // 主题色通道
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, THEME_CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
@@ -122,13 +167,12 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
-        
+
         // 图片选择器通道
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, IMAGE_PICKER_CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "pickImage" -> {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                        // Android 14+ 使用 Photo Picker（不需要权限）
                         pickImageWithPhotoPicker(result)
                     } else {
                         result.error("UNSUPPORTED", "需要 Android 14+", null)
@@ -143,36 +187,35 @@ class MainActivity : FlutterActivity() {
         super.onPause()
         try {
             android.webkit.CookieManager.getInstance().flush()
-        } catch (e: Exception) {}
+        } catch (_: Exception) {
+        }
     }
 
     override fun onStop() {
         super.onStop()
         try {
             android.webkit.CookieManager.getInstance().flush()
-        } catch (e: Exception) {}
+        } catch (_: Exception) {
+        }
     }
 
     @RequiresApi(Build.VERSION_CODES.S)
     private fun getSystemAccentColor(): Int {
         return resources.getColor(android.R.color.system_accent1_500, theme)
     }
-    
+
     @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
     private fun pickImageWithPhotoPicker(result: MethodChannel.Result) {
         pendingResult = result
-        
-        // 使用 Android 14+ Photo Picker API
         val intent = Intent(MediaStore.ACTION_PICK_IMAGES).apply {
             type = "image/*"
         }
-        
         startActivityForResult(intent, PICK_IMAGE_REQUEST)
     }
-    
+
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        
+
         if (requestCode == PICK_IMAGE_REQUEST) {
             if (resultCode == RESULT_OK) {
                 data?.data?.let { uri ->
@@ -184,73 +227,31 @@ class MainActivity : FlutterActivity() {
             pendingResult = null
         }
     }
-    
+
     private fun handleImageUri(uri: Uri) {
         try {
-            // 将图片复制到应用私有目录
             val inputStream = contentResolver.openInputStream(uri)
             if (inputStream == null) {
                 pendingResult?.error("READ_ERROR", "无法读取图片", null)
                 return
             }
-            
-            // 创建保存目录
+
             val appDir = File(filesDir, "backgrounds")
             if (!appDir.exists()) {
                 appDir.mkdirs()
             }
-            
-            // 生成文件名
+
             val fileName = "bg_${System.currentTimeMillis()}.png"
             val outputFile = File(appDir, fileName)
-            
-            // 复制文件
+
             FileOutputStream(outputFile).use { output ->
                 inputStream.copyTo(output)
             }
             inputStream.close()
-            
-            // 返回文件路径
+
             pendingResult?.success(outputFile.absolutePath)
         } catch (e: Exception) {
             pendingResult?.error("SAVE_ERROR", "保存图片失败: ${e.message}", null)
-        }
-    }
-
-    private fun postPromotedLiveUpdate(
-        id: Int,
-        title: String,
-        body: String,
-        subLocation: String?,
-        progress: Int,
-        maxProgress: Int,
-        showProgress: Boolean,
-        isCountingDown: Boolean,
-        whenTime: Long?,
-        usesChronometer: Boolean
-    ) {
-        LiveUpdateNotificationManager.postNotification(
-            context = this,
-            id = id,
-            title = title,
-            body = body,
-            subLocation = subLocation,
-            progress = progress,
-            maxProgress = maxProgress,
-            showProgress = showProgress,
-            isCountingDown = isCountingDown,
-            whenTime = whenTime,
-            usesChronometer = usesChronometer
-        )
-    }
-
-    private fun checkCanPostPromotedNotifications(): Boolean {
-        return try {
-            val notificationManager = getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
-            val method = notificationManager.javaClass.getMethod("canPostPromotedNotifications")
-            method.invoke(notificationManager) as Boolean
-        } catch (e: Throwable) {
-            true // 默认开启或旧系统兼容
         }
     }
 

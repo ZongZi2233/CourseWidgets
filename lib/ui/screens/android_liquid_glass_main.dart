@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import '../../providers/schedule_provider.dart';
 import '../../constants/theme_constants.dart';
+import '../../constants/version.dart' show kSolidColorBackground;
 import '../../services/live_notification_service_v2.dart';
 import '../../utils/responsive_utils.dart';
 import '../../main.dart' hide globalUseDarkMode; // [v2.6.0] 引用全局 routeObserver
@@ -129,11 +130,13 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
     // [v2.8.5 彻底消灭启动黑屏与白屏停滞] 立即绘制主界面布局，数据异步装载完毕后自动驱动刷新
 
     // [v3.0.0 正式版] 手机与平板全域统一响应式架构：横屏全量采用双角浮动导航与全幅贯通课表，彻底告别老旧侧边栏
-    final Widget rootLayout = _buildPhoneLayout(context);
-
-    // [v2.9.0] 彻底关闭陀螺仪持续重绘，提供丝滑稳定 120 FPS
-    return GlassMotionScope(
-      child: rootLayout,
+    return ValueListenableBuilder<String?>(
+      valueListenable: globalBackgroundPath,
+      builder: (context, _, _) {
+        return GlassMotionScope(
+          child: _buildPhoneLayout(context),
+        );
+      },
     );
   }
 
@@ -194,6 +197,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
   /// 手机布局
   Widget _buildPhoneLayout(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isSolidBg = globalBackgroundPath.value == kSolidColorBackground;
     final isLandscape = ResponsiveUtils.isLandscape(context);
 
     return Scaffold(
@@ -264,36 +268,39 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                 curve: Curves.easeOutCubic,
                 offset: _isBottomNavVisible ? Offset.zero : const Offset(0, 1.2),
                 child: RepaintBoundary(
-                  child: GlassTabBar.bottom(
-                    selectedIndex: _currentIndex,
-                    onTabSelected: (index) {
-                      HapticFeedback.selectionClick();
-                      _onTabSelected(index);
-                    },
-                    quality: GlassQuality.premium, // [v3.0.0-alpha19] 全时 100% 极客 Premium 材质，杜绝任何运动降级
-                    backgroundQuality: GlassQuality.premium,
-                    maskingQuality: MaskingQuality.high,
-                    barBorderRadius: 999.0,
-                    indicatorBorderRadius: 999.0,
-                    adaptiveBrightness: false, // [v2.8.9] 禁用实时纹理反读消除卡顿，保持流畅 120 FPS
-                    barHeight: 64.0,
-                    horizontalPadding: 16.0,
-                    verticalPadding: 8.0,
-                    magnification: 1.15,
-                    innerBlur: 0.0, // [v3.0.0-alpha19] 绝对消除滑块底衬残留模糊，零 blur 纯净晶体透镜
-                    interactionBehavior: GlassInteractionBehavior.full,
-                    settings: const LiquidGlassSettings(
-                      thickness: 24.0,
-                      blur: 0.3, // [v3.0.0-alpha20] 极低 blur 几乎完全通透，只靠 3D 折射与色散勾勒边缘
-                      chromaticAberration: 0.12,
-                      lightIntensity: 0.75,
-                      refractiveIndex: 1.48,
-                      saturation: 1.15,
-                      ambientStrength: 0.35,
-                      ambientRim: 0.0,
-                      fresnelStrength: 0.0,
-                      glassColor: Color(0x10FFFFFF),
-                    ),
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      GlassTabBar.bottom(
+                        selectedIndex: _currentIndex,
+                        onTabSelected: (index) {
+                          HapticFeedback.selectionClick();
+                          _onTabSelected(index);
+                        },
+                        quality: GlassQuality.premium, // [v3.0.0-alpha19] 全时 100% 极客 Premium 材质，杜绝任何运动降级
+                        backgroundQuality: GlassQuality.premium,
+                        maskingQuality: MaskingQuality.high,
+                        barBorderRadius: 999.0,
+                        indicatorBorderRadius: 999.0,
+                        adaptiveBrightness: false, // [v2.8.9] 禁用实时纹理反读消除卡顿，保持流畅 120 FPS
+                        barHeight: 64.0,
+                        horizontalPadding: 16.0,
+                        verticalPadding: 8.0,
+                        magnification: 1.15,
+                        innerBlur: 0.0, // [v3.0.0-alpha19] 绝对消除滑块底衬残留模糊，零 blur 纯净晶体透镜
+                        interactionBehavior: GlassInteractionBehavior.full,
+                        settings: const LiquidGlassSettings(
+                          thickness: 24.0,
+                          blur: 0.3, // [v3.0.0-alpha20] 极低 blur 几乎完全通透，只靠 3D 折射与色散勾勒边缘
+                          chromaticAberration: 0.12,
+                          lightIntensity: 0.75,
+                          refractiveIndex: 1.48,
+                          saturation: 1.15,
+                          ambientStrength: 0.35,
+                          ambientRim: 0.0,
+                          fresnelStrength: 0.0,
+                          glassColor: Color(0x10FFFFFF),
+                        ),
                     // [v3.0.0-alpha21] 静态（未触发）呈现实体主题色柔和指示胶囊，按下瞬间平滑激活 3D 凸透镜大范围折射
                     indicatorColor: isDark
                         ? Theme.of(context).primaryColor.withValues(alpha: 0.24)
@@ -338,6 +345,21 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                       ),
                     ],
                   ),
+                      // [纯色背景模式] 仅在玻璃渲染完成后，通过逆向裁剪在胶囊外侧绘制柔光，
+                      // 绝不被 BackdropFilter 采样进玻璃内部，100% 保持原玻璃通透度！
+                      if (isSolidBg)
+                        Positioned(
+                          left: 16.0,
+                          right: 16.0,
+                          top: 8.0,
+                          bottom: 8.0,
+                          child: liquid.OuterGlowShadowBox(
+                            borderRadius: 999.0,
+                            isDark: isDark,
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -347,78 +369,91 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
   /// [v3.0.0-alpha23] 横屏手机左下角官方 GlassTabBar 双标签 touch bar（课程、日历）
   Widget _buildLandscapeLeftNav(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isSolidBg = globalBackgroundPath.value == kSolidColorBackground;
     final primaryColor = Theme.of(context).primaryColor;
 
     return SizedBox(
       width: 180.0,
       height: 52.0,
-      child: GlassTabBar.bottom(
-        selectedIndex: _currentIndex == 2 ? 0 : _currentIndex,
-        showIndicator: _currentIndex != 2,
-        onTabSelected: (index) {
-          HapticFeedback.selectionClick();
-          _onTabSelected(index);
-        },
-        quality: GlassQuality.premium,
-        backgroundQuality: GlassQuality.premium,
-        maskingQuality: MaskingQuality.high,
-        barBorderRadius: 999.0,
-        indicatorBorderRadius: 999.0,
-        adaptiveBrightness: false,
-        barHeight: 52.0,
-        horizontalPadding: 0.0,
-        verticalPadding: 0.0,
-        magnification: 1.15,
-        innerBlur: 0.0,
-        interactionBehavior: GlassInteractionBehavior.full,
-        settings: const LiquidGlassSettings(
-          thickness: 24.0,
-          blur: 0.3,
-          chromaticAberration: 0.12,
-          lightIntensity: 0.75,
-          refractiveIndex: 1.48,
-          saturation: 1.15,
-          ambientStrength: 0.35,
-          ambientRim: 0.0,
-          fresnelStrength: 0.0,
-          glassColor: Color(0x10FFFFFF),
-        ),
-        indicatorColor: isDark
-            ? primaryColor.withValues(alpha: 0.24)
-            : primaryColor.withValues(alpha: 0.16),
-        indicatorSettings: LiquidGlassSettings(
-          thickness: 28.0,
-          blur: 0.0,
-          refractiveIndex: 1.50,
-          lightIntensity: 0.70,
-          ambientStrength: 0.25,
-          ambientRim: 0.0,
-          fresnelStrength: 0.0,
-          chromaticAberration: 0.10,
-          edgeAbsorption: 0.0,
-          glassColor: isDark
-              ? primaryColor.withValues(alpha: 0.08)
-              : primaryColor.withValues(alpha: 0.05),
-          shadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: isDark ? 0.38 : 0.16),
-              blurRadius: 22.0,
-              spreadRadius: -1.0,
-              offset: const Offset(0, 4.0),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          GlassTabBar.bottom(
+            selectedIndex: _currentIndex == 2 ? 0 : _currentIndex,
+            showIndicator: _currentIndex != 2,
+            onTabSelected: (index) {
+              HapticFeedback.selectionClick();
+              _onTabSelected(index);
+            },
+            quality: GlassQuality.premium,
+            backgroundQuality: GlassQuality.premium,
+            maskingQuality: MaskingQuality.high,
+            barBorderRadius: 999.0,
+            indicatorBorderRadius: 999.0,
+            adaptiveBrightness: false,
+            barHeight: 52.0,
+            horizontalPadding: 0.0,
+            verticalPadding: 0.0,
+            magnification: 1.15,
+            innerBlur: 0.0,
+            interactionBehavior: GlassInteractionBehavior.full,
+            settings: const LiquidGlassSettings(
+              thickness: 24.0,
+              blur: 0.3,
+              chromaticAberration: 0.12,
+              lightIntensity: 0.75,
+              refractiveIndex: 1.48,
+              saturation: 1.15,
+              ambientStrength: 0.35,
+              ambientRim: 0.0,
+              fresnelStrength: 0.0,
+              glassColor: Color(0x10FFFFFF),
             ),
-          ],
-        ),
-        tabs: const [
-          GlassTab(
-            icon: Icon(CupertinoIcons.square_grid_2x2),
-            activeIcon: Icon(CupertinoIcons.square_grid_2x2_fill),
-            label: '课程',
+            indicatorColor: isDark
+                ? primaryColor.withValues(alpha: 0.24)
+                : primaryColor.withValues(alpha: 0.16),
+            indicatorSettings: LiquidGlassSettings(
+              thickness: 28.0,
+              blur: 0.0,
+              refractiveIndex: 1.50,
+              lightIntensity: 0.70,
+              ambientStrength: 0.25,
+              ambientRim: 0.0,
+              fresnelStrength: 0.0,
+              chromaticAberration: 0.10,
+              edgeAbsorption: 0.0,
+              glassColor: isDark
+                  ? primaryColor.withValues(alpha: 0.08)
+                  : primaryColor.withValues(alpha: 0.05),
+              shadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.38 : 0.16),
+                  blurRadius: 22.0,
+                  spreadRadius: -1.0,
+                  offset: const Offset(0, 4.0),
+                ),
+              ],
+            ),
+            tabs: const [
+              GlassTab(
+                icon: Icon(CupertinoIcons.square_grid_2x2),
+                activeIcon: Icon(CupertinoIcons.square_grid_2x2_fill),
+                label: '课程',
+              ),
+              GlassTab(
+                icon: Icon(CupertinoIcons.calendar),
+                activeIcon: Icon(CupertinoIcons.calendar_today),
+                label: '日历',
+              ),
+            ],
           ),
-          GlassTab(
-            icon: Icon(CupertinoIcons.calendar),
-            activeIcon: Icon(CupertinoIcons.calendar_today),
-            label: '日历',
-          ),
+          if (isSolidBg)
+            Positioned.fill(
+              child: liquid.OuterGlowShadowBox(
+                borderRadius: 999.0,
+                isDark: isDark,
+              ),
+            ),
         ],
       ),
     );

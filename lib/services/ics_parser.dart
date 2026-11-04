@@ -112,7 +112,9 @@ class IcsParser {
       parsedStartSection = int.tryParse(parts.first);
       parsedEndSection = parts.length > 1 ? int.tryParse(parts.last) : parsedStartSection;
     } else if (description.isNotEmpty) {
-      final sectionMatch = RegExp(r'(?:节次[:：]|第)(\d+)(?:[-~到至](\d+))?节?').firstMatch(description);
+      final sectionMatch = RegExp(
+        r'(?:节次[:：]\s*|第\s*)(\d+)\s*(?:[-~～到至]\s*(\d+))?\s*节?',
+      ).firstMatch(description);
       if (sectionMatch != null) {
         parsedStartSection = int.tryParse(sectionMatch.group(1) ?? '');
         final endStr = sectionMatch.group(2);
@@ -191,13 +193,42 @@ class IcsParser {
         }
 
         // 2. 计算所有重复的时间点
-        // 注意：rrule 计算需要基于 UTC 时间
-        final occurrences = rrule.getInstances(start: startUtc.toUtc());
+        // [v3.1.1 修复周一课程偏移到周日]：
+        // 使用本地墙钟时间对应的伪 UTC 进行 RRULE 展开，避免 UTC -8h 跨日导致 BYDAY 或 UNTIL 截断错位
+        final firstLocalStart = startUtc.toLocal();
+        final wallClockStartUtc = DateTime.utc(
+          firstLocalStart.year,
+          firstLocalStart.month,
+          firstLocalStart.day,
+          firstLocalStart.hour,
+          firstLocalStart.minute,
+          firstLocalStart.second,
+        );
+        if (rrule.until != null) {
+          final localUntil = rrule.until!.toLocal();
+          rrule = rrule.copyWith(
+            until: DateTime.utc(
+              localUntil.year,
+              localUntil.month,
+              localUntil.day,
+              23,
+              59,
+              59,
+            ),
+          );
+        }
+        final occurrences = rrule.getInstances(start: wallClockStartUtc);
 
         // 3. 遍历每一个计算出的时间点
         for (var occ in occurrences) {
-          // 转换为本地时间 (假设用户在中国)
-          final localStart = occ.toLocal();
+          final localStart = DateTime(
+            occ.year,
+            occ.month,
+            occ.day,
+            occ.hour,
+            occ.minute,
+            occ.second,
+          );
           final localEnd = localStart.add(duration);
 
           instances.add(
@@ -508,8 +539,8 @@ class IcsParser {
       breakTime: 5,
       useCustomConfig: true,
       showWeekends: showWeekends,
-      isEqualDuration: true,
-      defaultDuration: 45,
+      isEqualDuration: false,
+      defaultDuration: sectionDurations[1] ?? 45,
     );
   }
 }

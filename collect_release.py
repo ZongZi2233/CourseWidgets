@@ -123,19 +123,25 @@ def collect_android_apks(version, build):
     targets = []
 
     # 严格校验并仅收集 arm64-v8a (按用户要求不提供 Universal 冗余包)
+    selected_apk = None
     if os.path.exists(arm64_src):
-        apk_ver, apk_code = get_apk_badging(arm64_src, aapt_exe)
-        print(f"[APK 校验] arm64-v8a: versionName={apk_ver}, versionCode={apk_code}, 目标预期={version}+{build}")
+        selected_apk = arm64_src
+    elif os.path.exists(universal_src):
+        selected_apk = universal_src
+
+    if selected_apk:
+        apk_ver, apk_code = get_apk_badging(selected_apk, aapt_exe)
+        print(f"[APK 校验] arm64-v8a: source={os.path.basename(selected_apk)}, versionName={apk_ver}, versionCode={apk_code}, 目标预期={version}+{build}")
         if apk_ver is not None:
             if apk_ver == version:
-                targets.append((arm64_src, f"CourseWidgets-v{version}-android-arm64-v8a.apk"))
+                targets.append((selected_apk, f"CourseWidgets-v{version}-android-arm64-v8a.apk"))
             else:
-                print(f"[严重错误] arm64-v8a APK 版本号 ({apk_ver}) 与预期 ({version}) 不一致，严禁收集陈旧脏包！")
+                print(f"[严重错误] APK 版本号 ({apk_ver}) 与预期 ({version}) 不一致，严禁收集陈旧脏包！")
         else:
             # aapt 不可用时的保护
-            targets.append((arm64_src, f"CourseWidgets-v{version}-android-arm64-v8a.apk"))
+            targets.append((selected_apk, f"CourseWidgets-v{version}-android-arm64-v8a.apk"))
     else:
-        print(f"[提示] 未找到 arm64-v8a 构建产物: {arm64_src}")
+        print(f"[提示] 未找到 arm64-v8a 构建产物 (检查了 {arm64_src} 与 {universal_src})")
 
     for src_path, target_name in targets:
         dst_path = os.path.join(RELEASE_DIR, target_name)
@@ -170,11 +176,6 @@ def collect_windows_release(version, build):
             break
 
     if not exe_found:
-        return []
-
-    # 仅在 Windows 构建产物在近期（2小时内）有更新时打包收集
-    now = datetime.now().timestamp()
-    if (now - os.path.getmtime(win_dir)) > 7200:
         return []
 
     collected = []

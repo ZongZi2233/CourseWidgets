@@ -9,6 +9,8 @@ import 'dart:convert';
 import '../widgets/liquid_components.dart' as liquid;
 import '../widgets/liquid_toast.dart';
 import '../widgets/immersive_status_bar_backdrop.dart';
+import '../widgets/windows_desktop_title_bar.dart'
+    show setWindowsDesktopTitle, clearWindowsDesktopTitle;
 import '../../utils/glass_settings_helper.dart';
 import '../../utils/responsive_utils.dart';
 import 'package:smooth_scroll_multiplatform/smooth_scroll_multiplatform.dart';
@@ -29,6 +31,7 @@ class _SettingsAboutScreenState extends State<SettingsAboutScreen>
   @override
   void initState() {
     super.initState();
+    setWindowsDesktopTitle('关于软件');
     _controller = AnimationController(
       duration: const Duration(milliseconds: 600),
       vsync: this,
@@ -46,6 +49,7 @@ class _SettingsAboutScreenState extends State<SettingsAboutScreen>
 
   @override
   void dispose() {
+    clearWindowsDesktopTitle('关于软件');
     _controller.dispose();
     super.dispose();
   }
@@ -57,7 +61,10 @@ class _SettingsAboutScreenState extends State<SettingsAboutScreen>
     final secondaryTextColor = isDark ? Colors.white70 : const Color(0xFF555B68);
     final tertiaryTextColor = isDark ? Colors.white54 : const Color(0xFF8A909E);
 
-    final topPadding = MediaQuery.paddingOf(context).top + 60;
+    final isDesktop =
+        Platform.isWindows || Platform.isMacOS || Platform.isLinux;
+    final topPadding =
+        isDesktop ? 20.0 : (MediaQuery.paddingOf(context).top + 60);
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -75,9 +82,15 @@ class _SettingsAboutScreenState extends State<SettingsAboutScreen>
                   child: ListView(
                     controller: controller,
                     physics: physics,
-                    padding: EdgeInsets.fromLTRB(20, topPadding, 20, 100),
+                    padding: EdgeInsets.fromLTRB(20, topPadding, 20, isDesktop ? 32 : 100),
                     children: [
-                      liquid.HyperOSCard(
+                      Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 860),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              liquid.HyperOSCard(
                         padding: const EdgeInsets.all(32),
                         child: Column(
                         children: [
@@ -192,36 +205,41 @@ class _SettingsAboutScreenState extends State<SettingsAboutScreen>
                     ),
 
                     const SizedBox(height: 100),
-                  ],
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
             ),
           ),
         ),
 
           // 2. 状态栏微模糊避让 (0..48dp)
-          const ImmersiveStatusBarBackdrop(),
+          if (!isDesktop) const ImmersiveStatusBarBackdrop(),
 
-          // 3. 悬浮大圆角矩形玻璃标题胶囊（点击可返回，消除裸字悬浮感）
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: SafeArea(
-              bottom: false,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: Row(
-                  children: const [
-                    liquid.FloatingGlassHeaderButton(title: '关于软件'),
-                  ],
+          // 3. 悬浮大圆角矩形玻璃标题胶囊（仅移动端展示）
+          if (!isDesktop)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Row(
+                    children: const [
+                      liquid.FloatingGlassHeaderButton(title: '关于软件'),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
 
-          // 4. [v2.9.7] 悬浮右下角返回按钮
-          const liquid.FloatingLiquidBackButton(),
+          // 4. [v2.9.7] 悬浮右下角返回按钮（仅移动端展示）
+          if (!isDesktop) const liquid.FloatingLiquidBackButton(),
         ],
       ),
     );

@@ -11,7 +11,7 @@
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
     
     <application
-        android:label="CourseWidgets"
+        android:label="&#8203;"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:enableOnBackInvokedCallback="true"
@@ -25,6 +25,7 @@
             android:value="vulkan" />
         <activity
             android:name=".MainActivity"
+            android:label="CourseWidgets"
             android:exported="true"
             android:launchMode="singleTop"
             android:taskAffinity=""
@@ -32,10 +33,6 @@
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
             android:windowSoftInputMode="adjustResize">
-            <!-- Specifies an Android theme to apply to this Activity as soon as
-                 the Android process has started. This theme is visible to the user
-                 while the Flutter UI initializes. After that, this theme continues
-                 to determine the Window background behind the Flutter UI. -->
             <meta-data
               android:name="io.flutter.embedding.android.NormalTheme"
               android:resource="@style/NormalTheme"
@@ -78,7 +75,7 @@
             </intent-filter>
         </receiver>
 
-        <!-- [v3.0.0] Jetpack Glance 2×2 液态超椭圆课表桌面小组件 -->
+        <!-- [v3.1.0] Jetpack Glance 2×2 液态超椭圆课表桌面小组件 -->
         <receiver
             android:name=".widget.ScheduleWidgetReceiver"
             android:label="@string/widget_schedule_name"
@@ -86,9 +83,12 @@
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
                 <action android:name="com.zongzi.schedule.widget.ACTION_UPDATE" />
+                <action android:name="com.zongzi.schedule.widget.ACTION_MINUTE_TICK" />
+                <action android:name="android.intent.action.USER_PRESENT" />
                 <action android:name="android.intent.action.SCREEN_ON" />
                 <action android:name="android.intent.action.DATE_CHANGED" />
                 <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
@@ -106,11 +106,6 @@
                 android:resource="@xml/provider_paths" />
         </provider>
     </application>
-    <!-- Required to query activities that can process text, see:
-         https://developer.android.com/training/package-visibility and
-         https://developer.android.com/reference/android/content/Intent#ACTION_PROCESS_TEXT.
-
-         In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
     <queries>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>

@@ -7,25 +7,9 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:local_notifier/local_notifier.dart';
 import '../models/course_event.dart';
-import 'notification_manager.dart'; // [v2.5.0] 设置开关检查
+import 'notification_manager.dart';
 
-/// [v2.2.9] 实时通知服务 - 跨平台支持
-///
-/// 平台支持：
-/// - Android 16+: 使用 Live Update API (ProgressStyle)
-/// - Android < 16: 使用传统进度条通知
-/// - iOS: 使用 Live Activities (灵动岛)
-/// - Windows: 使用系统通知
-///
-/// 功能特性：
-/// - ✅ 提前 10 分钟提醒（不是几小时）
-/// - ✅ 后台保活（使用 WorkManager）
-/// - ✅ 实时更新课程状态
-/// - ✅ 跨平台统一接口
-///
-/// 官方文档:
-/// - Android Live Update: https://developer.android.com/develop/ui/views/notifications/live-update
-/// - Android ProgressStyle: https://developer.android.com/about/versions/16/features/progress-centric-notifications
+/// [v2.2.9 / v3.1.0] 实时通知与桌面小组件全链路同步服务
 class LiveNotificationServiceV2 {
   static final LiveNotificationServiceV2 _instance =
       LiveNotificationServiceV2._internal();
@@ -35,25 +19,24 @@ class LiveNotificationServiceV2 {
   final FlutterLocalNotificationsPlugin _notificationsPlugin =
       FlutterLocalNotificationsPlugin();
   Timer? _updateTimer;
-  Timer? _reminderCheckTimer; // [v2.2.9] 提醒检查定时器
+  Timer? _reminderCheckTimer;
   CourseEvent? _currentCourse;
   List<CourseEvent> _allCourses = [];
-  bool _hasShownReminder = false; // [v2.2.9] 是否已显示提醒
-  String? _lastNotifiedPayloadKey; // [v2.9.9] 通知负载缓存，杜绝重复 IPC 渲染
+  int _currentWeek = 1;
+  int? _semesterStartMs;
+  bool _hasShownReminder = false;
+  String? _lastNotifiedPayloadKey;
 
-  // 通知 ID
   static const int _liveNotificationId = 1000;
-  static const int _reminderNotificationId = 1001; // [v2.2.9] 提前提醒通知
-  static const String _channelId = 'live_course_updates_v3';
-  static const String _channelName = '课程实时提醒';
-  static const String _channelDesc = 'Android 16 Live Updates 课程倒计时';
-  static const String _reminderChannelId = 'course_reminders'; // [v2.2.9] 提醒通道
+  static const int _reminderNotificationId = 1001;
+  static const String _channelId = 'live_course_updates_v4';
+  static const String _channelName = '课程实时实况 (Live Updates)';
+  static const String _channelDesc = 'Android 16 Live Updates 课程多节点进度与状态栏胶囊';
+  static const String _reminderChannelId = 'course_reminders';
   static const String _reminderChannelName = '课程提醒';
   static const String _reminderChannelDesc = '提前 10 分钟课程提醒';
 
-  /// 初始化通知服务
   Future<void> initialize() async {
-    // 平台特定初始化
     if (Platform.isAndroid) {
       await _initializeAndroid();
     } else if (Platform.isIOS) {
@@ -65,7 +48,6 @@ class LiveNotificationServiceV2 {
     debugPrint('✅ 跨平台通知服务初始化完成 (${Platform.operatingSystem})');
   }
 
-  /// Android 初始化
   Future<void> _initializeAndroid() async {
     const AndroidInitializationSettings initializationSettingsAndroid =
         AndroidInitializationSettings('@mipmap/ic_launcher');
@@ -78,11 +60,9 @@ class LiveNotificationServiceV2 {
       onDidReceiveNotificationResponse: _onNotificationTapped,
     );
 
-    // 创建通知通道
     await _createAndroidNotificationChannels();
   }
 
-  /// iOS 初始化
   Future<void> _initializeIOS() async {
     const DarwinInitializationSettings initializationSettingsDarwin =
         DarwinInitializationSettings(
@@ -100,16 +80,12 @@ class LiveNotificationServiceV2 {
     );
   }
 
-  /// Windows 初始化
   Future<void> _initializeWindows() async {
-    // Windows 使用系统通知，无需特殊初始化
     debugPrint('📱 Windows 通知服务已就绪');
   }
 
-  /// 创建 Android 通知通道
   Future<void> _createAndroidNotificationChannels() async {
-    // Live Update 通道 (Android 16 Promoted Live Updates 要求最高优先级通道)
-    final AndroidNotificationChannel liveChannel = AndroidNotificationChannel(
+    const AndroidNotificationChannel liveChannel = AndroidNotificationChannel(
       _channelId,
       _channelName,
       description: _channelDesc,
@@ -118,18 +94,17 @@ class LiveNotificationServiceV2 {
       enableVibration: false,
       showBadge: true,
       enableLights: true,
-      ledColor: const Color(0xFFFF9A9E), // 嫩粉色
+      ledColor: Color(0xFF8AE29A),
     );
 
-    // [v2.2.9] 提醒通道
-    final AndroidNotificationChannel reminderChannel =
+    const AndroidNotificationChannel reminderChannel =
         AndroidNotificationChannel(
           _reminderChannelId,
           _reminderChannelName,
           description: _reminderChannelDesc,
           importance: Importance.high,
-          playSound: true, // 提醒需要声音
-          enableVibration: true, // 提醒需要震动
+          playSound: true,
+          enableVibration: true,
           showBadge: true,
         );
 
@@ -142,37 +117,126 @@ class LiveNotificationServiceV2 {
     await androidPlugin?.createNotificationChannel(reminderChannel);
   }
 
-  /// 处理通知点击事件
   void _onNotificationTapped(NotificationResponse response) {
     debugPrint('📱 通知被点击: ${response.payload}');
 
-    // 处理不同的操作
     if (response.actionId == 'dismiss') {
-      // 关闭通知
       cancelNotification();
       debugPrint('🛑 用户手动关闭通知');
     } else if (response.actionId == 'view_details' ||
         response.payload != null) {
-      // 查看详情或点击通知本体
-      debugPrint('📖 跳转到课程详情: ${response.payload}');
-      // 通过回调通知主界面跳转
       if (_onNotificationTapCallback != null && _currentCourse != null) {
         _onNotificationTapCallback!(_currentCourse!);
       }
     }
   }
 
-  /// 通知点击回调
   Function(CourseEvent)? _onNotificationTapCallback;
 
-  /// 设置通知点击回调
   void setOnNotificationTapCallback(Function(CourseEvent) callback) {
     _onNotificationTapCallback = callback;
   }
 
-  /// [v2.8.5] 启动全天候实时更新（每分钟更新一次）+ 提前 10 分钟提醒 + 智能微缩状态栏胶囊与日程预告
-  Future<void> startLiveUpdate(CourseEvent? nextCourse, {List<CourseEvent>? allCourses}) async {
-    // 请求通知权限
+  /// 构建供 Android 桌面小组件与实况通知使用的课程 JSON
+  String _encodeUpcomingCoursesJson(List<CourseEvent> sourceCourses) {
+    if (sourceCourses.isEmpty) return '[]';
+    final nowTime = DateTime.now();
+    final startWindow =
+        nowTime.subtract(const Duration(days: 7)).millisecondsSinceEpoch;
+    final endWindow =
+        nowTime.add(const Duration(days: 14)).millisecondsSinceEpoch;
+    final relevantCourses = sourceCourses
+        .where((c) => c.startTime >= startWindow && c.startTime <= endWindow)
+        .toList()
+      ..sort((a, b) => a.startTime.compareTo(b.startTime));
+
+    final listToSave = (relevantCourses.isNotEmpty
+            ? relevantCourses
+            : sourceCourses)
+        .take(140)
+        .map(
+          (c) => {
+            'name': c.name,
+            'location': c.location,
+            'teacher': c.teacher,
+            'startTime': c.startTime,
+            'endTime': c.endTime,
+            'startSection': c.startSection ?? 0,
+            'endSection': c.endSection ?? 0,
+          },
+        )
+        .toList();
+    return jsonEncode(listToSave);
+  }
+
+  /// [v3.1.0] 全天候同步课表数据至 Android 原生 SharedPreferences 与 Glance 桌面小组件
+  Future<void> syncWidgetAndNativeSchedule(
+    List<CourseEvent> courses, {
+    int? currentWeek,
+    DateTime? semesterStartDate,
+    CourseEvent? nextCourse,
+  }) async {
+    _allCourses = courses;
+    if (currentWeek != null && currentWeek > 0) {
+      _currentWeek = currentWeek;
+    }
+    if (semesterStartDate != null) {
+      _semesterStartMs = semesterStartDate.millisecondsSinceEpoch;
+    }
+    if (nextCourse != null) {
+      _currentCourse = nextCourse;
+    } else {
+      _currentCourse = _findCurrentOrUpcomingCourse(DateTime.now());
+    }
+    _lastNotifiedPayloadKey = null;
+
+    if (Platform.isAndroid) {
+      try {
+        const MethodChannel liveChannel =
+            MethodChannel('com.zongzi.schedule/live_update');
+        final upcomingCoursesJson = _encodeUpcomingCoursesJson(_allCourses);
+        await liveChannel.invokeMethod('syncWidgetSchedule', {
+          'upcomingCoursesJson': upcomingCoursesJson,
+          'currentWeek': _currentWeek,
+          'semesterStartMs': _semesterStartMs,
+          'progressStyle': NotificationManager().liveProgressStyle,
+        });
+      } catch (e) {
+        debugPrint('⚠️ 同步桌面小组件课表失败: $e');
+      }
+    }
+
+    if (NotificationManager().isNotificationEnabled &&
+        NotificationManager().isLiveActivitiesEnabled) {
+      await _updateNotification();
+    }
+  }
+
+  /// [v3.1.0] 强制立即重绘实况通知（用于设置页切换进度条样式时实时预览）
+  Future<void> forceRefreshNotification() async {
+    _lastNotifiedPayloadKey = null;
+    if (Platform.isAndroid) {
+      try {
+        const MethodChannel liveChannel =
+            MethodChannel('com.zongzi.schedule/live_update');
+        await liveChannel.invokeMethod('syncWidgetSchedule', {
+          'upcomingCoursesJson': _encodeUpcomingCoursesJson(_allCourses),
+          'currentWeek': _currentWeek,
+          'semesterStartMs': _semesterStartMs,
+          'progressStyle': NotificationManager().liveProgressStyle,
+        });
+      } catch (_) {}
+    }
+    await _updateNotification();
+  }
+
+  /// 启动全天候实时更新
+  Future<void> startLiveUpdate(
+    CourseEvent? nextCourse, {
+    List<CourseEvent>? allCourses,
+    int? currentWeek,
+    DateTime? semesterStartDate,
+  }) async {
     final status = await Permission.notification.request();
     if (status.isDenied) {
       debugPrint('❌ 通知权限被拒绝');
@@ -182,22 +246,25 @@ class LiveNotificationServiceV2 {
     if (allCourses != null) {
       _allCourses = allCourses;
     }
+    if (currentWeek != null && currentWeek > 0) {
+      _currentWeek = currentWeek;
+    }
+    if (semesterStartDate != null) {
+      _semesterStartMs = semesterStartDate.millisecondsSinceEpoch;
+    }
     _currentCourse = nextCourse;
-    _hasShownReminder = false; // 重置提醒标志
+    _hasShownReminder = false;
+    _lastNotifiedPayloadKey = null;
 
-    // 取消之前的定时器
     _updateTimer?.cancel();
     _reminderCheckTimer?.cancel();
 
-    // 立即显示一次
     await _updateNotification();
 
-    // [v2.9.9] 优化通知定时器刷新频率至 30 秒（原生 Chronometer 实时秒级跳动，减少 66% 冗余唤醒）
     _updateTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
       _updateNotification();
     });
 
-    // 每 30 秒检查一次是否需要提前提醒
     _reminderCheckTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
       _checkAndShowReminder();
     });
@@ -205,17 +272,21 @@ class LiveNotificationServiceV2 {
     debugPrint('🚀 实时常驻通知已启动: ${_currentCourse?.name ?? "全天候状态"}');
   }
 
-  /// [v2.8.5] 更新课程列表数据（当课表数据变动时被调用）
-  void updateCourses(List<CourseEvent> courses, {CourseEvent? nextCourse}) {
-    _allCourses = courses;
-    _lastNotifiedPayloadKey = null;
-    if (nextCourse != null) {
-      _currentCourse = nextCourse;
-    }
-    _updateNotification();
+  /// 更新课程列表数据（当课表数据变动时被调用）
+  void updateCourses(
+    List<CourseEvent> courses, {
+    CourseEvent? nextCourse,
+    int? currentWeek,
+    DateTime? semesterStartDate,
+  }) {
+    syncWidgetAndNativeSchedule(
+      courses,
+      currentWeek: currentWeek,
+      semesterStartDate: semesterStartDate,
+      nextCourse: nextCourse,
+    );
   }
 
-  /// [v2.2.9] 检查并显示提前 10 分钟提醒
   Future<void> _checkAndShowReminder() async {
     if (_currentCourse == null || _hasShownReminder) return;
 
@@ -225,7 +296,6 @@ class LiveNotificationServiceV2 {
     );
     final diff = start.difference(now);
 
-    // 提前 10 分钟提醒（9-11 分钟之间触发）
     if (diff.inMinutes >= 9 && diff.inMinutes <= 11) {
       await _showReminderNotification();
       _hasShownReminder = true;
@@ -233,7 +303,6 @@ class LiveNotificationServiceV2 {
     }
   }
 
-  /// [v2.2.9] 显示提前提醒通知
   Future<void> _showReminderNotification() async {
     if (_currentCourse == null) return;
 
@@ -241,23 +310,23 @@ class LiveNotificationServiceV2 {
       _currentCourse!.startTime,
     );
 
-    final AndroidNotificationDetails
-    androidDetails = AndroidNotificationDetails(
-      _reminderChannelId,
-      _reminderChannelName,
-      channelDescription: _reminderChannelDesc,
-      importance: Importance.high,
-      priority: Priority.high,
-      playSound: true,
-      enableVibration: true,
-      icon: '@mipmap/ic_launcher',
-      largeIcon: const DrawableResourceAndroidBitmap('@mipmap/ic_launcher'),
-      styleInformation: BigTextStyleInformation(
-        '${_currentCourse!.location}\n${start.hour}:${start.minute.toString().padLeft(2, '0')} 开始',
-        contentTitle: '10 分钟后上课',
-        summaryText: _currentCourse!.name,
-      ),
-    );
+    final AndroidNotificationDetails androidDetails =
+        AndroidNotificationDetails(
+          _reminderChannelId,
+          _reminderChannelName,
+          channelDescription: _reminderChannelDesc,
+          importance: Importance.high,
+          priority: Priority.high,
+          playSound: true,
+          enableVibration: true,
+          icon: '@mipmap/ic_launcher',
+          largeIcon: const DrawableResourceAndroidBitmap('@mipmap/ic_launcher'),
+          styleInformation: BigTextStyleInformation(
+            '${_currentCourse!.location}\n${start.hour}:${start.minute.toString().padLeft(2, '0')} 开始',
+            contentTitle: '10 分钟后上课',
+            summaryText: _currentCourse!.name,
+          ),
+        );
 
     final NotificationDetails details = NotificationDetails(
       android: androidDetails,
@@ -285,7 +354,6 @@ class LiveNotificationServiceV2 {
     }
   }
 
-  /// 相对日期格式化（今天、明天、后天、周三、下周三，>14天显示 M月D日）
   String _formatRelativeDate(DateTime target, DateTime now) {
     final targetDate = DateTime(target.year, target.month, target.day);
     final nowDate = DateTime(now.year, now.month, now.day);
@@ -310,19 +378,40 @@ class LiveNotificationServiceV2 {
   }
 
   List<CourseEvent> _getCoursesForDate(DateTime date) {
-    final startOfDay = DateTime(date.year, date.month, date.day).millisecondsSinceEpoch;
-    final endOfDay = DateTime(date.year, date.month, date.day, 23, 59, 59, 999).millisecondsSinceEpoch;
-    final courses = _allCourses.where((c) => c.startTime >= startOfDay && c.startTime <= endOfDay).toList();
+    final startOfDay = DateTime(
+      date.year,
+      date.month,
+      date.day,
+    ).millisecondsSinceEpoch;
+    final endOfDay = DateTime(
+      date.year,
+      date.month,
+      date.day,
+      23,
+      59,
+      59,
+      999,
+    ).millisecondsSinceEpoch;
+    final courses = _allCourses
+        .where((c) => c.startTime >= startOfDay && c.startTime <= endOfDay)
+        .toList();
     courses.sort((a, b) => a.startTime.compareTo(b.startTime));
     return courses;
   }
 
   CourseEvent? _getNextCourseToday(int currentStartTime, DateTime now) {
-    final endOfToday = DateTime(now.year, now.month, now.day, 23, 59, 59, 999).millisecondsSinceEpoch;
-    final remainingToday = _allCourses.where((c) => 
-      c.startTime > currentStartTime && 
-      c.startTime <= endOfToday
-    ).toList();
+    final endOfToday = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      23,
+      59,
+      59,
+      999,
+    ).millisecondsSinceEpoch;
+    final remainingToday = _allCourses
+        .where((c) => c.startTime > currentStartTime && c.startTime <= endOfToday)
+        .toList();
     remainingToday.sort((a, b) => a.startTime.compareTo(b.startTime));
     return remainingToday.isNotEmpty ? remainingToday.first : null;
   }
@@ -339,12 +428,10 @@ class LiveNotificationServiceV2 {
     return upcoming.isNotEmpty ? upcoming.first : null;
   }
 
-  /// 更新 Live Update 通知内容
   Future<void> _updateNotification() async {
     final now = DateTime.now();
     final nowMs = now.millisecondsSinceEpoch;
 
-    // 智能刷新当前课程：如果已有课程已结束，或者为null，且_allCourses不为空，动态重选
     if (_allCourses.isNotEmpty) {
       if (_currentCourse == null || nowMs >= _currentCourse!.endTime) {
         _currentCourse = _findCurrentOrUpcomingCourse(now);
@@ -360,16 +447,18 @@ class LiveNotificationServiceV2 {
     bool showProgress = false;
 
     if (_currentCourse == null) {
-      // 当前与后续无未结束课程
-      final nextCourses = _allCourses.where((c) => c.startTime > nowMs).toList();
+      final nextCourses =
+          _allCourses.where((c) => c.startTime > nowMs).toList();
       if (nextCourses.isNotEmpty) {
         nextCourses.sort((a, b) => a.startTime.compareTo(b.startTime));
         final nextFirst = nextCourses.first;
         final nextDt = DateTime.fromMillisecondsSinceEpoch(nextFirst.startTime);
         final relDay = _formatRelativeDate(nextDt, now);
         final count = _getCoursesForDate(nextDt).length;
-        final startStr = '${nextDt.hour}:${nextDt.minute.toString().padLeft(2, '0')}';
-        final loc = nextFirst.location.trim().isNotEmpty && !nextFirst.location.contains('未知')
+        final startStr =
+            '${nextDt.hour}:${nextDt.minute.toString().padLeft(2, '0')}';
+        final loc = nextFirst.location.trim().isNotEmpty &&
+                !nextFirst.location.contains('未知')
             ? ' (${nextFirst.location})'
             : '';
         title = '<b>$relDay</b> · <b>共$count节课</b>';
@@ -381,43 +470,52 @@ class LiveNotificationServiceV2 {
         subLocation = '今日无课';
       }
     } else {
-      final start = DateTime.fromMillisecondsSinceEpoch(_currentCourse!.startTime);
+      final start = DateTime.fromMillisecondsSinceEpoch(
+        _currentCourse!.startTime,
+      );
       final end = DateTime.fromMillisecondsSinceEpoch(_currentCourse!.endTime);
       final diff = start.difference(now);
 
       if (diff.isNegative) {
-        // 正在上课中
-        final totalMs = end.millisecondsSinceEpoch - start.millisecondsSinceEpoch;
+        final totalMs =
+            end.millisecondsSinceEpoch - start.millisecondsSinceEpoch;
         final elapsedMs = nowMs - start.millisecondsSinceEpoch;
-        final remainingSec = ((end.millisecondsSinceEpoch - nowMs) / 1000).ceil();
-        final startStr = '${start.hour}:${start.minute.toString().padLeft(2, '0')}';
+        final remainingSec =
+            ((end.millisecondsSinceEpoch - nowMs) / 1000).ceil();
+        final startStr =
+            '${start.hour}:${start.minute.toString().padLeft(2, '0')}';
         final endStr = '${end.hour}:${end.minute.toString().padLeft(2, '0')}';
         final durationMin = (totalMs / 60000).round();
 
         if (remainingSec > 0) {
-          title = '<b><font color="#FF5252">正在上课</font></b> · <b>${_currentCourse!.name}</b>';
+          title =
+              '<b><font color="#8AE29A">正在上课</font></b> · <b>${_currentCourse!.name}</b>';
           final courseLoc = _currentCourse!.location.trim();
           final hasLoc = courseLoc.isNotEmpty && !courseLoc.contains('未知');
-          // [v2.10.1] 关键修复：上课倒计时期间，subLocation 设为实时倒计时剩余文本（如'剩35分钟'），
-          // 彻底解决之前设为 null 导致系统药丸胶囊完全空白无内容的问题，同时也杜绝使用教室名字覆盖倒计时！
           final remainingMin = (remainingSec / 60).ceil();
           subLocation = remainingMin > 0 ? '剩$remainingMin分钟' : '即将下课';
 
           if (totalMs > 0) {
-            progressPercent = ((elapsedMs / totalMs) * 100).clamp(0, 100).toInt();
+            progressPercent =
+                ((elapsedMs / totalMs) * 100).clamp(0, 100).toInt();
             showProgress = true;
           }
           final loc = hasLoc ? ' ($courseLoc)' : '';
-          // [v2.10.0] 增加直观时间刻度轴与百分比说明，解决“无刻度标识比例尺”问题
-          body = '<b>${_currentCourse!.name}</b>$loc\n时间: $startStr ──●── $endStr ($durationMin分钟 · 进度 $progressPercent%)';
+          body =
+              '<b>${_currentCourse!.name}</b>$loc\n时间: $startStr ──●── $endStr ($durationMin分钟 · 进度 $progressPercent%)';
           eventTime = end;
           isCountingDown = true;
 
-          // 检查今日背靠背连续课程
-          final nextCourseToday = _getNextCourseToday(_currentCourse!.startTime, now);
+          final nextCourseToday = _getNextCourseToday(
+            _currentCourse!.startTime,
+            now,
+          );
           if (nextCourseToday != null) {
-            final nextStart = DateTime.fromMillisecondsSinceEpoch(nextCourseToday.startTime);
-            final nextStartStr = '${nextStart.hour}:${nextStart.minute.toString().padLeft(2, '0')}';
+            final nextStart = DateTime.fromMillisecondsSinceEpoch(
+              nextCourseToday.startTime,
+            );
+            final nextStartStr =
+                '${nextStart.hour}:${nextStart.minute.toString().padLeft(2, '0')}';
             final nextLoc = nextCourseToday.location.trim().isNotEmpty &&
                     !nextCourseToday.location.contains('未知')
                 ? ' (${nextCourseToday.location})'
@@ -425,45 +523,45 @@ class LiveNotificationServiceV2 {
             body += '\n<b>下一节</b>: ${nextCourseToday.name}$nextLoc · $nextStartStr';
           }
         } else {
-          // 刚刚下课过渡
-          title = '<b><font color="#4CAF50">已下课</font></b> · 休息中';
+          title = '<b><font color="#8AE29A">已下课</font></b> · 休息中';
           body = '<b>${_currentCourse!.name}</b> 刚刚结束';
           subLocation = '课间休息';
         }
       } else {
-        // 即将上课
         final diffSec = ((start.millisecondsSinceEpoch - nowMs) / 1000).ceil();
         final m = diffSec ~/ 60;
-        final startStr = '${start.hour}:${start.minute.toString().padLeft(2, '0')}';
+        final startStr =
+            '${start.hour}:${start.minute.toString().padLeft(2, '0')}';
         final endStr = '${end.hour}:${end.minute.toString().padLeft(2, '0')}';
-        final isToday = start.year == now.year && start.month == now.month && start.day == now.day;
+        final isToday = start.year == now.year &&
+            start.month == now.month &&
+            start.day == now.day;
         final courseLoc = _currentCourse!.location.trim();
         final hasLoc = courseLoc.isNotEmpty && !courseLoc.contains('未知');
         final loc = hasLoc ? ' ($courseLoc)' : '';
 
         if (isToday) {
           if (m <= 45) {
-            // [v2.10.1] 关键修复：课前倒计时期间，subLocation 设为 '$m分钟后上课'
             subLocation = m > 0 ? '$m分钟后上课' : '马上开始';
             progressPercent = (((45 - m) / 45) * 100).clamp(0, 100).toInt();
             showProgress = true;
             eventTime = start;
             isCountingDown = true;
 
-            final statusTag = m <= 10 ? '马上开始' : '即将上课';
-            title = '<b><font color="#FFA000">$statusTag</font></b> · <b>${_currentCourse!.name}</b>';
-            body = '<b>${_currentCourse!.name}</b>$loc · $startStr 开课\n时间: 倒计时中 ──── $startStr · 请提前入座准备';
+            final statusTag = m <= 10 ? '马上开始' : '课间待上';
+            title =
+                '<b><font color="#EB7A99">$statusTag</font></b> · <b>${_currentCourse!.name}</b>';
+            body =
+                '<b>${_currentCourse!.name}</b>$loc · $startStr 开课\n时间: 倒计时中 ──── $startStr · 请提前入座准备';
           } else {
-            // 课前45分钟以上
             title = '<b>下节课 ($startStr)</b> · <b>${_currentCourse!.name}</b>';
             body = '<b>${_currentCourse!.name}</b>$loc\n时间: $startStr - $endStr';
             subLocation = hasLoc ? courseLoc : startStr;
             showProgress = false;
-            eventTime = null;
-            isCountingDown = false;
+            eventTime = start;
+            isCountingDown = true;
           }
         } else {
-          // 非今日课程（明日、后天或之后日程）
           final startDate = DateTime(start.year, start.month, start.day);
           final targetCourses = _getCoursesForDate(startDate);
           final count = targetCourses.isNotEmpty ? targetCourses.length : 1;
@@ -478,37 +576,34 @@ class LiveNotificationServiceV2 {
       }
     }
 
-    // [v2.9.9] 负载防抖缓存：如果通知内容、进度和状态完全未发生改变，跳过 IPC 与通知重刷，避免耗电与微卡
-    final String currentPayloadKey = '$title|$body|$subLocation|$progressPercent|$showProgress|$isCountingDown';
+    final progressStyle = NotificationManager().liveProgressStyle;
+    final String currentPayloadKey =
+        '$title|$body|$subLocation|$progressPercent|$showProgress|$isCountingDown|$progressStyle|$_currentWeek';
     if (_lastNotifiedPayloadKey == currentPayloadKey) {
       return;
     }
     _lastNotifiedPayloadKey = currentPayloadKey;
 
-    // [v2.5.1反馈/v2.8.3升级] 严格遵循 Android 16 Live Updates (ProgressStyle) 规范构建实时活动通知
     final bool useLiveUpdate = NotificationManager().isLiveActivitiesEnabled;
 
     AndroidNotificationDetails androidDetails;
 
     if (useLiveUpdate) {
-      // [v2.8.3/v2.9.9] 符合 Android 16 ProgressStyle 规范的 Promoted Live Update 通知
-      // 使用应用专属新 Logo (ic_launcher) 并移除强制粉色底色
       androidDetails = AndroidNotificationDetails(
         _channelId,
         _channelName,
         channelDescription: _channelDesc,
         icon: '@mipmap/ic_launcher',
-        largeIcon: const DrawableResourceAndroidBitmap('@mipmap/ic_launcher'),
         importance: Importance.max,
         priority: Priority.max,
-        ongoing: true, // Live Updates 必须是 ongoing 常驻
+        ongoing: true,
         autoCancel: false,
-        onlyAlertOnce: true, // 仅在状态流转时提醒一次，周期静默刷新
+        onlyAlertOnce: true,
         showProgress: showProgress,
         maxProgress: 100,
         progress: progressPercent,
         indeterminate: false,
-        category: AndroidNotificationCategory.progress, // Android 16 实时进度条标准分类
+        category: AndroidNotificationCategory.progress,
         usesChronometer: eventTime != null,
         chronometerCountDown: isCountingDown,
         when: eventTime?.millisecondsSinceEpoch,
@@ -522,30 +617,13 @@ class LiveNotificationServiceV2 {
           summaryText: '实时活动',
           htmlFormatSummaryText: true,
         ),
-        // 操作按钮
-        actions: <AndroidNotificationAction>[
-          const AndroidNotificationAction(
-            'view_details',
-            '查看详情',
-            showsUserInterface: true,
-            cancelNotification: false,
-          ),
-          const AndroidNotificationAction(
-            'dismiss',
-            '关闭',
-            showsUserInterface: false,
-            cancelNotification: true,
-          ),
-        ],
       );
     } else {
-      // [v2.5.1] 旧版 RemoteViews/标准通知样式Fallback
       androidDetails = AndroidNotificationDetails(
         _channelId,
         _channelName,
         channelDescription: _channelDesc,
         icon: '@mipmap/ic_launcher',
-        largeIcon: const DrawableResourceAndroidBitmap('@mipmap/ic_launcher'),
         importance: Importance.defaultImportance,
         priority: Priority.defaultPriority,
         ongoing: false,
@@ -562,14 +640,6 @@ class LiveNotificationServiceV2 {
           summaryText: '课程提醒',
           htmlFormatSummaryText: true,
         ),
-        actions: <AndroidNotificationAction>[
-          const AndroidNotificationAction(
-            'view_details',
-            '查看详情',
-            showsUserInterface: true,
-            cancelNotification: true,
-          ),
-        ],
       );
     }
 
@@ -577,8 +647,7 @@ class LiveNotificationServiceV2 {
       android: androidDetails,
     );
 
-    // 如果禁用了Live Update并且已经到了上课状态，则可能不想频繁弹窗
-    if (!useLiveUpdate && title.startsWith('正在上课')) {
+    if (!useLiveUpdate && title.contains('正在上课')) {
       return;
     }
 
@@ -596,20 +665,19 @@ class LiveNotificationServiceV2 {
       };
       await windowToast.show();
     } else if (Platform.isAndroid && useLiveUpdate) {
-      // [v2.8.4] Android 16+ 原生提权通道：注入 android.requestPromotedOngoing 并调用 setRequestPromotedOngoing(true)
       bool nativeSucceeded = false;
       try {
-        const MethodChannel liveChannel = MethodChannel('com.zongzi.schedule/live_update');
+        const MethodChannel liveChannel =
+            MethodChannel('com.zongzi.schedule/live_update');
 
-        // [v3.0.0] 计算下一次硬件级精准闹钟唤醒时间戳：上课中或课前60分钟内，每分钟对齐刷新
         int? nextWakeupMs;
         final nextMinuteMs = ((nowMs ~/ 60000) + 1) * 60000;
-        final futureCourses = _allCourses.where((c) => c.endTime > nowMs).toList()
-          ..sort((a, b) => a.startTime.compareTo(b.startTime));
+        final futureCourses =
+            _allCourses.where((c) => c.endTime > nowMs).toList()
+              ..sort((a, b) => a.startTime.compareTo(b.startTime));
 
         for (final c in futureCourses) {
           if (c.startTime <= nowMs && c.endTime > nowMs) {
-            // 正在上课中：每分钟必须精准唤醒刷新剩余时间和进度
             final wake = (nextMinuteMs < c.endTime) ? nextMinuteMs : c.endTime;
             if (nextWakeupMs == null || wake < nextWakeupMs) {
               nextWakeupMs = wake;
@@ -617,17 +685,21 @@ class LiveNotificationServiceV2 {
           } else if (c.startTime > nowMs) {
             final diffMs = c.startTime - nowMs;
             if (diffMs <= 45 * 60 * 1000) {
-              // 开课前 45 分钟内：进入倒计时，每分钟精准刷新剩余时间
-              final wake = (nextMinuteMs < c.startTime) ? nextMinuteMs : c.startTime;
+              final wake =
+                  (nextMinuteMs < c.startTime) ? nextMinuteMs : c.startTime;
               if (nextWakeupMs == null || wake < nextWakeupMs) {
                 nextWakeupMs = wake;
               }
             } else {
-              // [v3.0.1] 开课前 45 分钟以上：准时在 45 分钟倒计时、10 分钟强提醒、5 分钟复提醒与开课时刻唤醒
               final fortyFiveMinBefore = c.startTime - 45 * 60 * 1000;
               final tenMinBefore = c.startTime - 10 * 60 * 1000;
               final fiveMinBefore = c.startTime - 5 * 60 * 1000;
-              final candidates = [fortyFiveMinBefore, tenMinBefore, fiveMinBefore, c.startTime].where((t) => t > nowMs);
+              final candidates = [
+                fortyFiveMinBefore,
+                tenMinBefore,
+                fiveMinBefore,
+                c.startTime,
+              ].where((t) => t > nowMs);
               for (final t in candidates) {
                 if (nextWakeupMs == null || t < nextWakeupMs) {
                   nextWakeupMs = t;
@@ -637,29 +709,8 @@ class LiveNotificationServiceV2 {
           }
         }
 
-        String? upcomingCoursesJson;
-        if (_allCourses.isNotEmpty) {
-          // [v3.0.0] 供给小组件与锁屏通报：保存前后 14 天完整课表数据（涵盖已上完与待上课程，支持桌面小组件切日回看与全天看板）
-          final nowTime = DateTime.now();
-          final startWindow = nowTime.subtract(const Duration(days: 7)).millisecondsSinceEpoch;
-          final endWindow = nowTime.add(const Duration(days: 14)).millisecondsSinceEpoch;
-          final relevantCourses = _allCourses
-              .where((c) => c.startTime >= startWindow && c.startTime <= endWindow)
-              .toList()
-            ..sort((a, b) => a.startTime.compareTo(b.startTime));
-
-          final listToSave = (relevantCourses.isNotEmpty ? relevantCourses : _allCourses)
-              .take(80)
-              .map((c) => {
-                'name': c.name,
-                'location': c.location,
-                'teacher': c.teacher,
-                'startTime': c.startTime,
-                'endTime': c.endTime,
-              })
-              .toList();
-          upcomingCoursesJson = jsonEncode(listToSave);
-        }
+        final String upcomingCoursesJson =
+            _encodeUpcomingCoursesJson(_allCourses);
 
         await liveChannel.invokeMethod('postPromotedLiveUpdate', {
           'id': _liveNotificationId,
@@ -673,11 +724,16 @@ class LiveNotificationServiceV2 {
           'whenTime': eventTime?.millisecondsSinceEpoch,
           'usesChronometer': eventTime != null,
           'upcomingCoursesJson': upcomingCoursesJson,
+          'currentWeek': _currentWeek,
+          'semesterStartMs': _semesterStartMs,
+          'progressStyle': progressStyle,
           'nextWakeupMs': nextWakeupMs,
         });
         nativeSucceeded = true;
       } catch (e) {
-        debugPrint('⚠️ 原生 Promoted Live Update 通道调用失败，降级回退到 flutter_local_notifications: $e');
+        debugPrint(
+          '⚠️ 原生 Promoted Live Update 通道调用失败，降级回退到 flutter_local_notifications: $e',
+        );
       }
 
       if (!nativeSucceeded) {
@@ -686,7 +742,9 @@ class LiveNotificationServiceV2 {
           title: title,
           body: body,
           notificationDetails: details,
-          payload: _currentCourse != null ? 'course_${_currentCourse!.startTime}' : 'course_general',
+          payload: _currentCourse != null
+              ? 'course_${_currentCourse!.startTime}'
+              : 'course_general',
         );
       }
     } else {
@@ -695,12 +753,13 @@ class LiveNotificationServiceV2 {
         title: title,
         body: body,
         notificationDetails: details,
-        payload: _currentCourse != null ? 'course_${_currentCourse!.startTime}' : 'course_general',
+        payload: _currentCourse != null
+            ? 'course_${_currentCourse!.startTime}'
+            : 'course_general',
       );
     }
   }
 
-  /// 取消通知
   Future<void> cancelNotification() async {
     _updateTimer?.cancel();
     _updateTimer = null;
@@ -710,8 +769,11 @@ class LiveNotificationServiceV2 {
     _hasShownReminder = false;
     if (Platform.isAndroid) {
       try {
-        const MethodChannel liveChannel = MethodChannel('com.zongzi.schedule/live_update');
-        await liveChannel.invokeMethod('cancelLiveUpdate', {'id': _liveNotificationId});
+        const MethodChannel liveChannel =
+            MethodChannel('com.zongzi.schedule/live_update');
+        await liveChannel.invokeMethod('cancelLiveUpdate', {
+          'id': _liveNotificationId,
+        });
       } catch (_) {}
     }
     await _notificationsPlugin.cancel(id: _liveNotificationId);
@@ -719,12 +781,10 @@ class LiveNotificationServiceV2 {
     debugPrint('🛑 Live Updates 通知已取消');
   }
 
-  /// 停止服务
   Future<void> dispose() async {
     await cancelNotification();
   }
 
-  /// [v2.10.2/v3.0.0] 彻底清洗 HTML 标签（用于 Windows Toast 与纯文本通知表面，杜绝 <b><font> 标签外泄形成乱码）
   static String _stripHtml(String input) {
     return input.replaceAll(RegExp(r'<[^>]*>'), '');
   }

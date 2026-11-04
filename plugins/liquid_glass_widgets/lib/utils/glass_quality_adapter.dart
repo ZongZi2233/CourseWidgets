@@ -466,6 +466,19 @@ class GlassQualityAdapter {
   /// Returns a forced quality if the device can't support higher tiers, or
   /// `null` if we should proceed to Phase 2.
   GlassQuality? _staticProbe() {
+    final bool isDesktop = !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.windows ||
+            defaultTargetPlatform == TargetPlatform.macOS ||
+            defaultTargetPlatform == TargetPlatform.linux);
+
+    // Desktop platforms (Windows / macOS / Linux) have dedicated GPU resources
+    // and run LightweightLiquidGlass via custom FragmentProgram shaders, completely
+    // independent of Impeller's ImageFilter.shader support.
+    // Never force minimal on desktop platforms due to !isShaderFilterSupported!
+    if (isDesktop) {
+      return null;
+    }
+
     // No custom shader support (e.g. software renderer, some broken Android
     // drivers) — force minimal: BackdropFilter only, zero shader cost.
     if (!ui.ImageFilter.isShaderFilterSupported) {
@@ -476,7 +489,7 @@ class GlassQualityAdapter {
     // On Windows with modern Impeller (ANGLE backend), desktop GPUs have ample
     // raster throughput. We allow Windows to proceed to the warm-up benchmark
     // (Phase 2) instead of hard-capping at standard, enabling 120fps premium liquid glass.
-    if (kIsWeb || defaultTargetPlatform == TargetPlatform.linux) {
+    if (kIsWeb) {
       final capped = _capQuality(maxQuality, GlassQuality.standard);
       return capped == maxQuality ? null : capped;
     }
@@ -520,7 +533,14 @@ class GlassQualityAdapter {
     //
     // Phase 3 runtime hysteresis will still step down quickly (2 windows,
     // ~4 s) if the device cannot actually sustain premium after warmup.
-    if (p75Ms < warmupPremiumThresholdMs) {
+    final bool isDesktop = !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.windows ||
+            defaultTargetPlatform == TargetPlatform.macOS ||
+            defaultTargetPlatform == TargetPlatform.linux);
+
+    if (isDesktop) {
+      decided = _capQuality(maxQuality, maxQuality);
+    } else if (p75Ms < warmupPremiumThresholdMs) {
       decided = _capQuality(maxQuality, maxQuality); // stay at ceiling
     } else if (p75Ms <= warmupStandardThresholdMs) {
       decided = _capQuality(maxQuality, GlassQuality.standard);
@@ -629,6 +649,12 @@ class GlassQualityAdapter {
   }
 
   void _tryStepDown() {
+    final bool isDesktop = !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.windows ||
+            defaultTargetPlatform == TargetPlatform.macOS ||
+            defaultTargetPlatform == TargetPlatform.linux);
+    if (isDesktop) return; // Desktop has abundant GPU power; do not downgrade.
+
     if (!_canChange()) return;
     final next = _stepDown(_currentQuality);
     if (next == _currentQuality) return; // already at minQuality

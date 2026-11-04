@@ -896,61 +896,25 @@ class DataImportService {
     }
   }
 
-  /// [v2.9.7] 导出当前激活的课表为临时 ICS 文件
+  /// [v2.9.7 / v3.1.1] 导出当前激活的课表为临时 ICS 文件
+  /// 直接从当前已对齐作息与开学周一的 courses 表生成 RFC 5545 标准 ICS，
+  /// 彻底杜绝读取旧版 schedule_history 导致节次错位（如 9:50-11:25）或周一课程跑到周日的问题。
   Future<File?> exportActiveScheduleToIcsFile({ScheduleConfig? config}) async {
     try {
-      final active = await DatabaseHelper.instance.getActiveSchedule();
+      final courses = await DatabaseHelper.instance.getAllCourses();
       String? icsContent;
 
-      if (active != null) {
-        icsContent = await DatabaseHelper.instance.exportScheduleToIcs(active['id'] as int);
+      if (courses.isNotEmpty) {
+        icsContent = DatabaseHelper.instance.generateIcsFromCourses(courses);
+      } else {
+        final active = await DatabaseHelper.instance.getActiveSchedule();
+        if (active != null) {
+          icsContent = await DatabaseHelper.instance.exportScheduleToIcs(active['id'] as int);
+        }
       }
 
       if (icsContent == null || icsContent.trim().isEmpty) {
-        final courses = await DatabaseHelper.instance.getAllCourses();
-        if (courses.isEmpty) return null;
-
-        final sb = StringBuffer();
-        String fmt(DateTime dt) {
-          String td(int n) => n >= 10 ? '$n' : '0$n';
-          return '${dt.year}${td(dt.month)}${td(dt.day)}T${td(dt.hour)}${td(dt.minute)}${td(dt.second)}';
-        }
-
-        final nowStr = fmt(DateTime.now());
-        sb.write('BEGIN:VCALENDAR\r\n');
-        sb.write('VERSION:2.0\r\n');
-        sb.write('PRODID:-//CourseWidgets//Schedule//CN\r\n');
-        sb.write('BEGIN:VTIMEZONE\r\n');
-        sb.write('TZID:Asia/Shanghai\r\n');
-        sb.write('BEGIN:STANDARD\r\n');
-        sb.write('TZNAME:CST\r\n');
-        sb.write('TZOFFSETFROM:+0800\r\n');
-        sb.write('TZOFFSETTO:+0800\r\n');
-        sb.write('DTSTART:19700101T000000\r\n');
-        sb.write('END:STANDARD\r\n');
-        sb.write('END:VTIMEZONE\r\n');
-
-        int uid = 0;
-        for (final evt in courses) {
-          final start = DateTime.fromMillisecondsSinceEpoch(evt.startTime);
-          final end = DateTime.fromMillisecondsSinceEpoch(evt.endTime);
-          sb.write('BEGIN:VEVENT\r\n');
-          sb.write('DTSTAMP:${nowStr}Z\r\n');
-          sb.write('UID:CW-ACTIVE-${++uid}-$nowStr@coursewidgets\r\n');
-          sb.write('SUMMARY:${evt.name}\r\n');
-          sb.write('DTSTART;TZID=Asia/Shanghai:${fmt(start)}\r\n');
-          sb.write('DTEND;TZID=Asia/Shanghai:${fmt(end)}\r\n');
-          if (evt.location.isNotEmpty) {
-            sb.write('LOCATION:${evt.location}\r\n');
-          }
-          if (evt.teacher.isNotEmpty) {
-            sb.write('DESCRIPTION:任课教师: ${evt.teacher}\r\n');
-          }
-          sb.write('STATUS:CONFIRMED\r\n');
-          sb.write('END:VEVENT\r\n');
-        }
-        sb.write('END:VCALENDAR\r\n');
-        icsContent = sb.toString();
+        return null;
       }
 
       final tempDir = await getTemporaryDirectory();

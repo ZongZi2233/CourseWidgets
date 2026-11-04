@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path/path.dart';
 import '../models/course_event.dart';
+import '../models/schedule_config.dart';
 import 'html_to_ics_converter.dart';
 import 'storage_service.dart';
 import 'app_logger.dart';
@@ -177,8 +178,13 @@ class DatabaseHelper {
     int week,
     DateTime startDate,
   ) async {
-    final weekStart = startDate.add(Duration(days: (week - 1) * 7));
-    final weekEnd = weekStart.add(Duration(days: 7));
+    final baseMonday = DateTime(
+      startDate.year,
+      startDate.month,
+      startDate.day,
+    ).subtract(Duration(days: startDate.weekday - 1));
+    final weekStart = baseMonday.add(Duration(days: (week - 1) * 7));
+    final weekEnd = weekStart.add(const Duration(days: 7));
 
     final db = await database;
     final result = await db.query(
@@ -254,10 +260,8 @@ class DatabaseHelper {
   }) async {
     final db = await database;
 
-    // 如果是新导入，先将所有现有记录设为非激活
-    if (sourceType == 'ics' || sourceType == 'html') {
-      await db.update('schedule_history', {'is_active': 0});
-    }
+    // 每次保存新课表历史记录时，先将所有现有记录设为非激活
+    await db.update('schedule_history', {'is_active': 0});
 
     return await db.insert('schedule_history', {
       'name': name,
@@ -287,6 +291,7 @@ class DatabaseHelper {
     final result = await db.query(
       'schedule_history',
       where: 'is_active = 1',
+      orderBy: 'created_at DESC',
       limit: 1,
     );
     return result.isNotEmpty ? result.first : null;
@@ -427,14 +432,53 @@ class DatabaseHelper {
     sb.write('END:VTIMEZONE\r\n');
 
     final effectiveConfig = configDataStr ?? StorageService().getString('schedule_config');
+    ScheduleConfigModel? configModel;
     if (effectiveConfig != null && effectiveConfig.isNotEmpty) {
       sb.write('X-SCHEDULE-CONFIG:$effectiveConfig\r\n');
+      try {
+        configModel = ScheduleConfigModel.fromJson(
+          jsonDecode(effectiveConfig) as Map<String, dynamic>,
+        );
+      } catch (_) {}
     }
 
     int uid = 0;
     for (final evt in events) {
-      final start = DateTime.fromMillisecondsSinceEpoch(evt.startTime);
-      final end = DateTime.fromMillisecondsSinceEpoch(evt.endTime);
+      DateTime start = DateTime.fromMillisecondsSinceEpoch(evt.startTime);
+      DateTime end = DateTime.fromMillisecondsSinceEpoch(evt.endTime);
+
+      // 若课程包含明确节次且存在当前课时配置，强制按当前课时配置对齐时分，确保导出的系统日历与课表网格 100% 一致
+      if (configModel != null &&
+          evt.startSection != null &&
+          evt.endSection != null &&
+          evt.startSection! >= 1 &&
+          evt.endSection! >= evt.startSection!) {
+        final sSec = evt.startSection!;
+        final eSec = evt.endSection!;
+        final sMin = configModel.sectionStartTimes[sSec];
+        final eStartMin = configModel.sectionStartTimes[eSec];
+        final eDur = configModel.isEqualDuration
+            ? configModel.defaultDuration
+            : (configModel.sectionDurations[eSec] ?? configModel.defaultDuration);
+        if (sMin != null && eStartMin != null) {
+          final eMin = eStartMin + eDur;
+          start = DateTime(
+            start.year,
+            start.month,
+            start.day,
+            sMin ~/ 60,
+            sMin % 60,
+          );
+          end = DateTime(
+            start.year,
+            start.month,
+            start.day,
+            eMin ~/ 60,
+            eMin % 60,
+          );
+        }
+      }
+
       sb.write('BEGIN:VEVENT\r\n');
       sb.write('DTSTAMP:${nowStr}Z\r\n');
       sb.write('UID:CW-${++uid}-$nowStr@coursewidgets\r\n');

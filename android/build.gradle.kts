@@ -27,6 +27,10 @@ allprojects {
     plugins.withId("com.android.library") {
         configure<com.android.build.api.dsl.LibraryExtension> {
             compileSdk = 37
+            compileOptions {
+                sourceCompatibility = JavaVersion.VERSION_21
+                targetCompatibility = JavaVersion.VERSION_21
+            }
         }
     }
     plugins.withId("com.android.application") {
@@ -36,10 +40,10 @@ allprojects {
     }
     configurations.all {
         resolutionStrategy.eachDependency {
-            // [v2.5.0] 统一 Kotlin 版本，但排除 build-tools（必须与 KGP 严格对齐）
+            // [v3.0.1] 统一 Kotlin 版本为 2.4.20，但排除 build-tools
             if (requested.group == "org.jetbrains.kotlin" &&
                 !requested.name.startsWith("kotlin-build-tools")) {
-                useVersion("2.3.0")
+                useVersion("2.4.20")
             }
         }
     }

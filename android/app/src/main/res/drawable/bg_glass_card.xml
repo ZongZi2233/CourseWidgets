@@ -1,33 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Layer 0: 柔光半透磨砂内胆底板 (16dp 圆角与微晶描边) -->
+    <!-- Layer 0: 温润莫奈暗色悬浮内胆底板 (16dp 圆角与细腻微晶描边，彻底移除断层横线) -->
     <item>
         <shape android:shape="rectangle">
             <corners android:radius="16dp" />
             <gradient
                 android:angle="135"
-                android:startColor="#2AFFFFFF"
-                android:endColor="#14FFFFFF"
+                android:startColor="#FF202430"
+                android:endColor="#FF191C26"
                 android:type="linear" />
             <stroke
-                android:width="0.6dp"
-                android:color="#2EFFFFFF" />
-        </shape>
-    </item>
-
-    <!-- Layer 1: 顶部微晶反光 -->
-    <item android:bottom="30dp">
-        <shape android:shape="rectangle">
-            <corners
-                android:topLeftRadius="16dp"
-                android:topRightRadius="16dp"
-                android:bottomLeftRadius="0dp"
-                android:bottomRightRadius="0dp" />
-            <gradient
-                android:angle="270"
-                android:startColor="#14FFFFFF"
-                android:endColor="#00FFFFFF"
-                android:type="linear" />
+                android:width="0.7dp"
+                android:color="#1FFFFFFF" />
         </shape>
     </item>
 </layer-list>

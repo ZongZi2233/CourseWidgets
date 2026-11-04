@@ -6,6 +6,7 @@ import 'package:system_theme/system_theme.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart' show GlassQuality;
 import 'storage_service.dart';
 import '../main.dart'; // For globalUseDarkMode
+import '../constants/version.dart' show kSolidColorBackground;
 import '../utils/glass_opacity_manager.dart';
 
 /// 主题模式
@@ -71,12 +72,12 @@ class ThemeService extends ChangeNotifier {
     }
   }
 
-  /// [v2.9.5] 动态刷新莫奈取色（根据当前背景壁纸与深浅色模式自动重新取色并广播）
+  /// [v2.9.5 / v3.1.0] 动态刷新莫奈取色（根据当前背景壁纸与深浅色模式自动重新取色并广播）
   Future<void> refreshMonetColors() async {
     if (_themeMode != ThemeMode.monet) return;
     final dark = isDarkMode;
     String? bgPath = globalBackgroundPath.value;
-    if (bgPath == null || bgPath.isEmpty) {
+    if (bgPath == null || bgPath.isEmpty || bgPath == kSolidColorBackground) {
       bgPath = dark ? 'asset:assets/Dark.png' : 'asset:assets/Light.png';
     } else if (bgPath.startsWith('asset:')) {
       final raw = bgPath.substring(6);
@@ -142,8 +143,6 @@ class ThemeService extends ChangeNotifier {
       case ThemeMode.defaultMode:
         _primaryColor = defaultPrimaryColor;
         _secondaryColor = defaultSecondaryColor;
-        // [v2.3.0修复] 保存默认颜色到存储
-        // 使用 toARGB32() 方法（Flutter 3.33+ 推荐）
         await _storage.setInt(
           StorageService.keyCustomThemeColor,
           _primaryColor.toARGB32(),
@@ -153,15 +152,12 @@ class ThemeService extends ChangeNotifier {
         );
         break;
       case ThemeMode.system:
-        // 系统主题色将在 applySystemTheme 中设置
         debugPrint('✅ 系统主题模式已设置，等待 applySystemTheme 调用');
         break;
       case ThemeMode.monet:
-        // 莫奈取色将在 extractColorsFromImage 中设置
         debugPrint('✅ 莫奈取色模式已设置，等待 extractColorsFromImage 调用');
         break;
       case ThemeMode.custom:
-        // 自定义主题色将在 setCustomColor 中设置
         debugPrint('✅ 自定义主题色模式已设置，等待 setCustomColor 调用');
         break;
     }
@@ -211,14 +207,12 @@ class ThemeService extends ChangeNotifier {
     }
 
     try {
-      // 使用 MethodChannel 获取系统主题色
       const platform = MethodChannel('com.zongzi.schedule/theme');
       final int? systemColor = await platform.invokeMethod(
         'getSystemAccentColor',
       );
 
       if (systemColor != null) {
-        // 使用系统主色调生成调色板
         final corePalette = CorePalette.of(systemColor);
         _primaryColor = Color(corePalette.primary.get(40));
         _secondaryColor = Color(corePalette.secondary.get(40));
@@ -247,19 +241,21 @@ class ThemeService extends ChangeNotifier {
   Future<void> extractColorsFromImage(String imagePath, {Brightness? brightness}) async {
     try {
       final effectiveBrightness = brightness ?? (isDarkMode ? Brightness.dark : Brightness.light);
+      final effectivePath = (imagePath.isEmpty || imagePath == kSolidColorBackground)
+          ? (effectiveBrightness == Brightness.dark ? 'asset:assets/Dark.png' : 'asset:assets/Light.png')
+          : imagePath;
       ImageProvider provider;
-      if (imagePath.startsWith('asset:')) {
-        provider = AssetImage(imagePath.substring(6));
+      if (effectivePath.startsWith('asset:')) {
+        provider = AssetImage(effectivePath.substring(6));
       } else {
-        final imageFile = File(imagePath);
+        final imageFile = File(effectivePath);
         if (!await imageFile.exists()) {
-          debugPrint('图片文件不存在: $imagePath');
+          debugPrint('图片文件不存在: $effectivePath');
           return;
         }
         provider = FileImage(imageFile);
       }
 
-      // [v2.5.5修复/v2.9.5升级] 根据传入或当前界面的明度提取原生 Material You 色系
       final colorScheme = await ColorScheme.fromImageProvider(
         provider: provider,
         brightness: effectiveBrightness,

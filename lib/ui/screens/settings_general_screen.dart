@@ -5,12 +5,15 @@ import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:file_selector/file_selector.dart';
 import 'dart:io';
 import '../../constants/theme_constants.dart';
+import '../../constants/version.dart' show kSolidColorBackground;
 import '../../services/storage_service.dart';
 import '../../services/theme_service.dart' as theme;
 import '../../utils/glass_settings_helper.dart';
 import '../../main.dart';
 import '../widgets/liquid_components.dart' as liquid;
 import '../widgets/immersive_status_bar_backdrop.dart';
+import '../widgets/windows_desktop_title_bar.dart'
+    show setWindowsDesktopTitle, clearWindowsDesktopTitle;
 import 'package:smooth_scroll_multiplatform/smooth_scroll_multiplatform.dart';
 
 class SettingsGeneralScreen extends StatefulWidget {
@@ -35,7 +38,14 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
   @override
   void initState() {
     super.initState();
+    setWindowsDesktopTitle('通用设置');
     _loadSettings();
+  }
+
+  @override
+  void dispose() {
+    clearWindowsDesktopTitle('通用设置');
+    super.dispose();
   }
 
   Future<void> _loadSettings() async {
@@ -78,7 +88,6 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
   Future<void> _pickBackgroundImage() async {
     try {
       if (Platform.isAndroid) {
-        // Android 14+ Photo Picker（不需要权限）
         const platform = MethodChannel('com.zongzi.schedule/image_picker');
         final String? imagePath = await platform.invokeMethod('pickImage');
 
@@ -86,7 +95,6 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
           globalBackgroundPath.value = imagePath;
           await _storage.setString(StorageService.keyBackgroundPath, imagePath);
 
-          // 如果是莫奈取色模式，立即提取颜色
           if (_currentThemeMode == theme.ThemeMode.monet) {
             await _themeService.extractColorsFromImage(imagePath);
             setState(() {});
@@ -95,7 +103,6 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
           if (mounted) _showToast('背景设置成功');
         }
       } else if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
-        // Windows/macOS/Linux 使用 file_selector
         final XFile? file = await openFile(
           acceptedTypeGroups: [
             const XTypeGroup(
@@ -109,7 +116,6 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
           globalBackgroundPath.value = file.path;
           await _storage.setString(StorageService.keyBackgroundPath, file.path);
 
-          // 如果是莫奈取色模式，立即提取颜色
           if (_currentThemeMode == theme.ThemeMode.monet) {
             await _themeService.extractColorsFromImage(file.path);
             setState(() {});
@@ -134,7 +140,6 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
   }
 
   void _showThemeModeBottomSheet() {
-    // [v2.5.2] 从 CupertinoModalPopup 迁移到 showModalBottomSheet 支持下滑关闭与小圆条拖拽
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -142,7 +147,6 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
       enableDrag: true,
       showDragHandle: false,
       isScrollControlled: true,
-      // [v2.5.2] 增加 RepaintBoundary 防止底部表单内高斯模糊拖降全局帧率
       builder: (BuildContext context) => RepaintBoundary(
         child: GlassSheet(
           settings: GlassSettingsHelper.getDialogSettings(),
@@ -150,7 +154,6 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // 标题
                 Padding(
                   padding: const EdgeInsets.all(20),
                   child: Text(
@@ -162,8 +165,6 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
                     ),
                   ),
                 ),
-
-                // 选项列表
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Column(
@@ -204,7 +205,6 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
                     ],
                   ),
                 ),
-
                 const SizedBox(height: 20),
               ],
             ),
@@ -226,19 +226,19 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
       onTap: () async {
         HapticFeedback.selectionClick();
 
-        // [v2.3.0] 自定义主题色需要打开颜色选择器
         if (mode == theme.ThemeMode.custom) {
-          Navigator.pop(context); // 先关闭底部表单
+          Navigator.pop(context);
           await _showColorPicker();
           return;
         }
 
-        // [v2.9.0] 莫奈取色：直接从当前背景或内置壁纸提取颜色，严禁弹出相册
         if (mode == theme.ThemeMode.monet) {
           setState(() => _currentThemeMode = theme.ThemeMode.monet);
           await _themeService.setThemeMode(theme.ThemeMode.monet);
-          final bgPath = globalBackgroundPath.value ??
-              (_isDarkMode ? 'asset:assets/Dark.png' : 'asset:assets/Light.png');
+          final rawBg = globalBackgroundPath.value;
+          final bgPath = (rawBg == null || rawBg.isEmpty || rawBg == kSolidColorBackground)
+              ? (_isDarkMode ? 'asset:assets/Dark.png' : 'asset:assets/Light.png')
+              : rawBg;
           await _themeService.extractColorsFromImage(bgPath);
           if (mounted) {
             setState(() {});
@@ -330,9 +330,29 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
     );
   }
 
+  Future<void> _toggleSolidColorBackground(bool useSolid) async {
+    HapticFeedback.selectionClick();
+    if (useSolid) {
+      globalBackgroundPath.value = kSolidColorBackground;
+      await _storage.setString(StorageService.keyBackgroundPath, kSolidColorBackground);
+      if (mounted) {
+        _showToast('已切换为纯色极简背景');
+      }
+    } else {
+      globalBackgroundPath.value = null;
+      await _storage.remove(StorageService.keyBackgroundPath);
+      if (mounted) {
+        _showToast('已恢复默认渐变壁纸');
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final topPadding = MediaQuery.paddingOf(context).top + 60;
+    final isDesktop =
+        Platform.isWindows || Platform.isMacOS || Platform.isLinux;
+    final topPadding =
+        isDesktop ? 20.0 : (MediaQuery.paddingOf(context).top + 60);
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -346,123 +366,142 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
               builder: (context, controller, physics) => SingleChildScrollView(
                 controller: controller,
                 physics: physics,
-                padding: EdgeInsets.fromLTRB(16, topPadding, 16, 100),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // [v3.0.0] 外观设置大卡片（合并自适应与强制深色）
-                    _buildSection('外观'),
-                    _buildCardGroup([
-                      _buildSwitchRow(
-                        '自适应深色模式',
-                        '跟随系统设置',
-                        CupertinoIcons.circle_righthalf_fill,
-                        _adaptiveDarkMode,
-                        _toggleAdaptiveMode,
-                      ),
-                      IgnorePointer(
-                        ignoring: _adaptiveDarkMode,
-                        child: _buildSwitchRow(
-                          '强制深色模式',
-                          '手动覆盖系统设置',
-                          CupertinoIcons.moon_fill,
-                          globalUseDarkMode,
-                          _toggleDarkMode,
-                          disabled: _adaptiveDarkMode,
-                        ),
-                      ),
-                    ]),
-                    const SizedBox(height: 20),
-
-                    // [v3.0.0] 主题色大卡片
-                    _buildSection('主题色'),
-                    _buildCardGroup([
-                      _buildActionRow(
-                        '主题色设置',
-                        _getThemeModeText(),
-                        CupertinoIcons.color_filter,
-                        _showThemeModeBottomSheet,
-                      ),
-                    ]),
-
-                    const SizedBox(height: 20),
-
-                    // [v3.0.0] 个性化大卡片（合并更换背景与恢复默认）
-                    _buildSection('个性化'),
-                    _buildCardGroup([
-                      _buildActionRow(
-                        '更换背景图片',
-                        '从本地相册选择自定义壁纸',
-                        CupertinoIcons.photo,
-                        _pickBackgroundImage,
-                      ),
-                      _buildActionRow(
-                        '恢复默认背景',
-                        '重置为内置质感渐变壁纸',
-                        CupertinoIcons.arrow_counterclockwise,
-                        () async {
-                          globalBackgroundPath.value = null;
-                          await _storage.remove(StorageService.keyBackgroundPath);
-                          _showAlert('已恢复', '背景已恢复默认渐变');
-                        },
-                      ),
-                    ]),
-
-                    const SizedBox(height: 20),
-
-                    // [v3.0.0] 渲染性能大卡片（Premium 旗舰画质 vs Standard 流畅高帧切换）
-                    _buildSection('渲染与性能'),
-                    _buildCardGroup([
-                      ListenableBuilder(
-                        listenable: theme.ThemeService.globalGlassQualityNotifier,
-                        builder: (context, _) {
-                          final isPremium = theme.ThemeService.globalGlassQualityNotifier.value == GlassQuality.premium;
-                          return _buildActionRow(
-                            '全局玻璃渲染模式',
-                            isPremium
-                                ? '当前：旗舰画质 (Premium) · 完整折射光影'
-                                : '当前：流畅高帧 (Standard) · 适合老旧机型',
-                            CupertinoIcons.speedometer,
-                            _toggleGlassQuality,
-                            trailing: liquid.LiquidSwitch(
-                              value: isPremium,
-                              onChanged: (_) => _toggleGlassQuality(),
+                padding: EdgeInsets.fromLTRB(16, topPadding, 16, isDesktop ? 32 : 100),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 860),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // [v3.0.0] 外观设置大卡片（合并自适应与强制深色）
+                        _buildSection('外观'),
+                        _buildCardGroup([
+                          _buildSwitchRow(
+                            '自适应深色模式',
+                            '跟随系统设置',
+                            CupertinoIcons.circle_righthalf_fill,
+                            _adaptiveDarkMode,
+                            _toggleAdaptiveMode,
+                          ),
+                          IgnorePointer(
+                            ignoring: _adaptiveDarkMode,
+                            child: _buildSwitchRow(
+                              '强制深色模式',
+                              '手动覆盖系统设置',
+                              CupertinoIcons.moon_fill,
+                              globalUseDarkMode,
+                              _toggleDarkMode,
+                              disabled: _adaptiveDarkMode,
                             ),
-                          );
-                        },
-                      ),
-                    ]),
+                          ),
+                        ]),
+                        const SizedBox(height: 20),
 
-                    const SizedBox(height: 100),
-                  ],
+                        // [v3.0.0] 主题色大卡片
+                        _buildSection('主题色'),
+                        _buildCardGroup([
+                          _buildActionRow(
+                            '主题色设置',
+                            _getThemeModeText(),
+                            CupertinoIcons.color_filter,
+                            _showThemeModeBottomSheet,
+                          ),
+                        ]),
+
+                        const SizedBox(height: 20),
+
+                        // [v3.1.0] 个性化大卡片（更换壁纸 / 恢复默认渐变壁纸 / 去掉默认壁纸纯色模式）
+                        _buildSection('个性化'),
+                        ValueListenableBuilder<String?>(
+                          valueListenable: globalBackgroundPath,
+                          builder: (context, bgPath, _) {
+                            final isSolidColor = bgPath == kSolidColorBackground;
+                            return _buildCardGroup([
+                              _buildActionRow(
+                                '更换背景图片',
+                                '从本地相册选择自定义壁纸',
+                                CupertinoIcons.photo,
+                                _pickBackgroundImage,
+                              ),
+                              _buildActionRow(
+                                '恢复默认壁纸',
+                                '重置为内置质感渐变壁纸',
+                                CupertinoIcons.arrow_counterclockwise,
+                                () async {
+                                  globalBackgroundPath.value = null;
+                                  await _storage.remove(StorageService.keyBackgroundPath);
+                                  _showAlert('已恢复', '背景已恢复默认质感渐变壁纸');
+                                },
+                              ),
+                              _buildSwitchRow(
+                                '去除默认壁纸（纯色背景）',
+                                '浅色为纯白，夜间为深灰近黑（类微信深色）',
+                                CupertinoIcons.paintbrush_fill,
+                                isSolidColor,
+                                _toggleSolidColorBackground,
+                              ),
+                            ]);
+                          },
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        // [v3.0.0] 渲染性能大卡片（Premium 旗舰画质 vs Standard 流畅高帧切换）
+                        _buildSection('渲染与性能'),
+                        _buildCardGroup([
+                          ListenableBuilder(
+                            listenable: theme.ThemeService.globalGlassQualityNotifier,
+                            builder: (context, _) {
+                              final isPremium = theme.ThemeService.globalGlassQualityNotifier.value == GlassQuality.premium;
+                              return _buildActionRow(
+                                '全局玻璃渲染模式',
+                                isPremium
+                                    ? '当前：旗舰画质 (Premium) · 完整折射光影'
+                                    : '当前：流畅高帧 (Standard) · 适合老旧机型',
+                                CupertinoIcons.speedometer,
+                                _toggleGlassQuality,
+                                trailing: liquid.LiquidSwitch(
+                                  value: isPremium,
+                                  onChanged: (_) => _toggleGlassQuality(),
+                                ),
+                              );
+                            },
+                          ),
+                        ]),
+
+                        const SizedBox(height: 100),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ),
           ),
 
           // 2. 状态栏微模糊避让 (0..48dp)
-          const ImmersiveStatusBarBackdrop(),
+          if (!isDesktop) const ImmersiveStatusBarBackdrop(),
 
-          // 3. 悬浮大圆角矩形玻璃标题胶囊（点击可返回，消除裸字悬浮感）
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: SafeArea(
-              bottom: false,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: Row(
-                  children: const [
-                    liquid.FloatingGlassHeaderButton(title: '通用设置'),
-                  ],
+          // 3. 悬浮大圆角矩形玻璃标题胶囊（仅移动端展示）
+          if (!isDesktop)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Row(
+                    children: const [
+                      liquid.FloatingGlassHeaderButton(title: '通用设置'),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
 
-          // 4. [v2.9.7] 悬浮右下角返回按钮
-          const liquid.FloatingLiquidBackButton(),
+          // 4. [v2.9.7] 悬浮右下角返回按钮（仅移动端展示）
+          if (!isDesktop) const liquid.FloatingLiquidBackButton(),
         ],
       ),
     );
@@ -483,25 +522,23 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
 
   /// [v2.3.0] 显示颜色选择器
   Future<void> _showColorPicker() async {
-    // 预设颜色
     final presetColors = [
-      AppThemeColors.babyPink, // 默认粉色
-      const Color(0xFFFF6B6B), // 珊瑚红
-      const Color(0xFFFFB347), // 柑橘橙
-      const Color(0xFFFFD93D), // 奶酪黄
-      const Color(0xFF6BCB77), // 薄荷绿
-      const Color(0xFF4D96FF), // 晴空蓝
-      const Color(0xFF9D84B7), // 丁香紫
-      const Color(0xFFFF85A2), // 桃金粉
-      // [v2.5.2 扩编] 增加更多现代美学色彩
-      const Color(0xFF00C9A7), // 翡翠绿
-      const Color(0xFF845EC2), // 皇家紫
-      const Color(0xFFFF9671), // 蜜桃红
-      const Color(0xFF0081C9), // 海洋蓝
-      const Color(0xFFB0A8B9), // 莫兰迪雾灰
-      const Color(0xFFC34A36), // 砖红琥珀
-      const Color(0xFF537188), // 钢青蓝
-      const Color(0xFFE2B714), // 芥末黄
+      AppThemeColors.babyPink,
+      const Color(0xFFFF6B6B),
+      const Color(0xFFFFB347),
+      const Color(0xFFFFD93D),
+      const Color(0xFF6BCB77),
+      const Color(0xFF4D96FF),
+      const Color(0xFF9D84B7),
+      const Color(0xFFFF85A2),
+      const Color(0xFF00C9A7),
+      const Color(0xFF845EC2),
+      const Color(0xFFFF9671),
+      const Color(0xFF0081C9),
+      const Color(0xFFB0A8B9),
+      const Color(0xFFC34A36),
+      const Color(0xFF537188),
+      const Color(0xFFE2B714),
     ];
 
     Color? selectedColor;
@@ -580,7 +617,6 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
 
   static const double kSettingsItemHeight = 56.0;
 
-  /// [v3.0.0] 合并同类设置项的大圆角超椭圆卡片容器（统一高度与内边距，去除生硬边框）
   Widget _buildCardGroup(List<Widget> children) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final dividerColor = isDark
@@ -607,7 +643,6 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
     );
   }
 
-  /// [v3.0.0] 标准化高度开关设置行（统一 56dp 高度，纯净图标无厚重底色块）
   Widget _buildSwitchRow(
     String title,
     String subtitle,
@@ -666,7 +701,6 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
     );
   }
 
-  /// [v3.0.0] 标准化高度操作设置行（统一 56dp 高度，纯净图标无厚重底色块）
   Widget _buildActionRow(
     String title,
     String subtitle,
@@ -730,7 +764,6 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
     );
   }
 
-  /// [v3.0.0] 全局玻璃渲染模式即时切换（Premium 旗舰画质 vs Standard 流畅省电）
   void _toggleGlassQuality() async {
     HapticFeedback.selectionClick();
     final currentQuality = theme.ThemeService().glassQuality;

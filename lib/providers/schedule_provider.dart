@@ -2,12 +2,12 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import '../models/course_event.dart';
 import '../services/data_import_service.dart';
-import '../services/storage_service.dart'; // [v2.3.0] 用于清除配置数据
+import '../services/storage_service.dart';
 import '../models/schedule_config.dart';
 import '../services/database_helper.dart';
-import '../services/onboarding_service.dart'; // [v2.5.9] 引入重置引导服务
-import '../services/ics_parser.dart'; // [v2.8.9] 引入课时推导算法
-import '../services/live_notification_service_v2.dart'; // [v2.10.1] 作息配置联动刷新通知与胶囊
+import '../services/onboarding_service.dart';
+import '../services/ics_parser.dart';
+import '../services/live_notification_service_v2.dart';
 import '../services/time_alignment_engine.dart';
 
 /// 课表状态管理器 - 基于SQLite数据库
@@ -23,7 +23,6 @@ class ScheduleProvider with ChangeNotifier {
   int _currentDay = 1; // 1-7, 周一到周日
 
   // [v2.7.0] 唯一配置来源 (Single Source of Truth)
-  // semesterStartDate 只存在于 _currentConfig 中，不再有独立冗余字段
   ScheduleConfigModel _currentConfig = ScheduleConfigModel.defaultConfig();
 
   List<CourseEvent> get courses => _courses;
@@ -41,6 +40,17 @@ class ScheduleProvider with ChangeNotifier {
 
   /// 获取所有有效周次（使用缓存）
   List<int> get availableWeeks => _availableWeeks;
+
+  /// [v3.1.0] 全天候同步课表数据至 Android 原生桌面小组件与实况通知
+  void _syncNativeWidgetAndNotification() {
+    final nextCourse = getCurrentOrNextCourse();
+    LiveNotificationServiceV2().syncWidgetAndNativeSchedule(
+      _courses,
+      currentWeek: _currentWeek,
+      semesterStartDate: _currentConfig.semesterStartDate,
+      nextCourse: nextCourse,
+    );
+  }
 
   /// 刷新有效周次缓存
   Future<void> _refreshAvailableWeeks() async {
@@ -64,8 +74,6 @@ class ScheduleProvider with ChangeNotifier {
     try {
       final result = await _importService.importFromIcsFile();
       if (result != null) {
-        // [v2.7.0] 彻底废除 _autoCalculateSemesterStart 的强制平移
-        // 由于 Config 已经在 import 服务中落盘 MMKV，因此直接 Load 即可保证全家桶同步
         await loadSavedData();
 
         _isLoading = false;
@@ -136,7 +144,10 @@ class ScheduleProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      final result = await _importService.importFromHtmlString(htmlContent);
+      final result = await _importService.importFromHtmlString(
+        htmlContent,
+        config: _currentConfig,
+      );
       if (result != null) {
         await loadSavedData();
 
@@ -187,13 +198,7 @@ class ScheduleProvider with ChangeNotifier {
     try {
       final result = await _importService.importFromAssets();
       if (result != null) {
-        _courses = result;
-        await _refreshAvailableWeeks(); // 刷新缓存
-
-        _currentWeek = 1;
-        _currentDay = DateTime.now().weekday;
-        if (_currentDay > 5) _currentDay = 1;
-
+        await loadSavedData();
         _isLoading = false;
         notifyListeners();
         return true;
@@ -214,7 +219,6 @@ class ScheduleProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      // [v2.7.0] 只从 schedule_config 恢复配置 (Single Source of Truth)
       final storage = StorageService();
       final savedConfig = storage.getString('schedule_config');
       if (savedConfig != null) {
@@ -226,7 +230,6 @@ class ScheduleProvider with ChangeNotifier {
           debugPrint('⚠️ 解析课时配置失败，使用默认配置: $e');
         }
       } else {
-        // 兼容旧版：尝试从旧的 semester_start_date 迁移
         final savedSemesterDate = storage.getString('semester_start_date');
         if (savedSemesterDate != null) {
           try {
@@ -234,7 +237,6 @@ class ScheduleProvider with ChangeNotifier {
             _currentConfig = _currentConfig.copyWith(
               semesterStartDate: oldDate,
             );
-            // 迁移后保存为新格式并删除旧键
             await storage.setString(
               'schedule_config',
               jsonEncode(_currentConfig.toJson()),
@@ -250,7 +252,6 @@ class ScheduleProvider with ChangeNotifier {
       if (courses.isNotEmpty) {
         _courses = courses;
 
-        // [v2.9.0] 仅在用户从未保存过课时配置时自动智能推导，绝不覆盖用户自定义课时
         if (savedConfig == null) {
           try {
             final deduced = IcsParser.deduceConfigFromCourses(_courses, '');
@@ -272,25 +273,43 @@ class ScheduleProvider with ChangeNotifier {
           }
         }
 
-        // [v2.8.2] 自动校准：如果课表首周与配置的目标开学周一不一致，自动平移对齐，彻底杜绝锁定在第2周
         final earliestMonday = getEarliestCourseMonday();
         final targetStartDate = _currentConfig.semesterStartDate;
-        final targetMonday = DateTime(targetStartDate.year, targetStartDate.month, targetStartDate.day)
-            .subtract(Duration(days: targetStartDate.weekday - 1));
-        if (earliestMonday != null && earliestMonday != targetMonday) {
-          debugPrint('🔄 检测到课表首周 ($earliestMonday) 与开学周一 ($targetMonday) 不一致，自动对齐...');
-          await alignScheduleToStartDate(targetMonday);
-        } else {
-          await _refreshAvailableWeeks();
-          await Future.microtask(() async {
-            await _jumpToCurrentDate();
-            debugPrint('✅ 数据加载完成，已跳转到当前日期：第 $_currentWeek 周，星期 $_currentDay');
-          });
+        final targetMonday = DateTime(
+          targetStartDate.year,
+          targetStartDate.month,
+          targetStartDate.day,
+        ).subtract(Duration(days: targetStartDate.weekday - 1));
+        if (_currentConfig.semesterStartDate != targetMonday) {
+          _currentConfig = _currentConfig.copyWith(
+            semesterStartDate: targetMonday,
+          );
+          await storage.setString(
+            'schedule_config',
+            jsonEncode(_currentConfig.toJson()),
+          );
         }
+        if (earliestMonday != null && earliestMonday != targetMonday) {
+          debugPrint(
+            '🔄 检测到课表首周 ($earliestMonday) 与开学周一 ($targetMonday) 不一致，自动对齐...',
+          );
+          await alignScheduleToStartDate(targetMonday);
+        }
+        // 确保数据库中的所有课程起止时分与当前课时配置 100% 严格同步
+        await _recalculateAllTimestamps(_currentConfig, _currentConfig);
+        await _refreshAvailableWeeks();
+        await Future.microtask(() async {
+          await _jumpToCurrentDate();
+          _syncNativeWidgetAndNotification();
+          debugPrint(
+            '✅ 数据加载完成，已跳转到当前日期：第 $_currentWeek 周，星期 $_currentDay',
+          );
+        });
       } else {
         _availableWeeks = List.generate(25, (i) => i + 1);
         if (_currentWeek < 1) _currentWeek = 1;
         if (_currentDay < 1 || _currentDay > 7) _currentDay = 1;
+        _syncNativeWidgetAndNotification();
         debugPrint('⚠️ 没有课程数据，使用默认周次 1~25 和星期');
       }
     } catch (e) {
@@ -301,8 +320,6 @@ class ScheduleProvider with ChangeNotifier {
     _isLoading = false;
     notifyListeners();
   }
-
-  // ... (keeping other methods same until getAvailableWeeks)
 
   /// 导出数据
   Future<bool> exportData() async {
@@ -320,24 +337,20 @@ class ScheduleProvider with ChangeNotifier {
 
   /// 清除数据
   Future<void> clearData() async {
-    // 清除数据库中的课程数据
     await _importService.clearAllData();
 
-    // [v2.3.0修复] 清除 MMKV 中的课程相关配置
     final storage = StorageService();
-    await storage.clear(); // [v2.5.9] 彻底清空包括主题在内的所有 MMKV 数据
+    await storage.clear();
 
-    // 重置引导页状态，以便重启后进入引导
     await OnboardingService().resetOnboarding();
 
-    // 重置状态
     _courses = [];
-    _availableWeeks = List.generate(25, (i) => i + 1); // 重置周次缓存为 1~25 周
+    _availableWeeks = List.generate(25, (i) => i + 1);
     _currentWeek = 1;
     _currentDay = 1;
-    // _semesterStartDate consolidated into _currentConfig
     _currentConfig = ScheduleConfigModel.defaultConfig();
 
+    _syncNativeWidgetAndNotification();
     notifyListeners();
 
     debugPrint('✅ 所有数据已清除（包括数据库和配置）');
@@ -356,11 +369,14 @@ class ScheduleProvider with ChangeNotifier {
           where: 'startTime = ? AND name = ?',
           whereArgs: [course.startTime, course.name],
         );
-        _courses.removeWhere((c) => c.startTime == course.startTime && c.name == course.name);
+        _courses.removeWhere(
+          (c) => c.startTime == course.startTime && c.name == course.name,
+        );
       }
       _availableWeeks = await _importService.getAvailableWeeks(
         _currentConfig.semesterStartDate,
       );
+      _syncNativeWidgetAndNotification();
       notifyListeners();
       debugPrint('🗑️ 已删除课程: ${course.name}');
     } catch (e) {
@@ -393,7 +409,6 @@ class ScheduleProvider with ChangeNotifier {
       _currentWeek,
       _currentConfig.semesterStartDate,
     );
-    debugPrint('📚 第 $_currentWeek 周共有 ${weekCourses.length} 节课');
     return weekCourses;
   }
 
@@ -405,7 +420,6 @@ class ScheduleProvider with ChangeNotifier {
       _currentDay,
       _currentConfig.semesterStartDate,
     );
-    debugPrint('📚 星期 $_currentDay 共有 ${dayCourses.length} 节课');
     return dayCourses;
   }
 
@@ -419,7 +433,7 @@ class ScheduleProvider with ChangeNotifier {
     );
   }
 
-  /// [v3.0.0-alpha14] 获取指定周次和指定星期的课程（用于横向滑动切换周次与 PageView 跟手预渲染）
+  /// 获取指定周次和指定星期的课程（用于横向滑动切换周次与 PageView 跟手预渲染）
   List<CourseEvent> getCoursesForDayAndWeek(int day, int week) {
     return TimeAlignmentEngine.filterCoursesForDay(
       _courses,
@@ -434,76 +448,80 @@ class ScheduleProvider with ChangeNotifier {
     return getCurrentOrNextCourse();
   }
 
-  /// [v2.8.0] 获取当前正在进行或未来的下一节课程（全时段保活，支持跨天、跨周查找）
+  /// 获取当前正在进行或未来的下一节课程
   CourseEvent? getCurrentOrNextCourse() {
     return TimeAlignmentEngine.findCurrentOrNextCourse(_courses);
   }
 
-  /// [v2.8.0] 获取现有课表中最早课程所在的周一（用于智能检测是否对齐开学首周）
+  /// 获取现有课表中最早课程所在的周一
   DateTime? getEarliestCourseMonday() {
     return TimeAlignmentEngine.getEarliestCourseMonday(_courses);
   }
 
-  /// [v2.8.0] 智能课表平移：将整个课表基准平移至目标开学日期首周，并按当前课时重算
+  /// 智能课表平移：将整个课表基准平移至目标开学日期首周，并按当前课时重算
   Future<void> alignScheduleToStartDate(DateTime targetStartDate) async {
     if (_courses.isEmpty) return;
     final earliestMonday = TimeAlignmentEngine.getEarliestCourseMonday(_courses);
     if (earliestMonday == null) return;
 
-    final targetMonday = DateTime(targetStartDate.year, targetStartDate.month, targetStartDate.day)
-        .subtract(Duration(days: targetStartDate.weekday - 1));
+    final targetMonday = DateTime(
+      targetStartDate.year,
+      targetStartDate.month,
+      targetStartDate.day,
+    ).subtract(Duration(days: targetStartDate.weekday - 1));
 
     final offsetDays = targetMonday.difference(earliestMonday).inDays;
-    
-    // 如果存在整周偏移，通过 TimeAlignmentEngine 进行全局平移
+
     if (offsetDays != 0) {
-      final newCourses = TimeAlignmentEngine.alignCoursesToTargetStartDate(_courses, targetStartDate);
+      final newCourses = TimeAlignmentEngine.alignCoursesToTargetStartDate(
+        _courses,
+        targetStartDate,
+      );
       _courses = newCourses;
       await DatabaseHelper.instance.insertCourses(newCourses);
-      debugPrint('✅ 课表首周已从 ${earliestMonday.toString().substring(0, 10)} 平移 $offsetDays 天至 ${targetMonday.toString().substring(0, 10)}');
+      debugPrint(
+        '✅ 课表首周已从 ${earliestMonday.toString().substring(0, 10)} 平移 $offsetDays 天至 ${targetMonday.toString().substring(0, 10)}',
+      );
     }
 
-    // 更新配置中的开学日期为 targetMonday 并持久化
     _currentConfig = _currentConfig.copyWith(semesterStartDate: targetMonday);
     final storage = StorageService();
-    await storage.setString('schedule_config', jsonEncode(_currentConfig.toJson()));
+    await storage.setString(
+      'schedule_config',
+      jsonEncode(_currentConfig.toJson()),
+    );
 
     await _refreshAvailableWeeks();
     await _jumpToCurrentDate();
+    _syncNativeWidgetAndNotification();
     notifyListeners();
   }
 
-  /// 获取所有有效周次（即将废弃，请使用 availableWeeks getter）
   Future<List<int>> getAvailableWeeks_deprecated() async {
     if (_availableWeeks.isNotEmpty && _availableWeeks.length > 1) {
       return _availableWeeks;
     }
-    // Fallback if needed, but normally use cache
     _availableWeeks = await _importService.getAvailableWeeks(
       _currentConfig.semesterStartDate,
     );
     return _availableWeeks;
   }
 
-  /// 兼容旧版调用的方法
   Future<List<int>> getAvailableWeeks() async {
     return getAvailableWeeks_deprecated();
   }
 
-  /// 获取所有有效星期
   List<int> getAvailableDays() {
     final days = _courses.map((e) => e.weekday).toSet().toList();
     days.sort();
     return days;
   }
 
-  /// 获取星期名称
   String getDayName(int day) {
     const dayNames = ['', '周一', '周二', '周三', '周四', '周五', '周六', '周日'];
     return dayNames[day];
   }
 
-  /// 检查是否需要提醒（5分钟内开始）
   bool needsReminder(CourseEvent course) {
     final now = DateTime.now().millisecondsSinceEpoch;
     final difference = course.startTime - now;
@@ -511,32 +529,31 @@ class ScheduleProvider with ChangeNotifier {
     return minutes >= 0 && minutes <= 5;
   }
 
-  /// 设置学期开始日期 — 统一通过 updateConfig 保存并触发重算与课表首周对齐
   Future<void> setSemesterStartDate(DateTime date) async {
-    final targetMonday = DateTime(date.year, date.month, date.day)
-        .subtract(Duration(days: date.weekday - 1));
+    final targetMonday = DateTime(
+      date.year,
+      date.month,
+      date.day,
+    ).subtract(Duration(days: date.weekday - 1));
     final newConfig = _currentConfig.copyWith(semesterStartDate: targetMonday);
-    
+
     final earliestMonday = getEarliestCourseMonday();
     await updateConfig(newConfig);
     if (earliestMonday != null && earliestMonday != targetMonday) {
       await alignScheduleToStartDate(targetMonday);
     }
     await _jumpToCurrentDate();
+    _syncNativeWidgetAndNotification();
     debugPrint('✅ 开学日期已更新为 $targetMonday，并自动对齐首周课表');
   }
 
-  /// 更新课时配置
-  /// [v2.7.0] 配置变更后自动重算所有课程时间戳
   Future<void> updateConfig(ScheduleConfigModel newConfig) async {
     final oldConfig = _currentConfig;
     _currentConfig = newConfig;
 
-    // 保存到 MMKV (唯一存储点)
     final storage = StorageService();
     await storage.setString('schedule_config', jsonEncode(newConfig.toJson()));
 
-    // [v2.7.0] 如果开学日期或课时时间或等长课程配置发生变化，重新计算所有课程时间戳
     final configChanged =
         oldConfig.semesterStartDate != newConfig.semesterStartDate ||
         oldConfig.isEqualDuration != newConfig.isEqualDuration ||
@@ -549,9 +566,7 @@ class ScheduleProvider with ChangeNotifier {
 
     await _refreshAvailableWeeks();
 
-    // [v2.10.1] 每次配置变更落盘后，立即联动通知服务同步课表数据与时间戳，彻底消除作息脱节
-    final nextCourse = getCurrentOrNextCourse();
-    LiveNotificationServiceV2().updateCourses(_courses, nextCourse: nextCourse);
+    _syncNativeWidgetAndNotification();
 
     notifyListeners();
     debugPrint(
@@ -559,21 +574,20 @@ class ScheduleProvider with ChangeNotifier {
     );
   }
 
-  /// [v2.10.1] 主动按指定或当前课时配置全量重新计算所有课程时间戳，并同步通知服务与课表视图
-  Future<void> recalculateAllCourseTimes([ScheduleConfigModel? targetConfig]) async {
+  Future<void> recalculateAllCourseTimes([
+    ScheduleConfigModel? targetConfig,
+  ]) async {
     final config = targetConfig ?? _currentConfig;
     if (_courses.isNotEmpty) {
       await _recalculateAllTimestamps(_currentConfig, config);
       await _jumpToCurrentDate();
       await _refreshAvailableWeeks();
-      final nextCourse = getCurrentOrNextCourse();
-      LiveNotificationServiceV2().updateCourses(_courses, nextCourse: nextCourse);
+      _syncNativeWidgetAndNotification();
       notifyListeners();
       debugPrint('✅ 已主动触发全量课程时间戳与作息配置严格对齐');
     }
   }
 
-  /// 检测课时时间是否发生变化 (覆盖全部 1~13 节)
   bool _sectionTimesChanged(
     ScheduleConfigModel oldConfig,
     ScheduleConfigModel newConfig,
@@ -591,25 +605,30 @@ class ScheduleProvider with ChangeNotifier {
     return false;
   }
 
-  /// [v2.10.1 彻底修复] 重新计算所有课程的绝对时间戳
-  /// 动态基于原有课时配置匹配真实节次，按时长精准推导节数跨度，并严禁跨越午休与晚餐
   Future<void> _recalculateAllTimestamps(
     ScheduleConfigModel oldConfig,
     ScheduleConfigModel newConfig,
   ) async {
     final oldStartDate = oldConfig.semesterStartDate;
+    final oldStartDayOnly = DateTime(
+      oldStartDate.year,
+      oldStartDate.month,
+      oldStartDate.day,
+    );
+    final oldStartMonday = oldStartDayOnly.subtract(
+      Duration(days: oldStartDayOnly.weekday - 1),
+    );
+    final baseMonday =
+        TimeAlignmentEngine.getEarliestCourseMonday(_courses) ?? oldStartMonday;
     final newCourses = <CourseEvent>[];
 
     for (final course in _courses) {
       final startDt = DateTime.fromMillisecondsSinceEpoch(course.startTime);
 
-      // 反推 week 和 dayOfWeek (按年月日纯日期计算，防时差与夏令时，严格以周一为锚点)
       final startDayOnly = DateTime(startDt.year, startDt.month, startDt.day);
-      final oldStartDayOnly = DateTime(oldStartDate.year, oldStartDate.month, oldStartDate.day);
-      final oldStartMonday = oldStartDayOnly.subtract(Duration(days: oldStartDayOnly.weekday - 1));
-      final daysSinceStart = startDayOnly.difference(oldStartMonday).inDays;
+      final daysSinceStart = startDayOnly.difference(baseMonday).inDays;
       final week = (daysSinceStart >= 0) ? ((daysSinceStart ~/ 7) + 1) : 1;
-      final dayOfWeek = startDt.weekday; // 1=Monday..7=Sunday
+      final dayOfWeek = startDt.weekday;
 
       int startSection;
       int endSection;
@@ -618,11 +637,9 @@ class ScheduleProvider with ChangeNotifier {
           course.endSection != null &&
           course.startSection! > 0 &&
           course.endSection! >= course.startSection!) {
-        // [v3.0.0 核心突破] 课程固有语义节次优先！彻底摒弃时间差模糊吸附，杜绝吃课与错位
         startSection = course.startSection!;
         endSection = course.endSection!;
       } else {
-        // 兜底推导：针对旧版本未持久化节次的遗留课程数据
         final timeMinutes = startDt.hour * 60 + startDt.minute;
         final endDt = DateTime.fromMillisecondsSinceEpoch(course.endTime);
         final endMinutes = endDt.hour * 60 + endDt.minute;
@@ -700,7 +717,6 @@ class ScheduleProvider with ChangeNotifier {
         endSection = startSection + spanSections - 1;
       }
 
-      // 用新配置计算新时间
       final newStartTime = newConfig.getStartTime(week, dayOfWeek, startSection);
       final newEndTime = newConfig.getEndTimeWithDuration(
         week,
@@ -719,33 +735,26 @@ class ScheduleProvider with ChangeNotifier {
       );
     }
 
-    // 写回数据库
     _courses = newCourses;
     await DatabaseHelper.instance.insertCourses(newCourses);
     debugPrint('✅ 已重新计算 ${newCourses.length} 个课程的时间戳，杜绝午休穿透与跨时段重叠');
 
-    // [v2.10.1] 立即同步通知服务中的课程时间，确保 Live Update 胶囊与通知时间与作息配置 100% 对齐
-    final nextCourse = getCurrentOrNextCourse();
-    LiveNotificationServiceV2().updateCourses(_courses, nextCourse: nextCourse);
+    _syncNativeWidgetAndNotification();
   }
 
-  /// 使用默认配置
   void useDefaultConfig() {
     _currentConfig = ScheduleConfigModel.defaultConfig();
     notifyListeners();
   }
 
-  /// 从HTML导入（带配置）
   Future<bool> importHtmlDataWithConfig(ScheduleConfigModel config) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
 
     try {
-      // 先更新配置
       _currentConfig = config;
 
-      // 使用HTML导入服务，但需要传递配置
       final result = await _importService.importFromHtmlFile();
       if (result != null) {
         _courses = result;
@@ -753,6 +762,7 @@ class ScheduleProvider with ChangeNotifier {
         _currentDay = DateTime.now().weekday;
         if (_currentDay > 5) _currentDay = 1;
 
+        _syncNativeWidgetAndNotification();
         _isLoading = false;
         notifyListeners();
         return true;
@@ -766,12 +776,10 @@ class ScheduleProvider with ChangeNotifier {
     return false;
   }
 
-  /// 获取配置描述
   String getConfigDescription() {
     return _currentConfig.getDescription();
   }
 
-  /// 自动跳转到当前日期对应的周次和星期
   Future<void> _jumpToCurrentDate() async {
     if (_courses.isEmpty) return;
 
@@ -780,42 +788,36 @@ class ScheduleProvider with ChangeNotifier {
 
     if (availableWeeks.isEmpty) return;
 
-    // [v2.8.2] 计算当前日期相对于学期开始日期的周次（纯日期对齐防时差）
     final nowDayOnly = DateTime(now.year, now.month, now.day);
+    final rawStart = _currentConfig.semesterStartDate;
     final startDayOnly = DateTime(
-      _currentConfig.semesterStartDate.year,
-      _currentConfig.semesterStartDate.month,
-      _currentConfig.semesterStartDate.day,
-    );
+      rawStart.year,
+      rawStart.month,
+      rawStart.day,
+    ).subtract(Duration(days: rawStart.weekday - 1));
     final daysSinceStart = nowDayOnly.difference(startDayOnly).inDays;
-    final weeksSinceStart = (daysSinceStart >= 0) ? (daysSinceStart ~/ 7) + 1 : 1;
+    final weeksSinceStart =
+        (daysSinceStart >= 0) ? (daysSinceStart ~/ 7) + 1 : 1;
 
-    // 检查课程是否已经结束
     final maxWeek = availableWeeks.last;
     const minWeek = 1;
 
     if (weeksSinceStart < minWeek) {
-      // 课程还没开始，显示第一周
       _currentWeek = 1;
       _currentDay = now.weekday;
     } else if (weeksSinceStart > maxWeek) {
-      // 课程已结束，显示最后一周
       _currentWeek = maxWeek;
       _currentDay = now.weekday;
-      // 显示假期提示
       _errorMessage = '本学期课程已结束，当前显示最后一周课程';
     } else {
-      // 课程进行中，显示当前周
       _currentWeek = weeksSinceStart;
       _currentDay = now.weekday;
     }
 
-    // 确保星期在有效范围内（1-7）
     if (_currentDay < 1 || _currentDay > 7) {
-      _currentDay = 1; // 默认显示周一
+      _currentDay = 1;
     }
 
-    // 如果当前天是周末，且没有课程，自动切换到周一
     if (_currentDay > 5) {
       final dayCourses = _courses.where((course) {
         final week = course.getWeekNumber(_currentConfig.semesterStartDate);
@@ -823,30 +825,26 @@ class ScheduleProvider with ChangeNotifier {
       }).toList();
 
       if (dayCourses.isEmpty) {
-        _currentDay = 1; // 切换到周一
+        _currentDay = 1;
       }
     }
   }
 
-  /// 开机自动生成测试课程（从本周开始往后生成4个星期）
   Future<void> generateTestCourses() async {
-    // 检查是否已有数据，如果有则不生成
     if (_courses.isNotEmpty) return;
 
     _isLoading = true;
     notifyListeners();
 
     try {
-      // 生成4周的测试数据
       final testCourses = <CourseEvent>[];
 
-      // 定义一些测试课程
       final testCourseTemplates = [
         {
           'name': '高等数学',
           'location': '教学楼A101',
           'teacher': '张教授',
-          'dayOfWeek': 1, // 周一
+          'dayOfWeek': 1,
           'startSection': 1,
           'endSection': 2,
         },
@@ -854,7 +852,7 @@ class ScheduleProvider with ChangeNotifier {
           'name': '大学英语',
           'location': '教学楼B202',
           'teacher': '李老师',
-          'dayOfWeek': 2, // 周二
+          'dayOfWeek': 2,
           'startSection': 3,
           'endSection': 4,
         },
@@ -862,7 +860,7 @@ class ScheduleProvider with ChangeNotifier {
           'name': '计算机基础',
           'location': '实验楼C303',
           'teacher': '王老师',
-          'dayOfWeek': 3, // 周三
+          'dayOfWeek': 3,
           'startSection': 5,
           'endSection': 6,
         },
@@ -870,7 +868,7 @@ class ScheduleProvider with ChangeNotifier {
           'name': '体育',
           'location': '操场',
           'teacher': '刘教练',
-          'dayOfWeek': 4, // 周四
+          'dayOfWeek': 4,
           'startSection': 7,
           'endSection': 8,
         },
@@ -878,22 +876,18 @@ class ScheduleProvider with ChangeNotifier {
           'name': '线性代数',
           'location': '教学楼D404',
           'teacher': '陈教授',
-          'dayOfWeek': 5, // 周五
+          'dayOfWeek': 5,
           'startSection': 1,
           'endSection': 2,
         },
       ];
 
-      // 为每个模板生成4周的课程
       for (int week = 0; week < 4; week++) {
         for (var template in testCourseTemplates) {
           final dayOfWeek = template['dayOfWeek'] as int;
           final startSection = template['startSection'] as int;
           final endSection = template['endSection'] as int;
 
-          // 计算具体日期 (保留注释)
-
-          // 使用当前配置计算时间
           final startTime = _currentConfig.getStartTime(
             week + 1,
             dayOfWeek,
@@ -920,12 +914,10 @@ class ScheduleProvider with ChangeNotifier {
         }
       }
 
-      // 保存到数据库
       final db = DatabaseHelper.instance;
       await db.clearAll();
       await db.insertCourses(testCourses);
 
-      // 保存到历史记录
       final courseData = testCourses.map((e) => e.toMap()).toList();
       final courseDataJson = jsonEncode(courseData);
 
@@ -943,8 +935,8 @@ class ScheduleProvider with ChangeNotifier {
 
       _courses = testCourses;
 
-      // 自动跳转到当前日期
       await _jumpToCurrentDate();
+      _syncNativeWidgetAndNotification();
 
       _isLoading = false;
       notifyListeners();
@@ -955,15 +947,11 @@ class ScheduleProvider with ChangeNotifier {
     }
   }
 
-  /// 检查当前是否在学期内
   bool isDuringSemester() {
     if (_courses.isEmpty) return false;
-
-    // 注意：这里需要同步获取，实际使用时可能需要调整
-    return true; // 简化处理
+    return true;
   }
 
-  /// 获取学期状态描述
   String getSemesterStatus() {
     if (_courses.isEmpty) return '无课程数据';
 
@@ -971,8 +959,6 @@ class ScheduleProvider with ChangeNotifier {
     final weeksSinceStart =
         now.difference(_currentConfig.semesterStartDate).inDays ~/ 7 + 1;
 
-    // 这里需要同步获取可用周次，暂时简化处理
-    // 实际使用时应该缓存可用周次
     return '第$weeksSinceStart周';
   }
 }

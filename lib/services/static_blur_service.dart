@@ -4,17 +4,19 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import '../constants/version.dart' show globalBackgroundPath;
+import '../constants/version.dart' show globalBackgroundPath, kSolidColorBackground;
 import '../main.dart' show globalDarkModeNotifier;
 
-/// [v3.0.0] 全局静态单次烘焙壁纸遮罩服务 (Static Blurred Wallpaper Service)
+/// [v3.0.0 / v3.1.0] 全局静态单次烘焙壁纸遮罩服务 (Static Blurred Wallpaper Service)
 ///
 /// 架构设计目标：
 /// 1. 废除多卡片（如 30 个课程卡片、7 个星期标头）重复调用 GPU 动态 BackdropFilter；
 /// 2. 背景壁纸全屏保持 100% 原始超清画质；
 /// 3. 当且仅当壁纸更换、深浅色模式切换或屏幕尺寸变动时，在后台离屏单次烘焙
-///    一张适度降采样的静态高斯模糊纹理 (ui.Image，内存仅约 1.8MB)；
-/// 4. 卡片或组件 (如 HyperOSCard) 移动或滚动时，作为视口遮罩直接通过
+///    一张适度降采样的静态高斯模糊纹理 (ui.Image，内存仅约 1.2MB)；
+/// 4. 当处于纯色无壁纸模式 (kSolidColorBackground = 'none') 时，直接释放离屏纹理，
+///    卡片仅绘制纯正超椭圆混色表面，0 纹理采样开销；
+/// 5. 卡片或组件 (如 HyperOSCard) 移动或滚动时，作为视口遮罩直接通过
 ///    drawImageRect 采样其在屏幕对应坐标的模糊像素切片并叠加亚克力混色，
 ///    实现单卡渲染耗时 <0.01ms，120Hz 极限满帧。
 class StaticBlurredWallpaperService extends ChangeNotifier with WidgetsBindingObserver {
@@ -69,7 +71,7 @@ class StaticBlurredWallpaperService extends ChangeNotifier with WidgetsBindingOb
     bakeCurrentWallpaper();
   }
 
-  /// 解析当前适用的壁纸 ImageProvider (内置 360px 适度下采样，极速解码 <2ms)
+  /// 解析当前适用的壁纸 ImageProvider (内置适度下采样，极速解码 <2ms)
   ImageProvider _resolveImageProvider(bool isDark, String? bgPath, {int? targetWidth}) {
     final defaultAsset = isDark ? 'assets/Dark.png' : 'assets/Light.png';
     ImageProvider base;
@@ -103,6 +105,18 @@ class StaticBlurredWallpaperService extends ChangeNotifier with WidgetsBindingOb
 
     final isDark = globalDarkModeNotifier.value;
     final bgPath = globalBackgroundPath.value;
+
+    // [v3.1.0] 纯色无壁纸模式：直接清空静态模糊纹理，零显存占用与零采样开销
+    if (bgPath == kSolidColorBackground) {
+      if (_blurredImage != null || _lastWallpaperKey != 'none|$isDark') {
+        final oldImage = _blurredImage;
+        _blurredImage = null;
+        _lastWallpaperKey = 'none|$isDark';
+        oldImage?.dispose();
+        notifyListeners();
+      }
+      return;
+    }
 
     // 确定屏幕逻辑尺寸
     Size screenSize = customScreenSize ?? _getScreenLogicalSize();

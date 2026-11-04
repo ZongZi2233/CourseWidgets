@@ -1,33 +1,30 @@
 <?xml version="1.0" encoding="utf-8"?>
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Layer 0: HyperOS Liquid Glass 旗舰微乳亚克力深度通透磨砂渐变底板 (24dp 超椭圆大圆角与微透细微描边) -->
+    <!-- Layer 0: 深邃黑曜石微晶磨砂底板 (24dp 超椭圆圆角，高不透明度隔绝桌面杂乱壁纸透底) -->
     <item>
         <shape android:shape="rectangle">
             <corners android:radius="24dp" />
             <gradient
                 android:angle="135"
-                android:startColor="#E61A202C"
-                android:centerColor="#D9141824"
-                android:endColor="#E610131E"
+                android:startColor="#F7181B24"
+                android:centerColor="#F813161E"
+                android:endColor="#FA0E1017"
                 android:type="linear" />
             <stroke
                 android:width="0.8dp"
-                android:color="#3AFFFFFF" />
+                android:color="#26FFFFFF" />
         </shape>
     </item>
 
-    <!-- Layer 1: 顶部凸透镜物理高光边缘 (Meniscus Specular Rim) -->
-    <item android:bottom="60dp">
+    <!-- Layer 1: 全域柔光微晶斜向漫反射层 (无断层横线) -->
+    <item>
         <shape android:shape="rectangle">
-            <corners
-                android:topLeftRadius="24dp"
-                android:topRightRadius="24dp"
-                android:bottomLeftRadius="0dp"
-                android:bottomRightRadius="0dp" />
+            <corners android:radius="24dp" />
             <gradient
-                android:angle="270"
-                android:startColor="#20FFFFFF"
-                android:endColor="#00FFFFFF"
+                android:angle="315"
+                android:startColor="#00FFFFFF"
+                android:centerColor="#05FFFFFF"
+                android:endColor="#12FFFFFF"
                 android:type="linear" />
         </shape>
     </item>

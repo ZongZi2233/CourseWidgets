@@ -14,8 +14,8 @@ android {
     ndkVersion = "29.0.14206865"
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_21
-        targetCompatibility = JavaVersion.VERSION_21
+        sourceCompatibility = JavaVersion.toVersion(25)
+        targetCompatibility = JavaVersion.toVersion(25)
         isCoreLibraryDesugaringEnabled = true
     }
 
@@ -84,15 +84,15 @@ android {
         }
     }
     
-    // 配置ABI拆分，只生成arm64-v8a
-    //splits {
-    //    //abi {
-    //        //isEnable = true
-    //        //reset()
-    //       //include("arm64-v8a")
-    //        //isUniversalApk = false
-    //    }
-    //}
+    // 配置ABI拆分，由 Flutter 命令行 --split-per-abi 控制
+    // splits {
+    //     abi {
+    //         isEnable = true
+    //         reset()
+    //         include("arm64-v8a")
+    //         isUniversalApk = false
+    //     }
+    // }
     
     packaging {
         jniLibs {
@@ -119,17 +119,18 @@ flutter {
 
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
-    implementation("androidx.glance:glance-appwidget:1.1.1")
-    implementation("androidx.glance:glance-material3:1.1.1")
+    implementation("androidx.glance:glance-appwidget:1.2.0")
+    implementation("androidx.glance:glance-material3:1.2.0")
 }
 
 kotlin {
-    jvmToolchain(21) 
+    jvmToolchain(25) 
 }
 
 // [v2.5.1] Kotlin 编译极致并行化，利用多核心超线程
 tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
     compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_25)
         freeCompilerArgs.addAll(
             "-Xbackend-threads=12"
         )

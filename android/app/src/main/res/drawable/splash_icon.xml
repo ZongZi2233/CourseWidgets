@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12+ 系统启动页图标：使用真实应用图标并按圆形遮罩安全区内缩，避免图标区域为空而显示成黑块 -->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@mipmap/ic_launcher"
+    android:insetLeft="24%"
+    android:insetTop="24%"
+    android:insetRight="24%"
+    android:insetBottom="24%" />

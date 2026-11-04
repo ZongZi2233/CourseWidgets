@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Cute study monster body with wavy top ears and rounded bottom -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M5,7.5 C5,5.8 6.3,4.5 8,4.5 C8.8,4.5 9.5,4.9 10,5.4 C10.6,4.8 11.3,4.5 12,4.5 C12.7,4.5 13.4,4.8 14,5.4 C14.5,4.9 15.2,4.5 16,4.5 C17.7,4.5 19,5.8 19,7.5 L19,14.5 C19,16.2 17.7,17.5 16,17.5 L8,17.5 C6.3,17.5 5,16.2 5,14.5 Z M9.2,9.2 C8.3,9.2 7.5,10.0 7.5,10.9 C7.5,11.8 8.3,12.6 9.2,12.6 C10.1,12.6 10.9,11.8 10.9,10.9 C10.9,10.0 10.1,9.2 9.2,9.2 Z M14.8,9.2 C13.9,9.2 13.1,10.0 13.1,10.9 C13.1,11.8 13.9,12.6 14.8,12.6 C15.7,12.6 16.5,11.8 16.5,10.9 C16.5,10.0 15.7,9.2 14.8,9.2 Z" />
+    <!-- Cute little pupils -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M9.5,10.3 m-0.7,0 a0.7,0.7 0 1,0 1.4,0 a0.7,0.7 0 1,0 -1.4,0" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M15.1,10.3 m-0.7,0 a0.7,0.7 0 1,0 1.4,0 a0.7,0.7 0 1,0 -1.4,0" />
+    <!-- Desk base line underneath -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M4.5,19.2 C4.5,18.6 5.0,18.2 5.5,18.2 L18.5,18.2 C19.0,18.2 19.5,18.6 19.5,19.2 C19.5,19.8 19.0,20.2 18.5,20.2 L5.5,20.2 C5.0,20.2 4.5,19.8 4.5,19.2 Z" />
+</vector>

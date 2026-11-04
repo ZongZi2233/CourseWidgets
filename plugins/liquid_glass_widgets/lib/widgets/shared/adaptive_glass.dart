@@ -204,6 +204,19 @@ class AdaptiveGlass extends StatelessWidget {
           GlassThemeHelpers.applyCeiling(effectiveQuality, adaptiveData.effectiveQuality);
     }
 
+    final accessibilityData = GlassAccessibilityData.of(context);
+    final bool isDesktop = !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.windows ||
+            defaultTargetPlatform == TargetPlatform.macOS ||
+            defaultTargetPlatform == TargetPlatform.linux);
+
+    // [v3.0.1 桌面端液态玻璃满血保护]
+    // 桌面平台拥有充沛 GPU 硬件算力。除非用户主动在系统开启高对比度/减少透明度等无障碍辅助，
+    // 否则一律禁止降级至 Minimal/_FrostedFallback，全时锁定 Premium 满血着色器玻璃折射质感！
+    if (isDesktop && effectiveQuality == GlassQuality.minimal && !accessibilityData.reduceTransparency) {
+      effectiveQuality = GlassQuality.premium;
+    }
+
     // ---- MINIMAL FAST-PATH ---------------------------------------------------
     // GlassQuality.minimal bypasses all custom shaders. Renders via
     // _FrostedFallback: ClipPath(ShapeBorderClipper) + BackdropFilter + tint.
@@ -247,7 +260,6 @@ class AdaptiveGlass extends StatelessWidget {
     // GlassAccessibilityScope must be in the widget tree for this to activate;
     // without it, defaults.reduceTransparency = false and we proceed normally.
     // --------------------------------------------------------------------------
-    final accessibilityData = GlassAccessibilityData.of(context);
     if (accessibilityData.reduceTransparency) {
       return _wrapWithDecorations(
         context,

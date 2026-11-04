@@ -351,8 +351,8 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
       for (int i = 1; i <= daysInMonth; i++) {
         days.add(DateTime(firstDay.year, firstDay.month, i));
       }
-      // 补齐月末几天保证整周对齐
-      while (days.length % 7 != 0) {
+      // 补齐月末几天保证整周对齐（至少展示 5 行 35 天，跨 6 周月份自动展示 6 行 42 天）
+      while (days.length % 7 != 0 || days.length < 35) {
         final lastDate = days.last;
         days.add(DateTime(lastDate.year, lastDate.month, lastDate.day + 1));
       }
@@ -365,7 +365,9 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
     }
 
     final int rowCount = (days.length / 7).ceil();
-    final double gridHeight = _isMonthView ? (rowCount * 42.0) : 42.0;
+    final double gridHeight = _isMonthView
+        ? (rowCount * 42.0 + (rowCount - 1) * 4.0)
+        : 42.0;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -402,9 +404,9 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
           child: GridView.builder(
             padding: EdgeInsets.zero,
             physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 7,
-              childAspectRatio: 1.0,
+              mainAxisExtent: 42.0,
               mainAxisSpacing: 4,
               crossAxisSpacing: 4,
             ),

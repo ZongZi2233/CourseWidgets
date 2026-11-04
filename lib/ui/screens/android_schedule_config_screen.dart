@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
@@ -9,6 +10,8 @@ import '../widgets/liquid_components.dart' as liquid;
 import '../widgets/liquid_glass_pickers.dart';
 import '../widgets/unified_backdrop_panel.dart';
 import '../widgets/immersive_status_bar_backdrop.dart';
+import '../widgets/windows_desktop_title_bar.dart'
+    show setWindowsDesktopTitle, clearWindowsDesktopTitle;
 import 'package:smooth_scroll_multiplatform/smooth_scroll_multiplatform.dart';
 
 class AndroidScheduleConfigScreen extends StatefulWidget {
@@ -45,6 +48,7 @@ class AndroidScheduleConfigScreenState
   @override
   void initState() {
     super.initState();
+    setWindowsDesktopTitle('课时配置');
     final provider = context.read<ScheduleProvider>();
     _config = provider.currentConfig;
 
@@ -92,9 +96,14 @@ class AndroidScheduleConfigScreenState
       initialDate: currentDate,
     );
     if (picked != null) {
+      final normalizedMonday = DateTime(
+        picked.year,
+        picked.month,
+        picked.day,
+      ).subtract(Duration(days: picked.weekday - 1));
       setState(() {
         _semesterDateController.text =
-            '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+            '${normalizedMonday.year}-${normalizedMonday.month.toString().padLeft(2, '0')}-${normalizedMonday.day.toString().padLeft(2, '0')}';
       });
       _saveConfigQuietly();
     }
@@ -300,6 +309,7 @@ class AndroidScheduleConfigScreenState
 
   @override
   void dispose() {
+    clearWindowsDesktopTitle('课时配置');
     _saveConfigQuietly();
     _semesterDateController.dispose();
     _breakTimeController.dispose();
@@ -317,8 +327,17 @@ class AndroidScheduleConfigScreenState
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDark ? Colors.white : const Color(0xFF1A1A2E);
 
-    final topPadding = widget.showNavigation ? (MediaQuery.paddingOf(context).top + 60) : 0.0;
-    final defaultPadding = EdgeInsets.fromLTRB(16, topPadding > 0 ? topPadding : 16, 16, 100);
+    final isDesktop =
+        Platform.isWindows || Platform.isMacOS || Platform.isLinux;
+    final topPadding = widget.showNavigation
+        ? (isDesktop ? 20.0 : (MediaQuery.paddingOf(context).top + 60))
+        : 0.0;
+    final defaultPadding = EdgeInsets.fromLTRB(
+      16,
+      topPadding > 0 ? topPadding : 16,
+      16,
+      isDesktop ? 32 : 100,
+    );
 
     return PopScope(
       canPop: true,
@@ -620,9 +639,10 @@ class AndroidScheduleConfigScreenState
           ),
 
           // 2. 状态栏微模糊避让 (0..48dp)
-          if (widget.showNavigation) const ImmersiveStatusBarBackdrop(),
+          if (widget.showNavigation && !isDesktop)
+            const ImmersiveStatusBarBackdrop(),
 
-          // 3. 悬浮标题栏
+          // 3. 悬浮标题栏与保存按钮
           if (widget.showNavigation)
             Positioned(
               top: 0,
@@ -637,9 +657,10 @@ class AndroidScheduleConfigScreenState
                   ),
                   child: Row(
                     children: [
-                      const liquid.FloatingGlassHeaderButton(
-                        title: '课时配置',
-                      ),
+                      if (!isDesktop)
+                        const liquid.FloatingGlassHeaderButton(
+                          title: '课时配置',
+                        ),
                       const Spacer(),
                       liquid.LiquidButton(
                         text: '保存',
@@ -654,8 +675,9 @@ class AndroidScheduleConfigScreenState
               ),
             ),
 
-          // 4. [v2.9.7] 悬浮右下角返回按钮
-          if (widget.showNavigation) const liquid.FloatingLiquidBackButton(),
+          // 4. [v2.9.7] 悬浮右下角返回按钮（仅移动端展示）
+          if (widget.showNavigation && !isDesktop)
+            const liquid.FloatingLiquidBackButton(),
         ],
       ),
     ),

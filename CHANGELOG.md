@@ -2,6 +2,38 @@
 
 本文档记录 CourseWidgets 各版本更新的动态活动演进，重点关注架构改进、渲染优化、故障诊断与教务抓取能力提升。
 
+## [v3.1.2] - 2026-11-05 (Build 3120 正式版)
+
+### 1. Android 16 实况通知 (Live Update) 粗胶囊轨道与圆点节点恢复及顶栏减负 (LiveUpdate Thick Pill & Header Clean)
+- **恢复 8~10dp 粗胶囊轨道与圆点节点**：重构 `LiveUpdateNotificationManager.buildNativeAndroid16ProgressStyle`，采用显式已走/未走颜色分段（`setStyledByProgress(false)`）、为每个课节挂载 `Notification.ProgressStyle.Point` 圆点节点与高 DPI 矢量游标（`setProgressTrackerIcon`），彻底解决在 Android 16 SystemUI 中退化为 2dp 细线的问题，同时严格保持 **1 节课 = 1 个课节节点**；
+- **隐藏通知栏左上角冗余软件名称**：在 `AndroidManifest.xml` 中将 `<application android:label>` 设为零宽字符（桌面启动器图标名称由 `<activity android:name=".MainActivity" android:label="CourseWidgets">` 独立承载），并在通知 `extras` 注入 `android.substName = "\u200B"`，使实况通知左上角图标旁不再显示冗余的 `CourseWidgets` 名称。
+
+### 2. 系统日程 (ICS) 同步与课表时间/星期 100% 严格对齐 (100% Calendar & ICS Time Alignment)
+- **修复导出旧快照导致第二节课错位 (09:50-11:25)**：重构 `DataImportService.exportActiveScheduleToIcsFile` 与 `DatabaseHelper.generateIcsFromCourses`，导出系统日程时直接从 `courses` 表实时读取最新数据，并依据当前 `ScheduleConfigModel` 的 `sectionStartTimes` 与 `sectionDurations` 强制校准每节课的 `DTSTART`/`DTEND` 时分，彻底解决此前导出 `schedule_history` 静态初版快照导致上午第二节大课错位为 `09:50-11:25` 的问题；
+- **修复开学日非周一或 RRULE UTC 跨日导致周一课程跑到周日**：在 `ScheduleProvider.loadSavedData`、`_recalculateAllTimestamps`、`_jumpToCurrentDate`、`DatabaseHelper.getCoursesByWeek` 与 `AndroidScheduleConfigScreen._pickSemesterDate` 中强制将学期起点归一到当周周一；同时修复 `IcsParser` 中 `rrule.getInstances` 使用本地墙钟伪 UTC 展开，避免 `+08:00` 转 UTC `-8h` 跨日导致星期偏移；
+- **修复课表平移丢失节次**：在 `TimeAlignmentEngine.alignCoursesToTargetStartDate` 中完整保留 `startSection` 与 `endSection` 字段。
+
+### 3. 切页“先变暗再变亮”根治与 120fps 滑动帧率优化 (Zero Brightness Flash & 120fps Scroll Optimization)
+- **消除多页面切换先变暗再变亮**：移除 `DirectionalMotionBlurSwitcher` 转场期间在 `Stack` 底层重复叠加的第二层 `AppBackgroundLayer`（避免半透明背景双层叠加变暗、动画结束移除时骤然变亮），移除全屏 `ImageFiltered` 离屏缓冲切换，并为每个缓存子页面包裹固定 `GlobalKey` 的 `RepaintBoundary`；
+- **课表上下滑动 120fps 光栅隔离**：在 `WeeklyScheduleGrid` 的 `SingleChildScrollView` 内层引入 `RepaintBoundary` 光栅缓存隔离，纵向滚动时课程卡片实现零重绘满帧滑动。
+
+## [v3.1.1] - 2026-10-26 (Build 3110 正式版)
+
+### 1. Android 16 实况通知单课单节点与标题排版重构 (Single-Node-Per-Course & Hero Typography)
+- **1 节课 = 1 个进度段**：重构 `LiveUpdateNotificationManager` 课节分段逻辑，去除课间休息独立分段，支持“居中圆点样式”与“按时长分段样式”双模式切换；
+- **实况通知主副标题重点突出**：主标题采用 `1.18x` 加粗展示课程名或距上课倒计时，副标题整合教室、节次与时间范围，通知折叠态与展开态一眼可读。
+
+### 2. 日历页与课表页周次/课时联动及全出血顶栏交互统一 (Calendar Sync & Edge-to-Edge Header)
+- **日历视图与课表同源渲染**：重构 `CalendarViewScreen` 直接从 `ScheduleProvider` 读取激活课程并按 `sectionStartTimes`/`sectionDurations` 实时计算展示时分；
+- **二级页面全出血穿透与点击空白收起弹窗**：统一 `CourseEditScreen`、设置子页面全出血滚动视口与 `FloatingGlassHeaderButton` 顶部胶囊，修复新建课程或编辑课时点击空白处弹窗聚焦异常。
+
+## [v3.1.0] - 2026-10-18 (Build 3100 正式版)
+
+### 1. 全域灵动非线性动效曲线与纯色无壁纸模式 (Fluid Motion Curves & Solid Color Mode)
+- **全局 `AppCurves` 物理动效系统**：引入对标 iOS 26 Fluid Motion 与 HyperOS 2.0 的 `pageSlide`、`spring`、`springBounce` 阻尼弹簧曲线；
+- **纯色无壁纸模式 (`none`)**：支持浅色纯白 `#FFFFFF` 与深色微信夜间深灰 `#111111` 极简纯色背景，零壁纸纹理开销；
+- **Android 16 原生 `Notification.ProgressStyle` 实况通知引擎**：全面废除自定义 `RemoteViews`，100% 通过 `Notification.hasPromotableCharacteristics()` 校验，激活状态栏实时胶囊与锁屏实况卡片。
+
 ## [v3.0.0] - 2026-10-12 (Build 3000 正式版)
 
 ### 1. 正式包名与全平台应用名称就位 (Production Package & Binary Identity)

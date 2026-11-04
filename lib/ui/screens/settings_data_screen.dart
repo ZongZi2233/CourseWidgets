@@ -13,18 +13,39 @@ import '../widgets/immersive_status_bar_backdrop.dart';
 import 'package:flutter_phoenix/flutter_phoenix.dart';
 import 'webview_import_screen.dart';
 import '../../services/app_logger.dart';
+import '../widgets/windows_desktop_title_bar.dart'
+    show setWindowsDesktopTitle, clearWindowsDesktopTitle;
 import 'package:smooth_scroll_multiplatform/smooth_scroll_multiplatform.dart';
 
-class SettingsDataScreen extends StatelessWidget {
+class SettingsDataScreen extends StatefulWidget {
   const SettingsDataScreen({super.key});
+
+  @override
+  State<SettingsDataScreen> createState() => _SettingsDataScreenState();
+}
+
+class _SettingsDataScreenState extends State<SettingsDataScreen> {
+  @override
+  void initState() {
+    super.initState();
+    setWindowsDesktopTitle('数据管理');
+  }
+
+  @override
+  void dispose() {
+    clearWindowsDesktopTitle('数据管理');
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final provider = context.read<ScheduleProvider>();
     final dataImportService = DataImportService();
     final isDark = ThemeService().isDarkMode; // Added this line
-
-    final topPadding = MediaQuery.paddingOf(context).top + 60;
+    final isDesktop =
+        Platform.isWindows || Platform.isMacOS || Platform.isLinux;
+    final topPadding =
+        isDesktop ? 20.0 : (MediaQuery.paddingOf(context).top + 60);
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -37,12 +58,18 @@ class SettingsDataScreen extends StatelessWidget {
               scrollSpeed: 1.2,
               builder: (context, controller, physics) => ListView(
                 controller: controller,
-                padding: EdgeInsets.fromLTRB(16, topPadding, 16, 100),
+                padding: EdgeInsets.fromLTRB(16, topPadding, 16, isDesktop ? 32 : 100),
                 physics: physics,
                 children: [
-                        // [v3.0.0] 大卡片 1：数据导入
-                        _buildSectionHeader('数据导入', isDark),
-                        _buildCardGroup([
+                  Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 860),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // [v3.0.0] 大卡片 1：数据导入
+                          _buildSectionHeader('数据导入', isDark),
+                          _buildCardGroup([
                           _buildActionRow(
                             '教务系统导入',
                             '支持超星、正方、青果等主流系统',
@@ -200,30 +227,35 @@ class SettingsDataScreen extends StatelessWidget {
                     ),
                   ),
                 ),
+              ],
+            ),
+          ),
+        ),
 
           // 2. 状态栏微模糊避让 (0..48dp)
-          const ImmersiveStatusBarBackdrop(),
+          if (!isDesktop) const ImmersiveStatusBarBackdrop(),
 
-          // 3. 悬浮大圆角矩形玻璃标题胶囊（点击可返回，消除裸字悬浮感）
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: SafeArea(
-              bottom: false,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: Row(
-                  children: const [
-                    liquid.FloatingGlassHeaderButton(title: '数据管理'),
-                  ],
+          // 3. 悬浮大圆角矩形玻璃标题胶囊（仅移动端展示）
+          if (!isDesktop)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Row(
+                    children: const [
+                      liquid.FloatingGlassHeaderButton(title: '数据管理'),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
 
-          // 4. [v2.9.7] 悬浮右下角返回按钮
-          const liquid.FloatingLiquidBackButton(),
+          // 4. [v2.9.7] 悬浮右下角返回按钮（仅移动端展示）
+          if (!isDesktop) const liquid.FloatingLiquidBackButton(),
         ],
       ),
     );
