@@ -2,9 +2,9 @@ import 'dart:io';
 import '../main.dart' show globalDarkModeNotifier, globalBackgroundPath;
 export '../main.dart' show globalBackgroundPath;
 
-/// 当前版本：[v3.1.2 正式版] 主线正式发布（Build 3120）
-const String appVersion = '3.1.2';
-const int buildNumber = 3120;
+/// 当前版本：[v3.1.3 正式版] 主线正式发布（Build 3130）
+const String appVersion = '3.1.3';
+const int buildNumber = 3130;
 const String copyright = '© 2025-2026 CourseWidgets. All rights reserved.';
 
 /// [v3.1.0] 纯色无壁纸模式标识符（浅色纯白 #FFFFFF，深色微信夜间深灰近黑 #111111）

@@ -70,7 +70,7 @@ class SmoothSlideTransitionsBuilder extends PageTransitionsBuilder {
     Widget transitionChild = MotionBlurTransition(
       animation: animation,
       isEntering: true,
-      maxBlur: 13.0,
+      maxBlur: 5.0,
       child: SlideTransition(
         position: inSlide,
         child: FadeTransition(

@@ -615,89 +615,79 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
   }
 
   /// 现代晶透顶部栏：精简为品牌 Logo 与当前日期指示，腾出顶部空间
+  /// [v3.1.3 FlClash 级优化] 随页面平移的内部悬浮栏改用预烘焙静态壁纸采样的 HyperOSCard，
+  /// 彻底消除切页平移与 1D 动态模糊期间 BackdropFilter 离屏采样黑底导致的掉帧与变暗。
   Widget _buildModernTopBar(ScheduleProvider provider) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final now = DateTime.now();
     const weekDays = ['', '周一', '周二', '周三', '周四', '周五', '周六', '周日'];
     final dateStr = '${now.month}月${now.day}日 ${weekDays[now.weekday]}';
 
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: liquid.HyperOSShadows.dock(isDark),
+    return liquid.HyperOSCard(
+      useBlur: true,
+      cornerRadius: 18,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+      color: isDark ? const Color(0x4512151B) : const Color(0x52FFFFFF),
+      border: BorderSide(
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.14)
+            : Colors.white.withValues(alpha: 0.72),
+        width: 0.9,
       ),
-      child: GlassContainer(
-        useOwnLayer: true,
-        quality: theme.ThemeService().glassQuality,
-        shape: const LiquidRoundedSuperellipse(borderRadius: 18),
-        settings: LiquidGlassSettings(
-          glassColor: isDark ? const Color(0x1812151B) : const Color(0x18FFFFFF),
-          blur: 0.5,
-          thickness: 18.0,
-          refractiveIndex: 1.44,
-          lightIntensity: 0.70,
-          ambientStrength: 0.45,
-          ambientRim: 0.0,
-          fresnelStrength: 0.0,
-          saturation: 1.20,
-        ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-          child: Row(
-            children: [
-              Icon(
-                CupertinoIcons.book_fill,
-                color: AppThemeColors.babyPink,
-                size: 20,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                "CourseWidgets",
-                style: TextStyle(
-                  color: isDark ? Colors.white : const Color(0xFF1E2128),
-                  fontSize: 16.5,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.3,
-                ),
-              ),
-              const Spacer(),
-              // 当前日期指示徽章 (无边框，柔和漫反射阴影)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: liquid.HyperOSShadows.pill(isDark),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      CupertinoIcons.calendar,
-                      size: 12,
-                      color: isDark ? Colors.white70 : const Color(0xFF555B68),
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      dateStr,
-                      style: TextStyle(
-                        color: isDark ? Colors.white70 : const Color(0xFF333842),
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+      shadows: liquid.HyperOSShadows.dock(isDark),
+      child: Row(
+        children: [
+          Icon(
+            CupertinoIcons.book_fill,
+            color: AppThemeColors.babyPink,
+            size: 20,
           ),
-        ),
+          const SizedBox(width: 8),
+          Text(
+            "CourseWidgets",
+            style: TextStyle(
+              color: isDark ? Colors.white : const Color(0xFF1E2128),
+              fontSize: 16.5,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.3,
+            ),
+          ),
+          const Spacer(),
+          // 当前日期指示徽章 (无边框，柔和漫反射阴影)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: liquid.HyperOSShadows.pill(isDark),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  CupertinoIcons.calendar,
+                  size: 12,
+                  color: isDark ? Colors.white70 : const Color(0xFF555B68),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  dateStr,
+                  style: TextStyle(
+                    color: isDark ? Colors.white70 : const Color(0xFF333842),
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
 
 
-  /// [v2.9.6] 底部悬浮横向胶囊控制 Dock：靠右布局，加深同系色描边，杜绝任何黑描边
+  /// [v3.1.3] 底部悬浮横向胶囊控制 Dock：靠右布局，采用预烘焙静态玻璃采样 + 晶透亮边
   /// 布局：（（+）（＜）（第 X 周 ▾）（＞）（…））
   Widget _buildFloatingBottomActionDock(ScheduleProvider provider) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -707,33 +697,21 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
     final canPrev = provider.currentWeek > weeks.first;
     final canNext = provider.currentWeek < weeks.last;
 
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(26),
-        boxShadow: liquid.HyperOSShadows.dock(isDark),
+    return liquid.HyperOSCard(
+      useBlur: true,
+      cornerRadius: 26,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      color: isDark ? const Color(0x4A101216) : const Color(0x56FFFFFF),
+      border: BorderSide(
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.14)
+            : Colors.white.withValues(alpha: 0.72),
+        width: 0.9,
       ),
-      child: GlassContainer(
-        useOwnLayer: true,
-        quality: theme.ThemeService().glassQuality,
-        shape: const LiquidRoundedSuperellipse(borderRadius: 26),
-        settings: LiquidGlassSettings(
-          glassColor: isDark
-              ? const Color(0x35101216)
-              : const Color(0x30FFFFFF),
-          blur: 0.5,
-          thickness: 20.0,
-          refractiveIndex: 1.42,
-          lightIntensity: 0.35,
-          ambientStrength: 0.20,
-          ambientRim: 0.0,
-          fresnelStrength: 0.0,
-          edgeAbsorption: 0.06,
-        ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
+      shadows: liquid.HyperOSShadows.dock(isDark),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
               // 1. (+) 添加课程按钮 (纯净无边框，柔粉弥散阴影，Spring 跟手弹性)
               SpringTouchFeedback(
                 onTap: () {
@@ -945,9 +923,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
               ),
             ],
           ),
-        ),
-      ),
-    );
+        );
   }
 
   /// [v2.9.6] 优雅的周次选择浮层（打开瞬间冻结背景控件离屏渲染提升帧率，退出动画完成后平滑解锁）

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
-import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import '../../providers/schedule_provider.dart';
 import '../../models/course_event.dart';
 import '../../constants/theme_constants.dart';
@@ -163,6 +162,8 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
   }
 
   /// 现代晶透月历顶栏（年月切换、今天速达、月/周胶囊切换）
+  /// [v3.1.3 FlClash 级优化] 统一使用预烘焙静态壁纸纹理采样的 HyperOSCard，
+  /// 彻底消除“课程 ↔ 日历”切换时的 Picture.toImageSync 首帧卡顿与 BackdropFilter 采样黑底闪烁。
   Widget _buildHeader({double horizontalPadding = 16.0, bool compact = false}) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDark ? Colors.white : const Color(0xFF1A1A2E);
@@ -171,39 +172,21 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
 
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(22),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: isDark ? 0.22 : 0.08),
-              blurRadius: 10,
-              offset: const Offset(0, 3),
-            ),
-          ],
+      child: liquid.HyperOSCard(
+        useBlur: true,
+        cornerRadius: 22,
+        padding: compact
+            ? const EdgeInsets.symmetric(horizontal: 10, vertical: 6)
+            : const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        color: isDark ? const Color(0x4512151B) : const Color(0x55FFFFFF),
+        border: BorderSide(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.14)
+              : Colors.white.withValues(alpha: 0.72),
+          width: 0.9,
         ),
-        child: GlassContainer(
-          useOwnLayer: true,
-          quality: GlassQuality.premium,
-          shape: const LiquidRoundedSuperellipse(borderRadius: 22),
-          settings: LiquidGlassSettings(
-            glassColor: isDark
-                ? const Color(0x2212151B)
-                : const Color(0x35FFFFFF),
-            blur: 1.5,
-            thickness: 20.0,
-            refractiveIndex: 1.45,
-            lightIntensity: 0.75,
-            ambientStrength: 0.45,
-            ambientRim: 0.0,
-            fresnelStrength: 0.0,
-            saturation: 1.15,
-          ),
-          child: Padding(
-            padding: compact
-                ? const EdgeInsets.symmetric(horizontal: 10, vertical: 6)
-                : const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            child: Row(
+        shadows: liquid.HyperOSShadows.dock(isDark),
+        child: Row(
           children: [
             // 上个月
             _buildNavButton(
@@ -303,9 +286,7 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
           ],
         ),
       ),
-    ),
-  ),
-);
+    );
   }
 
   Widget _buildNavButton({required IconData icon, required VoidCallback onTap}) {
@@ -369,6 +350,13 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
         ? (rowCount * 42.0 + (rowCount - 1) * 4.0)
         : 42.0;
 
+    // [v3.1.3 性能优化] 单次遍历预计算有课日期哈希集合，避免 42 个月历单元格重复遍历全学期课程列表 (消除每次构建 12,000+ 次 DateTime 分配)
+    final Set<int> courseDateKeys = <int>{};
+    for (final c in provider.courses) {
+      final d = DateTime.fromMillisecondsSinceEpoch(c.startTime);
+      courseDateKeys.add(d.year * 10000 + d.month * 100 + d.day);
+    }
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -401,36 +389,37 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
           duration: const Duration(milliseconds: 260),
           curve: Curves.fastOutSlowIn,
           height: gridHeight,
-          child: GridView.builder(
-            padding: EdgeInsets.zero,
-            physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 7,
-              mainAxisExtent: 42.0,
-              mainAxisSpacing: 4,
-              crossAxisSpacing: 4,
-            ),
-            itemCount: days.length,
-            itemBuilder: (context, index) {
-              final date = days[index];
-              final hasCourses = _getCoursesForDate(
-                date,
-                provider.courses,
-              ).isNotEmpty;
-              final isSelected = _selectedDate != null &&
-                  date.year == _selectedDate!.year &&
-                  date.month == _selectedDate!.month &&
-                  date.day == _selectedDate!.day;
-              final isCurrentMonth = date.month == _currentMonth.month;
+          child: RepaintBoundary(
+            child: GridView.builder(
+              padding: EdgeInsets.zero,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 7,
+                mainAxisExtent: 42.0,
+                mainAxisSpacing: 4,
+                crossAxisSpacing: 4,
+              ),
+              itemCount: days.length,
+              itemBuilder: (context, index) {
+                final date = days[index];
+                final hasCourses = courseDateKeys.contains(
+                  date.year * 10000 + date.month * 100 + date.day,
+                );
+                final isSelected = _selectedDate != null &&
+                    date.year == _selectedDate!.year &&
+                    date.month == _selectedDate!.month &&
+                    date.day == _selectedDate!.day;
+                final isCurrentMonth = date.month == _currentMonth.month;
 
-              return _buildDayCell(
-                date,
-                isSelected,
-                hasCourses,
-                _isToday(date),
-                isCurrentMonth,
-              );
-            },
+                return _buildDayCell(
+                  date,
+                  isSelected,
+                  hasCourses,
+                  _isToday(date),
+                  isCurrentMonth,
+                );
+              },
+            ),
           ),
         ),
       ],
@@ -608,11 +597,13 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
                   itemCount: courses.length,
                   itemBuilder: (context, index) {
                     final course = courses[index];
-                    return _buildCourseCard(
-                      course: course,
-                      isDark: isDark,
-                      primaryColor: primaryTextColor,
-                      secondaryColor: secondaryTextColor,
+                    return RepaintBoundary(
+                      child: _buildCourseCard(
+                        course: course,
+                        isDark: isDark,
+                        primaryColor: primaryTextColor,
+                        secondaryColor: secondaryTextColor,
+                      ),
                     );
                   },
                 ),

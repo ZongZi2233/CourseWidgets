@@ -44,12 +44,13 @@ class AppCurves {
   }
 }
 
-/// [v3.1.0] 物理速度同步的 1D 运动动态模糊组件
+/// [v3.1.3] 物理速度同步 + FlClash SnapshotWidget 静态光栅冻结的 1D 运动动态模糊组件
 ///
 /// 架构特性：
-/// 1. 采用与 [AppCurves.pageSlide] 瞬时速度导数同相位的偏态钟形包络；
-/// 2. 量化 sigmaX 步进 (0.25px) 并缓存 ImageFilter 实例，减少每帧引擎层滤镜对象分配；
-/// 3. 落位尾段 (t > 0.88 或 sigmaX < 0.35) 自动关闭 ImageFiltered 离屏层，保障 120Hz 满帧停靠。
+/// 1. 采用与 [AppCurves.pageSlide] 瞬时速度导数同相位的偏态钟形包络，适度收敛峰值模糊度 (maxBlur ≈ 5.0)；
+/// 2. 借鉴 FlClash (`prism_ui`) 核心架构：在动画进行期间开启 [SnapshotWidget] (`SnapshotMode.permissive`)，
+///    将运动子树冻结为单张 GPU 静态纹理，消除动画期间子树重绘及 BackdropFilter 采样透明底导致的明暗闪烁；
+/// 3. 量化 sigmaX 步进 (0.25px) 并缓存 ImageFilter 实例，落位尾段 (t > 0.88 或 sigmaX < 0.30) 自动关闭离屏层。
 class MotionBlurTransition extends StatefulWidget {
   final Animation<double> animation;
   final Widget child;
@@ -60,7 +61,7 @@ class MotionBlurTransition extends StatefulWidget {
     super.key,
     required this.animation,
     required this.child,
-    this.maxBlur = 14.0,
+    this.maxBlur = 5.0,
     this.isEntering = true,
   });
 
@@ -72,9 +73,47 @@ class _MotionBlurTransitionState extends State<MotionBlurTransition> {
   static final ImageFilter _zeroFilter = ImageFilter.blur(sigmaX: 0.0, sigmaY: 0.0);
   double _lastQuantizedSigma = 0.0;
   ImageFilter _cachedFilter = _zeroFilter;
+  late final SnapshotController _snapshotController;
+
+  @override
+  void initState() {
+    super.initState();
+    _snapshotController = SnapshotController(
+      allowSnapshotting: widget.animation.isAnimating,
+    );
+    widget.animation.addStatusListener(_onStatusChanged);
+  }
+
+  @override
+  void didUpdateWidget(MotionBlurTransition oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.animation != widget.animation) {
+      oldWidget.animation.removeStatusListener(_onStatusChanged);
+      widget.animation.addStatusListener(_onStatusChanged);
+      _updateSnapshotting();
+    }
+  }
+
+  void _onStatusChanged(AnimationStatus status) {
+    _updateSnapshotting();
+  }
+
+  void _updateSnapshotting() {
+    final moving = widget.animation.isAnimating;
+    if (_snapshotController.allowSnapshotting != moving) {
+      _snapshotController.allowSnapshotting = moving;
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.animation.removeStatusListener(_onStatusChanged);
+    _snapshotController.dispose();
+    super.dispose();
+  }
 
   ImageFilter _resolveFilter(double quantizedSigma) {
-    if (quantizedSigma <= 0.35) return _zeroFilter;
+    if (quantizedSigma <= 0.30) return _zeroFilter;
     if ((quantizedSigma - _lastQuantizedSigma).abs() < 0.01) {
       return _cachedFilter;
     }
@@ -89,9 +128,16 @@ class _MotionBlurTransitionState extends State<MotionBlurTransition> {
 
   @override
   Widget build(BuildContext context) {
+    final snapshotChild = SnapshotWidget(
+      controller: _snapshotController,
+      mode: SnapshotMode.permissive,
+      autoresize: true,
+      child: widget.child,
+    );
+
     return AnimatedBuilder(
       animation: widget.animation,
-      child: widget.child,
+      child: snapshotChild,
       builder: (context, child) {
         final isReversing = widget.animation.status == AnimationStatus.reverse;
         final progress = widget.animation.value.clamp(0.0, 1.0);
@@ -99,7 +145,7 @@ class _MotionBlurTransitionState extends State<MotionBlurTransition> {
         final envelope = AppCurves.velocityBlurEnvelope(t);
         final rawSigma = envelope * widget.maxBlur;
         final quantizedSigma = (rawSigma * 4.0).roundToDouble() * 0.25;
-        final bool hasBlur = quantizedSigma > 0.35;
+        final bool hasBlur = quantizedSigma > 0.30;
 
         return ImageFiltered(
           enabled: hasBlur,
@@ -111,13 +157,13 @@ class _MotionBlurTransitionState extends State<MotionBlurTransition> {
   }
 }
 
-/// [v3.1.0] 零 Timer 分配、单 Ticker 物理阻尼平滑的页面切周 1D 运动动态模糊包装器
+/// [v3.1.3] 零 Timer 分配、单 Ticker 物理阻尼平滑的页面切周 1D 运动动态模糊包装器
 ///
 /// 核心性能优化：
-/// 1. 废除每帧新建/取消 Timer 与反复重启 AnimationController.animateTo 的高开销设计；
+/// 1. 恢复细腻丝滑的 1D 水平运动模糊，将默认峰值模糊度收敛至柔和的 3.8px，兼顾灵动速度感与文字清晰度；
 /// 2. 采用按需唤醒的原生 [Ticker] 指数阻尼滤波追踪瞬时切页速度，静止时 Ticker 完全休眠 (0 CPU 占用)；
 /// 3. 对 sigmaX 进行 0.25px 步进量化并缓存 [ImageFilter]，仅当量化值变化时通知重绘；
-/// 4. [widget.child] (PageView) 全程作为缓存子树透传，绝不因模糊度更新触发任何 Widget Rebuild。
+/// 4. 配合内部全面静态纹理化的 [HyperOSCard]，彻底杜绝动态模糊期间采样透明底变暗的问题。
 class PageControllerMotionBlur extends StatefulWidget {
   final PageController controller;
   final Widget child;
@@ -128,7 +174,7 @@ class PageControllerMotionBlur extends StatefulWidget {
     super.key,
     required this.controller,
     required this.child,
-    this.maxBlur = 12.0,
+    this.maxBlur = 3.8,
     this.downscaleFraction = 1.0,
   });
 
@@ -136,22 +182,139 @@ class PageControllerMotionBlur extends StatefulWidget {
   State<PageControllerMotionBlur> createState() => _PageControllerMotionBlurState();
 }
 
-class _PageControllerMotionBlurState extends State<PageControllerMotionBlur> {
+class _PageControllerMotionBlurState extends State<PageControllerMotionBlur>
+    with SingleTickerProviderStateMixin {
+  static final ImageFilter _zeroFilter = ImageFilter.blur(sigmaX: 0.0, sigmaY: 0.0);
+
+  late final Ticker _ticker;
+  double? _lastPage;
+  Duration? _lastTickElapsed;
+  double _currentSigma = 0.0;
+  double _targetSigma = 0.0;
+  double _quantizedSigma = 0.0;
+  double _lastFilterSigma = 0.0;
+  ImageFilter _cachedFilter = _zeroFilter;
+
+  @override
+  void initState() {
+    super.initState();
+    _ticker = createTicker(_onTick);
+    widget.controller.addListener(_onScroll);
+  }
+
+  @override
+  void didUpdateWidget(PageControllerMotionBlur oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.removeListener(_onScroll);
+      widget.controller.addListener(_onScroll);
+      _lastPage = null;
+    }
+  }
+
+  void _onScroll() {
+    if (!widget.controller.hasClients || !widget.controller.position.hasContentDimensions) {
+      return;
+    }
+    final page = widget.controller.page;
+    if (page == null) return;
+
+    if (_lastPage != null) {
+      final deltaPage = (page - _lastPage!).abs();
+      // 将每帧页位移量映射为柔和的 1D 水平动态模糊强度 (上限受 widget.maxBlur 约束)
+      final effectiveMax = math.min(widget.maxBlur, 4.5);
+      final velocityFactor = (deltaPage * 22.0).clamp(0.0, 1.0);
+      final computed = velocityFactor * effectiveMax;
+      if (computed > _targetSigma) {
+        _targetSigma = computed;
+      }
+      if (_targetSigma > 0.25 && !_ticker.isActive) {
+        _lastTickElapsed = null;
+        _ticker.start();
+      }
+    }
+    _lastPage = page;
+  }
+
+  void _onTick(Duration elapsed) {
+    final dt = _lastTickElapsed == null
+        ? 0.016
+        : ((elapsed - _lastTickElapsed!).inMicroseconds / 1000000.0).clamp(0.001, 0.05);
+    _lastTickElapsed = elapsed;
+
+    // 目标值自然指数衰减 + 当前值平滑追随
+    _targetSigma *= math.exp(-14.0 * dt);
+    final lerpRate = (1.0 - math.exp(-22.0 * dt)).clamp(0.0, 1.0);
+    _currentSigma += (_targetSigma - _currentSigma) * lerpRate;
+
+    final nextQuantized = _currentSigma < 0.28
+        ? 0.0
+        : ((_currentSigma * 4.0).roundToDouble() * 0.25);
+
+    if ((nextQuantized - _quantizedSigma).abs() >= 0.20) {
+      setState(() {
+        _quantizedSigma = nextQuantized;
+      });
+    }
+
+    if (_currentSigma < 0.22 && _targetSigma < 0.22) {
+      _currentSigma = 0.0;
+      _targetSigma = 0.0;
+      if (_quantizedSigma != 0.0) {
+        setState(() {
+          _quantizedSigma = 0.0;
+        });
+      }
+      _ticker.stop();
+      _lastTickElapsed = null;
+    }
+  }
+
+  ImageFilter _resolveFilter(double sigma) {
+    if (sigma <= 0.28) return _zeroFilter;
+    if ((sigma - _lastFilterSigma).abs() < 0.01) {
+      return _cachedFilter;
+    }
+    _lastFilterSigma = sigma;
+    _cachedFilter = ImageFilter.blur(
+      sigmaX: sigma,
+      sigmaY: 0.0,
+      tileMode: TileMode.clamp,
+    );
+    return _cachedFilter;
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onScroll);
+    _ticker.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
-    // [v3.1.1 性能优化] 移除外层全屏 ImageFiltered 离屏层，避免横向切周时整页重建离屏缓冲导致掉帧与亮度突变
-    return widget.child;
+    final bool hasBlur = _quantizedSigma > 0.28;
+    return ImageFiltered(
+      enabled: hasBlur,
+      imageFilter: _resolveFilter(_quantizedSigma),
+      child: widget.child,
+    );
   }
 }
 
-/// [v3.1.0] 左右方向感知的高性能运动模糊与预缓存光栅切页组件
+/// [v3.1.3] 全面借鉴 FlClash (`chen08209/FlClash` & `prism_ui`) 的主导航切页引擎：
+/// 常驻预热页面池 + SnapshotWidget 静态 GPU 纹理冻结 + 速度包络 1D 动态模糊
 ///
 /// 核心突破：
-/// 1. 彻底修复旧版在 AnimatedBuilder 每帧回调内调用 widget.builder 导致每帧重建两个主界面的性能黑洞；
-/// 2. 切换开始时仅构建一次进出场页面并锁定在独立 RepaintBoundary 光栅缓存中，动画全程 0 Widget Rebuild；
-/// 3. 采用 [AppCurves.velocityBlurEnvelope] 速度导数包络驱动 1D 运动模糊，启动灵动、落位即刻清晰。
+/// 1. 解决“课程页 ↔ 日历页”切页首帧掉帧：首帧渲染完成后自动在后台 Offstage 预热全部主页面并常驻保活，
+///    固定 Stack 槽位顺序 `[0, 1, 2]`，切页触发瞬间 **0 Widget 重建、0 Layout 布局、0 Element 重排**；
+/// 2. 借鉴 FlClash `SnapshotWidget` (`SnapshotMode.permissive`)：在页面离开静止位（切页动画进行中）时，
+///    将进出场页面直接冻结为单张静态 GPU 光栅纹理，彻底消除 Impeller 对移动页面的每帧全量重绘；
+/// 3. 恢复细腻丝滑的 1D 运动模糊 (`maxBlur: 4.5`)：在静态纹理快照外层施加水平方向速度导数模糊，
+///    既有高速切换的流光动感，又彻底杜绝“先变暗再变亮”闪烁。
 class DirectionalMotionBlurSwitcher extends StatefulWidget {
   final int selectedIndex;
+  final int pageCount;
   final Widget Function(BuildContext context, int index) builder;
   final Duration duration;
   final Curve curve;
@@ -162,9 +325,10 @@ class DirectionalMotionBlurSwitcher extends StatefulWidget {
     super.key,
     required this.selectedIndex,
     required this.builder,
-    this.duration = const Duration(milliseconds: 380),
+    this.pageCount = 3,
+    this.duration = const Duration(milliseconds: 360),
     this.curve = AppCurves.pageSlide,
-    this.maxBlur = 10.0,
+    this.maxBlur = 4.5,
     this.downscaleFraction = 0.45,
   });
 
@@ -176,17 +340,26 @@ class DirectionalMotionBlurSwitcher extends StatefulWidget {
 class _DirectionalMotionBlurSwitcherState
     extends State<DirectionalMotionBlurSwitcher>
     with SingleTickerProviderStateMixin {
+  static final ImageFilter _zeroFilter = ImageFilter.blur(sigmaX: 0.0, sigmaY: 0.0);
+
   late int _currentIndex;
   late int _previousIndex;
   late bool _isForward;
   late AnimationController _controller;
   late Animation<double> _animation;
 
-  Widget? _cachedExitingPage;
-  Widget? _cachedEnteringPage;
-  // [v3.1.0 修复切页明暗闪烁] 每个页面使用固定 GlobalKey：动画开始/结束时页面在「静止态」与「转场 Stack」
-  // 之间仅做 reparent，不再销毁重建，玻璃控件状态、滚动位置全程保持，彻底消除落位瞬间的重建闪烁。
-  final Map<int, GlobalKey> _pageKeys = <int, GlobalKey>{};
+  final Set<int> _activatedIndices = <int>{};
+  final Map<int, SnapshotController> _snapshotControllers =
+      <int, SnapshotController>{};
+  double _lastQuantizedSigma = 0.0;
+  ImageFilter _cachedFilter = _zeroFilter;
+
+  SnapshotController _controllerFor(int index) {
+    return _snapshotControllers.putIfAbsent(
+      index,
+      () => SnapshotController(allowSnapshotting: false),
+    );
+  }
 
   @override
   void initState() {
@@ -194,6 +367,8 @@ class _DirectionalMotionBlurSwitcherState
     _currentIndex = widget.selectedIndex;
     _previousIndex = widget.selectedIndex;
     _isForward = true;
+    _activatedIndices.add(_currentIndex);
+    _controllerFor(_currentIndex);
 
     _controller = AnimationController(
       vsync: this,
@@ -208,14 +383,38 @@ class _DirectionalMotionBlurSwitcherState
     _controller.addStatusListener((status) {
       if (status == AnimationStatus.completed ||
           status == AnimationStatus.dismissed) {
+        _setSnapshottingForTransition(false);
         if (mounted) {
-          setState(() {
-            _cachedExitingPage = null;
-            _cachedEnteringPage = null;
-          });
+          setState(() {});
         }
       }
     });
+
+    // 首帧渲染完毕后，在下一空闲帧静默预热其余主页面 (如日历页、设置页)，
+    // 确保首次点击切换“课程 ↔ 日历”时子树与 Layout 已经 100% 就绪，消除首帧构建卡顿。
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      bool added = false;
+      for (int i = 0; i < widget.pageCount; i++) {
+        _controllerFor(i);
+        if (_activatedIndices.add(i)) {
+          added = true;
+        }
+      }
+      if (added) {
+        setState(() {});
+      }
+    });
+  }
+
+  void _setSnapshottingForTransition(bool active) {
+    for (final entry in _snapshotControllers.entries) {
+      final shouldSnapshot = active &&
+          (entry.key == _currentIndex || entry.key == _previousIndex);
+      if (entry.value.allowSnapshotting != shouldSnapshot) {
+        entry.value.allowSnapshotting = shouldSnapshot;
+      }
+    }
   }
 
   @override
@@ -225,67 +424,141 @@ class _DirectionalMotionBlurSwitcherState
       _isForward = widget.selectedIndex > _currentIndex;
       _previousIndex = _currentIndex;
       _currentIndex = widget.selectedIndex;
-      _cachedExitingPage = _buildPage(_previousIndex);
-      _cachedEnteringPage = _buildPage(_currentIndex);
+      _activatedIndices.add(_currentIndex);
+      _activatedIndices.add(_previousIndex);
+      _controllerFor(_currentIndex);
+      _controllerFor(_previousIndex);
+
+      // 开启 FlClash 同款静态纹理快照：运动中的进出场页面直接从单张 GPU 快照绘制
+      _setSnapshottingForTransition(true);
       _controller.forward(from: 0.0);
     }
   }
 
-  /// 单个页面（静止态与转场态共用同一棵带 GlobalKey 的子树 + RepaintBoundary 光栅缓存，玻璃质量全程不变，彻底消除明暗跳变与切页掉帧）
-  Widget _buildPage(int index) {
-    return RepaintBoundary(
-      key: _pageKeys.putIfAbsent(index, () => GlobalKey()),
-      child: Builder(
-        builder: (ctx) => widget.builder(ctx, index),
-      ),
+  ImageFilter _resolveFilter(double quantizedSigma) {
+    if (quantizedSigma <= 0.28) return _zeroFilter;
+    if ((quantizedSigma - _lastQuantizedSigma).abs() < 0.01) {
+      return _cachedFilter;
+    }
+    _lastQuantizedSigma = quantizedSigma;
+    _cachedFilter = ImageFilter.blur(
+      sigmaX: quantizedSigma,
+      sigmaY: 0.0,
+      tileMode: TileMode.clamp,
     );
+    return _cachedFilter;
   }
 
   @override
   void dispose() {
     _controller.dispose();
+    for (final c in _snapshotControllers.values) {
+      c.dispose();
+    }
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    if (!_controller.isAnimating) {
-      return _buildPage(_currentIndex);
+    // 预先构建固定槽位 [0 .. pageCount - 1] 的页面节点，子组件引用传递给 AnimatedBuilder，
+    // 动画全程 0 Subtree Rebuild、0 Element 重排。
+    final List<Widget?> pageNodes = List<Widget?>.filled(
+      widget.pageCount,
+      null,
+    );
+    for (int i = 0; i < widget.pageCount; i++) {
+      if (_activatedIndices.contains(i)) {
+        pageNodes[i] = SnapshotWidget(
+          key: ValueKey<String>('page_snapshot_$i'),
+          controller: _controllerFor(i),
+          mode: SnapshotMode.permissive,
+          autoresize: true,
+          child: RepaintBoundary(
+            child: Builder(
+              builder: (ctx) => widget.builder(ctx, i),
+            ),
+          ),
+        );
+      }
     }
-
-    final exitingPage = _cachedExitingPage ??= _buildPage(_previousIndex);
-    final enteringPage = _cachedEnteringPage ??= _buildPage(_currentIndex);
 
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, _) {
-        if (!_controller.isAnimating) {
-          return _buildPage(_currentIndex);
-        }
+        final bool isAnimating = _controller.isAnimating;
+        final double rawT = _controller.value.clamp(0.0, 1.0);
+        final double curvedT = _animation.value;
+        final double sign = _isForward ? 1.0 : -1.0;
 
-        final sign = _isForward ? 1.0 : -1.0;
-        final curvedT = _animation.value;
-        final exitingOffset = Offset(-sign * curvedT, 0.0);
-        final enteringOffset = Offset(sign * (1.0 - curvedT), 0.0);
+        // 计算物理速度导数包络驱动的 1D 水平运动模糊强度 (0.25px 步进量化)
+        final double envelope =
+            isAnimating ? AppCurves.velocityBlurEnvelope(rawT) : 0.0;
+        final double rawSigma = envelope * widget.maxBlur;
+        final double quantizedSigma =
+            (rawSigma * 4.0).roundToDouble() * 0.25;
+        final bool hasBlur = isAnimating && quantizedSigma > 0.28;
+        final ImageFilter activeFilter =
+            hasBlur ? _resolveFilter(quantizedSigma) : _zeroFilter;
 
-        // [v3.1.1 修复切页“先变暗再变亮”与掉帧]：
-        // 1. 移除外层 ImageFiltered 离屏合成层（ImageFiltered 会隔离 BackdropFilter 对外层全局壁纸的采样）；
-        // 2. 移除转场期间叠加的第二层 AppBackgroundLayer（避免两层壁纸与半透明玻璃二次叠加导致转场变暗、结束瞬间变亮）；
-        // 3. 进出场页面均由带 GlobalKey 的 RepaintBoundary 缓存为 GPU 纹理，实现满帧 120fps 平滑位移。
         return Stack(
           fit: StackFit.expand,
           children: [
-            FractionalTranslation(
-              translation: exitingOffset,
-              child: exitingPage,
-            ),
-            FractionalTranslation(
-              translation: enteringOffset,
-              child: enteringPage,
-            ),
+            for (int i = 0; i < widget.pageCount; i++)
+              if (pageNodes[i] != null)
+                _buildPageSlot(
+                  index: i,
+                  pageNode: pageNodes[i]!,
+                  isAnimating: isAnimating,
+                  curvedT: curvedT,
+                  sign: sign,
+                  hasBlur: hasBlur,
+                  activeFilter: activeFilter,
+                ),
           ],
         );
       },
+    );
+  }
+
+  Widget _buildPageSlot({
+    required int index,
+    required Widget pageNode,
+    required bool isAnimating,
+    required double curvedT,
+    required double sign,
+    required bool hasBlur,
+    required ImageFilter activeFilter,
+  }) {
+    final bool isCurrent = index == _currentIndex;
+    final bool isExiting = isAnimating && index == _previousIndex;
+    final bool isVisible = isCurrent || isExiting;
+
+    Offset translation = Offset.zero;
+    if (isAnimating) {
+      if (isExiting) {
+        translation = Offset(-sign * curvedT, 0.0);
+      } else if (isCurrent) {
+        translation = Offset(sign * (1.0 - curvedT), 0.0);
+      }
+    }
+
+    return Offstage(
+      key: ValueKey<int>(index),
+      offstage: !isVisible,
+      child: TickerMode(
+        enabled: isVisible,
+        child: IgnorePointer(
+          ignoring: !isCurrent || isAnimating,
+          child: FractionalTranslation(
+            translation: translation,
+            child: ImageFiltered(
+              enabled: isVisible && hasBlur,
+              imageFilter: activeFilter,
+              child: pageNode,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
