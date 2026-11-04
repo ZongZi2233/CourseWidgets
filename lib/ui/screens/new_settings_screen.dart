@@ -8,6 +8,7 @@ import 'android_schedule_config_screen.dart';
 import 'course_edit_screen.dart';
 import '../widgets/liquid_components.dart' as liquid;
 import '../transitions/smooth_slide_transitions.dart';
+import '../animations/app_motion.dart';
 import '../widgets/liquid_glass_pickers.dart';
 import '../widgets/immersive_status_bar_backdrop.dart';
 import '../widgets/windows_desktop_title_bar.dart'
@@ -200,52 +201,60 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
     required VoidCallback onTap,
   }) {
     final isDark = ThemeService().isDarkMode;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: SizedBox(
-        height: kSettingsItemHeight,
-        child: Row(
-          children: [
-            SizedBox(
-              width: 36,
-              height: 36,
-              child: Center(
-                child: Icon(
-                  icon,
-                  color: isDark ? const Color(0xFFD6DBE5) : const Color(0xFF3A4150),
-                  size: 22,
+    return Builder(
+      builder: (rowContext) => InkWell(
+        onTap: () {
+          SharedElementSourceRegistry.recordFromContext(
+            rowContext,
+            cornerRadius: 20.0,
+          );
+          onTap();
+        },
+        borderRadius: BorderRadius.circular(16),
+        child: SizedBox(
+          height: kSettingsItemHeight,
+          child: Row(
+            children: [
+              SizedBox(
+                width: 36,
+                height: 36,
+                child: Center(
+                  child: Icon(
+                    icon,
+                    color: isDark ? const Color(0xFFD6DBE5) : const Color(0xFF3A4150),
+                    size: 22,
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: _textColor,
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: _textColor,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: TextStyle(fontSize: 11.5, color: _textSecondaryColor),
-                  ),
-                ],
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: TextStyle(fontSize: 11.5, color: _textSecondaryColor),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            Icon(
-              CupertinoIcons.right_chevron,
-              color: _textSecondaryColor.withValues(alpha: 0.45),
-              size: 15,
-            ),
-          ],
+              Icon(
+                CupertinoIcons.right_chevron,
+                color: _textSecondaryColor.withValues(alpha: 0.45),
+                size: 15,
+              ),
+            ],
+          ),
         ),
       ),
     );

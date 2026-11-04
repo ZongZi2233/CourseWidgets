@@ -681,9 +681,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                     final coreStack = Listener(
                       behavior: HitTestBehavior.translucent,
                       onPointerDown: (event) {
-                        SharedElementSourceRegistry.recordPointerDown(
-                          event.position,
-                        );
+                        SharedElementSourceRegistry.recordPointerDown(event);
                       },
                       child: LiquidGlassScope.stack(
                         background: backgroundWidget,

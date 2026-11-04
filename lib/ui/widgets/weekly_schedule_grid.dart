@@ -19,6 +19,7 @@ import '../transitions/smooth_slide_transitions.dart';
 import 'package:smooth_scroll_multiplatform/smooth_scroll_multiplatform.dart';
 import '../animations/app_motion.dart';
 import '../../utils/responsive_utils.dart';
+import '../../services/theme_service.dart' as theme;
 
 /// [v3.1.0] 本周课程网格视图（支持平板与手机竖屏全看板，防溢出自适应与单周 RepaintBoundary 缓存）
 class WeeklyScheduleGrid extends StatefulWidget {
@@ -362,18 +363,19 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
                 boxShadow: liquid.HyperOSShadows.pill(isDark),
               ),
               child: GlassContainer(
+                useOwnLayer: true,
                 shape: const LiquidRoundedSuperellipse(borderRadius: 14),
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 settings: LiquidGlassSettings(
-                  glassColor: isDark ? Colors.white.withValues(alpha: 0.12) : Colors.white.withValues(alpha: 0.40),
-                  blur: 1.5,
-                  thickness: 14,
-                  refractiveIndex: 1.45,
-                  lightIntensity: 0.45,
-                  ambientStrength: 0.25,
-                  ambientRim: 0.12,
-                  fresnelStrength: 0.22,
-                  edgeAbsorption: 0.05,
+                  glassColor: isDark ? Colors.white.withValues(alpha: 0.12) : Colors.white.withValues(alpha: 0.35),
+                  blur: 0.5,
+                  thickness: 16,
+                  refractiveIndex: 1.40,
+                  lightIntensity: 0.35,
+                  ambientStrength: 0.20,
+                  ambientRim: 0.0,
+                  fresnelStrength: 0.0,
+                  edgeAbsorption: 0.06,
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -639,20 +641,23 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
         boxShadow: liquid.HyperOSShadows.pill(isDark),
       ),
       child: GlassContainer(
+        useOwnLayer: true,
         shape: const LiquidRoundedSuperellipse(borderRadius: 13),
+        quality: theme.ThemeService().glassQuality,
         padding: EdgeInsets.zero,
         settings: LiquidGlassSettings(
           glassColor: isDark
               ? const Color(0x2812151B)
-              : const Color(0x34FFFFFF),
-          blur: 1.5,
-          thickness: 12,
-          refractiveIndex: 1.42,
-          lightIntensity: 0.42,
-          ambientStrength: 0.25,
-          ambientRim: 0.10,
-          fresnelStrength: 0.20,
-          edgeAbsorption: 0.05,
+              : const Color(0x35FFFFFF),
+          blur: 0.5,
+          thickness: 16,
+          refractiveIndex: 1.44,
+          lightIntensity: 0.70,
+          ambientStrength: 0.35,
+          ambientRim: 0.0,
+          fresnelStrength: 0.0,
+          edgeAbsorption: 0.10,
+          saturation: 1.15,
         ),
         child: Center(
           child: Column(
@@ -957,6 +962,10 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
                       title: '编辑课程',
                       icon: CupertinoIcons.pencil,
                       onTap: () {
+                        SharedElementSourceRegistry.recordFromContext(
+                          context,
+                          cornerRadius: 16.0,
+                        );
                         Navigator.push(
                           context,
                           TransparentMaterialPageRoute(

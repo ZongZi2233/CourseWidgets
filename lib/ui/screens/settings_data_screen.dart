@@ -10,6 +10,8 @@ import '../../services/theme_service.dart'; // Added this import
 import '../widgets/liquid_components.dart' as liquid;
 import '../widgets/liquid_toast.dart';
 import '../widgets/immersive_status_bar_backdrop.dart';
+import '../transitions/smooth_slide_transitions.dart';
+import '../animations/app_motion.dart';
 import 'package:flutter_phoenix/flutter_phoenix.dart';
 import 'webview_import_screen.dart';
 import '../../services/app_logger.dart';
@@ -81,7 +83,7 @@ class _SettingsDataScreenState extends State<SettingsDataScreen> {
                                   Platform.isMacOS) {
                                 Navigator.push(
                                   context,
-                                  MaterialPageRoute(
+                                  TransparentMaterialPageRoute(
                                     builder: (_) => const WebviewImportScreen(),
                                   ),
                                 );
@@ -459,57 +461,65 @@ class _SettingsDataScreenState extends State<SettingsDataScreen> {
         ? const Color(0xFFFF5252).withValues(alpha: 0.7)
         : (isDark ? Colors.white60 : const Color(0xFF718096));
 
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: SizedBox(
-        height: kSettingsItemHeight,
-        child: Row(
-          children: [
-            SizedBox(
-              width: 36,
-              height: 36,
-              child: Center(
-                child: Icon(
-                  icon,
-                  color: iconColor,
-                  size: 22,
+    return Builder(
+      builder: (rowContext) => InkWell(
+        onTap: () {
+          SharedElementSourceRegistry.recordFromContext(
+            rowContext,
+            cornerRadius: 20.0,
+          );
+          onTap();
+        },
+        borderRadius: BorderRadius.circular(16),
+        child: SizedBox(
+          height: kSettingsItemHeight,
+          child: Row(
+            children: [
+              SizedBox(
+                width: 36,
+                height: 36,
+                child: Center(
+                  child: Icon(
+                    icon,
+                    color: iconColor,
+                    size: 22,
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: primaryColor,
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: primaryColor,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      color: subColor,
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: subColor,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            Icon(
-              CupertinoIcons.right_chevron,
-              color: isDestructive
-                  ? const Color(0xFFFF5252).withValues(alpha: 0.6)
-                  : (isDark ? Colors.white38 : Colors.black26),
-              size: 15,
-            ),
-          ],
+              Icon(
+                CupertinoIcons.right_chevron,
+                color: isDestructive
+                    ? const Color(0xFFFF5252).withValues(alpha: 0.6)
+                    : (isDark ? Colors.white38 : Colors.black26),
+                size: 15,
+              ),
+            ],
+          ),
         ),
       ),
     );

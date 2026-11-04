@@ -9,6 +9,7 @@ import 'settings_data_screen.dart';
 import 'settings_notification_screen.dart';
 import '../widgets/liquid_components.dart' as liquid;
 import '../transitions/smooth_slide_transitions.dart';
+import '../animations/app_motion.dart';
 
 /// [v2.8.4] 设置主界面 - 全面迁移官方 GlassCard 与 AdaptiveLiquidGlassLayer
 class SettingsMainScreen extends StatefulWidget {
@@ -240,58 +241,64 @@ class _SettingsMainScreenState extends State<SettingsMainScreen> {
     required VoidCallback onTap,
     required bool isDark,
   }) {
-    return InkWell(
-      onTap: () {
-        HapticFeedback.lightImpact();
-        onTap();
-      },
-      borderRadius: BorderRadius.circular(16),
-      child: SizedBox(
-        height: kSettingsItemHeight,
-        child: Row(
-          children: [
-            SizedBox(
-              width: 36,
-              height: 36,
-              child: Center(
-                child: Icon(
-                  icon,
-                  color: isDark ? const Color(0xFFD6DBE5) : const Color(0xFF3A4150),
-                  size: 24,
+    return Builder(
+      builder: (rowContext) => InkWell(
+        onTap: () {
+          HapticFeedback.lightImpact();
+          SharedElementSourceRegistry.recordFromContext(
+            rowContext,
+            cornerRadius: 20.0,
+          );
+          onTap();
+        },
+        borderRadius: BorderRadius.circular(16),
+        child: SizedBox(
+          height: kSettingsItemHeight,
+          child: Row(
+            children: [
+              SizedBox(
+                width: 36,
+                height: 36,
+                child: Center(
+                  child: Icon(
+                    icon,
+                    color: isDark ? const Color(0xFFD6DBE5) : const Color(0xFF3A4150),
+                    size: 24,
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 15.5,
-                      fontWeight: FontWeight.w600,
-                      color: isDark ? Colors.white : const Color(0xFF1A1A2E),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 15.5,
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? Colors.white : const Color(0xFF1A1A2E),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: isDark ? Colors.white60 : Colors.black54,
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isDark ? Colors.white60 : Colors.black54,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            Icon(
-              Icons.chevron_right_rounded,
-              color: isDark ? Colors.white30 : Colors.black26,
-              size: 20,
-            ),
-          ],
+              Icon(
+                Icons.chevron_right_rounded,
+                color: isDark ? Colors.white30 : Colors.black26,
+                size: 20,
+              ),
+            ],
+          ),
         ),
       ),
     );

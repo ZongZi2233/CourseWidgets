@@ -628,21 +628,22 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
         boxShadow: liquid.HyperOSShadows.dock(isDark),
       ),
       child: GlassContainer(
+        useOwnLayer: true,
         shape: const LiquidRoundedSuperellipse(borderRadius: 18),
         quality: theme.ThemeService().glassQuality,
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
         settings: LiquidGlassSettings(
           glassColor: isDark
-              ? const Color(0x2812151B)
-              : const Color(0x32FFFFFF),
-          blur: 1.5,
-          thickness: 14.0,
-          refractiveIndex: 1.45,
-          lightIntensity: 0.45,
-          ambientStrength: 0.25,
-          ambientRim: 0.12,
-          fresnelStrength: 0.22,
-          edgeAbsorption: 0.05,
+              ? const Color(0x1812151B)
+              : const Color(0x18FFFFFF),
+          blur: 0.5,
+          thickness: 18.0,
+          refractiveIndex: 1.44,
+          lightIntensity: 0.70,
+          ambientStrength: 0.45,
+          ambientRim: 0.0,
+          fresnelStrength: 0.0,
+          saturation: 1.20,
         ),
         child: Row(
           children: [
@@ -713,20 +714,21 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
         boxShadow: liquid.HyperOSShadows.dock(isDark),
       ),
       child: GlassContainer(
+        useOwnLayer: true,
         shape: const LiquidRoundedSuperellipse(borderRadius: 26),
         quality: theme.ThemeService().glassQuality,
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         settings: LiquidGlassSettings(
           glassColor: isDark
-              ? const Color(0x32101216)
-              : const Color(0x36FFFFFF),
-          blur: 2.0,
-          thickness: 16.0,
-          refractiveIndex: 1.48,
-          lightIntensity: 0.48,
-          ambientStrength: 0.25,
-          ambientRim: 0.14,
-          fresnelStrength: 0.25,
+              ? const Color(0x35101216)
+              : const Color(0x30FFFFFF),
+          blur: 0.5,
+          thickness: 20.0,
+          refractiveIndex: 1.42,
+          lightIntensity: 0.35,
+          ambientStrength: 0.20,
+          ambientRim: 0.0,
+          fresnelStrength: 0.0,
           edgeAbsorption: 0.06,
         ),
         child: Row(
@@ -926,6 +928,10 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                     icon: const Icon(CupertinoIcons.slider_horizontal_3, size: 18, color: Colors.white),
                     title: '课时设置',
                     onTap: () {
+                      SharedElementSourceRegistry.recordFromContext(
+                        context,
+                        cornerRadius: 20.0,
+                      );
                       Navigator.push(
                         context,
                         TransparentMaterialPageRoute(

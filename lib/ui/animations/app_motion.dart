@@ -1,16 +1,19 @@
 import 'dart:math' as math;
 import 'dart:ui';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import '../widgets/app_background_layer.dart';
 
-/// [v3.1.4] 借鉴 FlClash (`prism_ui` `open_container.dart`) 的次级页面 SharedElement 源位置注册表
+/// [v3.1.5] 借鉴 FlClash (`prism_ui` `open_container.dart`) 的次级页面 SharedElement 圆角矩形卡片源位置注册表
 ///
-/// 当用户点击任何卡片 (`HyperOSCard`)、弹性按钮 (`SpringTouchFeedback`) 或屏幕任意触点时，
-/// 自动记录被点击组件在屏幕坐标系中的真实 [Rect] 与圆角半径 [cornerRadius]。
-/// 次级页面 (`TransparentMaterialPageRoute`) 推入时直接从该实际位置超椭圆展开至全屏，
-/// 返回（含手势预见性侧滑返回、左上角返回、系统返回、ESC）时平滑缩回该实际位置。
+/// 核心升级：
+/// 1. 绝不从“点击到的小圆”或“手指触点小胶囊”展开，而是精确锁定**被点击的那块圆角矩形卡片/列表行**；
+/// 2. 当点击的是卡片内的小圆形按钮（如悬浮 Dock 上的 36x36 `+` 按钮）时，自动向上寻优获取外层圆角矩形容器的 [Rect]；
+/// 3. 在全局 `recordPointerDown` 中直接通过 `RendererBinding.instance.hitTestInView` 扫描渲染树命中路径，
+///    即使点击的是未显式埋点的 `InkWell` 设置行或菜单项，也能自动提取其所属的圆角矩形卡片与行边界。
 class SharedElementSourceRegistry {
   SharedElementSourceRegistry._();
 
@@ -18,86 +21,239 @@ class SharedElementSourceRegistry {
   static double _lastCornerRadius = 20.0;
   static DateTime? _lastWidgetTime;
 
-  static Offset? _lastPointerPos;
+  static Rect? _lastHitCardRect;
+  static double _lastHitCardRadius = 20.0;
   static DateTime? _lastPointerTime;
 
-  /// 由全局根部 Listener 记录最近一次手指按下坐标（作为未显式包裹组件的兜底源位置）
-  static void recordPointerDown(Offset globalPosition) {
-    _lastPointerPos = globalPosition;
-    _lastPointerTime = DateTime.now();
+  /// 将圆角半径严格约束为“圆角矩形”形态（绝不允许 radius >= minSide * 0.42 变成圆形或椭圆胶囊）
+  static double _normalizeCardRadius(Rect rect, double preferredRadius) {
+    final minSide = math.min(rect.width, rect.height);
+    final maxAllowed = (minSide * 0.30).clamp(10.0, 24.0);
+    return preferredRadius.clamp(10.0, maxAllowed);
   }
 
-  /// 由可点击组件（如 HyperOSCard、SpringTouchFeedback）在触发 onTap 前自动记录自身真实屏幕矩形
+  /// 由全局根部 Listener 在手指按下瞬间自动从渲染树命中路径中提取被点击的圆角矩形卡片边界
+  static void recordPointerDown(PointerDownEvent event) {
+    _lastPointerTime = DateTime.now();
+    try {
+      final view = PlatformDispatcher.instance.implicitView;
+      final Size screenSize = (view != null && view.physicalSize.width > 0)
+          ? (view.physicalSize / view.devicePixelRatio)
+          : const Size(400, 860);
+
+      final HitTestResult result = HitTestResult();
+      RendererBinding.instance.hitTestInView(result, event.position, event.viewId);
+
+      Rect? rowCandidate;
+      Rect? cardCandidate;
+
+      for (final entry in result.path) {
+        final target = entry.target;
+        if (target is RenderBox && target.hasSize && target.attached) {
+          final size = target.size;
+          // 排除全屏/近全屏容器与过小的图标/小圆点
+          if (size.width >= screenSize.width * 0.96 ||
+              size.height >= screenSize.height * 0.80) {
+            continue;
+          }
+          if (size.width < 60.0 || size.height < 38.0) {
+            continue;
+          }
+          // 排除接近正圆/正方形的小按钮 (宽高比接近 1 且尺寸 < 68)
+          if (size.width < 68.0 && size.height < 68.0) {
+            continue;
+          }
+
+          final topLeft = target.localToGlobal(Offset.zero);
+          final rect = topLeft & size;
+          if (!rect.left.isFinite ||
+              !rect.top.isFinite ||
+              !rect.width.isFinite ||
+              !rect.height.isFinite) {
+            continue;
+          }
+
+          // 识别列表设置行 (高度 44~92px, 宽度 >= 140px)
+          if (rowCandidate == null &&
+              size.width >= 140.0 &&
+              size.height >= 44.0 &&
+              size.height <= 96.0) {
+            rowCandidate = rect;
+          }
+
+          // 识别外层圆角矩形卡片 / 悬浮栏 / 课程卡片
+          final typeName = target.runtimeType.toString();
+          final isGlassOrCardBox = typeName.contains('SharedBlur') ||
+              typeName.contains('ClipR') ||
+              typeName.contains('DecoratedBox') ||
+              typeName.contains('Physical');
+          if (isGlassOrCardBox &&
+              size.width >= 68.0 &&
+              size.height >= 40.0 &&
+              size.height <= 460.0) {
+            cardCandidate ??= rect;
+          }
+        }
+      }
+
+      if (rowCandidate != null && cardCandidate != null) {
+        // 若点击的是卡片组（如设置页多行 HyperOSCard）中的某一行：
+        // 左右对齐外层圆角矩形卡片的完整宽度，上下取该行的圆角矩形块！
+        final mergedRect = Rect.fromLTWH(
+          cardCandidate.left,
+          rowCandidate.top,
+          cardCandidate.width,
+          rowCandidate.height,
+        );
+        _lastHitCardRect = mergedRect;
+        _lastHitCardRadius = _normalizeCardRadius(mergedRect, 20.0);
+      } else if (cardCandidate != null) {
+        _lastHitCardRect = cardCandidate;
+        _lastHitCardRadius = _normalizeCardRadius(cardCandidate, 20.0);
+      } else if (rowCandidate != null) {
+        _lastHitCardRect = rowCandidate;
+        _lastHitCardRadius = _normalizeCardRadius(rowCandidate, 20.0);
+      }
+    } catch (_) {}
+  }
+
+  /// 由可点击组件（如 HyperOSCard、设置行、SpringTouchFeedback）在触发 onTap 前自动记录圆角矩形卡片边界
   static void recordFromContext(
     BuildContext context, {
     double cornerRadius = 20.0,
   }) {
     try {
       final renderObject = context.findRenderObject();
-      if (renderObject is RenderBox && renderObject.hasSize && renderObject.attached) {
-        final size = renderObject.size;
-        if (size.width >= 16.0 && size.height >= 16.0) {
-          final topLeft = renderObject.localToGlobal(Offset.zero);
-          final rect = topLeft & size;
-          if (rect.left.isFinite &&
-              rect.top.isFinite &&
-              rect.width.isFinite &&
-              rect.height.isFinite) {
-            _lastWidgetRect = rect;
-            _lastCornerRadius = cornerRadius.clamp(8.0, 36.0);
-            _lastWidgetTime = DateTime.now();
+      if (renderObject is! RenderBox ||
+          !renderObject.hasSize ||
+          !renderObject.attached) {
+        return;
+      }
+
+      final mq = MediaQuery.maybeOf(context);
+      final screenSize = mq?.size ?? const Size(400, 860);
+
+      RenderBox chosenBox = renderObject;
+      Rect chosenRect = chosenBox.localToGlobal(Offset.zero) & chosenBox.size;
+
+      // 关键修复：如果当前点击的是小圆形/方形按钮（如悬浮 Dock 上的 36x36 `+` 按钮或卡片内小按钮），
+      // 向上遍历祖先 Element 寻找包裹它的圆角矩形卡片或悬浮胶囊栏，绝不从 36x36 的小圆展开！
+      final bool isTinyOrCircularButton =
+          chosenRect.width < 68.0 || chosenRect.height < 40.0;
+
+      Rect? outerCardRect;
+      context.visitAncestorElements((ancestor) {
+        final ro = ancestor.renderObject;
+        if (ro is RenderBox && ro.hasSize && ro.attached) {
+          final s = ro.size;
+          if (s.width >= screenSize.width * 0.96 ||
+              s.height >= screenSize.height * 0.80) {
+            return false; // 已到达全屏级容器，停止向上查找
+          }
+          final wName = ancestor.widget.runtimeType.toString();
+          if (wName.contains('HyperOSCard') ||
+              wName.contains('GlassContainer') ||
+              wName.contains('GlassCard')) {
+            final topLeft = ro.localToGlobal(Offset.zero);
+            final r = topLeft & s;
+            if (r.left.isFinite && r.top.isFinite) {
+              outerCardRect = r;
+              return false;
+            }
           }
         }
+        return true;
+      });
+
+      if (isTinyOrCircularButton && outerCardRect != null) {
+        // 小圆形按钮（如 `+`）使用其所属的外层悬浮胶囊 Dock 或外层卡片的圆角矩形
+        chosenRect = outerCardRect!;
+      } else if (outerCardRect != null &&
+          chosenRect.height >= 42.0 &&
+          chosenRect.height <= 96.0 &&
+          outerCardRect!.height > chosenRect.height * 1.35) {
+        // 多行卡片组中的单行：左右对齐外层 HyperOSCard 的完整圆角矩形宽度，上下保持被点击行的高度
+        chosenRect = Rect.fromLTWH(
+          outerCardRect!.left,
+          chosenRect.top,
+          outerCardRect!.width,
+          chosenRect.height,
+        );
+      }
+
+      if (chosenRect.left.isFinite &&
+          chosenRect.top.isFinite &&
+          chosenRect.width >= 44.0 &&
+          chosenRect.height >= 36.0) {
+        _lastWidgetRect = chosenRect;
+        _lastCornerRadius = _normalizeCardRadius(chosenRect, cornerRadius);
+        _lastWidgetTime = DateTime.now();
       }
     } catch (_) {}
   }
 
-  /// 路由推入时消费最近一次点击的真实组件位置；若超时或全屏容器则回退至触点胶囊矩形
+  /// 路由推入时消费最近一次点击的真实圆角矩形卡片位置
   static ({Rect rect, double cornerRadius})? consumeSource(Size screenSize) {
     final now = DateTime.now();
+
+    Rect? candidateRect;
+    double candidateRadius = 20.0;
 
     if (_lastWidgetRect != null && _lastWidgetTime != null) {
       final ageMs = now.difference(_lastWidgetTime!).inMilliseconds;
       final rect = _lastWidgetRect!;
+      final radius = _lastCornerRadius;
       _lastWidgetRect = null;
       _lastWidgetTime = null;
 
-      // 过滤掉接近全屏的父容器，确保展开源是具体的按钮或卡片
       final isSubScreenWidget = rect.width < screenSize.width * 0.96 &&
           rect.height < screenSize.height * 0.85;
-      if (ageMs <= 750 && isSubScreenWidget) {
-        final double clampedLeft =
-            rect.left.clamp(0.0, math.max(0.0, screenSize.width - 24.0)).toDouble();
-        final double clampedTop =
-            rect.top.clamp(0.0, math.max(0.0, screenSize.height - 24.0)).toDouble();
-        final double clampedWidth =
-            rect.width.clamp(28.0, screenSize.width).toDouble();
-        final double clampedHeight =
-            rect.height.clamp(28.0, screenSize.height).toDouble();
-        return (
-          rect: Rect.fromLTWH(clampedLeft, clampedTop, clampedWidth, clampedHeight),
-          cornerRadius: _lastCornerRadius,
-        );
+      if (ageMs <= 1200 && isSubScreenWidget) {
+        candidateRect = rect;
+        candidateRadius = radius;
       }
     }
 
-    if (_lastPointerPos != null && _lastPointerTime != null) {
+    if (candidateRect == null &&
+        _lastHitCardRect != null &&
+        _lastPointerTime != null) {
       final ageMs = now.difference(_lastPointerTime!).inMilliseconds;
-      final pos = _lastPointerPos!;
-      _lastPointerPos = null;
+      final rect = _lastHitCardRect!;
+      final radius = _lastHitCardRadius;
+      _lastHitCardRect = null;
       _lastPointerTime = null;
-      if (ageMs <= 750 && screenSize.width > 0 && screenSize.height > 0) {
-        const w = 136.0;
-        const h = 52.0;
-        final double left =
-            (pos.dx - w / 2).clamp(12.0, math.max(12.0, screenSize.width - w - 12.0)).toDouble();
-        final double top =
-            (pos.dy - h / 2).clamp(12.0, math.max(12.0, screenSize.height - h - 12.0)).toDouble();
-        return (
-          rect: Rect.fromLTWH(left, top, w, h),
-          cornerRadius: 22.0,
-        );
+
+      final isSubScreenWidget = rect.width < screenSize.width * 0.96 &&
+          rect.height < screenSize.height * 0.85;
+      if (ageMs <= 1200 && isSubScreenWidget) {
+        candidateRect = rect;
+        candidateRadius = radius;
       }
+    }
+
+    if (candidateRect != null &&
+        screenSize.width > 0 &&
+        screenSize.height > 0) {
+      final double clampedWidth =
+          candidateRect.width.clamp(64.0, screenSize.width - 16.0).toDouble();
+      final double clampedHeight =
+          candidateRect.height.clamp(42.0, screenSize.height * 0.82).toDouble();
+      final double clampedLeft = candidateRect.left
+          .clamp(4.0, math.max(4.0, screenSize.width - clampedWidth - 4.0))
+          .toDouble();
+      final double clampedTop = candidateRect.top
+          .clamp(4.0, math.max(4.0, screenSize.height - clampedHeight - 4.0))
+          .toDouble();
+      final normalizedRect = Rect.fromLTWH(
+        clampedLeft,
+        clampedTop,
+        clampedWidth,
+        clampedHeight,
+      );
+      return (
+        rect: normalizedRect,
+        cornerRadius: _normalizeCardRadius(normalizedRect, candidateRadius),
+      );
     }
 
     return null;
@@ -228,7 +384,7 @@ class PageControllerMotionBlur extends StatefulWidget {
     super.key,
     required this.controller,
     required this.child,
-    this.maxBlur = 3.8,
+    this.maxBlur = 2.6,
     this.downscaleFraction = 1.0,
   });
 
@@ -392,7 +548,7 @@ class DirectionalMotionBlurSwitcher extends StatefulWidget {
     this.pageCount = 3,
     this.duration = const Duration(milliseconds: 360),
     this.curve = AppCurves.pageSlide,
-    this.maxBlur = 4.2,
+    this.maxBlur = 2.8,
     this.downscaleFraction = 0.45,
   });
 

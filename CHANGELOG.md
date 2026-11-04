@@ -2,6 +2,21 @@
 
 本文档记录 CourseWidgets 各版本更新的动态活动演进，重点关注架构改进、渲染优化、故障诊断与教务抓取能力提升。
 
+## [v3.1.5] - 2026-11-05 (Build 3150 正式版)
+
+### 1. 修复顶栏与悬浮玻璃组件模糊糊成一团的问题 (`useOwnLayer: true` 独立超清透液态玻璃层恢复)
+- **根因定位与彻底修复**：在 `v3.1.4` 恢复课程页顶部栏（`_buildModernTopBar`）、底部悬浮横向胶囊控制 Dock（`_buildFloatingBottomActionDock`）、日历页顶栏（`CalendarViewScreen._buildHeader`）、周次切换控制条（`_buildWeekControl`）与横屏左上角日期徽章（`_buildCornerDateBadge`）的 `GlassContainer` 时，因漏传 `useOwnLayer: true` 导致其落入 `LiquidGlass.grouped` 模式并继承父级全局高模糊着色器设置，使内部文字与按钮被强模糊覆盖；
+- **100% 恢复 `v3.1.2` 原版独立超清透参数**：为上述全部 5 处悬浮 `GlassContainer` 显式开启 `useOwnLayer: true`，并恢复 `blur: 0.5`、`ambientRim: 0.0`、`fresnelStrength: 0.0` 的超清透折射参数，确保 3D 液态玻璃通透晶莹且内部文字、图标 100% 锐利清晰。
+
+### 2. 次级页面 SharedElement 升级为从“被点击的圆角矩形卡片本身”展开与缩回 (True Rounded-Rectangle Card Morph)
+- **消除“从点击到的圆/小胶囊展开”问题**：
+  - 在 `SettingsMainScreen`、`NewSettingsScreen`、`SettingsDataScreen`、`WeeklyScheduleGrid`、`CalendarViewScreen` 与悬浮 Dock 菜单中为所有设置行与卡片绑定圆角矩形卡片源位置记录（并将 `WebviewImportScreen` 统一升级为 `TransparentMaterialPageRoute`）；
+  - 升级 `SharedElementSourceRegistry`：当点击的是小圆形图标按钮（如悬浮 Dock 上的 `36x36` `+` 按钮）时，自动向上寻优获取外层悬浮栏/卡片的圆角矩形 `Rect`；当点击的是多行 `HyperOSCard` 中的单行时，左右自动对齐外层圆角矩形卡片完整宽度；同时在全局 `recordPointerDown` 中通过 `RendererBinding.instance.hitTestInView` 直接从渲染树提取被点击的圆角矩形卡片边界，并严格约束圆角半径为标准圆角矩形（绝不退化为圆形）；
+- **1:1 还原 FlClash `open_container.dart` (`_openingFrame` / `_closingFrame`) 圆角矩形等比展开轨迹**：在 `_SharedElementMorphTransition` 中采用宽度等比缩放与圆角矩形实体底板过渡，第 1 帧即在被点击的圆角矩形卡片原位完整显现并平滑撑开成整个次级页面，返回时精准收缩变回该圆角矩形卡片本身。
+
+### 3. 预见性侧滑返回引入双曲橡皮筋强阻尼限幅，彻底杜绝滑出屏幕 (Hyperbolic Rubber-Band Damped Predictive Back)
+- **修复预见性侧滑返回位移倍率过大问题**：在 `_computePredictiveDragRect` 中引入对标 FlClash `rubber()` 的双曲橡皮筋强阻尼限幅函数（`_rubberBand`），将水平最大跟手偏移严格限制在 `<= 26px`（屏幕宽度的 `6.5%` 以内，初始灵敏度系数降至 `0.14`）、垂直最大偏移限制在 `<= 18px`，并将页面缩放范围收紧为温和稳重的 `1.0 -> 0.88`，确保无论手指滑动多快多远，浮窗页面始终稳重悬浮于屏幕中央，绝不飞出屏幕。
+
 ## [v3.1.4] - 2026-11-05 (Build 3140 正式版)
 
 ### 1. Windows 秒开加载动画与 Android 单层极速开屏重构 (Instant Windows Splash & Single-Layer Android Launch)

@@ -26,17 +26,20 @@ class _RouteMorphMetadata {
     final consumed = SharedElementSourceRegistry.consumeSource(screenSize);
     if (consumed != null) {
       sourceRect = consumed.rect;
-      sourceRadius = consumed.cornerRadius;
+      final maxRadius =
+          (math.min(consumed.rect.width, consumed.rect.height) * 0.28)
+              .clamp(12.0, 22.0);
+      sourceRadius = consumed.cornerRadius.clamp(12.0, maxRadius);
     } else {
-      // 若无显式点击源（如快捷键或代码触发推入），采用屏幕中下部灵动胶囊区作为默认展开锚点
-      final w = (screenSize.width * 0.76).clamp(180.0, 420.0);
-      const h = 64.0;
+      // 若无显式点击源（如快捷键或代码触发推入），采用标准全宽圆角矩形卡片作为默认展开锚点
+      final w = (screenSize.width - 32.0).clamp(180.0, 820.0);
+      const h = 68.0;
       sourceRect = Rect.fromCenter(
-        center: Offset(screenSize.width * 0.5, screenSize.height * 0.78),
+        center: Offset(screenSize.width * 0.5, screenSize.height * 0.72),
         width: w,
         height: h,
       );
-      sourceRadius = 22.0;
+      sourceRadius = 20.0;
     }
   }
 }
@@ -248,15 +251,15 @@ class _SharedElementMorphTransitionState
 
     final deltaDx = (signedDx - _lastDragDx).abs();
     _lastDragDx = signedDx;
-    final targetBlur = (deltaDx * 0.28).clamp(0.0, 4.2);
+    final targetBlur = (deltaDx * 0.18).clamp(0.0, 2.6);
 
     setState(() {
       _dragProgress = math.max(
         rawProgress,
-        (signedDx.abs() / math.max(1.0, screenWidth * 0.75)).clamp(0.0, 1.0),
+        (signedDx.abs() / math.max(1.0, screenWidth * 0.85)).clamp(0.0, 1.0),
       );
       _dragCurrentOffset = Offset(signedDx, rawDy);
-      _dragBlurSigma = (_dragBlurSigma * 0.55 + targetBlur * 0.45).clamp(0.0, 4.2);
+      _dragBlurSigma = (_dragBlurSigma * 0.55 + targetBlur * 0.45).clamp(0.0, 2.6);
       _meta.predictiveDragProgress.value = _dragProgress;
     });
   }
@@ -297,14 +300,14 @@ class _SharedElementMorphTransitionState
     final rawDy = details.globalPosition.dy - _dragStartPos.dy;
     final deltaDx = (rawDx - _lastDragDx).abs();
     _lastDragDx = rawDx;
-    final targetBlur = (deltaDx * 0.28).clamp(0.0, 4.2);
+    final targetBlur = (deltaDx * 0.18).clamp(0.0, 2.6);
 
     setState(() {
       _dragCurrentOffset = Offset(rawDx, rawDy);
       _dragProgress =
-          (rawDx / math.max(1.0, screenSize.width * 0.78)).clamp(0.0, 1.0);
+          (rawDx / math.max(1.0, screenSize.width * 0.85)).clamp(0.0, 1.0);
       _dragBlurSigma =
-          (_dragBlurSigma * 0.55 + targetBlur * 0.45).clamp(0.0, 4.2);
+          (_dragBlurSigma * 0.55 + targetBlur * 0.45).clamp(0.0, 2.6);
       _meta.predictiveDragProgress.value = _dragProgress;
     });
   }
@@ -343,25 +346,37 @@ class _SharedElementMorphTransitionState
     widget.route.navigator?.maybePop();
   }
 
-  /// 计算预见性侧滑拖拽期间次级页面的实时缩放与跟手浮窗矩形 (对标 FlClash `drag_back.dart`)
+  /// 双曲橡皮筋强阻尼位移限幅函数 (对标 FlClash `open_container.dart` `rubber()` 阻尼手感)
+  /// 确保预见性侧滑返回时页面稳重居中微缩，绝不会一滑就飞出屏幕
+  double _rubberBand(double delta, double maxLimit) {
+    if (delta == 0.0 || maxLimit <= 0.0) return 0.0;
+    final sign = delta.sign;
+    final damped = delta.abs() * 0.14;
+    return sign * maxLimit * (damped / (damped + maxLimit * 0.90));
+  }
+
+  /// 计算预见性侧滑拖拽期间次级页面的实时缩放与高阻尼跟手浮窗矩形
   Rect _computePredictiveDragRect(Size screenSize) {
     final eased = Curves.easeOutCubic.transform(_dragProgress.clamp(0.0, 1.0));
-    final scale = lerpDouble(1.0, 0.70, eased)!;
+    // 温和收敛缩放幅度 (1.0 -> 0.88)，保持卡片在屏幕中央稳重悬浮
+    final scale = lerpDouble(1.0, 0.88, eased)!;
     final w = screenSize.width * scale;
     final h = screenSize.height * scale;
 
     final baseLeft = (screenSize.width - w) * 0.5;
     final baseTop = (screenSize.height - h) * 0.5;
 
-    final shiftX = _dragCurrentOffset.dx * 0.62;
-    final shiftY = (_dragCurrentOffset.dy * 0.28)
-        .clamp(-screenSize.height * 0.16, screenSize.height * 0.22);
+    // 水平最大位移严格限制在 <= 26px (屏幕宽度的 6.5% 以内)，垂直最大位移 <= 18px
+    final maxShiftX = math.min(26.0, screenSize.width * 0.065);
+    final maxShiftY = math.min(18.0, screenSize.height * 0.025);
+    final shiftX = _rubberBand(_dragCurrentOffset.dx, maxShiftX);
+    final shiftY = _rubberBand(_dragCurrentOffset.dy, maxShiftY);
 
     return Rect.fromLTWH(baseLeft + shiftX, baseTop + shiftY, w, h);
   }
 
   double _computePredictiveDragRadius() {
-    return lerpDouble(0.0, 28.0, (_dragProgress * 3.2).clamp(0.0, 1.0))!;
+    return lerpDouble(0.0, 26.0, (_dragProgress * 2.8).clamp(0.0, 1.0))!;
   }
 
   ImageFilter _resolveFilter(double quantizedSigma) {
@@ -436,7 +451,7 @@ class _SharedElementMorphTransitionState
         // 2. 计算速度包络 1D 动态模糊 (覆盖：进入动画、所有退出动画、预见性侧滑拖拽与回弹)
         final animBlurT = isReversing ? (1.0 - rawT) : rawT;
         final animSigma = isAnimating
-            ? AppCurves.velocityBlurEnvelope(animBlurT) * 4.2
+            ? AppCurves.velocityBlurEnvelope(animBlurT) * 3.0
             : 0.0;
         final combinedSigma = math.max(animSigma, _dragBlurSigma);
         final quantizedSigma = (combinedSigma * 4.0).roundToDouble() * 0.25;
@@ -448,7 +463,9 @@ class _SharedElementMorphTransitionState
         final secondaryScale = lerpDouble(1.0, 0.945, secCurved)!;
         final secondaryDx = lerpDouble(0.0, -screenSize.width * 0.05, secCurved)!;
 
-        // 4. 计算当前容器形变矩形 (currentRect) 与超椭圆圆角 (currentRadius)
+        // 4. 计算当前圆角矩形容器形变边界 (currentRect) 与圆角半径 (currentRadius)
+        // 对标 FlClash `open_container.dart` (`_openingFrame` / `_closingFrame`)：
+        // 从被点击的圆角矩形卡片 (sourceRect) 等比平滑撑开至全屏圆角矩形，返回时精准缩回该圆角矩形卡片！
         final Rect fullScreenRect = Offset.zero & screenSize;
         final Rect sourceRect = _meta.sourceRect ?? fullScreenRect;
         final double sourceRadius = _meta.sourceRadius;
@@ -457,7 +474,7 @@ class _SharedElementMorphTransitionState
         double currentRadius;
         double containerOpacity = 1.0;
         double contentOpacity = 1.0;
-        double placeholderVeilAlpha = 0.0;
+        double cardShellAlpha = 0.0;
 
         if (_isDraggingBack) {
           // 状态 I：用户正在手指拖拽预见性侧滑返回
@@ -465,12 +482,13 @@ class _SharedElementMorphTransitionState
           currentRadius = _computePredictiveDragRadius();
           containerOpacity = 1.0;
           contentOpacity = 1.0;
+          cardShellAlpha = 0.0;
         } else if (rawT >= 0.999 && !isAnimating) {
           // 状态 II：次级页面完全展开静止态 (零裁剪、零缩放开销)
           currentRect = fullScreenRect;
           currentRadius = 0.0;
         } else {
-          // 状态 III：SharedElement 容器展开 (Push) 或缩回原组件位置 (Pop)
+          // 状态 III：SharedElement 圆角矩形卡片展开 (Push) 或缩回原卡片位置 (Pop)
           final double curvedT = (isReversing
                   ? AppCurves.pageSlideReverse
                   : AppCurves.pageSlide)
@@ -480,34 +498,66 @@ class _SharedElementMorphTransitionState
           final Rect openAnchorRect = (isReversing && _meta.dragReleaseRect != null)
               ? _meta.dragReleaseRect!
               : fullScreenRect;
-          final double openAnchorRadius =
+          final double openDisplayRadius =
               (isReversing && _meta.dragReleaseRadius != null)
                   ? _meta.dragReleaseRadius!
-                  : 0.0;
+                  : 26.0;
 
-          currentRect = Rect.lerp(sourceRect, openAnchorRect, curvedT)!;
-          currentRadius =
-              lerpDouble(sourceRadius, openAnchorRadius, curvedT)!.clamp(0.0, 44.0);
+          // FlClash `_openingFrame` 等比宽度缩放与高度展开插值
+          final double openWidth = math.max(1.0, openAnchorRect.width);
+          final double fromScale =
+              (sourceRect.width / openWidth).clamp(0.08, 1.0);
+          final double scale = lerpDouble(fromScale, 1.0, curvedT)!;
+          final double unscaledHeight = lerpDouble(
+            sourceRect.height / fromScale,
+            openAnchorRect.height,
+            curvedT,
+          )!;
+          final double currentWidth = openWidth * scale;
+          final double currentHeight = unscaledHeight * scale;
+          final Offset currentCenter = Offset.lerp(
+            sourceRect.center,
+            openAnchorRect.center,
+            curvedT,
+          )!;
+          currentRect = Rect.fromCenter(
+            center: currentCenter,
+            width: currentWidth,
+            height: currentHeight,
+          );
+
+          // 飞行全程保持圆角矩形形态 (sourceRadius -> 26px)，仅在贴合屏幕边缘尾段 (curvedT > 0.88) 归零
+          final double flightRadius = lerpDouble(
+                sourceRadius / fromScale,
+                openDisplayRadius,
+                curvedT,
+              )! *
+              scale;
+          final double edgeSettle = (_meta.dragReleaseRadius != null && isReversing)
+              ? 1.0
+              : (1.0 - ((curvedT - 0.88) / 0.12).clamp(0.0, 1.0));
+          currentRadius = (flightRadius * edgeSettle).clamp(0.0, 32.0);
 
           if (!isReversing) {
-            // 进入时 (Push)：前 18% 快速浮现容器，前 42% 页面内容渐显，源卡片底色平滑消退
-            containerOpacity = (rawT / 0.18).clamp(0.0, 1.0);
+            // 进入时 (Push)：第 1 帧即在被点击的圆角矩形卡片原位 100% 显现，由原卡片平滑撑开成次级页面
+            containerOpacity = 1.0;
             contentOpacity =
-                Curves.easeOut.transform(((rawT - 0.05) / 0.38).clamp(0.0, 1.0));
-            placeholderVeilAlpha = (1.0 - (rawT / 0.36).clamp(0.0, 1.0)) * 0.45;
+                Curves.easeOutCubic.transform((rawT / 0.42).clamp(0.0, 1.0));
+            cardShellAlpha =
+                (1.0 - Curves.easeOut.transform((rawT / 0.46).clamp(0.0, 1.0)));
           } else {
-            // 退出时 (Pop - 含按钮返回、系统返回、ESC、侧滑释放)：
-            // 缩回原组件位置并在最后 34% 平滑消融回原卡片/按钮
+            // 退出时 (Pop)：次级页面平滑收缩回被点击的圆角矩形卡片本身，并在贴合原卡片的最后 22% 无缝消融
             containerOpacity =
-                Curves.easeOutCubic.transform((rawT / 0.34).clamp(0.0, 1.0));
+                Curves.easeOutCubic.transform((rawT / 0.22).clamp(0.0, 1.0));
             contentOpacity =
-                Curves.easeIn.transform(((rawT - 0.08) / 0.36).clamp(0.0, 1.0));
-            placeholderVeilAlpha =
-                (1.0 - (rawT / 0.40).clamp(0.0, 1.0)) * 0.35;
+                Curves.easeInCubic.transform(((rawT - 0.10) / 0.42).clamp(0.0, 1.0));
+            cardShellAlpha =
+                (1.0 - Curves.easeOut.transform((rawT / 0.48).clamp(0.0, 1.0))) *
+                    0.92;
           }
         }
 
-        // 5. 构建借鉴 FlClash `_openingFrame` / `_closingFrame` 的无重排等比缩放超椭圆容器
+        // 5. 构建借鉴 FlClash `_openingFrame` / `_closingFrame` 的无重排等比缩放圆角矩形容器
         Widget morphingContainer;
         final bool isFullScreenIdle =
             !_isDraggingBack && !isAnimating && rawT >= 0.999 && secRaw <= 0.001;
@@ -532,44 +582,47 @@ class _SharedElementMorphTransitionState
             );
           }
 
-          if (placeholderVeilAlpha > 0.005) {
-            final placeholderColor = isDark
-                ? const Color(0xFF1E222D)
-                : const Color(0xFFF4F6FA);
-            scaledPage = Stack(
-              fit: StackFit.expand,
-              children: [
-                scaledPage,
+          final Color cardBaseColor = isDark
+              ? const Color(0xEE1C202B)
+              : const Color(0xF4F7F9FC);
+
+          Widget innerMorphStack = Stack(
+            fit: StackFit.expand,
+            children: [
+              // 圆角矩形卡片实体底板：确保展开初段与缩回尾段呈现出饱满清晰的圆角矩形卡片形态
+              if (cardShellAlpha > 0.005)
                 IgnorePointer(
                   child: ColoredBox(
-                    color: placeholderColor.withValues(alpha: placeholderVeilAlpha),
+                    color: cardBaseColor.withValues(
+                      alpha: (cardShellAlpha * 0.94).clamp(0.0, 1.0),
+                    ),
                   ),
                 ),
-              ],
-            );
-          }
+              OverflowBox(
+                alignment: Alignment.topCenter,
+                minWidth: currentRect.width,
+                maxWidth: currentRect.width,
+                minHeight: currentRect.height,
+                maxHeight: currentRect.height,
+                child: Transform.scale(
+                  scale: scaleX,
+                  alignment: Alignment.topCenter,
+                  child: OverflowBox(
+                    alignment: Alignment.topCenter,
+                    minWidth: screenSize.width,
+                    maxWidth: screenSize.width,
+                    minHeight: screenSize.height,
+                    maxHeight: screenSize.height,
+                    child: scaledPage,
+                  ),
+                ),
+              ),
+            ],
+          );
 
           Widget clippedCard = ClipRSuperellipse(
             borderRadius: BorderRadius.circular(currentRadius),
-            child: OverflowBox(
-              alignment: Alignment.topCenter,
-              minWidth: currentRect.width,
-              maxWidth: currentRect.width,
-              minHeight: currentRect.height,
-              maxHeight: currentRect.height,
-              child: Transform.scale(
-                scale: scaleX,
-                alignment: Alignment.topCenter,
-                child: OverflowBox(
-                  alignment: Alignment.topCenter,
-                  minWidth: screenSize.width,
-                  maxWidth: screenSize.width,
-                  minHeight: screenSize.height,
-                  maxHeight: screenSize.height,
-                  child: scaledPage,
-                ),
-              ),
-            ),
+            child: innerMorphStack,
           );
 
           // 缩放或预见性返回期间为浮窗卡片赋予柔和立体漫反射阴影与微高光描边

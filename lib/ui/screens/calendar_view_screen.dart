@@ -11,6 +11,7 @@ import '../../utils/responsive_utils.dart';
 import '../widgets/liquid_components.dart' as liquid;
 import '../widgets/glass_context_menu.dart';
 import '../transitions/smooth_slide_transitions.dart';
+import '../animations/app_motion.dart';
 import 'course_edit_screen.dart';
 
 /// [v2.8.4] 日历视图 — 官方高端液态玻璃重构与 120Hz 极速性能优化
@@ -180,6 +181,7 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
           boxShadow: liquid.HyperOSShadows.dock(isDark),
         ),
         child: GlassContainer(
+          useOwnLayer: true,
           shape: const LiquidRoundedSuperellipse(borderRadius: 22),
           quality: theme.ThemeService().glassQuality,
           padding: compact
@@ -187,16 +189,16 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
               : const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           settings: LiquidGlassSettings(
             glassColor: isDark
-                ? const Color(0x2812151B)
-                : const Color(0x34FFFFFF),
+                ? const Color(0x2212151B)
+                : const Color(0x35FFFFFF),
             blur: 1.5,
-            thickness: 14.0,
+            thickness: 20.0,
             refractiveIndex: 1.45,
-            lightIntensity: 0.45,
-            ambientStrength: 0.25,
-            ambientRim: 0.12,
-            fresnelStrength: 0.22,
-            edgeAbsorption: 0.05,
+            lightIntensity: 0.75,
+            ambientStrength: 0.45,
+            ambientRim: 0.0,
+            fresnelStrength: 0.0,
+            saturation: 1.15,
           ),
           child: Row(
             children: [
@@ -641,10 +643,11 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
-      child: liquid.HyperOSCard(
-        cornerRadius: 18,
-        padding: const EdgeInsets.all(14),
-        child: Row(
+      child: Builder(
+        builder: (cardContext) => liquid.HyperOSCard(
+          cornerRadius: 18,
+          padding: const EdgeInsets.all(14),
+          child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             // 时间胶囊块
@@ -757,6 +760,10 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
                   title: '编辑课程',
                   icon: CupertinoIcons.pencil,
                   onTap: () {
+                    SharedElementSourceRegistry.recordFromContext(
+                      cardContext,
+                      cornerRadius: 18.0,
+                    );
                     Navigator.push(
                       context,
                       TransparentMaterialPageRoute(
@@ -833,6 +840,7 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
               ),
             ),
           ],
+        ),
         ),
       ),
     );
