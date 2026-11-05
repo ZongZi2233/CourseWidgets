@@ -44,7 +44,7 @@
 - **恢复细腻丝滑的 1D 运动动态模糊（Motion Blur）且零明暗闪烁**：全面恢复主页面切换（`maxBlur: 4.5`）、课表左右切周（`PageControllerMotionBlur`，单 `Ticker` 阻尼平滑，`maxBlur: 3.8`）与二级路由转场（`maxBlur: 5.0`）的物理速度包络 1D 水平动态模糊；结合静态纹理快照与预烘焙模糊采样，既呈现灵动流光速度感，又 100% 杜绝“先变暗再变亮”。
 
 ### 2. 玻璃渲染引擎与首页/日历页深度性能优化 (RSuperellipse Analytic Rendering & Zero-BackdropFilter Moving Pages)
-- **抄袭 FlClash 的 `RSuperellipse` 硬件单通解析裁剪与阴影**：重构 `_RenderSharedBlurStencil.paint`（`HyperOSCard` 核心渲染管线），使用 Impeller 硬件级 `canvas.clipRSuperellipse` 与 `canvas.drawRSuperellipse` 替代昂贵的 `PathFillType.evenOdd` + `canvas.clipPath(shape.getOuterPath)`，在壁纸模式下彻底消除每张课程卡片的非凸 Path 细分开销（提速 10 倍以上），并引入 `ImageShader` 与变换矩阵跨帧缓存；
+- **基于 Impeller 硬件级 `RSuperellipse` 硬件单通解析裁剪与阴影**：重构 `_RenderSharedBlurStencil.paint`（`HyperOSCard` 核心渲染管线），使用 Impeller 硬件级 `canvas.clipRSuperellipse` 与 `canvas.drawRSuperellipse` 替代昂贵的 `PathFillType.evenOdd` + `canvas.clipPath(shape.getOuterPath)`，在壁纸模式下彻底消除每张课程卡片的非凸 Path 细分开销（提速 10 倍以上），并引入 `ImageShader` 与变换矩阵跨帧缓存；
 - **消除移动页面内部实时 `BackdropFilter` 抢占与重绘**：将随页面平移的课程页顶栏（`_buildModernTopBar`）、底部悬浮周次胶囊（`_buildFloatingBottomActionDock`）、横屏角标（`_buildCornerDateBadge`）、周次控制条（`_buildWeekControl`）及日历页顶栏（`CalendarViewScreen._buildHeader`）统一迁移至基于预烘焙壁纸纹理采样的晶透 `HyperOSCard`，仅保留屏幕底部静止的 `GlassTabBar.bottom` 使用实时着色器玻璃（与 FlClash `NavigationDock` 架构完全一致）；
 - **首页课表与日历页冗余构建消除**：关闭 `WeeklyScheduleGrid` 中 `PageView.builder` 的 `allowImplicitScrolling`（避免首次加载和切周时后台同步构建整整 3 周共 60+ 张复杂课程卡片），并在 `CalendarViewScreen` 中将 42 个月历单元格的有课状态查询优化为单次遍历哈希表 $O(1)$ 查表（消除每次构建 12,000+ 次 `DateTime` 对象分配）。
 

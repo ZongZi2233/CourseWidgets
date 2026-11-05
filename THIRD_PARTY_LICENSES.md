@@ -1,4 +1,4 @@
-﻿# Third-Party Licenses
+# Third-Party Licenses
 
 This document lists all third-party dependencies used in CourseWidgets and their respective licenses.
 
@@ -126,6 +126,26 @@ This document lists all third-party dependencies used in CourseWidgets and their
 - **License**: MIT License
 - **URL**: https://pub.dev/packages/flutter_phoenix
 
+### Workmanager (^0.9.0+3)
+- **License**: MIT License
+- **URL**: https://pub.dev/packages/workmanager
+
+### Flutter Foreground Task (^8.15.0)
+- **License**: MIT License
+- **URL**: https://pub.dev/packages/flutter_foreground_task
+
+### Live Activities (^2.4.6)
+- **License**: MIT License
+- **URL**: https://pub.dev/packages/live_activities
+
+### Sensors Plus (^7.1.0)
+- **License**: BSD 3-Clause License
+- **URL**: https://pub.dev/packages/sensors_plus
+
+### Smooth Scroll Multiplatform (^1.0.8)
+- **License**: MIT License
+- **URL**: https://pub.dev/packages/smooth_scroll_multiplatform
+
 ## Dev Dependencies
 
 ### Flutter Lints (^6.0.0)
@@ -143,40 +163,28 @@ This document lists all third-party dependencies used in CourseWidgets and their
 - **Copyright**: Dart Authors
 - **URL**: https://pub.dev/packages/build_runner
 
-## Font Licenses
-
-### SF Pro
-- **License**: Apple Font License
-- **Copyright**: Apple Inc.
-- **Note**: Used for English, numbers, and symbols
-
-### PingFang SC
-- **License**: Apple Font License
-- **Copyright**: Apple Inc.
-- **Note**: Used for Chinese, Japanese, Korean (CJK) characters
-
 ## License Compatibility
 
-All dependencies are compatible with the Apache 2.0 License under which CourseWidgets is released:
+All direct dependencies are compatible with the **GNU Affero General Public License v3.0 (AGPL-3.0)** under which CourseWidgets is released:
 
-- **MIT License**: Permissive, compatible with Apache 2.0
-- **BSD 3-Clause License**: Permissive, compatible with Apache 2.0
-- **Apache 2.0 License**: Same license, fully compatible
+- **MIT License**: Permissive, compatible with GNU AGPL-3.0
+- **BSD 3-Clause License**: Permissive, compatible with GNU AGPL-3.0
+- **Apache 2.0 License**: Permissive, compatible with GNU AGPL-3.0
 
 ## Compliance Notes
 
-1. All required copyright notices and license texts are preserved in their respective packages
-2. Modified files carry prominent notices as required by Apache 2.0
-3. Attribution notices from dependencies are retained
-4. No trademark usage conflicts exist
+1. All required copyright notices and license texts are preserved in their respective packages.
+2. Modified local plugin packages retain their original upstream attribution and license notices.
+3. No proprietary trademark ownership is claimed by this project.
 
 ## Full License Texts
 
 For the full text of each license, please refer to:
-- Apache 2.0: http://www.apache.org/licenses/LICENSE-2.0
+- GNU AGPL-3.0: https://www.gnu.org/licenses/agpl-3.0.html
+- Apache 2.0: https://www.apache.org/licenses/LICENSE-2.0
 - MIT: https://opensource.org/licenses/MIT
 - BSD 3-Clause: https://opensource.org/licenses/BSD-3-Clause
 
 ---
 
-Last Updated: January 2026
+Last Updated: November 2026 (v3.1.5)

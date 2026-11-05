@@ -1457,7 +1457,7 @@ class _RenderSharedBlurStencil extends RenderProxyBox {
     final radius = Radius.circular(cornerRadius);
     final rsuperellipse = RSuperellipse.fromRectAndRadius(rect, radius);
 
-    // 1. [v3.1.3 抄袭 FlClash 超椭圆单通解析阴影优化]
+    // 1. [v3.1.3 采用 Impeller 超椭圆单通解析阴影优化]
     //    在 Impeller 下，drawRSuperellipse 采用硬件单通解析高斯模糊 (analytic single-pass)，
     //    比 PathFillType.evenOdd + clipPath 快 10 倍以上！
     //    当存在静态模糊壁纸采样 (blurredImage != null) 时，卡片内部紧接着会被 100% 不透明的
@@ -1492,7 +1492,7 @@ class _RenderSharedBlurStencil extends RenderProxyBox {
       }
     }
 
-    // 2. [v3.1.3 抄袭 FlClash 硬件级超椭圆裁剪]
+    // 2. [v3.1.3 采用 Impeller 硬件级超椭圆裁剪]
     //    直接使用 canvas.clipRSuperellipse 替代 canvas.clipPath(shape.getOuterPath(rect))，
     //    彻底消除每张卡片每帧的 Path 顶点细分与 Stencil 多边形光栅化开销！
     canvas.save();

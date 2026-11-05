@@ -182,9 +182,8 @@ class _SettingsAboutScreenState extends State<SettingsAboutScreen>
                             ),
                           ),
                           const SizedBox(height: 8),
-                          // [v2.2.1] 修改为 Apache 2.0 License
                           Text(
-                            'Open Source under Apache 2.0 License',
+                            'Open Source under GNU AGPL-3.0 License',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               fontSize: 11,
@@ -263,14 +262,14 @@ class _SettingsAboutScreenState extends State<SettingsAboutScreen>
     return false;
   }
 
-  /// [v2.6.3] 根据平台和版本号构造下载地址
+  /// [v3.1.5] 根据平台和版本号构造下载地址
   String _buildDownloadUrl(String version) {
     final ver = version.replaceAll(RegExp(r'^v'), '');
     if (Platform.isWindows) {
-      return 'https://github.com/ZongZi2233AI/CourseWidgets/releases/download/v$ver/Release_amd64_$ver.zip';
+      return 'https://github.com/ZongZi2233/CourseWidgets/releases/download/v$ver/CourseWidgets-v$ver-windows-x64.zip';
     } else {
       // Android arm64
-      return 'https://github.com/ZongZi2233AI/CourseWidgets/releases/download/v$ver/app-arm64-v8a-release$ver.apk';
+      return 'https://github.com/ZongZi2233/CourseWidgets/releases/download/v$ver/CourseWidgets-v$ver-android-arm64-v8a.apk';
     }
   }
 
@@ -278,7 +277,7 @@ class _SettingsAboutScreenState extends State<SettingsAboutScreen>
     setState(() => _isCheckingUpdate = true);
     try {
       final url = Uri.parse(
-        'https://api.github.com/repos/ZongZi2233AI/CourseWidgets/releases/latest',
+        'https://api.github.com/repos/ZongZi2233/CourseWidgets/releases/latest',
       );
       final request = await HttpClient().getUrl(url);
       request.headers.add('User-Agent', 'CourseWidgets_App');

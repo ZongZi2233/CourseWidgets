@@ -3,7 +3,7 @@
 # ─────────────────────────────────────────────────────────────
 
 # ─────────────────────────────────────────────────────────────
-# 1. 签名证书、密钥与隐私配置文件 (Signing Keys, Keystores & Secrets)
+# 1. 签名证书、密钥与隐私令牌配置文件 (Signing Keys, Keystores & Secrets)
 # ─────────────────────────────────────────────────────────────
 *.jks
 *.keystore
@@ -15,23 +15,29 @@
 my-release-key.jks
 key.properties
 android/key.properties
+.env
+.env.*
+*.env
+.github_token
+*.token
+*token*.txt
 
 # ─────────────────────────────────────────────────────────────
 # 2. 本地机器配置、环境变量与临时缓存 (Local Environment & Machine Config)
 # ─────────────────────────────────────────────────────────────
 local.properties
 **/local.properties
-.env
-.env.*
-*.env
 **/ephemeral/
 .gradle/
 **/.gradle/
+kotlin-tooling-metadata.json
 
 # ─────────────────────────────────────────────────────────────
-# 3. Flutter / Dart / 构建产物 (Flutter & Build Artifacts)
+# 3. Flutter / Dart / 构建产物与插件缓存 (Flutter & Build Artifacts)
 # ─────────────────────────────────────────────────────────────
 .dart_tool/
+**/.dart_tool/
+.flutter-plugins
 .flutter-plugins-dependencies
 .pub-cache/
 .pub/
@@ -40,12 +46,14 @@ local.properties
 /coverage/
 **/doc/api/
 **/ios/Flutter/.last_build_id
+plugins/*/example/
+plugins/live_activities-2.4.6/images/
+plugins/**/*.backup
 
 # ─────────────────────────────────────────────────────────────
 # 4. 发布归档包与调试符号 (Release Binaries & Debug Symbols)
 # ─────────────────────────────────────────────────────────────
-/release/*.apk
-/release/*.zip
+/release/
 /symbols/
 /debug-info/
 /scratch/
@@ -61,14 +69,50 @@ app.*.map.json
 /android/app/release
 
 # ─────────────────────────────────────────────────────────────
-# 5. 编辑器与 IDE (IDE & Editor Settings)
+# 5. 编辑器、Agent IDE 与内部上下文文档 (IDE, Agent Configs & Internal Notes)
 # ─────────────────────────────────────────────────────────────
 .idea/
 *.iml
 *.ipr
 *.iws
 .vscode/
+.trae/
+.cursor/
+.cursorrules
+.windsurf/
+.windsurfrules
 .clinerules/
+.cline/
+.continue/
+.aider*
+.gemini/
+.claude/
+.codex/
+.roo/
+.idx/
+.github/copilot*
+AGENTS.md
+AGENT.md
+agent.md
+CLAUDE.md
+claude.md
+GEMINI.md
+gemini.md
+AI_CONTEXT.md
+PROJECT_MEMORY.md
+PROJECT_STATUS.md
+/Markdownachieve/
+/docs/
+plugins/flutter_miuix/skill/
+plugins/flutter_miuix/lib/src/theme/miuix/.port_notes/
+plugins/liquid_glass_widgets/ARCHITECTURAL_AUDIT.md
+plugins/liquid_glass_widgets/FOUNDATION_COMPLETE.md
+plugins/liquid_glass_widgets/FOUNDATION_SOLIDIFICATION.md
+plugins/liquid_glass_widgets/GLASS_BOTTOM_BAR_PR_EVALUATION.md
+plugins/liquid_glass_widgets/PERFORMANCE_ANALYSIS.md
+apply_workmanager_fix.ps1
+check_windows_build.ps1
+commit_version.py
 
 # ─────────────────────────────────────────────────────────────
 # 6. 操作系统与临时文件 (OS Artifacts & Temp Files)
