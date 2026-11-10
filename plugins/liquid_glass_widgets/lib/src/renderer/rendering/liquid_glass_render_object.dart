@@ -234,7 +234,6 @@ abstract class LiquidGlassRenderObject extends RenderProxyBox {
     }
 
     if (needsGeometryUpdate || _geometryImage == null || link._dirty) {
-      link.updateAllGeometries();
       link._dirty = false;
       needsGeometryUpdate = false;
 

@@ -8,8 +8,10 @@ import '../../src/renderer/liquid_glass_renderer.dart';
 import '../../constants/glass_defaults.dart';
 import '../../types/glass_quality.dart';
 import '../containers/glass_container.dart';
+import '../shared/adaptive_liquid_glass_layer.dart';
 import '../shared/inherited_liquid_glass.dart';
 import 'glass_menu_item.dart';
+import '../../theme/glass_theme_helpers.dart';
 import '../../theme/glass_theme.dart';
 
 part 'shared/glass_menu_internal.dart';
@@ -258,7 +260,7 @@ class GlassMenu extends StatefulWidget {
     this.menuBorderRadius = 32.0,
     this.itemBorderRadius = 24.0,
     this.settings,
-    this.quality,
+    this.quality = GlassQuality.premium,
     this.stretch = 0.5,
     this.interactionScale = 1.02,
     this.stretchResistance = 0.08,

@@ -182,109 +182,110 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
                 type: MaterialType.transparency,
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-                  child: liquid.HyperOSCard(
-                    cornerRadius: 24,
-                    useBlur: true,
-                    padding: const EdgeInsets.all(20),
-                    color: dialogDark
-                        ? const Color(0xCC161922)
-                        : const Color(0xE0FFFFFF),
-                    shadows: liquid.HyperOSShadows.modal(dialogDark),
-                    border: BorderSide(
-                      color: dialogDark
-                          ? Colors.white.withValues(alpha: 0.14)
-                          : Colors.white.withValues(alpha: 0.78),
-                      width: 1.0,
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(24),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 24.0, sigmaY: 24.0),
+                      child: Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: dialogDark
+                              ? const Color(0xB8141720)
+                              : const Color(0x70FFFFFF),
+                          borderRadius: BorderRadius.circular(24),
+                          boxShadow: liquid.HyperOSShadows.modal(dialogDark),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text(
-                              '选择周次',
-                              style: TextStyle(
-                                color: dialogDark ? Colors.white : const Color(0xFF1E2128),
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                              ),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  '选择周次',
+                                  style: TextStyle(
+                                    color: dialogDark ? Colors.white : const Color(0xFF1E2128),
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                SpringTouchFeedback(
+                                  onTap: () => Navigator.pop(dialogCtx),
+                                  child: Icon(
+                                    CupertinoIcons.xmark_circle_fill,
+                                    color: dialogDark ? Colors.white38 : Colors.black26,
+                                    size: 22,
+                                  ),
+                                ),
+                              ],
                             ),
-                            SpringTouchFeedback(
-                              onTap: () => Navigator.pop(dialogCtx),
-                              child: Icon(
-                                CupertinoIcons.xmark_circle_fill,
-                                color: dialogDark ? Colors.white38 : Colors.black26,
-                                size: 22,
+                            const SizedBox(height: 16),
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxHeight: 280),
+                              child: GridView.builder(
+                                shrinkWrap: true,
+                                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: 5,
+                                  mainAxisSpacing: 10,
+                                  crossAxisSpacing: 10,
+                                  childAspectRatio: 1.3,
+                                ),
+                                itemCount: weeks.length,
+                                itemBuilder: (context, index) {
+                                  final w = weeks[index];
+                                  final isCur = w == provider.currentWeek;
+                                  return SpringTouchFeedback(
+                                    onTap: () {
+                                      _changeWeek(provider, w);
+                                      Navigator.pop(dialogCtx);
+                                    },
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        color: isCur
+                                            ? primaryColor.withValues(alpha: dialogDark ? 0.85 : 0.90)
+                                            : (dialogDark
+                                                ? Colors.white.withValues(alpha: 0.08)
+                                                : Colors.black.withValues(alpha: 0.05)),
+                                        borderRadius: SquircleGeometry.smoothRadius(12),
+                                        border: Border.all(
+                                          color: isCur
+                                              ? primaryColor.withValues(alpha: 0.3)
+                                              : (dialogDark
+                                                  ? Colors.white.withValues(alpha: 0.10)
+                                                  : Colors.black.withValues(alpha: 0.06)),
+                                          width: 0.8,
+                                        ),
+                                        boxShadow: isCur
+                                            ? [
+                                                BoxShadow(
+                                                  color: primaryColor.withValues(alpha: 0.35),
+                                                  blurRadius: 8,
+                                                  offset: const Offset(0, 2),
+                                                ),
+                                              ]
+                                            : null,
+                                      ),
+                                      alignment: Alignment.center,
+                                      child: Text(
+                                        '第$w周',
+                                        style: TextStyle(
+                                          color: isCur
+                                              ? Colors.white
+                                              : (dialogDark
+                                                  ? Colors.white.withValues(alpha: 0.85)
+                                                  : const Color(0xFF2D3139)),
+                                          fontWeight: isCur ? FontWeight.bold : FontWeight.w600,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                },
                               ),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 16),
-                        ConstrainedBox(
-                          constraints: const BoxConstraints(maxHeight: 280),
-                          child: GridView.builder(
-                            shrinkWrap: true,
-                            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 5,
-                              mainAxisSpacing: 10,
-                              crossAxisSpacing: 10,
-                              childAspectRatio: 1.3,
-                            ),
-                            itemCount: weeks.length,
-                            itemBuilder: (context, index) {
-                              final w = weeks[index];
-                              final isCur = w == provider.currentWeek;
-                              return SpringTouchFeedback(
-                                onTap: () {
-                                  _changeWeek(provider, w);
-                                  Navigator.pop(dialogCtx);
-                                },
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    color: isCur
-                                        ? primaryColor.withValues(alpha: dialogDark ? 0.85 : 0.90)
-                                        : (dialogDark
-                                            ? Colors.white.withValues(alpha: 0.08)
-                                            : Colors.black.withValues(alpha: 0.05)),
-                                    borderRadius: SquircleGeometry.smoothRadius(12),
-                                    border: Border.all(
-                                      color: isCur
-                                          ? primaryColor.withValues(alpha: 0.3)
-                                          : (dialogDark
-                                              ? Colors.white.withValues(alpha: 0.10)
-                                              : Colors.black.withValues(alpha: 0.06)),
-                                      width: 0.8,
-                                    ),
-                                    boxShadow: isCur
-                                        ? [
-                                            BoxShadow(
-                                              color: primaryColor.withValues(alpha: 0.35),
-                                              blurRadius: 8,
-                                              offset: const Offset(0, 2),
-                                            ),
-                                          ]
-                                        : null,
-                                  ),
-                                  alignment: Alignment.center,
-                                  child: Text(
-                                    '第$w周',
-                                    style: TextStyle(
-                                      color: isCur
-                                          ? Colors.white
-                                          : (dialogDark
-                                              ? Colors.white.withValues(alpha: 0.85)
-                                              : const Color(0xFF2D3139)),
-                                      fontWeight: isCur ? FontWeight.bold : FontWeight.w600,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
                   ),
                 ),

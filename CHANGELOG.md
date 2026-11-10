@@ -4,16 +4,16 @@
 
 ## [v3.1.6] - 2026-11-11 (Build 3160 正式版)
 
-### 1. 深度对标 FlClash (`prism_ui`) 重构形变菜单 (`GlassMenu` / `GlassContextMenu`)，根除每帧 `toImageSync` 阻塞与飞出按钮问题
-- **根除变形期间每帧 `Picture.toImageSync` 同步光栅化卡顿**：移除 `GlassMenu` 变形期间双 Blob 的 `AdaptiveLiquidGlassLayer` + `LiquidGlassBlendGroup`（其在 `GlassQuality.premium` 下每当圆角或宽高变化时都会在 `paint()` 中同步调用 `picture.toImageSync` 生成约 `600×600` 的几何贴图），改为单容器锚定 `Rect.lerp(startRect, targetRect, sizeT)` + `GlassContainer(useOwnLayer: true, quality: GlassQuality.standard)`（底层走 `LightweightLiquidGlass` 缓存 `BackdropFilterLayer` 与 `lightweight_glass.frag` 着色器），变形全程 **0 次 `toImageSync` 调用**；
-- **消除菜单脱离触发按钮飞出 50~70px 的轨迹失真**：废除 `LiquidMorphPhysics` 中导致位移超调至 `1.38x` 的 `_BackOutCurve(2.5)`，升级弹簧刚度（`openSpring`: `stiffness: 320, damping: 28`；`closeSpring`: `stiffness: 360, damping: 30`），使展开与收起全程锚定角 100% 锁死在触发卡片/按钮上，并支持窄胶囊按钮居中展开；
-- **固定 `OverlayPortal` 稳定树结构与整体内容平面等比展开**：保持 `AnimatedBuilder -> Stack -> OverlayPortal` 稳定挂载层级（避免打开瞬间因根组件类型切换导致 `OverlayPortal` 被卸载而使菜单空白、触发按钮消失），并在关闭收敛监听中严格校验 `isClosing` 状态；菜单内容采用固定目标尺寸 `OverflowBox` + 整体 `Transform.scale(scaleX, scaleY, alignment: _morphAlignment)` 展开，消除逐项错位缩放与首帧闪烁；
-- **统一课程卡片与底部胶囊的 `GlassContextMenu` 体验**：在课程卡片长按/点击菜单中自动绑定整张课程卡片的圆角矩形 `SharedElement` 源坐标，修复底部胶囊 `(⋯)` 菜单在浅色模式下白色图标不可见的问题。
+### 1. 深度调优真 3D 液态形变菜单 (`GlassMenu` / `GlassContextMenu`) 与双 Blob 水滴融球光学折射 (True Premium Two-Blob Metaball Morph Engine)
+- **全量锁定 `GlassQuality.premium` 真 3D 液态玻璃与实时全组件 Backdrop 折射**：`GlassMenu` 与 `GlassContextMenu` 全面锁定 `GlassQuality.premium`（`AdaptiveLiquidGlassLayer` + `LiquidGlassBlendGroup` + `blended_geometry.frag` + `liquid_glass_final_render.frag`），底层通过 Impeller 原生实时 `BackdropFilterLayer` 直接对菜单下方所有真实 UI 组件（课程卡片、文字、表头、悬浮底栏与壁纸）进行 3D SDF 凸透镜折射与水滴融球（`Blob A` 触发器残影 + `Blob B` 菜单主体）拉伸形变，彻底解决 `Standard` 降级材质仅采样底层壁纸、丢失其他 UI 组件 Backdrop 的问题；
+- **消除白色描边与强化 3D 凸透镜边缘折射**：将 `GlassContextMenu` 参数调校为纯净无白边高折射配置（`thickness: 20.0, refractiveIndex: 1.38, chromaticAberration: 0.04, blur: 3.5, lightIntensity: 0.35, ambientStrength: 0.20, ambientRim: 0.0, fresnelStrength: 0.0, edgeAbsorption: 0.05`），100% 剔除边缘人工白框，仅保留真实的 3D 半球透镜边缘弯曲折射与色散；
+- **满血灵动水滴弹簧动效与几何管线去重优化**：完整保留 `_BackOutCurve(2.5)` J 曲线水滴拉丝轨迹、欠阻尼弹簧（`stiffness: 120.0, damping: 16.0`）、收起碰撞回弹推力（`closeVelocityHint: -2.5`）及菜单项 `0.5 -> 1.0` 缩放渐显动效；移除 `RenderLiquidGlassLayer.paint` 中冗余的二次 `link.updateAllGeometries()` 遍历，并在 `OverlayPortal` 关闭收敛监听中严格校验 `isClosing` 状态；
+- **统一课程卡片与底部胶囊的 `GlassContextMenu` 体验**：在课程卡片与底部胶囊 `(⋯)` 菜单中自动绑定外层圆角矩形卡片 `SharedElement` 源坐标，修复底部胶囊 `(⋯)` 菜单在浅色模式下白色图标不可见的问题。
 
-### 2. UI 层级、滚动隔离与跨端视觉一致性全面优化 (UI Hierarchy, Scroll Isolation & Visual Consistency)
+### 2. UI 层级、实时 Backdrop 弹窗与跨端视觉一致性全面优化 (UI Hierarchy, Live Backdrop Dialogs & Visual Consistency)
 - **修复课表纵向滚动穿透星期表头**：在 `WeeklyScheduleGrid` 中将课程滚动层顶部收束至星期表头下方（`top: contentTop`）并开启 `Clip.hardEdge`，底部仍延伸至悬浮底栏下方（`bottom: 0`），彻底解决课程卡片向上滑动时与 `周一..周日` 星期表头文字重叠混杂的问题；
 - **精细化 `RepaintBoundary` 隔离与横屏底栏避让**：为左侧时间轴、静态水平网格线与每张课程卡片分别包裹独立的 `RepaintBoundary`；并将 `CalendarViewScreen` 横屏模式的底部安全边距提升至 `76px + bottomInset`，彻底消除左下角 `GlassTabBar` 与右下角设置按钮对横屏日历及日程列表底部的遮挡；
-- **统一弹窗物理入场/退场动效与单层静态模糊采样**：升级 `LiquidGlassDialog` 与 `showLiquidDialog` 为 `1.10x -> 1.0x` 弹簧入场、退场保持 `1.0x` 仅淡出的原生交互，将 `LiquidGlassDialog`、`FloatingGlassHeaderButton`、`SettingsAboutScreen` 更新弹窗与 `AndroidScheduleConfigScreen` 统一收敛至 `HyperOSCard` 静态高斯采样，并修复 `LiquidToast` 在浅色模式下白底白字不可见的问题；
+- **统一弹窗灵动弹簧动效与实时全组件 Backdrop 模糊**：升级 `LiquidGlassDialog` 与 `showLiquidDialog` 为 `1.10x -> 1.0x` 弹簧入场、退场保持 `1.0x` 仅淡出的原生交互；恢复 `LiquidGlassDialog`、`FloatingGlassHeaderButton`、周次选择弹窗与 `LiquidToast` (`GlassQuality.premium`) 的实时屏幕组件 Backdrop 模糊与无白边设计，并修复 `LiquidToast` 在浅色模式下白底白字不可见的问题；
 - **冷启动 SQLite 防重入合并**：在 `ScheduleProvider.loadSavedData` 中引入 `_inFlightLoadFuture` 并发合并与 `forceRefresh: false` 复用，消除冷启动阶段重复查询数据库与重复通知调度。
 
 ### 3. 升级适配 Android SDK 37.2 / NDK r30 (`30.0.16248370`) / Command-line Tools 23.0 与双端编译优化开关

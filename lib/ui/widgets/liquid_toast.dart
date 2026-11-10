@@ -162,19 +162,19 @@ class _LiquidToastWidgetState extends State<_LiquidToastWidget>
                 shape: const LiquidRoundedSuperellipse(borderRadius: 16),
                 settings: LiquidGlassSettings(
                   glassColor: isDark
-                      ? const Color(0xCC1C2029)
-                      : const Color(0xE0FFFFFF),
+                      ? const Color(0x35101216)
+                      : const Color(0x30FFFFFF),
                   blur: 3.5,
-                  thickness: 16.0,
-                  refractiveIndex: 1.35,
-                  lightIntensity: isDark ? 0.45 : 0.65,
-                  ambientStrength: isDark ? 0.30 : 0.45,
+                  thickness: 20.0,
+                  refractiveIndex: 1.40,
+                  lightIntensity: 0.35,
+                  ambientStrength: 0.20,
                   ambientRim: 0.0,
-                  edgeAbsorption: 0.0,
-                  fresnelStrength: 0.05,
-                  saturation: 1.15,
+                  edgeAbsorption: 0.04,
+                  fresnelStrength: 0.0,
+                  saturation: 1.20,
                 ),
-                quality: GlassQuality.standard,
+                quality: GlassQuality.premium,
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16,

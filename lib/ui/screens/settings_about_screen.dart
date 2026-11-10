@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
+import 'dart:ui';
 import '../../constants/theme_constants.dart';
 import '../../constants/version.dart';
 import 'dart:io';
@@ -315,16 +316,18 @@ class _SettingsAboutScreenState extends State<SettingsAboutScreen>
     liquid.showLiquidDialog(
       context: context,
       builder: Builder(
-        builder: (ctx) => Dialog(
-          backgroundColor: Colors.transparent,
-          insetPadding: const EdgeInsets.symmetric(horizontal: 24),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 420),
-            child: liquid.HyperOSCard(
-              cornerRadius: 28,
-              useBlur: true,
-              shadows: liquid.HyperOSShadows.modal(isDark),
-              padding: const EdgeInsets.all(24),
+        builder: (ctx) => BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+          child: Dialog(
+            backgroundColor: Colors.transparent,
+            insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: liquid.HyperOSCard(
+                cornerRadius: 28,
+                useBlur: true,
+                shadows: liquid.HyperOSShadows.modal(isDark),
+                padding: const EdgeInsets.all(24),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -472,6 +475,7 @@ class _SettingsAboutScreenState extends State<SettingsAboutScreen>
               ),
             ),
           ),
+        ),
         ),
       ),
     );

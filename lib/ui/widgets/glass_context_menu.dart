@@ -16,6 +16,7 @@ class GlassContextMenu extends StatelessWidget {
   final EdgeInsets menuPadding;
   final BuildContext? sharedElementSourceContext;
   final double sharedElementCornerRadius;
+  final LiquidGlassSettings? settings;
 
   const GlassContextMenu({
     super.key,
@@ -29,6 +30,7 @@ class GlassContextMenu extends StatelessWidget {
     this.menuPadding = const EdgeInsets.symmetric(horizontal: 12, vertical: 72),
     this.sharedElementSourceContext,
     this.sharedElementCornerRadius = 18.0,
+    this.settings,
   }) : assert(
           trigger != null || triggerBuilder != null,
           'Either trigger or triggerBuilder must be provided',
@@ -47,26 +49,27 @@ class GlassContextMenu extends StatelessWidget {
       itemBorderRadius: itemBorderRadius,
       menuPadding: menuPadding,
       autoAdjustToScreen: true,
-      platformViewBackdrop: false,
-      quality: ThemeService().glassQuality,
+      platformViewBackdrop: false, // [v3.0.1] 全平台全开凸透镜边缘折射着色器，不走降级
+      quality: GlassQuality.premium,
       menuAlignment: menuAlignment ?? GlassMenuAlignment.none,
       selectionColor: isDark
           ? Colors.white.withValues(alpha: 0.15)
           : primaryColor.withValues(alpha: 0.16),
-      settings: LiquidGlassSettings(
-        glassColor: isDark
-            ? const Color(0x4212151C)
-            : const Color(0x52FFFFFF),
-        blur: 10.0,
-        thickness: 18.0,
-        refractiveIndex: 1.38,
-        lightIntensity: 0.72,
-        ambientStrength: 0.42,
-        ambientRim: 0.0,
-        fresnelStrength: 0.05,
-        edgeAbsorption: 0.0,
-        saturation: 1.22,
-      ),
+      settings: settings ??
+          LiquidGlassSettings(
+            glassColor: isDark
+                ? const Color(0x35101216)
+                : const Color(0x30FFFFFF),
+            blur: 3.5,
+            thickness: 20.0,
+            refractiveIndex: 1.38,
+            chromaticAberration: 0.04,
+            lightIntensity: 0.35,
+            ambientStrength: 0.20,
+            ambientRim: 0.0,
+            fresnelStrength: 0.0,
+            edgeAbsorption: 0.05,
+          ),
       items: items.map((item) {
         final textColor = item.isDestructive
             ? Colors.redAccent

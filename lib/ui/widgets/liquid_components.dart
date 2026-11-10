@@ -1,3 +1,4 @@
+import 'dart:ui' show ImageFilter;
 import 'dart:ui' as ui show Image;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -430,49 +431,66 @@ class LiquidGlassDialog extends StatelessWidget {
         constraints: BoxConstraints(maxWidth: maxWidth),
         child: Material(
           type: MaterialType.transparency,
-          child: HyperOSCard(
-            cornerRadius: 28,
-            useBlur: true,
-            feedbackType: MiuixPressFeedbackType.none,
-            padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 22),
-            shadows: HyperOSShadows.modal(isDark),
-            color: isDark ? const Color(0xCC202531) : const Color(0xE6FFFFFF),
-            border: BorderSide(
-              color: isDark
-                  ? Colors.white.withValues(alpha: 0.18)
-                  : Colors.white.withValues(alpha: 0.85),
-              width: 1.1,
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(28),
+              boxShadow: HyperOSShadows.modal(isDark),
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: isDark ? Colors.white : const Color(0xFF1E2128),
-                    letterSpacing: -0.2,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 12),
-                Flexible(
-                  child: DefaultTextStyle(
-                    style: TextStyle(
-                      fontSize: 14.5,
-                      color: isDark
-                          ? Colors.white.withValues(alpha: 0.78)
-                          : const Color(0xFF4A5060),
-                      height: 1.45,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(28),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 22),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: isDark
+                          ? const [
+                              Color(0xCC242936),
+                              Color(0xB8181B24),
+                            ]
+                          : const [
+                              Color(0xE0FFFFFF),
+                              Color(0xC8F2F6FC),
+                            ],
                     ),
-                    textAlign: TextAlign.center,
-                    child: content,
+                    borderRadius: BorderRadius.circular(28),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? Colors.white : const Color(0xFF1E2128),
+                          letterSpacing: -0.2,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 12),
+                      Flexible(
+                        child: DefaultTextStyle(
+                          style: TextStyle(
+                            fontSize: 14.5,
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.78)
+                                : const Color(0xFF4A5060),
+                            height: 1.45,
+                          ),
+                          textAlign: TextAlign.center,
+                          child: content,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      _buildActions(context, effectiveActions, isDark),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 20),
-                _buildActions(context, effectiveActions, isDark),
-              ],
+              ),
             ),
           ),
         ),
@@ -866,44 +884,44 @@ class FloatingGlassHeaderButton extends StatelessWidget {
           Navigator.maybePop(context);
         }
       },
-      child: HyperOSCard(
-        cornerRadius: 20,
-        useBlur: true,
-        feedbackType: MiuixPressFeedbackType.none,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        color: isDark
-            ? Colors.black.withValues(alpha: 0.38)
-            : Colors.white.withValues(alpha: 0.68),
-        shadows: HyperOSShadows.pill(isDark),
-        border: BorderSide(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.16)
-              : Colors.white.withValues(alpha: 0.85),
-          width: 0.8,
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              CupertinoIcons.chevron_left,
-              size: 18,
-              color: textColor.withValues(alpha: 0.9),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              color: isDark
+                  ? Colors.black.withValues(alpha: 0.35)
+                  : Colors.white.withValues(alpha: 0.65),
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: HyperOSShadows.pill(isDark),
             ),
-            const SizedBox(width: 6),
-            Text(
-              title,
-              style: TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.bold,
-                color: textColor,
-                letterSpacing: 0.3,
-              ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  CupertinoIcons.chevron_left,
+                  size: 18,
+                  color: textColor.withValues(alpha: 0.9),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                    color: textColor,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+                if (trailing != null) ...[
+                  const SizedBox(width: 8),
+                  trailing!,
+                ],
+              ],
             ),
-            if (trailing != null) ...[
-              const SizedBox(width: 8),
-              trailing!,
-            ],
-          ],
+          ),
         ),
       ),
     );
