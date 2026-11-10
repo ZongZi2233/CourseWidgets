@@ -22,8 +22,8 @@
 
 ## 📦 Latest Release: [v3.1.6 (Build 3160)](https://github.com/ZongZi2233/CourseWidgets/releases/tag/v3.1.6)
 
-* **Android Client (`arm64-v8a`)**: [`CourseWidgets-v3.1.6-android-arm64-v8a.apk`](https://github.com/ZongZi2233/CourseWidgets/releases/download/v3.1.6/CourseWidgets-v3.1.6-android-arm64-v8a.apk) — Requires Android 15+ (API 35+, compiled against API 37.2 & NDK r30), with full support for Android 16 Live Updates, `arm64-v8a`-only ABI split, R8 `fullMode` obfuscation & resource shrinking, and Dart AOT obfuscation.
-* **Windows Desktop (`x64`)**: [`CourseWidgets-v3.1.6-windows-x64.zip`](https://github.com/ZongZi2233/CourseWidgets/releases/download/v3.1.6/CourseWidgets-v3.1.6-windows-x64.zip) — Portable x64 package (built with MSVC `/O2` + `/OPT:REF,/OPT:ICF` linker optimization and Dart AOT obfuscation) featuring a custom borderless title bar, system tray residency, keyboard shortcuts, and 4K High-DPI scaling.
+* **Android Client (`arm64-v8a`)**: [`CourseWidgets-v3.1.6-android-arm64-v8a.apk`](https://github.com/ZongZi2233/CourseWidgets/releases/download/v3.1.6/CourseWidgets-v3.1.6-android-arm64-v8a.apk) — Requires Android 15+ (API 35+, compiled against API 37.2 & NDK r30), with full support for Android 16 Live Updates, `arm64-v8a`-only ABI split, R8 obfuscation & resource shrinking, and Dart AOT optimization.
+* **Windows Desktop (`x64`)**: [`CourseWidgets-v3.1.6-windows-x64.zip`](https://github.com/ZongZi2233/CourseWidgets/releases/download/v3.1.6/CourseWidgets-v3.1.6-windows-x64.zip) — Portable x64 package (built with MSVC `/O2` + `/OPT:REF,/OPT:ICF` linker optimization and Dart AOT optimization) featuring a custom borderless title bar, system tray residency, keyboard shortcuts, and 4K High-DPI scaling.
 
 ---
 
@@ -111,11 +111,11 @@ flutter run -d windows    # Run on Windows desktop
 
 ### 3. Production Release Build & Packaging
 ```bash
-# 1. Build Android arm64-v8a Release APK (arm64-v8a only, R8 shrinking & Dart obfuscation)
-flutter build apk --release --split-per-abi --target-platform android-arm64 --obfuscate --split-debug-info=build/debug-info/android
+# 1. Build Android arm64-v8a Release APK (arm64-v8a only & R8 obfuscation/shrinking)
+flutter build apk --release --split-per-abi --target-platform android-arm64
 
-# 2. Build Windows x64 Release Client (MSVC LTCG optimization & Dart obfuscation)
-flutter build windows --release --obfuscate --split-debug-info=build/debug-info/windows
+# 2. Build Windows x64 Release Client (MSVC /O2 & /OPT:REF,/OPT:ICF optimization)
+flutter build windows --release
 
 # 3. Verify version metadata and collect artifacts into release/ (with SHA256 manifest)
 python collect_release.py

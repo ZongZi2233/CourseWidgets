@@ -17,9 +17,9 @@
 - **冷启动 SQLite 防重入合并**：在 `ScheduleProvider.loadSavedData` 中引入 `_inFlightLoadFuture` 并发合并与 `forceRefresh: false` 复用，消除冷启动阶段重复查询数据库与重复通知调度。
 
 ### 3. 升级适配 Android SDK 37.2 / NDK r30 (`30.0.16248370`) / Command-line Tools 23.0 与双端编译优化开关
-- **Android API 37.2 与 NDK r30 正式适配**：升级 `android/app/build.gradle.kts` 为 AGP 9.4.1 原生支持的 `compileSdk { version = release(37) { minorApiLevel = 2 } }`（API 37.2, Extension 24）、`buildToolsVersion = "37.0.0"`、`ndkVersion = "30.0.16248370"`；
-- **开启 Android 16KB 页对齐与真 R8 Full Mode**：在 `packaging` 中开启 `jniLibs { useLegacyPackaging = false }`（满足 Android 15–17 16KB Page Size 要求）并剔除冗余元数据；在 `gradle.properties` 中关闭无意义的 `enableJetifier`、启用 `-Xlambdas=indy`（保留 `kotlin.incremental=false` 规避 Windows 跨盘符 `C:`/`D:` 增量缓存异常）；清理 `proguard-rules.pro` 中导致 `R8 fullMode` 失效的 3 条全量通配规则；
-- **Windows MSVC Release 全程序优化 (`/GL` + `/LTCG`)**：在 `windows/CMakeLists.txt` 中启用 `/MP` 多核并行编译及 Release 模式下的 `/O2 /Oi /Ot /GL /Gy /Gw` 与链接器 `/LTCG /OPT:REF /OPT:ICF` 优化。
+- **Android API 37.2 与 NDK r30 正式适配**：升级 `android/app/build.gradle.kts` 与 `android/build.gradle.kts` 为 AGP 9.4.1 原生支持的 `compileSdk { version = release(37) { minorApiLevel = 2 } }`（API 37.2, Extension 24）、`buildToolsVersion = "37.0.0"`、`ndkVersion = "30.0.16248370"`；
+- **恢复 Android 应用显示名称与 R8 混淆安全规则**：将 `AndroidManifest.xml` 中 `<application android:label>` 恢复为 `"CourseWidgets"`（解决安装器与系统设置中应用显示名称空白的问题，实况通知顶栏隐藏软件名由 `LiveUpdateNotificationManager` 的 `android.substName` 独立承载），并在 `proguard-rules.pro` 中完整保护 `com.tencent.mmkv.**`、`kotlin.**` 及插件默认构造函数，防止 R8 `fullMode` 误删导致启动闪退；
+- **Windows MSVC Release 编译与链接优化**：在 `windows/CMakeLists.txt` 中启用 `/MP` 多核并行编译及 Release 模式下的 `/O2 /Oi /Ot /Gy /Gw` 与链接器 `/OPT:REF /OPT:ICF` 优化。
 
 ## [v3.1.5] - 2026-11-05 (Build 3150 正式版)
 

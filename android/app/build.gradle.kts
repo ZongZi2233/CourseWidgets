@@ -26,10 +26,6 @@ android {
 
     buildFeatures {
         compose = true
-        aidl = false
-        renderScript = false
-        shaders = false
-        resValues = false
     }
 
     defaultConfig {
@@ -105,7 +101,6 @@ android {
     
     packaging {
         jniLibs {
-            useLegacyPackaging = true
             pickFirsts += setOf(
                 "**/libflutter.so",
                 "**/libc++_shared.so"
@@ -117,10 +112,7 @@ android {
                 "META-INF/LICENSE",
                 "META-INF/LICENSE.txt",
                 "META-INF/NOTICE",
-                "META-INF/NOTICE.txt",
-                "META-INF/*.kotlin_module",
-                "META-INF/version-control-info.textproto",
-                "DebugProbesKt.bin"
+                "META-INF/NOTICE.txt"
             )
         }
     }
@@ -144,9 +136,5 @@ kotlin {
 tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
     compilerOptions {
         jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_25)
-        freeCompilerArgs.addAll(
-            "-Xbackend-threads=12",
-            "-Xlambdas=indy"
-        )
     }
 }

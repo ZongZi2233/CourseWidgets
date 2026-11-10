@@ -22,8 +22,8 @@
 
 ## 📦 最新正式版下载：[v3.1.6 (Build 3160)](https://github.com/ZongZi2233/CourseWidgets/releases/tag/v3.1.6)
 
-* **Android 客户端 (`arm64-v8a`)**：[`CourseWidgets-v3.1.6-android-arm64-v8a.apk`](https://github.com/ZongZi2233/CourseWidgets/releases/download/v3.1.6/CourseWidgets-v3.1.6-android-arm64-v8a.apk) —— 支持 Android 15+（API 35+，基于 API 37.2 与 NDK r30 编译），完整适配 Android 16 实况通知（Live Updates），开启仅 `arm64-v8a` 纯净分包、R8 `fullMode` 深度混淆压缩与 Dart AOT 符号剥离混淆。
-* **Windows 桌面端 (`x64`)**：[`CourseWidgets-v3.1.6-windows-x64.zip`](https://github.com/ZongZi2233/CourseWidgets/releases/download/v3.1.6/CourseWidgets-v3.1.6-windows-x64.zip) —— 免安装便携版（开启 MSVC `/O2` + `/OPT:REF,/OPT:ICF` 链接裁剪优化与 Dart AOT 混淆），支持无边框自定义标题栏、系统托盘常驻、热键响应与 4K 高分屏缩放。
+* **Android 客户端 (`arm64-v8a`)**：[`CourseWidgets-v3.1.6-android-arm64-v8a.apk`](https://github.com/ZongZi2233/CourseWidgets/releases/download/v3.1.6/CourseWidgets-v3.1.6-android-arm64-v8a.apk) —— 支持 Android 15+（API 35+，基于 API 37.2 与 NDK r30 编译），完整适配 Android 16 实况通知（Live Updates），开启仅 `arm64-v8a` 纯净分包、R8 代码混淆压缩与 Dart AOT 编译优化。
+* **Windows 桌面端 (`x64`)**：[`CourseWidgets-v3.1.6-windows-x64.zip`](https://github.com/ZongZi2233/CourseWidgets/releases/download/v3.1.6/CourseWidgets-v3.1.6-windows-x64.zip) —— 免安装便携版（开启 MSVC `/O2` + `/OPT:REF,/OPT:ICF` 链接裁剪优化与 Dart AOT 编译优化），支持无边框自定义标题栏、系统托盘常驻、热键响应与 4K 高分屏缩放。
 
 ---
 
@@ -111,11 +111,11 @@ flutter run -d windows    # 运行至 Windows 桌面端
 
 ### 3. 生产环境 Release 构建与归档
 ```bash
-# 1. 构建 Android arm64-v8a Release APK (开启仅 arm64-v8a 分包、R8 压缩与 Dart 混淆)
-flutter build apk --release --split-per-abi --target-platform android-arm64 --obfuscate --split-debug-info=build/debug-info/android
+# 1. 构建 Android arm64-v8a Release APK (开启仅 arm64-v8a 分包与 R8 混淆压缩)
+flutter build apk --release --split-per-abi --target-platform android-arm64
 
-# 2. 构建 Windows x64 Release 客户端 (开启 MSVC LTCG 优化与 Dart 混淆)
-flutter build windows --release --obfuscate --split-debug-info=build/debug-info/windows
+# 2. 构建 Windows x64 Release 客户端 (开启 MSVC /O2 与 /OPT:REF,/OPT:ICF 优化)
+flutter build windows --release
 
 # 3. 校验版本号并收集归档至 release/ 目录（自动生成 SHA256 清单）
 python collect_release.py

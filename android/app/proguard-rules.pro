@@ -5,6 +5,10 @@
 -keep class io.flutter.util.** { *; }
 -keep class io.flutter.view.** { *; }
 -keep class io.flutter.plugins.** { *; }
+-keep class com.tencent.mmkv.** { *; }
+
+# 保持类名和方法名
+-keepnames class * { public <methods>; }
 
 # 保持序列化类
 -keepclassmembers class * implements java.io.Serializable {
@@ -81,7 +85,8 @@
 -keep class android.support.annotation.** { *; }
 -keep class androidx.annotation.** { *; }
 
-# 保持Kotlin元数据与注解
+# 保持Kotlin相关
+-keep class kotlin.** { *; }
 -keep class kotlin.Metadata { *; }
 -keepattributes RuntimeVisibleAnnotations
 -keepattributes RuntimeVisibleParameterAnnotations
@@ -106,6 +111,11 @@
 
 # 如果你没有用到 Flutter 的延迟加载组件功能，直接忽略它们
 -keep class io.flutter.embedding.engine.deferredcomponents.** { *; }
+
+# 针对你日志中提到的 R8 构造函数警告的通用修复
+-keepclassmembers class * {
+    void <init>();
+}
 
 # [v3.0.0] Jetpack Glance 桌面小组件与动作回调保护
 -keep class androidx.glance.** { *; }

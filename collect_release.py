@@ -210,14 +210,6 @@ def main():
     print(f"目标版本: v{version} (Build {build})")
 
     os.makedirs(RELEASE_DIR, exist_ok=True)
-    # 清理 release/ 中历史旧版本产物，保持发布目录仅含当前最新版本的两个平台包
-    for fname in os.listdir(RELEASE_DIR):
-        if fname.startswith("CourseWidgets-v") and not fname.startswith(f"CourseWidgets-v{version}-"):
-            try:
-                os.remove(os.path.join(RELEASE_DIR, fname))
-                print(f"[清理] 已移除旧版归档文件: {fname}")
-            except Exception:
-                pass
 
     all_artifacts = []
     all_artifacts.extend(collect_android_apks(version, build))
