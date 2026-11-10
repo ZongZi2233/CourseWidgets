@@ -2,6 +2,25 @@
 
 本文档记录 CourseWidgets 各版本更新的动态活动演进，重点关注架构改进、渲染优化、故障诊断与教务抓取能力提升。
 
+## [v3.1.6] - 2026-11-11 (Build 3160 正式版)
+
+### 1. 深度对标 FlClash (`prism_ui`) 重构形变菜单 (`GlassMenu` / `GlassContextMenu`)，根除每帧 `toImageSync` 阻塞与飞出按钮问题
+- **根除变形期间每帧 `Picture.toImageSync` 同步光栅化卡顿**：移除 `GlassMenu` 变形期间双 Blob 的 `AdaptiveLiquidGlassLayer` + `LiquidGlassBlendGroup`（其在 `GlassQuality.premium` 下每当圆角或宽高变化时都会在 `paint()` 中同步调用 `picture.toImageSync` 生成约 `600×600` 的几何贴图），改为单容器锚定 `Rect.lerp(startRect, targetRect, sizeT)` + `GlassContainer(useOwnLayer: true, quality: GlassQuality.standard)`（底层走 `LightweightLiquidGlass` 缓存 `BackdropFilterLayer` 与 `lightweight_glass.frag` 着色器），变形全程 **0 次 `toImageSync` 调用**；
+- **消除菜单脱离触发按钮飞出 50~70px 的轨迹失真**：废除 `LiquidMorphPhysics` 中导致位移超调至 `1.38x` 的 `_BackOutCurve(2.5)`，升级弹簧刚度（`openSpring`: `stiffness: 320, damping: 28`；`closeSpring`: `stiffness: 360, damping: 30`），使展开与收起全程锚定角 100% 锁死在触发卡片/按钮上，并支持窄胶囊按钮居中展开；
+- **按需懒加载控制器与整体内容平面等比展开**：将 `_morphController` 与 `_scrollController` 改为首次打开菜单时按需初始化，使课表网格常驻的 20+ 张课程卡片在未打开菜单时零 `AnimationController` 与 `Ticker` 开销；菜单内容采用固定目标尺寸 `OverflowBox` + 整体 `Transform.scale(scaleX, scaleY, alignment: _morphAlignment)` 展开，消除逐项错位缩放与首帧闪烁；
+- **统一课程卡片与底部胶囊的 `GlassContextMenu` 体验**：在课程卡片长按/点击菜单中自动绑定整张课程卡片的圆角矩形 `SharedElement` 源坐标，修复底部胶囊 `(⋯)` 菜单在浅色模式下白色图标不可见的问题。
+
+### 2. UI 层级、滚动隔离与跨端视觉一致性全面优化 (UI Hierarchy, Scroll Isolation & Visual Consistency)
+- **修复课表纵向滚动穿透星期表头**：在 `WeeklyScheduleGrid` 中将课程滚动层顶部收束至星期表头下方（`top: contentTop`）并开启 `Clip.hardEdge`，底部仍延伸至悬浮底栏下方（`bottom: 0`），彻底解决课程卡片向上滑动时与 `周一..周日` 星期表头文字重叠混杂的问题；
+- **精细化 `RepaintBoundary` 隔离与横屏底栏避让**：为左侧时间轴、静态水平网格线与每张课程卡片分别包裹独立的 `RepaintBoundary`；并将 `CalendarViewScreen` 横屏模式的底部安全边距提升至 `76px + bottomInset`，彻底消除左下角 `GlassTabBar` 与右下角设置按钮对横屏日历及日程列表底部的遮挡；
+- **统一弹窗物理入场/退场动效与单层静态模糊采样**：升级 `LiquidGlassDialog` 与 `showLiquidDialog` 为 `1.10x -> 1.0x` 弹簧入场、退场保持 `1.0x` 仅淡出的原生交互，将 `LiquidGlassDialog`、`FloatingGlassHeaderButton`、`SettingsAboutScreen` 更新弹窗与 `AndroidScheduleConfigScreen` 统一收敛至 `HyperOSCard` 静态高斯采样，并修复 `LiquidToast` 在浅色模式下白底白字不可见的问题；
+- **冷启动 SQLite 防重入合并**：在 `ScheduleProvider.loadSavedData` 中引入 `_inFlightLoadFuture` 并发合并与 `forceRefresh: false` 复用，消除冷启动阶段重复查询数据库与重复通知调度。
+
+### 3. 升级适配 Android SDK 37.2 / NDK r30 (`30.0.16248370`) / Command-line Tools 23.0 与双端编译优化开关
+- **Android API 37.2 与 NDK r30 正式适配**：升级 `android/app/build.gradle.kts` 为 AGP 9.4.1 原生支持的 `compileSdk { version = release(37) { minorApiLevel = 2 } }`（API 37.2, Extension 24）、`buildToolsVersion = "37.0.0"`、`ndkVersion = "30.0.16248370"`；
+- **开启 Android 16KB 页对齐与真 R8 Full Mode**：在 `packaging` 中开启 `jniLibs { useLegacyPackaging = false }`（满足 Android 15–17 16KB Page Size 要求）并剔除冗余元数据；在 `gradle.properties` 中关闭无意义的 `enableJetifier`、启用 `-Xlambdas=indy`（保留 `kotlin.incremental=false` 规避 Windows 跨盘符 `C:`/`D:` 增量缓存异常）；清理 `proguard-rules.pro` 中导致 `R8 fullMode` 失效的 3 条全量通配规则；
+- **Windows MSVC Release 全程序优化 (`/GL` + `/LTCG`)**：在 `windows/CMakeLists.txt` 中启用 `/MP` 多核并行编译及 Release 模式下的 `/O2 /Oi /Ot /GL /Gy /Gw` 与链接器 `/LTCG /OPT:REF /OPT:ICF` 优化。
+
 ## [v3.1.5] - 2026-11-05 (Build 3150 正式版)
 
 ### 1. 修复顶栏与悬浮玻璃组件模糊糊成一团的问题 (`useOwnLayer: true` 独立超清透液态玻璃层恢复)

@@ -134,6 +134,9 @@ class _LiquidToastWidgetState extends State<_LiquidToastWidget>
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? Colors.white : const Color(0xFF1E2128);
+
     return Positioned(
       top: MediaQuery.of(context).padding.top + 60,
       left: 16,
@@ -148,28 +151,30 @@ class _LiquidToastWidgetState extends State<_LiquidToastWidget>
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.15),
+                    color: Colors.black.withValues(alpha: isDark ? 0.22 : 0.08),
                     blurRadius: 16,
                     offset: const Offset(0, 6),
                   ),
                 ],
               ),
               child: GlassContainer(
-                useOwnLayer: true, // [v2.8.9] 独立离屏折射图层，真实折射底层页面内容
+                useOwnLayer: true,
                 shape: const LiquidRoundedSuperellipse(borderRadius: 16),
-                settings: const LiquidGlassSettings(
-                  glassColor: Color(0x1AFFFFFF), // [v2.9.0] 纯净无色中性液态玻璃，拒绝人造绿色/暗色浑浊染色
-                  blur: 2.5,
-                  thickness: 20.0,
-                  refractiveIndex: 1.45,
-                  lightIntensity: 0.70,
-                  ambientStrength: 0.45,
-                  ambientRim: 0.0, // [v2.9.0] 彻底消除黑边与暗角
-                  edgeAbsorption: 0.0, // [v2.9.0] 消除边缘发黑吸光
+                settings: LiquidGlassSettings(
+                  glassColor: isDark
+                      ? const Color(0xCC1C2029)
+                      : const Color(0xE0FFFFFF),
+                  blur: 3.5,
+                  thickness: 16.0,
+                  refractiveIndex: 1.35,
+                  lightIntensity: isDark ? 0.45 : 0.65,
+                  ambientStrength: isDark ? 0.30 : 0.45,
+                  ambientRim: 0.0,
+                  edgeAbsorption: 0.0,
                   fresnelStrength: 0.05,
-                  saturation: 1.20,
+                  saturation: 1.15,
                 ),
-                quality: GlassQuality.premium,
+                quality: GlassQuality.standard,
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16,
@@ -181,18 +186,18 @@ class _LiquidToastWidgetState extends State<_LiquidToastWidget>
                       const SizedBox(width: 12),
                       Expanded(
                         child: DefaultTextStyle(
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: textColor,
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
-                            decoration: TextDecoration.none, // [v2.3.0修复] 移除下划线
+                            decoration: TextDecoration.none,
                             fontFamily: 'PingFangSC',
                           ),
                           child: Text(
                             widget.message,
-                            style: const TextStyle(
-                              decoration:
-                                  TextDecoration.none, // [v2.3.0修复] 双重保险移除下划线
+                            style: TextStyle(
+                              color: textColor,
+                              decoration: TextDecoration.none,
                             ),
                           ),
                         ),

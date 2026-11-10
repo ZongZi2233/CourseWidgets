@@ -10,8 +10,13 @@ plugins {
 
 android {
     namespace = "com.zongzi.schedule"
-    compileSdk = 37
-    ndkVersion = "29.0.14206865"
+    compileSdk {
+        version = release(37) {
+            minorApiLevel = 2
+        }
+    }
+    buildToolsVersion = "37.0.0"
+    ndkVersion = "30.0.16248370"
 
     compileOptions {
         sourceCompatibility = JavaVersion.toVersion(25)
@@ -21,6 +26,10 @@ android {
 
     buildFeatures {
         compose = true
+        aidl = false
+        renderScript = false
+        shaders = false
+        resValues = false
     }
 
     defaultConfig {
@@ -96,6 +105,7 @@ android {
     
     packaging {
         jniLibs {
+            useLegacyPackaging = true
             pickFirsts += setOf(
                 "**/libflutter.so",
                 "**/libc++_shared.so"
@@ -107,7 +117,10 @@ android {
                 "META-INF/LICENSE",
                 "META-INF/LICENSE.txt",
                 "META-INF/NOTICE",
-                "META-INF/NOTICE.txt"
+                "META-INF/NOTICE.txt",
+                "META-INF/*.kotlin_module",
+                "META-INF/version-control-info.textproto",
+                "DebugProbesKt.bin"
             )
         }
     }
@@ -132,7 +145,8 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
     compilerOptions {
         jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_25)
         freeCompilerArgs.addAll(
-            "-Xbackend-threads=12"
+            "-Xbackend-threads=12",
+            "-Xlambdas=indy"
         )
     }
 }

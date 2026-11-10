@@ -100,7 +100,8 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
   /// 右栏：选中日期的课程日程详情列表
   Widget _buildLandscapeLayout(ScheduleProvider provider) {
     final topPadding = MediaQuery.paddingOf(context).top + 8.0;
-    final bottomPadding = MediaQuery.paddingOf(context).bottom + 12.0;
+    // [v3.1.6] 预留悬浮底栏 (GlassTabBar / 设置按钮) 的底部安全高度，防止横屏遮挡
+    final bottomPadding = MediaQuery.paddingOf(context).bottom + 76.0;
 
     return Padding(
       padding: EdgeInsets.fromLTRB(
@@ -606,7 +607,7 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
                     16,
                     4,
                     16,
-                    isLandscape ? (16 + MediaQuery.paddingOf(context).bottom) : 120,
+                    isLandscape ? (76 + MediaQuery.paddingOf(context).bottom) : 120,
                   ),
                   physics: const BouncingScrollPhysics(),
                   itemCount: courses.length,

@@ -1,4 +1,3 @@
-import 'dart:ui' show ImageFilter;
 import 'dart:ui' as ui show Image;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -392,7 +391,14 @@ class LiquidGlassDialog extends StatelessWidget {
         maxWidth: maxWidth,
       ),
       transitionBuilder: (dialogCtx, anim1, anim2, child) {
-        final curved = AppCurves.spring.transform(anim1.value);
+        final isReversing = anim1.status == AnimationStatus.reverse;
+        final double scale;
+        if (isReversing) {
+          scale = 1.0;
+        } else {
+          final curved = AppCurves.spring.transform(anim1.value);
+          scale = (1.10 - 0.10 * curved).clamp(0.96, 1.12);
+        }
         return FadeTransition(
           opacity: CurvedAnimation(
             parent: anim1,
@@ -400,7 +406,7 @@ class LiquidGlassDialog extends StatelessWidget {
             reverseCurve: AppCurves.easeAccel,
           ),
           child: Transform.scale(
-            scale: (0.86 + 0.14 * curved).clamp(0.0, 1.08),
+            scale: scale,
             child: child,
           ),
         );
@@ -422,76 +428,51 @@ class LiquidGlassDialog extends StatelessWidget {
     return Center(
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: maxWidth),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(28),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: isDark ? 0.45 : 0.12),
-                blurRadius: 32.0,
-                spreadRadius: -2.0,
-                offset: const Offset(0, 10.0),
-              ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(28),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 22),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: isDark
-                        ? [
-                            const Color(0xCC242936),
-                            const Color(0xB8181B24),
-                          ]
-                        : [
-                            const Color(0xE0FFFFFF),
-                            const Color(0xC8F2F6FC),
-                          ],
+        child: Material(
+          type: MaterialType.transparency,
+          child: HyperOSCard(
+            cornerRadius: 28,
+            useBlur: true,
+            feedbackType: MiuixPressFeedbackType.none,
+            padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 22),
+            shadows: HyperOSShadows.modal(isDark),
+            color: isDark ? const Color(0xCC202531) : const Color(0xE6FFFFFF),
+            border: BorderSide(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.18)
+                  : Colors.white.withValues(alpha: 0.85),
+              width: 1.1,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : const Color(0xFF1E2128),
+                    letterSpacing: -0.2,
                   ),
-                  borderRadius: BorderRadius.circular(28),
-                  border: Border.all(
-                    color: isDark
-                        ? Colors.white.withValues(alpha: 0.18)
-                        : Colors.white.withValues(alpha: 0.85),
-                    width: 1.1,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 12),
+                Flexible(
+                  child: DefaultTextStyle(
+                    style: TextStyle(
+                      fontSize: 14.5,
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.78)
+                          : const Color(0xFF4A5060),
+                      height: 1.45,
+                    ),
+                    textAlign: TextAlign.center,
+                    child: content,
                   ),
                 ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      title,
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: isDark ? Colors.white : const Color(0xFF1E2128),
-                        letterSpacing: -0.2,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 12),
-                    Flexible(
-                      child: DefaultTextStyle(
-                        style: TextStyle(
-                          fontSize: 14.5,
-                          color: isDark ? Colors.white.withValues(alpha: 0.78) : const Color(0xFF4A5060),
-                          height: 1.45,
-                        ),
-                        textAlign: TextAlign.center,
-                        child: content,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    _buildActions(context, effectiveActions, isDark),
-                  ],
-                ),
-              ),
+                const SizedBox(height: 20),
+                _buildActions(context, effectiveActions, isDark),
+              ],
             ),
           ),
         ),
@@ -579,7 +560,7 @@ class LiquidGlassDialog extends StatelessWidget {
   }
 }
 
-// [v3.1.0] 统一灵动弹簧弹窗入口
+// [v3.1.6] 统一灵动弹簧弹窗入口（对标 FlClash / iOS 原生弹窗 1.10x->1.0x 入场，1.0x 淡出退场）
 Future<T?> showLiquidDialog<T>({
   required BuildContext context,
   required Widget builder,
@@ -589,10 +570,17 @@ Future<T?> showLiquidDialog<T>({
     barrierDismissible: true,
     barrierLabel: 'Dismiss',
     barrierColor: Colors.black.withValues(alpha: 0.38),
-    transitionDuration: const Duration(milliseconds: 320),
+    transitionDuration: const Duration(milliseconds: 300),
     pageBuilder: (ctx, anim1, anim2) => builder,
     transitionBuilder: (ctx, anim1, anim2, child) {
-      final curved = AppCurves.spring.transform(anim1.value);
+      final isReversing = anim1.status == AnimationStatus.reverse;
+      final double scale;
+      if (isReversing) {
+        scale = 1.0;
+      } else {
+        final curved = AppCurves.spring.transform(anim1.value);
+        scale = (1.10 - 0.10 * curved).clamp(0.96, 1.12);
+      }
       return FadeTransition(
         opacity: CurvedAnimation(
           parent: anim1,
@@ -600,7 +588,7 @@ Future<T?> showLiquidDialog<T>({
           reverseCurve: AppCurves.easeAccel,
         ),
         child: Transform.scale(
-          scale: (0.86 + 0.14 * curved).clamp(0.0, 1.08),
+          scale: scale,
           child: child,
         ),
       );
@@ -878,56 +866,44 @@ class FloatingGlassHeaderButton extends StatelessWidget {
           Navigator.maybePop(context);
         }
       },
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            decoration: BoxDecoration(
-              color: isDark
-                  ? Colors.black.withValues(alpha: 0.35)
-                  : Colors.white.withValues(alpha: 0.65),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: isDark
-                    ? Colors.white.withValues(alpha: 0.16)
-                    : Colors.white.withValues(alpha: 0.85),
-                width: 0.8,
+      child: HyperOSCard(
+        cornerRadius: 20,
+        useBlur: true,
+        feedbackType: MiuixPressFeedbackType.none,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        color: isDark
+            ? Colors.black.withValues(alpha: 0.38)
+            : Colors.white.withValues(alpha: 0.68),
+        shadows: HyperOSShadows.pill(isDark),
+        border: BorderSide(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.16)
+              : Colors.white.withValues(alpha: 0.85),
+          width: 0.8,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              CupertinoIcons.chevron_left,
+              size: 18,
+              color: textColor.withValues(alpha: 0.9),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.bold,
+                color: textColor,
+                letterSpacing: 0.3,
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.06),
-                  blurRadius: 14,
-                  offset: const Offset(0, 3),
-                ),
-              ],
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  CupertinoIcons.chevron_left,
-                  size: 18,
-                  color: textColor.withValues(alpha: 0.9),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.bold,
-                    color: textColor,
-                    letterSpacing: 0.3,
-                  ),
-                ),
-                if (trailing != null) ...[
-                  const SizedBox(width: 8),
-                  trailing!,
-                ],
-              ],
-            ),
-          ),
+            if (trailing != null) ...[
+              const SizedBox(width: 8),
+              trailing!,
+            ],
+          ],
         ),
       ),
     );

@@ -55,7 +55,7 @@ class _WindowsCustomWindowState extends State<WindowsCustomWindow>
       if (!mounted) return;
 
       try {
-        await context.read<ScheduleProvider>().loadSavedData();
+        await context.read<ScheduleProvider>().loadSavedData(forceRefresh: false);
       } catch (e) {
         debugPrint('桌面端启动加载数据失败: $e');
       }

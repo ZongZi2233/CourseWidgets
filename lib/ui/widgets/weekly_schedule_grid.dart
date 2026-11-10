@@ -41,7 +41,6 @@ class WeeklyScheduleGrid extends StatefulWidget {
 class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
   static const double kSectionRowHeight = 68.0;
   static const int kTotalSections = 13;
-  final ValueNotifier<bool> _isBackgroundFrozen = ValueNotifier<bool>(false);
   PageController? _weekPageController;
   int _lastSyncedWeek = -1;
   bool _isProgrammaticScroll = false;
@@ -75,7 +74,6 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
   @override
   void dispose() {
     _weekPageController?.dispose();
-    _isBackgroundFrozen.dispose();
     super.dispose();
   }
 
@@ -172,150 +170,129 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
 
     final primaryColor = Theme.of(context).primaryColor;
 
-    await showGeneralDialog(
+    await liquid.showLiquidDialog(
       context: context,
-      useRootNavigator: false,
-      barrierDismissible: true,
-      barrierLabel: 'Dismiss',
-      barrierColor: Colors.black.withValues(alpha: 0.35),
-      transitionDuration: const Duration(milliseconds: 320),
-      transitionBuilder: (dialogCtx, anim1, anim2, child) {
-        final curved = AppCurves.spring.transform(anim1.value);
-        return Transform.scale(
-          scale: (0.88 + 0.12 * curved).clamp(0.0, 1.08),
-          child: Opacity(
-            opacity: anim1.value.clamp(0.0, 1.0),
-            child: child,
-          ),
-        );
-      },
-      pageBuilder: (dialogCtx, anim1, anim2) {
-        final dialogDark = Theme.of(dialogCtx).brightness == Brightness.dark;
-        return Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 420),
-            child: Material(
-              type: MaterialType.transparency,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(24),
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 24.0, sigmaY: 24.0),
-                    child: Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: dialogDark
-                            ? const Color(0xB8141720)
-                            : const Color(0x65FFFFFF),
-                        borderRadius: BorderRadius.circular(24),
-                        border: Border.all(
-                          color: dialogDark
-                              ? Colors.white.withValues(alpha: 0.14)
-                              : Colors.white.withValues(alpha: 0.70),
-                          width: 1.0,
+      builder: Builder(
+        builder: (dialogCtx) {
+          final dialogDark = Theme.of(dialogCtx).brightness == Brightness.dark;
+          return Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: Material(
+                type: MaterialType.transparency,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+                  child: liquid.HyperOSCard(
+                    cornerRadius: 24,
+                    useBlur: true,
+                    padding: const EdgeInsets.all(20),
+                    color: dialogDark
+                        ? const Color(0xCC161922)
+                        : const Color(0xE0FFFFFF),
+                    shadows: liquid.HyperOSShadows.modal(dialogDark),
+                    border: BorderSide(
+                      color: dialogDark
+                          ? Colors.white.withValues(alpha: 0.14)
+                          : Colors.white.withValues(alpha: 0.78),
+                      width: 1.0,
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              '选择周次',
+                              style: TextStyle(
+                                color: dialogDark ? Colors.white : const Color(0xFF1E2128),
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            SpringTouchFeedback(
+                              onTap: () => Navigator.pop(dialogCtx),
+                              child: Icon(
+                                CupertinoIcons.xmark_circle_fill,
+                                color: dialogDark ? Colors.white38 : Colors.black26,
+                                size: 22,
+                              ),
+                            ),
+                          ],
                         ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: dialogDark ? 0.35 : 0.12),
-                            blurRadius: 28,
-                            spreadRadius: -2,
-                            offset: const Offset(0, 8),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                '选择周次',
-                                style: TextStyle(
-                                  color: dialogDark ? Colors.white : const Color(0xFF1E2128),
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              SpringTouchFeedback(
-                                onTap: () => Navigator.pop(dialogCtx),
-                                child: Icon(
-                                  CupertinoIcons.xmark_circle_fill,
-                                  color: dialogDark ? Colors.white38 : Colors.black26,
-                                  size: 22,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                          ConstrainedBox(
-                            constraints: const BoxConstraints(maxHeight: 280),
-                            child: GridView.builder(
-                              shrinkWrap: true,
-                              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: 5,
-                                mainAxisSpacing: 10,
-                                crossAxisSpacing: 10,
-                                childAspectRatio: 1.3,
-                              ),
-                              itemCount: weeks.length,
-                              itemBuilder: (context, index) {
-                                final w = weeks[index];
-                                final isCur = w == provider.currentWeek;
-                                return SpringTouchFeedback(
-                                  onTap: () {
-                                    _changeWeek(provider, w);
-                                    Navigator.pop(dialogCtx);
-                                  },
-                                  child: Container(
-                                    decoration: BoxDecoration(
+                        const SizedBox(height: 16),
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxHeight: 280),
+                          child: GridView.builder(
+                            shrinkWrap: true,
+                            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 5,
+                              mainAxisSpacing: 10,
+                              crossAxisSpacing: 10,
+                              childAspectRatio: 1.3,
+                            ),
+                            itemCount: weeks.length,
+                            itemBuilder: (context, index) {
+                              final w = weeks[index];
+                              final isCur = w == provider.currentWeek;
+                              return SpringTouchFeedback(
+                                onTap: () {
+                                  _changeWeek(provider, w);
+                                  Navigator.pop(dialogCtx);
+                                },
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: isCur
+                                        ? primaryColor.withValues(alpha: dialogDark ? 0.85 : 0.90)
+                                        : (dialogDark
+                                            ? Colors.white.withValues(alpha: 0.08)
+                                            : Colors.black.withValues(alpha: 0.05)),
+                                    borderRadius: SquircleGeometry.smoothRadius(12),
+                                    border: Border.all(
                                       color: isCur
-                                          ? primaryColor.withValues(alpha: dialogDark ? 0.85 : 0.90)
-                                          : (dialogDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05)),
-                                      borderRadius: SquircleGeometry.smoothRadius(12),
-                                      border: Border.all(
-                                        color: isCur
-                                            ? primaryColor.withValues(alpha: 0.3)
-                                            : (dialogDark ? Colors.white.withValues(alpha: 0.10) : Colors.black.withValues(alpha: 0.06)),
-                                        width: 0.8,
-                                      ),
-                                      boxShadow: isCur
-                                          ? [
-                                              BoxShadow(
-                                                color: primaryColor.withValues(alpha: 0.35),
-                                                blurRadius: 8,
-                                                offset: const Offset(0, 2),
-                                              ),
-                                            ]
-                                          : null,
+                                          ? primaryColor.withValues(alpha: 0.3)
+                                          : (dialogDark
+                                              ? Colors.white.withValues(alpha: 0.10)
+                                              : Colors.black.withValues(alpha: 0.06)),
+                                      width: 0.8,
                                     ),
-                                    alignment: Alignment.center,
-                                    child: Text(
-                                      '第$w周',
-                                      style: TextStyle(
-                                        color: isCur
-                                            ? Colors.white
-                                            : (dialogDark ? Colors.white.withValues(alpha: 0.85) : const Color(0xFF2D3139)),
-                                        fontWeight: isCur ? FontWeight.bold : FontWeight.w600,
-                                        fontSize: 13,
-                                      ),
+                                    boxShadow: isCur
+                                        ? [
+                                            BoxShadow(
+                                              color: primaryColor.withValues(alpha: 0.35),
+                                              blurRadius: 8,
+                                              offset: const Offset(0, 2),
+                                            ),
+                                          ]
+                                        : null,
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: Text(
+                                    '第$w周',
+                                    style: TextStyle(
+                                      color: isCur
+                                          ? Colors.white
+                                          : (dialogDark
+                                              ? Colors.white.withValues(alpha: 0.85)
+                                              : const Color(0xFF2D3139)),
+                                      fontWeight: isCur ? FontWeight.bold : FontWeight.w600,
+                                      fontSize: 13,
                                     ),
                                   ),
-                                );
-                              },
-                            ),
+                                ),
+                              );
+                            },
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
               ),
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 
@@ -495,17 +472,21 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
 
     return Stack(
       children: [
-        // 1. 纵向滚动内容区
-        Positioned.fill(
+        // 1. 纵向滚动内容区（顶部在星期表头下方精准裁剪，底部延伸至悬浮底栏下方供液态玻璃折射）
+        Positioned(
+          top: contentTop,
+          left: 0,
+          right: 0,
+          bottom: 0,
           child: DynMouseScroll(
             durationMS: 250,
             scrollSpeed: 1.2,
             builder: (context, controller, physics) => SingleChildScrollView(
               controller: controller,
               physics: physics,
-              clipBehavior: Clip.none,
+              clipBehavior: Clip.hardEdge,
               padding: EdgeInsets.only(
-                top: contentTop,
+                top: 2,
                 bottom: resolvedPadding.bottom,
                 left: resolvedPadding.left,
                 right: resolvedPadding.right,
@@ -514,67 +495,76 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                  // 左侧时间轴 (1~13 节课)
-                  SizedBox(
-                    width: timeColWidth,
-                    child: Column(
-                      children: List.generate(kTotalSections, (i) {
-                        final section = i + 1;
-                        final startMin = config.sectionStartTimes[section] ?? (480 + (i < 5 ? i * 50 : 360 + i * 50));
-                        final hour = (startMin ~/ 60).toString().padLeft(2, '0');
-                        final min = (startMin % 60).toString().padLeft(2, '0');
-                        final timeStr = '$hour:$min';
+                    // 左侧时间轴 (1~13 节课) - 独立 RepaintBoundary 避免随课程卡片重绘
+                    RepaintBoundary(
+                      child: SizedBox(
+                        width: timeColWidth,
+                        child: Column(
+                          children: List.generate(kTotalSections, (i) {
+                            final section = i + 1;
+                            final startMin = config.sectionStartTimes[section] ??
+                                (480 + (i < 5 ? i * 50 : 360 + i * 50));
+                            final hour =
+                                (startMin ~/ 60).toString().padLeft(2, '0');
+                            final min =
+                                (startMin % 60).toString().padLeft(2, '0');
+                            final timeStr = '$hour:$min';
 
-                        return SizedBox(
-                          height: kSectionRowHeight,
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                '$section',
-                                style: TextStyle(
-                                  color: isDark ? Colors.white.withValues(alpha: 0.85) : const Color(0xFF2D3139),
-                                  fontSize: widget.isPhone ? 11 : 12,
-                                  fontWeight: FontWeight.bold,
-                                ),
+                            return SizedBox(
+                              height: kSectionRowHeight,
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    '$section',
+                                    style: TextStyle(
+                                      color: isDark
+                                          ? Colors.white.withValues(alpha: 0.85)
+                                          : const Color(0xFF2D3139),
+                                      fontSize: widget.isPhone ? 11 : 12,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 1),
+                                  Text(
+                                    timeStr,
+                                    style: TextStyle(
+                                      color: isDark
+                                          ? Colors.white.withValues(alpha: 0.45)
+                                          : const Color(0xFF7A808C),
+                                      fontSize: widget.isPhone ? 8.5 : 9.5,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(height: 1),
-                              Text(
-                                timeStr,
-                                style: TextStyle(
-                                  color: isDark ? Colors.white.withValues(alpha: 0.45) : const Color(0xFF7A808C),
-                                  fontSize: widget.isPhone ? 8.5 : 9.5,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      }),
-                    ),
-                  ),
-
-                  // 周一至周日各列的课程网格
-                  ...List.generate(daysCount, (dayIndex) {
-                    final day = dayIndex + 1;
-                    final courses = provider.getCoursesForDayAndWeek(day, week);
-
-                    return Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 1.5),
-                        child: _buildDayGridStack(
-                          context,
-                          day,
-                          courses,
-                          provider,
-                          isDark,
-                          week: week,
-                          daysCount: daysCount,
+                            );
+                          }),
                         ),
                       ),
-                    );
-                  }),
-                ],
+                    ),
+
+                    // 周一至周日各列的课程网格
+                    ...List.generate(daysCount, (dayIndex) {
+                      final day = dayIndex + 1;
+                      final courses = provider.getCoursesForDayAndWeek(day, week);
+
+                      return Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 1.5),
+                          child: _buildDayGridStack(
+                            context,
+                            day,
+                            courses,
+                            provider,
+                            isDark,
+                            week: week,
+                            daysCount: daysCount,
+                          ),
+                        ),
+                      );
+                    }),
+                  ],
                 ),
               ),
             ),
@@ -792,19 +782,27 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          ...List.generate(kTotalSections, (i) {
-            return Positioned(
-              top: (i + 1) * kSectionRowHeight - 1,
-              left: 0,
-              right: 0,
-              child: Container(
-                height: 0.6,
-                color: isDark
-                    ? Colors.white.withValues(alpha: 0.04)
-                    : Colors.black.withValues(alpha: 0.03),
+          Positioned.fill(
+            child: RepaintBoundary(
+              child: IgnorePointer(
+                child: Stack(
+                  children: List.generate(kTotalSections, (i) {
+                    return Positioned(
+                      top: (i + 1) * kSectionRowHeight - 1,
+                      left: 0,
+                      right: 0,
+                      child: Container(
+                        height: 0.6,
+                        color: isDark
+                            ? Colors.white.withValues(alpha: 0.04)
+                            : Colors.black.withValues(alpha: 0.03),
+                      ),
+                    );
+                  }),
+                ),
               ),
-            );
-          }),
+            ),
+          ),
 
           ...courses.map((course) {
             final config = provider.currentConfig;
@@ -836,13 +834,15 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
               left: 0,
               right: 0,
               height: courseHeight,
-              child: _buildCourseCard(
-                context,
-                course,
-                isDark,
-                week,
-                spanCount: spanCount,
-                daysCount: daysCount,
+              child: RepaintBoundary(
+                child: _buildCourseCard(
+                  context,
+                  course,
+                  isDark,
+                  week,
+                  spanCount: spanCount,
+                  daysCount: daysCount,
+                ),
               ),
             );
           }),
@@ -851,7 +851,7 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
     );
   }
 
-  /// [v3.1.0 防溢出升级] 课程卡片：自适应跨节高度与 5/7 列宽度，彻底消除底部三点按钮纵向与横向溢出
+  /// [v3.1.6 防溢出与共享元素升级] 课程卡片：自适应跨节高度与 5/7 列宽度，支持从整张卡片圆角矩形展开次级页
   Widget _buildCourseCard(
     BuildContext context,
     CourseEvent course,
@@ -870,6 +870,8 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
 
     final isSingleSection = spanCount <= 1;
     final isSevenColPhone = widget.isPhone && daysCount >= 7;
+    final double cardCornerRadius =
+        widget.isPhone ? (isSevenColPhone ? 13.0 : 15.0) : 18.0;
     final cardPadding = isSingleSection
         ? EdgeInsets.symmetric(horizontal: widget.isPhone ? 4.5 : 6.0, vertical: 3.5)
         : EdgeInsets.all(widget.isPhone ? (isSevenColPhone ? 4.5 : 5.5) : 7.5);
@@ -880,153 +882,149 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
     final int maxLocationLines = isSingleSection ? 1 : 2;
     final bool showTeacher = !isSingleSection && course.teacher.isNotEmpty;
 
-    return liquid.HyperOSCard(
-      key: ValueKey('card_w${currentWeek}_${course.id ?? course.name}_${course.startTime}'),
-      useBlur: true,
-      cornerRadius: widget.isPhone ? (isSevenColPhone ? 13 : 15) : 18,
-      padding: cardPadding,
-      color: cardBgColor,
-      contentColor: titleColor,
-      shadows: liquid.HyperOSShadows.card(isDark, glowColor: glowColor),
-      onTap: null,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          // 动态计算三点菜单触发胶囊安全宽度：绝不超过卡片内部可用宽度的 82%
-          final maxAvailW = constraints.maxWidth.isFinite ? constraints.maxWidth : 44.0;
-          final pillWidth = math.min(
-            widget.isPhone ? 38.0 : 46.0,
-            math.max(20.0, maxAvailW * 0.80),
-          );
-          final pillHeight = isSingleSection ? 12.0 : (widget.isPhone ? 14.5 : 16.5);
-          final iconSize = isSingleSection ? 12.0 : (widget.isPhone ? 14.5 : 16.5);
+    return Builder(
+      builder: (cardContext) => liquid.HyperOSCard(
+        key: ValueKey('card_w${currentWeek}_${course.id ?? course.name}_${course.startTime}'),
+        useBlur: true,
+        cornerRadius: cardCornerRadius,
+        padding: cardPadding,
+        color: cardBgColor,
+        contentColor: titleColor,
+        shadows: liquid.HyperOSShadows.card(isDark, glowColor: glowColor),
+        onTap: null,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final maxAvailW = constraints.maxWidth.isFinite ? constraints.maxWidth : 44.0;
+            final pillWidth = math.min(
+              widget.isPhone ? 38.0 : 46.0,
+              math.max(20.0, maxAvailW * 0.80),
+            );
+            final pillHeight = isSingleSection ? 12.0 : (widget.isPhone ? 14.5 : 16.5);
+            final iconSize = isSingleSection ? 12.0 : (widget.isPhone ? 14.5 : 16.5);
 
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 1. 课程名称：包裹于 Flexible(fit: FlexFit.tight) 中，自动吸收多余空间且绝不挤压底部按钮
-              Flexible(
-                fit: FlexFit.tight,
-                child: Text(
-                  CourseNameFormatter.format(course.name, isPhone: widget.isPhone),
-                  style: TextStyle(
-                    color: titleColor,
-                    fontSize: widget.isPhone ? (isSevenColPhone ? 11.0 : 11.8) : 13.5,
-                    fontWeight: FontWeight.bold,
-                    height: 1.15,
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Flexible(
+                  fit: FlexFit.tight,
+                  child: Text(
+                    CourseNameFormatter.format(course.name, isPhone: widget.isPhone),
+                    style: TextStyle(
+                      color: titleColor,
+                      fontSize: widget.isPhone ? (isSevenColPhone ? 11.0 : 11.8) : 13.5,
+                      fontWeight: FontWeight.bold,
+                      height: 1.15,
+                    ),
+                    maxLines: maxTitleLines,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  maxLines: maxTitleLines,
-                  overflow: TextOverflow.ellipsis,
                 ),
-              ),
 
-              // 2. 老师与地点
-              if (showTeacher || hasLocation) ...[
-                if (showTeacher)
-                  Text(
-                    course.teacher,
-                    style: TextStyle(
-                      color: subTextColor,
-                      fontSize: widget.isPhone ? (isSevenColPhone ? 9.8 : 10.5) : 11.8,
-                      fontWeight: FontWeight.w600,
-                      height: 1.15,
+                if (showTeacher || hasLocation) ...[
+                  if (showTeacher)
+                    Text(
+                      course.teacher,
+                      style: TextStyle(
+                        color: subTextColor,
+                        fontSize: widget.isPhone ? (isSevenColPhone ? 9.8 : 10.5) : 11.8,
+                        fontWeight: FontWeight.w600,
+                        height: 1.15,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                if (hasLocation)
-                  Text(
-                    course.location,
-                    style: TextStyle(
-                      color: subTextColor,
-                      fontSize: widget.isPhone ? (isSevenColPhone ? 9.8 : 10.5) : 11.8,
-                      fontWeight: FontWeight.w600,
-                      height: 1.15,
+                  if (hasLocation)
+                    Text(
+                      course.location,
+                      style: TextStyle(
+                        color: subTextColor,
+                        fontSize: widget.isPhone ? (isSevenColPhone ? 9.8 : 10.5) : 11.8,
+                        fontWeight: FontWeight.w600,
+                        height: 1.15,
+                      ),
+                      maxLines: maxLocationLines,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    maxLines: maxLocationLines,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-              ],
+                ],
 
-              // 3. 底部三点横条：响应式宽度与高度，彻底杜绝横向/纵向溢出
-              Center(
-                child: GlassContextMenu(
-                  menuWidth: 170,
-                  menuAlignment: GlassMenuAlignment.none,
-                  items: [
-                    GlassContextMenuItem(
-                      title: '课程详情',
-                      icon: CupertinoIcons.info,
-                      onTap: () => _showCourseDetail(context, course),
-                    ),
-                    GlassContextMenuItem(
-                      title: '编辑课程',
-                      icon: CupertinoIcons.pencil,
-                      onTap: () {
-                        SharedElementSourceRegistry.recordFromContext(
-                          context,
-                          cornerRadius: 16.0,
-                        );
-                        Navigator.push(
-                          context,
-                          TransparentMaterialPageRoute(
-                            builder: (_) => CourseEditScreen(course: course),
-                          ),
-                        );
-                      },
-                    ),
-                    GlassContextMenuItem(
-                      title: '删除课程',
-                      icon: CupertinoIcons.trash,
-                      isDestructive: true,
-                      onTap: () {
-                        GlassDialog.show(
-                          context: context,
-                          title: '删除课程',
-                          message: '确定要删除课程「${course.name}」吗？此操作不可撤销。',
-                          actions: [
-                            GlassDialogAction(
-                              label: '取消',
-                              onPressed: () => Navigator.pop(context, false),
+                Center(
+                  child: GlassContextMenu(
+                    menuWidth: 170,
+                    menuAlignment: GlassMenuAlignment.none,
+                    sharedElementSourceContext: cardContext,
+                    sharedElementCornerRadius: cardCornerRadius,
+                    items: [
+                      GlassContextMenuItem(
+                        title: '课程详情',
+                        icon: CupertinoIcons.info,
+                        onTap: () => _showCourseDetail(context, course),
+                      ),
+                      GlassContextMenuItem(
+                        title: '编辑课程',
+                        icon: CupertinoIcons.pencil,
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            TransparentMaterialPageRoute(
+                              builder: (_) => CourseEditScreen(course: course),
                             ),
-                            GlassDialogAction(
-                              label: '删除',
-                              isDestructive: true,
-                              onPressed: () => Navigator.pop(context, true),
-                            ),
-                          ],
-                        ).then((confirmed) async {
-                          if (confirmed == true && context.mounted) {
-                            final provider = Provider.of<ScheduleProvider>(context, listen: false);
-                            await provider.deleteCourse(course);
-                            if (context.mounted) {
-                              liquid.showLiquidToast(context, '已删除课程: ${course.name}');
+                          );
+                        },
+                      ),
+                      GlassContextMenuItem(
+                        title: '删除课程',
+                        icon: CupertinoIcons.trash,
+                        isDestructive: true,
+                        onTap: () {
+                          liquid.LiquidGlassDialog.show<bool>(
+                            context: context,
+                            title: '删除课程',
+                            content: Text('确定要删除课程「${course.name}」吗？此操作不可撤销。'),
+                            actions: [
+                              GlassDialogAction(
+                                label: '取消',
+                                onPressed: () => Navigator.pop(context, false),
+                              ),
+                              GlassDialogAction(
+                                label: '删除',
+                                isDestructive: true,
+                                onPressed: () => Navigator.pop(context, true),
+                              ),
+                            ],
+                          ).then((confirmed) async {
+                            if (confirmed == true && context.mounted) {
+                              final provider = Provider.of<ScheduleProvider>(context, listen: false);
+                              await provider.deleteCourse(course);
+                              if (context.mounted) {
+                                liquid.showLiquidToast(context, '已删除课程: ${course.name}');
+                              }
                             }
-                          }
-                        });
-                      },
-                    ),
-                  ],
-                  trigger: Container(
-                    height: pillHeight,
-                    width: pillWidth,
-                    margin: EdgeInsets.only(top: isSingleSection ? 1.5 : 3.0, bottom: 1.0),
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: (isDark ? Colors.white : Colors.black)
-                          .withValues(alpha: isDark ? 0.18 : 0.09),
-                      borderRadius: BorderRadius.circular(7),
-                    ),
-                    child: Icon(
-                      Icons.more_horiz_rounded,
-                      size: iconSize,
-                      color: subTextColor.withValues(alpha: 0.85),
+                          });
+                        },
+                      ),
+                    ],
+                    trigger: Container(
+                      height: pillHeight,
+                      width: pillWidth,
+                      margin: EdgeInsets.only(top: isSingleSection ? 1.5 : 3.0, bottom: 1.0),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: (isDark ? Colors.white : Colors.black)
+                            .withValues(alpha: isDark ? 0.18 : 0.09),
+                        borderRadius: BorderRadius.circular(7),
+                      ),
+                      child: Icon(
+                        Icons.more_horiz_rounded,
+                        size: iconSize,
+                        color: subTextColor.withValues(alpha: 0.85),
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ],
-          );
-        },
+              ],
+            );
+          },
+        ),
       ),
     );
   }
@@ -1035,157 +1033,150 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primaryTextColor = isDark ? Colors.white : const Color(0xFF1A1A2E);
 
-    _isBackgroundFrozen.value = true;
-    try {
-      await showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        backgroundColor: Colors.transparent,
-        barrierColor: Colors.black.withValues(alpha: 0.35),
-        useRootNavigator: true,
-        builder: (sheetContext) => ClipRRect(
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 24.0, sigmaY: 24.0),
-            child: Container(
-              decoration: BoxDecoration(
-                color: isDark
-                    ? const Color(0xD9161922)
-                    : const Color(0xE6FFFFFF),
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-                border: Border(
-                  top: BorderSide(
-                    color: isDark
-                        ? Colors.white.withValues(alpha: 0.18)
-                        : Colors.white.withValues(alpha: 0.85),
-                    width: 1.0,
-                  ),
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withValues(alpha: 0.35),
+      useRootNavigator: true,
+      builder: (sheetContext) => ClipRRect(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 24.0, sigmaY: 24.0),
+          child: Container(
+            decoration: BoxDecoration(
+              color: isDark
+                  ? const Color(0xD9161922)
+                  : const Color(0xE6FFFFFF),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+              border: Border(
+                top: BorderSide(
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.18)
+                      : Colors.white.withValues(alpha: 0.85),
+                  width: 1.0,
                 ),
               ),
-              child: SafeArea(
-                top: false,
-                child: SingleChildScrollView(
-                  physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Center(
-                        child: Container(
-                          width: 38,
-                          height: 4.5,
-                          decoration: BoxDecoration(
-                            color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(3),
-                          ),
+            ),
+            child: SafeArea(
+              top: false,
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 38,
+                        height: 4.5,
+                        decoration: BoxDecoration(
+                          color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(3),
                         ),
                       ),
-                      const SizedBox(height: 18),
-                      Text(
-                        course.name,
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: primaryTextColor,
-                        ),
+                    ),
+                    const SizedBox(height: 18),
+                    Text(
+                      course.name,
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: primaryTextColor,
                       ),
-                      const SizedBox(height: 16),
-                      _buildDetailRow(sheetContext, '时间', course.timeStr),
-                      const SizedBox(height: 10),
-                      _buildDetailRow(
-                        sheetContext,
-                        '地点',
-                        (course.location.isEmpty || course.location.contains('未知'))
-                            ? '未指定地点'
-                            : course.location,
-                      ),
-                      const SizedBox(height: 10),
-                      _buildDetailRow(
-                        sheetContext,
-                        '教师',
-                        course.teacher.isEmpty ? '未指定教师' : course.teacher,
-                      ),
-                      const SizedBox(height: 22),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: SpringTouchFeedback(
-                              onTap: () {
-                                Navigator.pop(sheetContext);
-                                Navigator.push(
-                                  context,
-                                  TransparentMaterialPageRoute(
-                                    builder: (_) => CourseEditScreen(course: course),
-                                  ),
-                                );
-                              },
-                              child: Container(
-                                height: 46,
-                                decoration: BoxDecoration(
-                                  color: AppThemeColors.babyPink.withValues(alpha: 0.85),
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(
-                                    color: Colors.white.withValues(alpha: 0.35),
-                                    width: 1.0,
-                                  ),
+                    ),
+                    const SizedBox(height: 16),
+                    _buildDetailRow(sheetContext, '时间', course.timeStr),
+                    const SizedBox(height: 10),
+                    _buildDetailRow(
+                      sheetContext,
+                      '地点',
+                      (course.location.isEmpty || course.location.contains('未知'))
+                          ? '未指定地点'
+                          : course.location,
+                    ),
+                    const SizedBox(height: 10),
+                    _buildDetailRow(
+                      sheetContext,
+                      '教师',
+                      course.teacher.isEmpty ? '未指定教师' : course.teacher,
+                    ),
+                    const SizedBox(height: 22),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: SpringTouchFeedback(
+                            onTap: () {
+                              Navigator.pop(sheetContext);
+                              Navigator.push(
+                                context,
+                                TransparentMaterialPageRoute(
+                                  builder: (_) => CourseEditScreen(course: course),
                                 ),
-                                alignment: Alignment.center,
-                                child: const Text(
-                                  '编辑课程',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 15,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          SpringTouchFeedback(
-                            onTap: () => Navigator.pop(sheetContext),
+                              );
+                            },
                             child: Container(
-                              width: 88,
                               height: 46,
                               decoration: BoxDecoration(
-                                color: isDark
-                                    ? Colors.white.withValues(alpha: 0.12)
-                                    : Colors.black.withValues(alpha: 0.05),
+                                color: AppThemeColors.babyPink.withValues(alpha: 0.85),
                                 borderRadius: BorderRadius.circular(16),
                                 border: Border.all(
-                                  color: isDark
-                                      ? Colors.white.withValues(alpha: 0.15)
-                                      : Colors.black.withValues(alpha: 0.08),
-                                  width: 0.8,
+                                  color: Colors.white.withValues(alpha: 0.35),
+                                  width: 1.0,
                                 ),
                               ),
                               alignment: Alignment.center,
-                              child: Text(
-                                '关闭',
+                              child: const Text(
+                                '编辑课程',
                                 style: TextStyle(
-                                  color: isDark ? Colors.white70 : const Color(0xFF1E2128),
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 14,
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 15,
                                 ),
                               ),
                             ),
                           ),
-                        ],
-                      ),
-                    ],
-                  ),
+                        ),
+                        const SizedBox(width: 12),
+                        SpringTouchFeedback(
+                          onTap: () => Navigator.pop(sheetContext),
+                          child: Container(
+                            width: 88,
+                            height: 46,
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? Colors.white.withValues(alpha: 0.12)
+                                  : Colors.black.withValues(alpha: 0.05),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: isDark
+                                    ? Colors.white.withValues(alpha: 0.15)
+                                    : Colors.black.withValues(alpha: 0.08),
+                                width: 0.8,
+                              ),
+                            ),
+                            alignment: Alignment.center,
+                            child: Text(
+                              '关闭',
+                              style: TextStyle(
+                                color: isDark ? Colors.white70 : const Color(0xFF1E2128),
+                                fontWeight: FontWeight.w600,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
             ),
           ),
         ),
-      );
-    } finally {
-      if (mounted) {
-        _isBackgroundFrozen.value = false;
-      }
-    }
+      ),
+    );
   }
 
   Widget _buildDetailRow(BuildContext context, String label, String value) {

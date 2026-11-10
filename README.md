@@ -10,9 +10,9 @@
 [![License](https://img.shields.io/badge/License-AGPL%203.0-blue.svg)](LICENSE)
 [![Flutter](https://img.shields.io/badge/Flutter-3.47.0+-02569B?logo=flutter)](https://flutter.dev)
 [![Dart](https://img.shields.io/badge/Dart-3.13.0+-0175C2?logo=dart)](https://dart.dev)
-[![Android](https://img.shields.io/badge/Android-15%2B%20(API%2035--37)-3DDC84?logo=android)](https://github.com/ZongZi2233/CourseWidgets/releases)
+[![Android](https://img.shields.io/badge/Android-15%2B%20(API%2035--37.2)-3DDC84?logo=android)](https://github.com/ZongZi2233/CourseWidgets/releases)
 [![Windows](https://img.shields.io/badge/Windows-10%2F11%20x64-0078D6?logo=windows)](https://github.com/ZongZi2233/CourseWidgets/releases)
-[![Version](https://img.shields.io/badge/Release-v3.1.5%20(Build%203150)-FF9BAE)](https://github.com/ZongZi2233/CourseWidgets/releases/tag/v3.1.5)
+[![Version](https://img.shields.io/badge/Release-v3.1.6%20(Build%203160)-FF9BAE)](https://github.com/ZongZi2233/CourseWidgets/releases/tag/v3.1.6)
 
 [English](README_EN.md) | **简体中文**
 
@@ -20,10 +20,10 @@
 
 ---
 
-## 📦 最新正式版下载：[v3.1.5 (Build 3150)](https://github.com/ZongZi2233/CourseWidgets/releases/tag/v3.1.5)
+## 📦 最新正式版下载：[v3.1.6 (Build 3160)](https://github.com/ZongZi2233/CourseWidgets/releases/tag/v3.1.6)
 
-* **Android 客户端 (`arm64-v8a`)**：[`CourseWidgets-v3.1.5-android-arm64-v8a.apk`](https://github.com/ZongZi2233/CourseWidgets/releases/download/v3.1.5/CourseWidgets-v3.1.5-android-arm64-v8a.apk) —— 支持 Android 15+（API 35+），完整适配 Android 16 实况通知（Live Updates），开启 R8 资源压缩与 Dart AOT 编译优化。
-* **Windows 桌面端 (`x64`)**：[`CourseWidgets-v3.1.5-windows-x64.zip`](https://github.com/ZongZi2233/CourseWidgets/releases/download/v3.1.5/CourseWidgets-v3.1.5-windows-x64.zip) —— 免安装便携版，支持无边框自定义标题栏、系统托盘常驻、热键响应与 4K 高分屏缩放。
+* **Android 客户端 (`arm64-v8a`)**：[`CourseWidgets-v3.1.6-android-arm64-v8a.apk`](https://github.com/ZongZi2233/CourseWidgets/releases/download/v3.1.6/CourseWidgets-v3.1.6-android-arm64-v8a.apk) —— 支持 Android 15+（API 35+，基于 API 37.2 与 NDK r30 编译），完整适配 Android 16 实况通知（Live Updates），开启仅 `arm64-v8a` 纯净分包、R8 `fullMode` 深度混淆压缩与 Dart AOT 符号剥离混淆。
+* **Windows 桌面端 (`x64`)**：[`CourseWidgets-v3.1.6-windows-x64.zip`](https://github.com/ZongZi2233/CourseWidgets/releases/download/v3.1.6/CourseWidgets-v3.1.6-windows-x64.zip) —— 免安装便携版（开启 MSVC `/O2` + `/OPT:REF,/OPT:ICF` 链接裁剪优化与 Dart AOT 混淆），支持无边框自定义标题栏、系统托盘常驻、热键响应与 4K 高分屏缩放。
 
 ---
 
@@ -54,13 +54,13 @@
 
 ---
 
-## 📜 版本演进摘要（v2.0 ~ v3.1.5 CHANGELOG 概览）
+## 📜 版本演进摘要（v2.0 ~ v3.1.6 CHANGELOG 概览）
 
 完整的逐版本详细记录请参阅 [CHANGELOG.md](CHANGELOG.md)。
 
 | 阶段 / 版本 | 核心架构演进与功能更新摘要 |
 | :--- | :--- |
-| **v3.1.4 ~ v3.1.5**<br>*(2026-11)* | • **真液态玻璃清晰度修复**：为悬浮 `GlassContainer` 全面启用独立渲染层（`useOwnLayer: true`）与微模糊清透参数，配合离屏逆位移壁纸补偿消除切页变暗；<br>• **圆角矩形卡片 SharedElement 转场与阻尼预见性返回**：实现从被点击圆角矩形卡片原位等比展开/缩回，接管全手势预见性返回并加入双曲橡皮筋强阻尼限幅；<br>• **实况通知跨天防歧义与双端开屏优化**：实况通知显式标注 `今日周X` / `明日周X` 与午夜 0 点自动刷新；Windows 秒开加载动画、Android 单层原生开屏直达主页。 |
+| **v3.1.4 ~ v3.1.6**<br>*(2026-11)* | • **锚定式液态形变菜单 (`GlassMenu`) 与 UI 层级优化**：重构形变菜单为单容器 `Rect.lerp` 锚定几何展开，根除变形期间每帧 `toImageSync` 同步光栅化阻塞并实现懒加载控制器；修复课表纵向滚动穿透星期表头与横屏日历底栏遮挡；<br>• **真液态玻璃清晰度修复与 SharedElement 圆角矩形卡片转场**：为悬浮 `GlassContainer` 全面启用独立渲染层（`useOwnLayer: true`）与微模糊清透参数，实现从被点击圆角矩形卡片原位等比展开/缩回及双曲橡皮筋阻尼预见性返回；<br>• **Android SDK 37.2 / NDK r30 工具链与实况通知跨天防歧义**：升级适配 Android API 37.2、NDK `30.0.16248370`、16KB 页对齐与 R8 `fullMode`；实况通知显式标注 `今日周X` / `明日周X` 与午夜 0 点自动刷新。 |
 | **v3.1.2 ~ v3.1.3**<br>*(2026-11)* | • **Android 16 实况通知粗胶囊轨道恢复**：定制 8~10dp 粗胶囊轨道、课节圆点节点与高 DPI 游标，隐藏通知左上角冗余软件名；<br>• **系统日程（ICS）同步校准**：修复导出旧快照导致第二节课时间错位及 UTC 展开跨日导致星期偏移的问题；<br>• **120Hz 渲染管线优化**：引入常驻预热主页面池、硬件级 `RSuperellipse` 单通解析渲染、课表滚动 `RepaintBoundary` 光栅隔离与速度包络 1D 动态模糊。 |
 | **v3.1.0 ~ v3.1.1**<br>*(2026-10)* | • **实况通知单课单节点与排版升级**：重构 `1 节课 = 1 个进度段`，支持“居中圆点”与“按时长分段”双样式切换，放大突出课程与倒计时主标题；<br>• **日历页与课表页同源联动**：重构月/周日历视图与课表数据同源实时联动，支持纯色无壁纸模式（浅色纯白 / 深色深灰）与响应式防溢出课程卡片。 |
 | **v3.0.0 ~ v3.0.9**<br>*(2026-09 ~ 10)* | • **SQLite Schema v4 节次固化**：持久化保存课程节次索引，解决修改课时长度导致课程移位或被吞的问题；<br>• **全链路无损导入导出与 WebView 会话保持**：支持携带作息配置的 ICS 双向导入导出、HTML 解析与 JSON 备份；Windows WebView2 独立数据目录与凭据自动回填；<br>• **静态壁纸预烘焙模糊架构**：引入 `StaticBlurService` 视口级壁纸预烘焙与 `HyperOSCard` 无边框漫反射阴影设计。 |
@@ -85,13 +85,14 @@
 
 ### 1. 开发与编译环境要求
 ```yaml
-Flutter SDK:   >= 3.47.0 (Stable / Master)
-Dart SDK:      >= 3.13.0
-Android SDK:   CompileSDK 37, TargetSDK 37, MinSDK 35 (Android 15+)
-Android NDK:   29.0.14206865
+Flutter SDK:   >= 3.47.0 (当前验证: 3.47.7 Stable)
+Dart SDK:      >= 3.13.0 (当前验证: 3.13.5 Stable)
+Android SDK:   CompileSDK 37.2 (Extension 24), TargetSDK 37, MinSDK 35 (Android 15+)
+Build-Tools:   37.0.0 / Android SDK Command-line Tools 23.0
+Android NDK:   30.0.16248370 (r30)
 构建工具链:     AGP 9.4.1 / Gradle 9.8.1 / Kotlin 2.4.20
 Java 运行时:    JDK 25
-Windows 编译:   Visual Studio 2022 (包含“使用 C++ 的桌面开发”工作负载)
+Windows 编译:   Visual Studio 2022 (包含“使用 C++ 的桌面开发”工作负载, 开启 /MP + /O2 + /OPT:REF,/OPT:ICF)
 ```
 
 ### 2. 克隆与本地运行
@@ -110,11 +111,11 @@ flutter run -d windows    # 运行至 Windows 桌面端
 
 ### 3. 生产环境 Release 构建与归档
 ```bash
-# 1. 构建 Android arm64-v8a Release APK
-flutter build apk --release --split-per-abi --target-platform android-arm64
+# 1. 构建 Android arm64-v8a Release APK (开启仅 arm64-v8a 分包、R8 压缩与 Dart 混淆)
+flutter build apk --release --split-per-abi --target-platform android-arm64 --obfuscate --split-debug-info=build/debug-info/android
 
-# 2. 构建 Windows x64 Release 客户端
-flutter build windows --release
+# 2. 构建 Windows x64 Release 客户端 (开启 MSVC LTCG 优化与 Dart 混淆)
+flutter build windows --release --obfuscate --split-debug-info=build/debug-info/windows
 
 # 3. 校验版本号并收集归档至 release/ 目录（自动生成 SHA256 清单）
 python collect_release.py

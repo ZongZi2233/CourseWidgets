@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
-import 'dart:ui';
 import '../../constants/theme_constants.dart';
 import '../../constants/version.dart';
 import 'dart:io';
@@ -308,17 +307,15 @@ class _SettingsAboutScreenState extends State<SettingsAboutScreen>
     }
   }
 
-  /// [v2.6.3] 弹窗展示版本更新内容与下载按钮
+  /// [v3.1.6] 弹窗展示版本更新内容与下载按钮（统一使用 showLiquidDialog 与单层静态高斯采样）
   void _showUpdateDialog(String latestTag, String releaseBody) {
     final downloadUrl = _buildDownloadUrl(latestTag);
     final isDark = GlassSettingsHelper.isDark(context);
 
-    showDialog(
+    liquid.showLiquidDialog(
       context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.4),
-      builder: (ctx) => BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-        child: Dialog(
+      builder: Builder(
+        builder: (ctx) => Dialog(
           backgroundColor: Colors.transparent,
           insetPadding: const EdgeInsets.symmetric(horizontal: 24),
           child: ConstrainedBox(

@@ -16,6 +16,8 @@ class ScheduleProvider with ChangeNotifier {
 
   List<CourseEvent> _courses = [];
   bool _isLoading = false;
+  bool _hasLoadedInitialData = false;
+  Future<void>? _inFlightLoadFuture;
   String? _errorMessage;
 
   // 当前显示状态
@@ -212,8 +214,27 @@ class ScheduleProvider with ChangeNotifier {
     return false;
   }
 
-  /// 加载保存的数据
-  Future<void> loadSavedData() async {
+  /// 加载保存的数据（支持并发合并与防重复冷启动查询）
+  Future<void> loadSavedData({bool forceRefresh = true}) async {
+    if (!forceRefresh && _hasLoadedInitialData) {
+      return;
+    }
+    if (_inFlightLoadFuture != null) {
+      return _inFlightLoadFuture!;
+    }
+    final future = _loadSavedDataInternal();
+    _inFlightLoadFuture = future;
+    try {
+      await future;
+      _hasLoadedInitialData = true;
+    } finally {
+      if (identical(_inFlightLoadFuture, future)) {
+        _inFlightLoadFuture = null;
+      }
+    }
+  }
+
+  Future<void> _loadSavedDataInternal() async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();

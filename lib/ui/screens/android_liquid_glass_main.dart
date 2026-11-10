@@ -15,6 +15,7 @@ import 'calendar_view_screen.dart';
 import 'settings_main_screen.dart';
 import 'android_schedule_config_screen.dart';
 import '../widgets/liquid_components.dart' as liquid;
+import '../widgets/glass_context_menu.dart';
 import '../transitions/smooth_slide_transitions.dart';
 import '../widgets/tablet_sidebar.dart';
 import '../widgets/weekly_schedule_grid.dart';
@@ -31,7 +32,6 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
     with RouteAware {
   int _currentIndex = 0;
   bool _isBottomNavVisible = true;
-  final ValueNotifier<bool> _isBackgroundFrozen = ValueNotifier<bool>(false);
 
   void _onTabSelected(int index) {
     if (_currentIndex == index) return;
@@ -52,22 +52,20 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
   }
 
 
-  // [v2.8.9/v3.0.0] 被其他页面覆盖时：冻结底层课表动画并隐藏底栏，二级页面转场满帧 120 FPS
+  // [v2.8.9/v3.0.0] 被其他页面覆盖时：隐藏底栏，二级页面转场满帧 120 FPS
   @override
   void didPushNext() {
     if (mounted) {
-      _isBackgroundFrozen.value = true;
       setState(() {
         _isBottomNavVisible = false;
       });
     }
   }
 
-  // [v2.8.9/v3.0.0] 上一层页面弹出：平滑解冻课表并恢复底部导航栏
+  // [v2.8.9/v3.0.0] 上一层页面弹出：恢复底部导航栏
   @override
   void didPopNext() {
     if (mounted) {
-      _isBackgroundFrozen.value = false;
       setState(() {
         _isBottomNavVisible = true;
       });
@@ -87,7 +85,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
       _scheduleProvider = context.read<ScheduleProvider>();
       _scheduleProvider?.removeListener(_onScheduleChanged);
       _scheduleProvider?.addListener(_onScheduleChanged);
-      await _scheduleProvider!.loadSavedData();
+      await _scheduleProvider!.loadSavedData(forceRefresh: false);
 
       // 初始化 Android 16 Live Updates 通知服务
       final liveService = LiveNotificationServiceV2();
@@ -118,7 +116,6 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
   @override
   void dispose() {
     routeObserver.unsubscribe(this); // [v2.6.0] 卸载路由监听
-    _isBackgroundFrozen.dispose();
     _scheduleProvider?.removeListener(_onScheduleChanged);
     // 停止通知服务
     LiveNotificationServiceV2().dispose();
@@ -868,84 +865,70 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
               const SizedBox(width: 6),
 
               // 5. (⋯) 变形多功能菜单 (纯净无边框，漫反射微阴影)
-              GlassMenu(
-                menuWidth: 170,
-                menuBorderRadius: 20,
-                quality: theme.ThemeService().glassQuality,
-                settings: LiquidGlassSettings(
-                  glassColor: isDark
-                      ? const Color(0x35101216)
-                      : const Color(0x30FFFFFF),
-                  blur: 4.0,
-                  thickness: 18.0,
-                  refractiveIndex: 1.35,
-                  lightIntensity: 0.35,
-                  ambientStrength: 0.20,
-                  ambientRim: 0.0,
-                  fresnelStrength: 0.0,
-                  edgeAbsorption: 0.06,
-                ),
-                triggerBuilder: (context, toggleMenu) {
-                  return SpringTouchFeedback(
-                    onTap: toggleMenu,
-                    child: Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: isDark
-                            ? Colors.white.withValues(alpha: 0.12)
-                            : Colors.white.withValues(alpha: 0.55),
-                        borderRadius: BorderRadius.circular(18),
-                        border: Border.all(
+              Builder(
+                builder: (menuBtnContext) => GlassContextMenu(
+                  menuWidth: 170,
+                  menuBorderRadius: 20,
+                  sharedElementSourceContext: menuBtnContext,
+                  sharedElementCornerRadius: 18.0,
+                  triggerBuilder: (context, toggleMenu) {
+                    return SpringTouchFeedback(
+                      onTap: toggleMenu,
+                      child: Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
                           color: isDark
                               ? Colors.white.withValues(alpha: 0.12)
-                              : Colors.white.withValues(alpha: 0.70),
-                          width: 0.8,
+                              : Colors.white.withValues(alpha: 0.55),
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.12)
+                                : Colors.white.withValues(alpha: 0.70),
+                            width: 0.8,
+                          ),
+                          boxShadow: liquid.HyperOSShadows.pill(isDark),
                         ),
-                        boxShadow: liquid.HyperOSShadows.pill(isDark),
+                        child: Icon(
+                          CupertinoIcons.ellipsis,
+                          size: 15,
+                          color: isDark ? Colors.white : const Color(0xFF1E2128),
+                        ),
                       ),
-                      child: Icon(
-                        CupertinoIcons.ellipsis,
-                        size: 15,
-                        color: isDark ? Colors.white : const Color(0xFF1E2128),
-                      ),
+                    );
+                  },
+                  items: [
+                    GlassContextMenuItem(
+                      icon: CupertinoIcons.calendar_today,
+                      title: '回到本周',
+                      onTap: () {
+                        final now = DateTime.now();
+                        final start = provider.currentConfig.semesterStartDate;
+                        final week = (now.difference(start).inDays ~/ 7) + 1;
+                        provider.setCurrentWeek(week);
+                        provider.setCurrentDay(now.weekday);
+                      },
                     ),
-                  );
-                },
-                items: [
-                  GlassMenuItem(
-                    icon: const Icon(CupertinoIcons.calendar_today, size: 18, color: Colors.white),
-                    title: '回到本周',
-                    onTap: () {
-                      final now = DateTime.now();
-                      final start = provider.currentConfig.semesterStartDate;
-                      final week = (now.difference(start).inDays ~/ 7) + 1;
-                      provider.setCurrentWeek(week);
-                      provider.setCurrentDay(now.weekday);
-                    },
-                  ),
-                  GlassMenuItem(
-                    icon: const Icon(CupertinoIcons.slider_horizontal_3, size: 18, color: Colors.white),
-                    title: '课时设置',
-                    onTap: () {
-                      SharedElementSourceRegistry.recordFromContext(
-                        context,
-                        cornerRadius: 20.0,
-                      );
-                      Navigator.push(
-                        context,
-                        TransparentMaterialPageRoute(
-                          builder: (_) => const AndroidScheduleConfigScreen(),
-                        ),
-                      );
-                    },
-                  ),
-                  GlassMenuItem(
-                    icon: const Icon(CupertinoIcons.square_grid_2x2, size: 18, color: Colors.white),
-                    title: '周次管理',
-                    onTap: () => _showWeekPickerSheet(context, provider),
-                  ),
-                ],
+                    GlassContextMenuItem(
+                      icon: CupertinoIcons.slider_horizontal_3,
+                      title: '课时设置',
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          TransparentMaterialPageRoute(
+                            builder: (_) => const AndroidScheduleConfigScreen(),
+                          ),
+                        );
+                      },
+                    ),
+                    GlassContextMenuItem(
+                      icon: CupertinoIcons.square_grid_2x2,
+                      title: '周次管理',
+                      onTap: () => _showWeekPickerSheet(context, provider),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -953,146 +936,138 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
       );
   }
 
-  /// [v2.9.6] 优雅的周次选择浮层（打开瞬间冻结背景控件离屏渲染提升帧率，退出动画完成后平滑解锁）
+  /// [v2.9.6] 优雅的周次选择浮层
   Future<void> _showWeekPickerSheet(BuildContext context, ScheduleProvider provider) async {
     final weeks = provider.availableWeeks.isNotEmpty
         ? provider.availableWeeks
         : List.generate(25, (i) => i + 1);
 
-    _isBackgroundFrozen.value = true;
-    try {
-      await showModalBottomSheet(
-        context: context,
-        backgroundColor: Colors.transparent,
-        barrierColor: Colors.black.withValues(alpha: 0.20),
-        isScrollControlled: true,
-        builder: (ctx) {
-          final isDark = Theme.of(ctx).brightness == Brightness.dark;
-          final titleColor = isDark ? Colors.white : const Color(0xFF1E2128);
-          final closeColor = isDark ? Colors.white70 : const Color(0xFF555B68);
-          final closeBg = isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05);
+    await showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withValues(alpha: 0.20),
+      isScrollControlled: true,
+      builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        final titleColor = isDark ? Colors.white : const Color(0xFF1E2128);
+        final closeColor = isDark ? Colors.white70 : const Color(0xFF555B68);
+        final closeBg = isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05);
 
-          return ClipRRect(
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 20.0, sigmaY: 20.0),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? const Color(0xB8161922)
-                      : Colors.white.withValues(alpha: 0.85),
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-                ),
-                child: SafeArea(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Text(
-                              '选择学期周次',
-                              style: TextStyle(
-                                color: titleColor,
-                                fontSize: 18,
-                                fontWeight: FontWeight.w700,
+        return ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 20.0, sigmaY: 20.0),
+            child: Container(
+              decoration: BoxDecoration(
+                color: isDark
+                    ? const Color(0xB8161922)
+                    : Colors.white.withValues(alpha: 0.85),
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+              ),
+              child: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            '选择学期周次',
+                            style: TextStyle(
+                              color: titleColor,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const Spacer(),
+                          GestureDetector(
+                            onTap: () => Navigator.pop(ctx),
+                            child: Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: closeBg,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                CupertinoIcons.xmark,
+                                size: 14,
+                                color: closeColor,
                               ),
                             ),
-                            const Spacer(),
-                            GestureDetector(
-                              onTap: () => Navigator.pop(ctx),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxHeight: MediaQuery.of(context).size.height * 0.4,
+                        ),
+                        child: GridView.builder(
+                          shrinkWrap: true,
+                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 4,
+                            mainAxisSpacing: 10,
+                            crossAxisSpacing: 10,
+                            childAspectRatio: 1.8,
+                          ),
+                          itemCount: weeks.length,
+                          itemBuilder: (context, idx) {
+                            final week = weeks[idx];
+                            final isCur = week == provider.currentWeek;
+                            final unselectedBg = isDark
+                                ? Colors.white.withValues(alpha: 0.08)
+                                : const Color(0xFFF0F2F6);
+                            final unselectedText = isDark
+                                ? Colors.white70
+                                : const Color(0xFF555B68);
+
+                            return SpringTouchFeedback(
+                              onTap: () {
+                                HapticFeedback.selectionClick();
+                                provider.setCurrentWeek(week);
+                                Navigator.pop(ctx);
+                              },
                               child: Container(
-                                padding: const EdgeInsets.all(6),
                                 decoration: BoxDecoration(
-                                  color: closeBg,
-                                  shape: BoxShape.circle,
+                                  gradient: isCur
+                                      ? LinearGradient(
+                                          colors: [
+                                            AppThemeColors.babyPink.withValues(alpha: 0.5),
+                                            AppThemeColors.softCoral.withValues(alpha: 0.4),
+                                          ],
+                                        )
+                                      : null,
+                                  color: isCur ? null : unselectedBg,
+                                  borderRadius: BorderRadius.circular(12),
+                                  boxShadow: isCur
+                                      ? liquid.HyperOSShadows.pill(isDark, accentColor: AppThemeColors.babyPink)
+                                      : null,
                                 ),
-                                child: Icon(
-                                  CupertinoIcons.xmark,
-                                  size: 14,
-                                  color: closeColor,
+                                alignment: Alignment.center,
+                                child: Text(
+                                  '第$week周',
+                                  style: TextStyle(
+                                    color: isCur ? Colors.white : unselectedText,
+                                    fontSize: 13,
+                                    fontWeight: isCur ? FontWeight.w700 : FontWeight.w500,
+                                  ),
                                 ),
                               ),
-                            ),
-                          ],
+                            );
+                          },
                         ),
-                        const SizedBox(height: 16),
-                        ConstrainedBox(
-                          constraints: BoxConstraints(
-                            maxHeight: MediaQuery.of(context).size.height * 0.4,
-                          ),
-                          child: GridView.builder(
-                            shrinkWrap: true,
-                            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 4,
-                              mainAxisSpacing: 10,
-                              crossAxisSpacing: 10,
-                              childAspectRatio: 1.8,
-                            ),
-                            itemCount: weeks.length,
-                            itemBuilder: (context, idx) {
-                              final week = weeks[idx];
-                              final isCur = week == provider.currentWeek;
-                              final unselectedBg = isDark
-                                  ? Colors.white.withValues(alpha: 0.08)
-                                  : const Color(0xFFF0F2F6);
-                              final unselectedText = isDark
-                                  ? Colors.white70
-                                  : const Color(0xFF555B68);
-
-                              return SpringTouchFeedback(
-                                onTap: () {
-                                  HapticFeedback.selectionClick();
-                                  _isBackgroundFrozen.value = false;
-                                  provider.setCurrentWeek(week);
-                                  Navigator.pop(ctx);
-                                },
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    gradient: isCur
-                                        ? LinearGradient(
-                                            colors: [
-                                              AppThemeColors.babyPink.withValues(alpha: 0.5),
-                                              AppThemeColors.softCoral.withValues(alpha: 0.4),
-                                            ],
-                                          )
-                                        : null,
-                                    color: isCur ? null : unselectedBg,
-                                    borderRadius: BorderRadius.circular(12),
-                                    boxShadow: isCur
-                                        ? liquid.HyperOSShadows.pill(isDark, accentColor: AppThemeColors.babyPink)
-                                        : null,
-                                  ),
-                                  alignment: Alignment.center,
-                                  child: Text(
-                                    '第$week周',
-                                    style: TextStyle(
-                                      color: isCur ? Colors.white : unselectedText,
-                                      fontSize: 13,
-                                      fontWeight: isCur ? FontWeight.w700 : FontWeight.w500,
-                                    ),
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
               ),
             ),
-          );
-        },
-      );
-    } finally {
-      if (mounted) {
-        _isBackgroundFrozen.value = false;
-      }
-    }
+          ),
+        );
+      },
+    );
   }
 }
 

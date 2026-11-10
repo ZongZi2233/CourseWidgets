@@ -1,23 +1,38 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import '../../services/theme_service.dart';
+import '../animations/app_motion.dart';
 
-/// [v2.8.0] 全面迁移至官方 Liquid Morph Engine 的液态变形上下文菜单
-/// 从触发按钮平滑形变成玻璃菜单，支持拖拽选择、弹簧阻尼与抛物线展开
+/// [v3.1.6] 对标 FlClash / iOS 26 原生锚定弹簧形变与 120Hz 零掉帧的液态玻璃上下文菜单
 class GlassContextMenu extends StatelessWidget {
   final List<GlassContextMenuItem> items;
-  final Widget trigger;
+  final Widget? trigger;
+  final Widget Function(BuildContext context, VoidCallback toggleMenu)?
+      triggerBuilder;
   final double menuWidth;
+  final double menuBorderRadius;
+  final double itemBorderRadius;
   final GlassMenuAlignment? menuAlignment;
+  final EdgeInsets menuPadding;
+  final BuildContext? sharedElementSourceContext;
+  final double sharedElementCornerRadius;
 
   const GlassContextMenu({
     super.key,
     required this.items,
-    required this.trigger,
+    this.trigger,
+    this.triggerBuilder,
     this.menuWidth = 200.0,
+    this.menuBorderRadius = 22.0,
+    this.itemBorderRadius = 14.0,
     this.menuAlignment,
-  });
+    this.menuPadding = const EdgeInsets.symmetric(horizontal: 12, vertical: 72),
+    this.sharedElementSourceContext,
+    this.sharedElementCornerRadius = 18.0,
+  }) : assert(
+          trigger != null || triggerBuilder != null,
+          'Either trigger or triggerBuilder must be provided',
+        );
 
   @override
   Widget build(BuildContext context) {
@@ -26,11 +41,13 @@ class GlassContextMenu extends StatelessWidget {
 
     return GlassMenu(
       trigger: trigger,
+      triggerBuilder: triggerBuilder,
       menuWidth: menuWidth,
-      menuBorderRadius: 22.0,
-      itemBorderRadius: 14.0,
+      menuBorderRadius: menuBorderRadius,
+      itemBorderRadius: itemBorderRadius,
+      menuPadding: menuPadding,
       autoAdjustToScreen: true,
-      platformViewBackdrop: false, // [v3.0.1] 全平台全开凸透镜边缘折射着色器，不走降级
+      platformViewBackdrop: false,
       quality: ThemeService().glassQuality,
       menuAlignment: menuAlignment ?? GlassMenuAlignment.none,
       selectionColor: isDark
@@ -38,16 +55,17 @@ class GlassContextMenu extends StatelessWidget {
           : primaryColor.withValues(alpha: 0.16),
       settings: LiquidGlassSettings(
         glassColor: isDark
-            ? const Color(0x35101216)
-            : const Color(0x30FFFFFF),
-        blur: 3.0,
-        thickness: 20.0,
-        refractiveIndex: 1.35,
-        lightIntensity: 0.70,
-        ambientStrength: 0.40,
+            ? const Color(0x4212151C)
+            : const Color(0x52FFFFFF),
+        blur: 10.0,
+        thickness: 18.0,
+        refractiveIndex: 1.38,
+        lightIntensity: 0.72,
+        ambientStrength: 0.42,
         ambientRim: 0.0,
-        fresnelStrength: 0.0,
+        fresnelStrength: 0.05,
         edgeAbsorption: 0.0,
+        saturation: 1.22,
       ),
       items: items.map((item) {
         final textColor = item.isDestructive
@@ -68,7 +86,16 @@ class GlassContextMenu extends StatelessWidget {
             color: textColor,
           ),
           isDestructive: item.isDestructive,
-          onTap: item.onTap,
+          onTap: () {
+            final srcCtx = sharedElementSourceContext ?? context;
+            if (srcCtx.mounted) {
+              SharedElementSourceRegistry.recordFromContext(
+                srcCtx,
+                cornerRadius: sharedElementCornerRadius,
+              );
+            }
+            item.onTap();
+          },
         );
       }).toList(),
     );

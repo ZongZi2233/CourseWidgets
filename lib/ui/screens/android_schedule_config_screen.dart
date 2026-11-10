@@ -8,7 +8,6 @@ import '../../providers/schedule_provider.dart';
 import '../../constants/theme_constants.dart';
 import '../widgets/liquid_components.dart' as liquid;
 import '../widgets/liquid_glass_pickers.dart';
-import '../widgets/unified_backdrop_panel.dart';
 import '../widgets/immersive_status_bar_backdrop.dart';
 import '../widgets/windows_desktop_title_bar.dart'
     show setWindowsDesktopTitle, clearWindowsDesktopTitle;
@@ -361,10 +360,10 @@ class AndroidScheduleConfigScreenState
                   physics: physics,
                   children: [
                     // 基础设置
-                UnifiedBackdropPanel(
-                  borderRadius: 24,
-                  padding: const EdgeInsets.all(20),
-                    child: Column(
+                    liquid.HyperOSCard(
+                      cornerRadius: 24,
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
@@ -478,8 +477,8 @@ class AndroidScheduleConfigScreenState
 
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 16),
-                        child: UnifiedBackdropPanel(
-                          borderRadius: 24,
+                        child: liquid.HyperOSCard(
+                          cornerRadius: 24,
                           padding: const EdgeInsets.all(20),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -543,8 +542,8 @@ class AndroidScheduleConfigScreenState
                   ),
 
                   // 课时设置
-                  UnifiedBackdropPanel(
-                    borderRadius: 24,
+                  liquid.HyperOSCard(
+                    cornerRadius: 24,
                     padding: const EdgeInsets.all(20),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,

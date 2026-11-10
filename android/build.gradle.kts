@@ -26,7 +26,13 @@ tasks.register<Delete>("clean") {
 allprojects {
     plugins.withId("com.android.library") {
         configure<com.android.build.api.dsl.LibraryExtension> {
-            compileSdk = 37
+            compileSdk {
+                version = release(37) {
+                    minorApiLevel = 2
+                }
+            }
+            buildToolsVersion = "37.0.0"
+            ndkVersion = "30.0.16248370"
             compileOptions {
                 sourceCompatibility = JavaVersion.VERSION_21
                 targetCompatibility = JavaVersion.VERSION_21
@@ -35,7 +41,13 @@ allprojects {
     }
     plugins.withId("com.android.application") {
         configure<com.android.build.api.dsl.ApplicationExtension> {
-            compileSdk = 37
+            compileSdk {
+                version = release(37) {
+                    minorApiLevel = 2
+                }
+            }
+            buildToolsVersion = "37.0.0"
+            ndkVersion = "30.0.16248370"
         }
     }
     configurations.all {

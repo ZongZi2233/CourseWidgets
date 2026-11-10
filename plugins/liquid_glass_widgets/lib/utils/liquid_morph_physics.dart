@@ -172,26 +172,24 @@ class LiquidMorphPhysics {
   /// Spring profile for the iOS 26 liquid morph **opening** animation.
   static const SpringDescription openSpring = SpringDescription(
     mass: 1.0,
-    stiffness: 120.0,
-    damping: 16.0,
+    stiffness: 320.0,
+    damping: 28.0,
   );
 
   /// Spring profile for the iOS 26 liquid morph **closing** animation.
   ///
-  /// Identical constants to [openSpring]. The closing "bump" is produced by
-  /// injecting [closeVelocityHint] at the moment of close — not by different
-  /// spring physics.
+  /// Uses a slightly crisper damping profile for clean snap-back to the trigger.
   static const SpringDescription closeSpring = SpringDescription(
     mass: 1.0,
-    stiffness: 120.0,
-    damping: 16.0,
+    stiffness: 360.0,
+    damping: 30.0,
   );
 
   /// Initial velocity hint injected when the close animation starts.
   ///
   /// A negative value immediately drives the spring toward zero with
   /// momentum, maximising the visible rubber-band bounce amplitude.
-  static const double closeVelocityHint = -2.5;
+  static const double closeVelocityHint = -1.2;
 
   // ─── Tuning constants (intentionally not public) ───────────────────────────
   //
@@ -199,11 +197,8 @@ class LiquidMorphPhysics {
   // as public parameters would allow developers to produce physically broken
   // animations. Use [GlassMorphController.speed] for safe speed control.
 
-  /// Amplitude of the J-curve back-out overshoot for position interpolation.
-  static const double _backOutAmplitude = 2.5;
-
   /// Fraction of the animation over which the anchor blob shrinks to zero.
-  static const double _anchorEaseDuration = 0.4;
+  static const double _anchorEaseDuration = 0.28;
 
   /// Multiplier from path/size separation to SDF blur units.
   static const double _blendMultiplier = 150.0;
@@ -235,52 +230,43 @@ class LiquidMorphPhysics {
   }) {
     final clampedValue = rawValue.clamp(0.0, 1.0);
 
-    // Inject the close undershoot so Blob B bounces past the anchor on close.
-    // The open-side overshoot (rawValue > 1) is intentionally excluded because
-    // it causes an unwanted size wobble during the initial expansion.
-    final closeUndershoot = rawValue < 0.0 ? rawValue : 0.0;
+    // Gentle spring overshoot/undershoot allowance so the anchored corner
+    // stays 100% locked to the trigger button while preserving organic spring feel.
+    final overshootDelta = rawValue > 1.0
+        ? (rawValue - 1.0) * 0.45
+        : (rawValue < 0.0 ? rawValue * 0.35 : 0.0);
 
-    // ── J-Curve Position ──────────────────────────────────────────────────────
-    // The back-out curve overshoots far past 1.0 before snapping back,
-    // creating the "string pull" teardrop neck at maximum separation.
-    final pathT = _BackOutCurve(_backOutAmplitude).transform(clampedValue) +
-        closeUndershoot;
-
-    // ── Size ─────────────────────────────────────────────────────────────────
-    // Size grows steadily then decelerates so the teardrop bulge is clearly
-    // visible before the container reaches its final dimensions.
-    final sizeT =
-        Curves.linearToEaseOut.transform(clampedValue) + closeUndershoot;
+    // ── Synchronized Path & Size Interpolation ────────────────────────────────
+    // Keeping pathT and sizeT synchronized guarantees that the anchored corner
+    // of the morphing menu never detaches or flies away from the trigger button.
+    final sizeT = (clampedValue + overshootDelta).clamp(0.0, 1.06);
+    final pathT = sizeT;
 
     // ── Closing Momentum Push (Blob A displacement) ───────────────────────────
     // When the spring overshoots past 0 (rawValue < 0), Blob A is displaced
     // proportionally to mirror the closing momentum.
     final pushDx =
-        rawValue < 0.0 ? (finalDx + horizontalOffset) * rawValue : 0.0;
-    final pushDy = rawValue < 0.0 ? (finalDy + verticalOffset) * rawValue : 0.0;
+        rawValue < 0.0 ? (finalDx + horizontalOffset) * (rawValue * 0.25) : 0.0;
+    final pushDy =
+        rawValue < 0.0 ? (finalDy + verticalOffset) * (rawValue * 0.25) : 0.0;
 
     // ── Blob B Displacement ───────────────────────────────────────────────────
     final currentDx = finalDx * pathT;
     final currentDy = finalDy * pathT;
 
     // ── Anchor Scale ─────────────────────────────────────────────────────────
-    // Shrinks the ghost trigger (Blob A) to 0 over the first 40 % of the
-    // animation. Grows back during close so the real trigger "catches" the menu.
     final anchorScale =
         (1.0 - (clampedValue / _anchorEaseDuration)).clamp(0.0, 1.0);
 
     // ── Metaball Blend ────────────────────────────────────────────────────────
-    // Separation between pathT (position) and sizeT (size) represents how far
-    // Blob B has pulled away from its anchor. Blend naturally scales with this.
     final separation = (pathT - sizeT).abs();
     final blend = (separation * _blendMultiplier).clamp(0.0, _maxBlend);
 
     // ── Container Scale Pulse ─────────────────────────────────────────────────
-    // Subtle squeeze/swell during spring overshoot phases.
     final containerScale = rawValue > 1.0
-        ? 1.0 + (rawValue - 1.0) * 0.10 // open overshoot (negligible)
+        ? 1.0 + (rawValue - 1.0) * 0.06
         : rawValue < 0.0
-            ? 1.0 + rawValue * 0.55 // close undershoot → visible squeeze
+            ? (1.0 + rawValue * 0.25).clamp(0.88, 1.0)
             : 1.0;
 
     // ── Phase ─────────────────────────────────────────────────────────────────
@@ -307,22 +293,5 @@ class LiquidMorphPhysics {
     if (clampedValue < 0.8) return MorphPhase.travelling;
     if (clampedValue < 0.999) return MorphPhase.arriving;
     return MorphPhase.settled;
-  }
-}
-
-/// Back-out easing curve for the J-curve position overshoot.
-///
-/// Creates a pronounced overshoot past `1.0` before snapping back to `1.0`,
-/// which manifests as the teardrop "string pull" effect during the liquid morph.
-///
-/// - [amplitude] controls how far past `1.0` the curve overshoots.
-///   The default value of `2.5` is calibrated for iOS 26 native parity.
-class _BackOutCurve extends Curve {
-  const _BackOutCurve(this.amplitude);
-  final double amplitude;
-
-  @override
-  double transformInternal(double t) {
-    return (t -= 1.0) * t * ((amplitude + 1.0) * t + amplitude) + 1.0;
   }
 }

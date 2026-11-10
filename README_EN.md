@@ -10,9 +10,9 @@
 [![License](https://img.shields.io/badge/License-AGPL%203.0-blue.svg)](LICENSE)
 [![Flutter](https://img.shields.io/badge/Flutter-3.47.0+-02569B?logo=flutter)](https://flutter.dev)
 [![Dart](https://img.shields.io/badge/Dart-3.13.0+-0175C2?logo=dart)](https://dart.dev)
-[![Android](https://img.shields.io/badge/Android-15%2B%20(API%2035--37)-3DDC84?logo=android)](https://github.com/ZongZi2233/CourseWidgets/releases)
+[![Android](https://img.shields.io/badge/Android-15%2B%20(API%2035--37.2)-3DDC84?logo=android)](https://github.com/ZongZi2233/CourseWidgets/releases)
 [![Windows](https://img.shields.io/badge/Windows-10%2F11%20x64-0078D6?logo=windows)](https://github.com/ZongZi2233/CourseWidgets/releases)
-[![Version](https://img.shields.io/badge/Release-v3.1.5%20(Build%203150)-FF9BAE)](https://github.com/ZongZi2233/CourseWidgets/releases/tag/v3.1.5)
+[![Version](https://img.shields.io/badge/Release-v3.1.6%20(Build%203160)-FF9BAE)](https://github.com/ZongZi2233/CourseWidgets/releases/tag/v3.1.6)
 
 **English** | [简体中文](README.md)
 
@@ -20,10 +20,10 @@
 
 ---
 
-## 📦 Latest Release: [v3.1.5 (Build 3150)](https://github.com/ZongZi2233/CourseWidgets/releases/tag/v3.1.5)
+## 📦 Latest Release: [v3.1.6 (Build 3160)](https://github.com/ZongZi2233/CourseWidgets/releases/tag/v3.1.6)
 
-* **Android Client (`arm64-v8a`)**: [`CourseWidgets-v3.1.5-android-arm64-v8a.apk`](https://github.com/ZongZi2233/CourseWidgets/releases/download/v3.1.5/CourseWidgets-v3.1.5-android-arm64-v8a.apk) — Requires Android 15+ (API 35+), with full support for Android 16 Live Updates, R8 resource shrinking, and Dart AOT optimization.
-* **Windows Desktop (`x64`)**: [`CourseWidgets-v3.1.5-windows-x64.zip`](https://github.com/ZongZi2233/CourseWidgets/releases/download/v3.1.5/CourseWidgets-v3.1.5-windows-x64.zip) — Portable x64 package featuring a custom borderless title bar, system tray residency, keyboard shortcuts, and 4K High-DPI scaling.
+* **Android Client (`arm64-v8a`)**: [`CourseWidgets-v3.1.6-android-arm64-v8a.apk`](https://github.com/ZongZi2233/CourseWidgets/releases/download/v3.1.6/CourseWidgets-v3.1.6-android-arm64-v8a.apk) — Requires Android 15+ (API 35+, compiled against API 37.2 & NDK r30), with full support for Android 16 Live Updates, `arm64-v8a`-only ABI split, R8 `fullMode` obfuscation & resource shrinking, and Dart AOT obfuscation.
+* **Windows Desktop (`x64`)**: [`CourseWidgets-v3.1.6-windows-x64.zip`](https://github.com/ZongZi2233/CourseWidgets/releases/download/v3.1.6/CourseWidgets-v3.1.6-windows-x64.zip) — Portable x64 package (built with MSVC `/O2` + `/OPT:REF,/OPT:ICF` linker optimization and Dart AOT obfuscation) featuring a custom borderless title bar, system tray residency, keyboard shortcuts, and 4K High-DPI scaling.
 
 ---
 
@@ -54,13 +54,13 @@
 
 ---
 
-## 📜 Release History Summary (v2.0 ~ v3.1.5 Overview)
+## 📜 Release History Summary (v2.0 ~ v3.1.6 Overview)
 
 For complete per-version details, see [CHANGELOG.md](CHANGELOG.md).
 
 | Version Series | Key Architectural & Feature Highlights |
 | :--- | :--- |
-| **v3.1.4 ~ v3.1.5**<br>*(2026-11)* | • **Floating Liquid Glass Clarity Fix**: Enabled dedicated rendering layers (`useOwnLayer: true`) with ultra-clear micro-blur (`blur: 0.5`) across all floating `GlassContainer` bars and docks, paired with counter-translated wallpaper compensation;<br>• **Rounded-Rectangle Card SharedElement Morph & Damped Predictive Back**: Accurate rounded-rectangle card boundary detection on tap, proportional card expansion/contraction, and hyperbolic rubber-band damping for predictive back gestures;<br>• **Weekday-Explicit Live Updates & Fast Startup**: Added `Today/Tomorrow + Weekday` labels with midnight `00:00:02` auto-refresh; instant first-frame Windows splash and single-layer Android launch. |
+| **v3.1.4 ~ v3.1.6**<br>*(2026-11)* | • **Anchored Liquid Morphing Menu (`GlassMenu`) & UI Hierarchy Polish**: Rebuilt morphing menus with single-container `Rect.lerp` anchored geometry (eliminating per-frame `toImageSync` stalls and lazy-initializing controllers); fixed schedule grid vertical scroll bleed under weekday headers and landscape calendar dock overlap;<br>• **Floating Liquid Glass Clarity & Rounded-Rectangle Card Morph**: Enabled dedicated rendering layers (`useOwnLayer: true`) with ultra-clear micro-blur (`blur: 0.5`), accurate rounded-rectangle SharedElement card expansion/contraction, and rubber-band damped predictive back;<br>• **Android SDK 37.2 / NDK r30 Toolchain & Weekday-Explicit Live Updates**: Upgraded to Android API 37.2, NDK `30.0.16248370`, 16KB page alignment, and R8 `fullMode`; added `Today/Tomorrow + Weekday` Live Update labels with midnight `00:00:02` auto-refresh. |
 | **v3.1.2 ~ v3.1.3**<br>*(2026-11)* | • **Android 16 Live Update Thick Pill Track**: Restored 8–10dp thick capsule progress track with section dot nodes and high-DPI tracker icons; hid redundant app name in notification headers;<br>• **System Calendar (ICS) Alignment**: Fixed section time drift and UTC recurrence weekday shift when exporting schedules to system calendars;<br>• **120Hz Rendering Pipeline**: Introduced pre-warmed main page slots, hardware `RSuperellipse` analytic clipping/shadows, `RepaintBoundary` scroll isolation, and velocity-envelope 1D motion blur. |
 | **v3.1.0 ~ v3.1.1**<br>*(2026-10)* | • **Single-Node-Per-Course Live Updates**: Redesigned progress segmentation (`1 course = 1 node`) with switchable *Centered Dot* and *Duration-Proportional* styles and prominent hero typography;<br>• **Unified Schedule & Calendar Data Source**: Synchronized Calendar view directly with `ScheduleProvider`, added solid-color background mode (pure white / dark gray), and overflow-safe course cards. |
 | **v3.0.0 ~ v3.0.9**<br>*(2026-09 ~ 10)* | • **SQLite Schema v4 Section Persistence**: Persisted semantic section numbers to prevent course displacement when customizing period durations;<br>• **Lossless Import/Export & WebView Session Persistence**: Added `X-SCHEDULE-CONFIG` ICS round-trip support, HTML timetable import, JSON backup, and dedicated Windows WebView2 user data profiles;<br>• **Pre-Baked Static Wallpaper Blur**: Introduced `StaticBlurService` and borderless `HyperOSCard` ambient shadow rendering. |
@@ -85,13 +85,14 @@ For complete per-version details, see [CHANGELOG.md](CHANGELOG.md).
 
 ### 1. Development Environment Requirements
 ```yaml
-Flutter SDK:   >= 3.47.0 (Stable / Master)
-Dart SDK:      >= 3.13.0
-Android SDK:   CompileSDK 37, TargetSDK 37, MinSDK 35 (Android 15+)
-Android NDK:   29.0.14206865
+Flutter SDK:   >= 3.47.0 (Verified on 3.47.7 Stable)
+Dart SDK:      >= 3.13.0 (Verified on 3.13.5 Stable)
+Android SDK:   CompileSDK 37.2 (Extension 24), TargetSDK 37, MinSDK 35 (Android 15+)
+Build-Tools:   37.0.0 / Android SDK Command-line Tools 23.0
+Android NDK:   30.0.16248370 (r30)
 Build Tools:   AGP 9.4.1 / Gradle 9.8.1 / Kotlin 2.4.20
 Java Runtime:  JDK 25
-Windows Build: Visual Studio 2022 (with "Desktop development with C++" workload)
+Windows Build: Visual Studio 2022 (with "Desktop development with C++" workload, /MP + /O2 + /OPT:REF,/OPT:ICF enabled)
 ```
 
 ### 2. Clone & Run Locally
@@ -110,11 +111,11 @@ flutter run -d windows    # Run on Windows desktop
 
 ### 3. Production Release Build & Packaging
 ```bash
-# 1. Build Android arm64-v8a Release APK
-flutter build apk --release --split-per-abi --target-platform android-arm64
+# 1. Build Android arm64-v8a Release APK (arm64-v8a only, R8 shrinking & Dart obfuscation)
+flutter build apk --release --split-per-abi --target-platform android-arm64 --obfuscate --split-debug-info=build/debug-info/android
 
-# 2. Build Windows x64 Release Client
-flutter build windows --release
+# 2. Build Windows x64 Release Client (MSVC LTCG optimization & Dart obfuscation)
+flutter build windows --release --obfuscate --split-debug-info=build/debug-info/windows
 
 # 3. Verify version metadata and collect artifacts into release/ (with SHA256 manifest)
 python collect_release.py
