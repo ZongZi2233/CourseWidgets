@@ -1,56 +1,118 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
+import 'package:coursewidgets/ui/widgets/glass_context_menu.dart';
 
-// ignore: unused_import
-import 'package:coursewidgets/main.dart';
-
-class TestApp extends StatefulWidget {
-  const TestApp({Key? key}) : super(key: key);
-
-  @override
-  State<TestApp> createState() => _TestAppState();
-}
-
-class _TestAppState extends State<TestApp> {
-  int _counter = 0;
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      home: Scaffold(
-        appBar: AppBar(title: const Text('Test')),
-        body: Center(child: Text('$_counter', style: Theme.of(context).textTheme.headlineMedium)),
-        floatingActionButton: FloatingActionButton(
-          onPressed: () => setState(() => _counter++),
-          child: const Icon(Icons.add),
+void main() {
+  testWidgets('GlassMenu toggles and renders items',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: GlassMenu(
+              trigger: Container(
+                width: 50,
+                height: 50,
+                color: Colors.blue,
+                child: const Center(child: Text('Open Menu')),
+              ),
+              items: [
+                GlassMenuItem(
+                  title: 'Option 1',
+                  onTap: () {},
+                ),
+                GlassMenuItem(
+                  title: 'Option 2',
+                  onTap: () {},
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
-  }
-}
 
-void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const TestApp());
+    // Initial state: Menu closed
+    expect(find.text('Option 1'), findsNothing);
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    // Tap trigger
+    await tester.tap(find.text('Open Menu'));
+    await tester.pump(); // Start animation
+    await tester.pumpAndSettle();
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
+    // Menu should be present (portal shown)
+    expect(find.text('Option 1'), findsOneWidget);
+
+    // Close menu (tap outside)
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pumpAndSettle();
+
+    // Menu closed
+    expect(find.text('Option 1'), findsNothing);
+  });
+
+  testWidgets('GlassContextMenu toggles, selects item, and handles route push',
+      (WidgetTester tester) async {
+    int tapCount = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: GlassContextMenu(
+              triggerBuilder: (context, toggleMenu) => GestureDetector(
+                onTap: toggleMenu,
+                child: const SizedBox(
+                  width: 44,
+                  height: 44,
+                  child: Center(child: Text('MoreBtn')),
+                ),
+              ),
+              items: [
+                GlassContextMenuItem(
+                  title: 'Action A',
+                  icon: Icons.add,
+                  onTap: () {
+                    tapCount++;
+                  },
+                ),
+                GlassContextMenuItem(
+                  title: 'Push Route',
+                  icon: Icons.arrow_forward,
+                  onTap: () {},
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Action A'), findsNothing);
+
+    // 1. First open
+    await tester.tap(find.text('MoreBtn'));
     await tester.pump();
+    await tester.pumpAndSettle();
+    expect(find.text('Action A'), findsOneWidget);
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    // 2. Tap item to close
+    await tester.tap(find.text('Action A'));
+    await tester.pump();
+    await tester.pumpAndSettle();
+    expect(tapCount, 1);
+    expect(find.text('Action A'), findsNothing);
+
+    // 3. Verify trigger button is visible and tappable again (second open)
+    await tester.tap(find.text('MoreBtn'));
+    await tester.pump();
+    await tester.pumpAndSettle();
+    expect(find.text('Action A'), findsOneWidget);
+
+    // 4. Tap outside barrier to close
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pump();
+    await tester.pumpAndSettle();
+    expect(find.text('Action A'), findsNothing);
   });
 }

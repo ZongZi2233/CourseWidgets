@@ -3,8 +3,8 @@ part of '../glass_menu.dart';
 class _GlassMenuState extends State<GlassMenu> with TickerProviderStateMixin {
   final OverlayPortalController _overlayController = OverlayPortalController();
 
-  GlassMorphController? _morphController;
-  ScrollController? _scrollController;
+  late final GlassMorphController _morphController;
+  late final ScrollController _scrollController;
   Size? _triggerSize;
   double? _triggerBorderRadius;
   Offset _triggerGlobalPosition = Offset.zero; // captured in _openMenu
@@ -27,36 +27,6 @@ class _GlassMenuState extends State<GlassMenu> with TickerProviderStateMixin {
   late final ValueNotifier<int?> _hoveredIndexNotifier;
   late final ValueNotifier<bool> _isDraggingNotifier;
   List<Widget>? _cachedWrappedItems;
-
-  GlassMorphController _ensureMorphController() {
-    var ctrl = _morphController;
-    if (ctrl != null) return ctrl;
-    ctrl = GlassMorphController(vsync: this);
-    if (mounted) {
-      ctrl.setDisableAnimations(
-        MediaQuery.maybeOf(context)?.disableAnimations ?? false,
-      );
-    }
-    ctrl.addListener(() {
-      if (mounted) setState(() {});
-
-      // Hide overlay only when the spring has FULLY SETTLED near 0.
-      if (_overlayController.isShowing &&
-          ctrl!.value <= 0.001 &&
-          ctrl.velocity.abs() < 0.5 &&
-          ctrl.status != AnimationStatus.forward) {
-        _overlayController.hide();
-        _horizontalOffset = 0.0;
-        _verticalOffset = 0.0;
-      }
-    });
-    _morphController = ctrl;
-    return ctrl;
-  }
-
-  ScrollController _ensureScrollController() {
-    return _scrollController ??= ScrollController();
-  }
 
   @override
   void didUpdateWidget(GlassMenu oldWidget) {
@@ -105,6 +75,22 @@ class _GlassMenuState extends State<GlassMenu> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
+    _morphController = GlassMorphController(vsync: this);
+    _morphController.addListener(() {
+      // Hide overlay only when the spring has FULLY SETTLED near 0 during close.
+      if (_overlayController.isShowing &&
+          _morphController.isClosing &&
+          _morphController.value <= 0.001 &&
+          _morphController.velocity.abs() < 0.5 &&
+          _morphController.status != AnimationStatus.forward) {
+        _overlayController.hide();
+        _horizontalOffset = 0.0;
+        _verticalOffset = 0.0;
+      }
+
+      if (mounted) setState(() {});
+    });
+    _scrollController = ScrollController();
     _hoveredIndexNotifier = ValueNotifier(null);
     _isDraggingNotifier = ValueNotifier(false);
     widget.controller?._attach(this);
@@ -117,8 +103,8 @@ class _GlassMenuState extends State<GlassMenu> with TickerProviderStateMixin {
     _removeRouteListeners();
     _route = null;
     widget.controller?._detach(this);
-    _morphController?.dispose();
-    _scrollController?.dispose();
+    _morphController.dispose();
+    _scrollController.dispose();
     _hoveredIndexNotifier.dispose();
     _isDraggingNotifier.dispose();
     super.dispose();
@@ -127,12 +113,10 @@ class _GlassMenuState extends State<GlassMenu> with TickerProviderStateMixin {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _morphController?.setDisableAnimations(
+    _morphController.setDisableAnimations(
       MediaQuery.of(context).disableAnimations,
     );
-    if (_overlayController.isShowing) {
-      _updateRouteListener();
-    }
+    _updateRouteListener();
   }
 
   void _updateRouteListener() {
@@ -175,13 +159,12 @@ class _GlassMenuState extends State<GlassMenu> with TickerProviderStateMixin {
   }
 
   void _dismissImmediately() {
-    final morph = _morphController;
-    if (!_overlayController.isShowing && (morph == null || morph.value == 0.0)) {
+    if (!_overlayController.isShowing && _morphController.value == 0.0) {
       return;
     }
-    final wasClosing = morph?.isClosing ?? false;
+    final wasClosing = _morphController.isClosing;
     _overlayController.hide();
-    morph?.reset();
+    _morphController.reset();
     _horizontalOffset = 0.0;
     _verticalOffset = 0.0;
     _hoveredIndex = null;
@@ -207,31 +190,17 @@ class _GlassMenuState extends State<GlassMenu> with TickerProviderStateMixin {
             child: widget.trigger,
           );
 
-    final morph = _morphController;
-    if (morph == null) {
-      return Stack(
-        clipBehavior: Clip.none,
-        children: [
-          triggerChild,
-          OverlayPortal(
-            controller: _overlayController,
-            overlayChildBuilder: _buildMorphingOverlay,
-            overlayLocation: OverlayChildLocation.rootOverlay,
-          ),
-        ],
-      );
-    }
-
     return AnimatedBuilder(
-      animation: morph.animation,
+      animation: _morphController.animation,
       builder: (context, child) {
-        final rawValue = morph.value;
+        final rawValue = _morphController.value;
         final clampedValue = rawValue.clamp(0.0, 1.0);
 
         // Block trigger taps while menu is significantly open.
         final isMenuBlocking = _overlayController.isShowing && rawValue > 0.8;
 
-        final isHandoff = morph.isClosing && morph.hasHandedOff;
+        final isHandoff =
+            _morphController.isClosing && _morphController.hasHandedOff;
         // Smoothly crossfade trigger out over first 25% of morph so the icon
         // never blinks out on frame 1.
         final triggerOpacity = (_overlayController.isShowing && !isHandoff)
@@ -282,8 +251,7 @@ class _GlassMenuState extends State<GlassMenu> with TickerProviderStateMixin {
   }
 
   void _toggleMenu() {
-    final morph = _morphController;
-    if (_overlayController.isShowing && (morph?.value ?? 0.0) > 0.1) {
+    if (_overlayController.isShowing && _morphController.value > 0.1) {
       _closeMenu();
     } else {
       _openMenu();
@@ -301,7 +269,6 @@ class _GlassMenuState extends State<GlassMenu> with TickerProviderStateMixin {
       return;
     }
 
-    final morph = _ensureMorphController();
     _updateRouteListener();
 
     _triggerSize = renderBox.size;
@@ -392,7 +359,7 @@ class _GlassMenuState extends State<GlassMenu> with TickerProviderStateMixin {
     });
 
     _overlayController.show();
-    morph.open();
+    _morphController.open();
   }
 
   void _closeMenu() {
@@ -401,15 +368,14 @@ class _GlassMenuState extends State<GlassMenu> with TickerProviderStateMixin {
       _hoveredIndex = null;
       _isDragging = false;
     });
-    _morphController?.close();
+    _morphController.close();
     widget.onClose?.call();
   }
 
   Widget _buildMorphingOverlay(BuildContext context) {
-    final morph = _morphController;
-    if (_triggerSize == null || morph == null) return const SizedBox.shrink();
+    if (_triggerSize == null) return const SizedBox.shrink();
 
-    final rawValue = morph.value;
+    final rawValue = _morphController.value;
     final clampedValue = rawValue.clamp(0.0, 1.0);
 
     final tw = _triggerSize!.width;
@@ -423,7 +389,7 @@ class _GlassMenuState extends State<GlassMenu> with TickerProviderStateMixin {
     final finalDx = -_morphAlignment.x * dxMag;
     final finalDy = -_morphAlignment.y * dyMag;
 
-    final state = morph.computeState(
+    final state = _morphController.computeState(
       finalDx: finalDx,
       finalDy: finalDy,
       horizontalOffset: _horizontalOffset,
@@ -466,9 +432,10 @@ class _GlassMenuState extends State<GlassMenu> with TickerProviderStateMixin {
     )!
         .clamp(0.0, math.min(currentWidth, currentHeight) / 2.0);
 
-    final double overlayOpacity = (morph.isClosing && morph.hasHandedOff)
-        ? 0.0
-        : (clampedValue / 0.16).clamp(0.0, 1.0);
+    final double overlayOpacity =
+        (_morphController.isClosing && _morphController.hasHandedOff)
+            ? 0.0
+            : (clampedValue / 0.16).clamp(0.0, 1.0);
 
     return Stack(
       children: [
@@ -576,7 +543,7 @@ class _GlassMenuState extends State<GlassMenu> with TickerProviderStateMixin {
           chromaticAberration: 0.0,
         );
 
-    final scrollCtrl = _ensureScrollController();
+    final scrollCtrl = _scrollController;
     final double contentOpacity =
         ((clampedValue - 0.18) / 0.52).clamp(0.0, 1.0);
     final double scaleX = widget.menuWidth > 0
@@ -884,10 +851,8 @@ class _GlassMenuState extends State<GlassMenu> with TickerProviderStateMixin {
     final x = localPosition.dx;
     final dy = localPosition.dy;
     final scrollCtrl = _scrollController;
-    final y = dy +
-        ((scrollCtrl != null && scrollCtrl.hasClients)
-            ? scrollCtrl.offset
-            : 0.0);
+    final y =
+        dy + (scrollCtrl.hasClients ? scrollCtrl.offset : 0.0);
 
     final isWithinActiveZone = x > -20 &&
         x < widget.menuWidth + 20 &&

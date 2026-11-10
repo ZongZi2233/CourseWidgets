@@ -293,7 +293,9 @@ class GlassMorphController extends ChangeNotifier {
             mass: 1.0, stiffness: 60.0, damping: 11.3);
       case MorphSpeed.normal:
         // ω₀ ≈ 11 rad/s, ζ ≈ 0.73 — iOS 26 native parity
-        return LiquidMorphPhysics.openSpring;
+        return _isClosing
+            ? LiquidMorphPhysics.closeSpring
+            : LiquidMorphPhysics.openSpring;
       case MorphSpeed.fast:
         // ω₀ ≈ 14 rad/s, ζ ≈ 0.73
         return const SpringDescription(
@@ -316,10 +318,10 @@ class GlassMorphController extends ChangeNotifier {
   }
 
   void _onTick() {
-    // Handoff latch: fires exactly once when the spring first crosses zero
+    // Handoff latch: fires once when the spring reaches near-zero
     // during a close animation. The latch prevents it from re-triggering if
     // the underdamped spring bounces back above zero briefly.
-    if (_isClosing && _animationController.value <= 0.0 && !_hasHandedOff) {
+    if (_isClosing && _animationController.value <= 0.02 && !_hasHandedOff) {
       _hasHandedOff = true;
     }
     notifyListeners();

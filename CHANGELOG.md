@@ -7,7 +7,7 @@
 ### 1. 深度对标 FlClash (`prism_ui`) 重构形变菜单 (`GlassMenu` / `GlassContextMenu`)，根除每帧 `toImageSync` 阻塞与飞出按钮问题
 - **根除变形期间每帧 `Picture.toImageSync` 同步光栅化卡顿**：移除 `GlassMenu` 变形期间双 Blob 的 `AdaptiveLiquidGlassLayer` + `LiquidGlassBlendGroup`（其在 `GlassQuality.premium` 下每当圆角或宽高变化时都会在 `paint()` 中同步调用 `picture.toImageSync` 生成约 `600×600` 的几何贴图），改为单容器锚定 `Rect.lerp(startRect, targetRect, sizeT)` + `GlassContainer(useOwnLayer: true, quality: GlassQuality.standard)`（底层走 `LightweightLiquidGlass` 缓存 `BackdropFilterLayer` 与 `lightweight_glass.frag` 着色器），变形全程 **0 次 `toImageSync` 调用**；
 - **消除菜单脱离触发按钮飞出 50~70px 的轨迹失真**：废除 `LiquidMorphPhysics` 中导致位移超调至 `1.38x` 的 `_BackOutCurve(2.5)`，升级弹簧刚度（`openSpring`: `stiffness: 320, damping: 28`；`closeSpring`: `stiffness: 360, damping: 30`），使展开与收起全程锚定角 100% 锁死在触发卡片/按钮上，并支持窄胶囊按钮居中展开；
-- **按需懒加载控制器与整体内容平面等比展开**：将 `_morphController` 与 `_scrollController` 改为首次打开菜单时按需初始化，使课表网格常驻的 20+ 张课程卡片在未打开菜单时零 `AnimationController` 与 `Ticker` 开销；菜单内容采用固定目标尺寸 `OverflowBox` + 整体 `Transform.scale(scaleX, scaleY, alignment: _morphAlignment)` 展开，消除逐项错位缩放与首帧闪烁；
+- **固定 `OverlayPortal` 稳定树结构与整体内容平面等比展开**：保持 `AnimatedBuilder -> Stack -> OverlayPortal` 稳定挂载层级（避免打开瞬间因根组件类型切换导致 `OverlayPortal` 被卸载而使菜单空白、触发按钮消失），并在关闭收敛监听中严格校验 `isClosing` 状态；菜单内容采用固定目标尺寸 `OverflowBox` + 整体 `Transform.scale(scaleX, scaleY, alignment: _morphAlignment)` 展开，消除逐项错位缩放与首帧闪烁；
 - **统一课程卡片与底部胶囊的 `GlassContextMenu` 体验**：在课程卡片长按/点击菜单中自动绑定整张课程卡片的圆角矩形 `SharedElement` 源坐标，修复底部胶囊 `(⋯)` 菜单在浅色模式下白色图标不可见的问题。
 
 ### 2. UI 层级、滚动隔离与跨端视觉一致性全面优化 (UI Hierarchy, Scroll Isolation & Visual Consistency)
