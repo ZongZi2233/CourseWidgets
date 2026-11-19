@@ -36,8 +36,30 @@ class Win32Window {
   // |Show| is called. Returns true if the window was created successfully.
   bool Create(const std::wstring& title, const Point& origin, const Size& size);
 
+  // Creates a win32 window with |title| that is centered on the primary work area
+  // with the given logical |size|.
+  bool CreateCentered(const std::wstring& title, const Size& size);
+
   // Show the current window. Returns true if the window was successfully shown.
   bool Show();
+
+  // Ensures a hidden or minimized window is restored, visible, and focused.
+  void ShowOrRestore();
+
+  // Hides the window to system tray without closing the process.
+  void HideWindow();
+
+  // Applies borderless rounded-corner DWM attributes without accent borders.
+  static void ApplyBorderlessDwmStyle(HWND window);
+
+  // Registered custom window message for waking an existing single instance.
+  static UINT GetWakeUpMessageId();
+
+  // Controls whether WM_CLOSE hides the window to tray instead of closing.
+  void SetPreventCloseOnHide(bool prevent_close);
+
+  // Immediately closes the window bypassing hide-to-tray interception.
+  void ForceClose();
 
   // Release OS resources associated with window.
   void Destroy();
@@ -56,6 +78,9 @@ class Win32Window {
   RECT GetClientArea();
 
  protected:
+  bool ShouldPreventCloseOnHide() const {
+    return prevent_close_on_hide_ && !is_exiting_;
+  }
   // Processes and route salient window messages for mouse handling,
   // size change and DPI. Delegates handling of these to member overloads that
   // inheriting classes can handle.
@@ -91,6 +116,9 @@ class Win32Window {
   static void UpdateTheme(HWND const window);
 
   bool quit_on_close_ = false;
+  bool borderless_titlebar_ = true;
+  bool prevent_close_on_hide_ = false;
+  bool is_exiting_ = false;
 
   // window handle for top level window.
   HWND window_handle_ = nullptr;

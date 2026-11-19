@@ -2,6 +2,22 @@
 
 本文档记录 CourseWidgets 各版本更新的动态活动演进，重点关注架构改进、渲染优化、故障诊断与教务抓取能力提升。
 
+## [v3.1.8] - 2026-11-20 (Build 3180 正式版)
+
+### 1. Windows 首帧秒开开屏、DWM 原生硬件圆角对齐与无边框透底优化
+- **零空窗秒开开屏管线重构 (`AnimatedSplashOverlay` & `main.dart`)**：
+  - 将桌面端磁盘日志挂载（`AppLogger`）、壁纸莫奈像素量化（`ThemeService.refreshMonetColors`）、数十 MB 自定义字体（`SF-Pro.ttf` / `PingFangSC-Semibold.otf`）、液态玻璃着色器预热及 SQLite 课表装载全部移出首帧阻塞路径，并在 `runApp` 前同步读取深浅色状态以消除第 1 帧明暗闪烁；
+  - `AnimatedSplashOverlay` 在桌面端第 1 帧仅渲染轻量级 `ZeroFlickerSplashPreloader`，通过 `SchedulerBinding.instance.waitUntilFirstFrameRasterized` 确认首帧落盘后再显现窗口（并自真正上屏起保证至少 680ms 丝滑品牌呼吸动效与 350ms 非线性淡出），彻底消除“先长时间出现原生窗口、后突变出无动画画布”的问题；
+- **消除二次重建与圆角完全覆盖原生窗口**：
+  - 在 C++ Runner（`Win32Window::CreateCentered`）中于窗口创建阶段即按工作区 DPI 居中初始化 `1024x768` 与无标题栏 `WM_NCCALCSIZE` 区域、禁止 `WM_ERASEBKGND` 闪烁，彻底消灭 `1280x720 -> 1024x768` 二次 SwapChain 重建；
+  - 统一启用 `DWMWA_WINDOW_CORNER_PREFERENCE = DWMWCP_ROUND`（Windows 11 原生硬件圆角）、`DWMWA_BORDER_COLOR = DWMWA_COLOR_NONE` 与 `DWMWA_CAPTION_COLOR = DWMWA_COLOR_NONE`，保留系统原生 DWM 最小化/还原/贴靠动画与柔和阴影；同时移除 Windows 端内层 `14px ClipRRect` 裁切差值及 Windows 10 `SetAccentPolicy` 透明渐变残留，让 Flutter 画布 100% 满铺覆盖原生窗口，彻底根除圆角不对应与四角露黑/露边现象；
+  - 保持 `AnimatedSplashOverlay` 底层主界面处于同一 `Stack` 槽位，避免开屏卸载时销毁重建导航树。
+
+### 2. 修复 Windows 隐藏至托盘后无法从托盘及再次点击图标唤醒 UI
+- **统一桌面窗口解析与原生 Win32 通道兜底 (`DesktopWindowService` & `FlutterWindow`)**：
+  - 解决 `window_manager 0.7.0` 中 `WindowManager.instance.getCurrent()` 在窗口隐藏（`SW_HIDE`）或失焦时调用 Win32 `GetActiveWindow()` 返回 `null` 导致托盘点击与右键菜单均无法唤醒 UI 的缺陷；建立持久 `WindowId` 缓存并新增 C++ 原生 `com.zongzi.schedule/desktop_window` 通道（`showOrRestore` / `hideWindow` / `applyDwmStyle` / `forceClose` / `ForceRedraw`）；
+- **单实例重启动一键拉起隐藏窗口**：修复 `windows/runner/main.cpp` 单实例互斥校验，除最小化（`IsIconic`）外同步兼容已隐藏至托盘（`!IsWindowVisible`）的窗口，调用 `AllowSetForegroundWindow`、`ShowWindow(SW_SHOW)` 并发送自定义唤醒消息触发重绘与托盘后台状态同步，实现点击托盘图标、托盘菜单与再次点击桌面/开始菜单应用图标 100% 秒速唤醒。
+
 ## [v3.1.7] - 2026-11-19 (Build 3170 正式版)
 
 ### 1. 跨平台工程级软件更新引擎 (`AppUpdateService` & `AppUpdateDialog`)

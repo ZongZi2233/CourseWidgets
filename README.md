@@ -12,7 +12,7 @@
 [![Dart](https://img.shields.io/badge/Dart-3.14.0+-0175C2?logo=dart)](https://dart.dev)
 [![Android](https://img.shields.io/badge/Android-15%2B%20(API%2035--37.2)-3DDC84?logo=android)](https://github.com/ZongZi2233/CourseWidgets/releases)
 [![Windows](https://img.shields.io/badge/Windows-10%2F11%20x64-0078D6?logo=windows)](https://github.com/ZongZi2233/CourseWidgets/releases)
-[![Version](https://img.shields.io/badge/Release-v3.1.7%20(Build%203170)-FF9BAE)](https://github.com/ZongZi2233/CourseWidgets/releases/tag/v3.1.7)
+[![Version](https://img.shields.io/badge/Release-v3.1.8%20(Build%203180)-FF9BAE)](https://github.com/ZongZi2233/CourseWidgets/releases/tag/v3.1.8)
 
 [English](README_EN.md) | **简体中文**
 
@@ -20,10 +20,10 @@
 
 ---
 
-## 📦 最新正式版下载：[v3.1.7 (Build 3170)](https://github.com/ZongZi2233/CourseWidgets/releases/tag/v3.1.7)
+## 📦 最新正式版下载：[v3.1.8 (Build 3180)](https://github.com/ZongZi2233/CourseWidgets/releases/tag/v3.1.8)
 
-* **Android 客户端 (`arm64-v8a`)**：[`CourseWidgets-v3.1.7-android-arm64-v8a.apk`](https://github.com/ZongZi2233/CourseWidgets/releases/download/v3.1.7/CourseWidgets-v3.1.7-android-arm64-v8a.apk) —— 支持 Android 15+（API 35+，基于 API 37.2 与 NDK r30 编译），完整适配 Android 16 实况通知（Live Updates），内置应用内流式更新与 SHA-256 校验安装，开启仅 `arm64-v8a` 纯净分包、R8 代码混淆压缩与 Dart AOT 编译优化。
-* **Windows 桌面端 (`x64`)**：[`CourseWidgets-v3.1.7-windows-x64.zip`](https://github.com/ZongZi2233/CourseWidgets/releases/download/v3.1.7/CourseWidgets-v3.1.7-windows-x64.zip) —— 免安装便携版（开启 MSVC `/O2` + `/OPT:REF,/OPT:ICF` 链接裁剪优化与 Dart AOT 编译优化），内置基于编译产物 `SHA-256` 差异比对与 HTTP Range 的文件级增量热更新引擎，支持无边框自定义标题栏、系统托盘常驻、热键响应与 4K 高分屏缩放。
+* **Android 客户端 (`arm64-v8a`)**：[`CourseWidgets-v3.1.8-android-arm64-v8a.apk`](https://github.com/ZongZi2233/CourseWidgets/releases/download/v3.1.8/CourseWidgets-v3.1.8-android-arm64-v8a.apk) —— 支持 Android 15+（API 35+，基于 API 37.2 与 NDK r30 编译），完整适配 Android 16 实况通知（Live Updates），内置应用内流式更新与 SHA-256 校验安装，开启仅 `arm64-v8a` 纯净分包、R8 代码混淆压缩与 Dart AOT 编译优化。
+* **Windows 桌面端 (`x64`)**：[`CourseWidgets-v3.1.8-windows-x64.zip`](https://github.com/ZongZi2233/CourseWidgets/releases/download/v3.1.8/CourseWidgets-v3.1.8-windows-x64.zip) —— 免安装便携版（开启 MSVC `/O2` + `/OPT:REF,/OPT:ICF` 链接裁剪优化与 Dart AOT 编译优化），内置基于编译产物 `SHA-256` 差异比对与 HTTP Range 的文件级增量热更新引擎，第 0 帧秒开呼吸动效、Windows 11 DWM 原生零边框圆角对齐、系统托盘与重启动单实例毫秒唤醒及 4K 高分屏缩放。
 
 ---
 
@@ -54,13 +54,13 @@
 
 ---
 
-## 📜 版本演进摘要（v2.0 ~ v3.1.7 CHANGELOG 概览）
+## 📜 版本演进摘要（v2.0 ~ v3.1.8 CHANGELOG 概览）
 
 完整的逐版本详细记录请参阅 [CHANGELOG.md](CHANGELOG.md)。
 
 | 阶段 / 版本 | 核心架构演进与功能更新摘要 |
 | :--- | :--- |
-| **v3.1.4 ~ v3.1.7**<br>*(2026-11)* | • **Windows 文件级 SHA-256 增量热更新与 Android 应用内流式更新 (`v3.1.7`)**：Windows 端通过比对本地编译文件与远端 `windows-manifest.json` 哈希差异，利用 HTTP Range (`206 Partial Content`) 仅拉取变更文件块并原子替换重启（节省 90%+ 流量）；Android 端恢复设置页检查更新，支持应用内流式下载、SHA-256 校验与系统安装器自动调起；<br>• **Flutter 3.50.0 / Dart 3.14.0 与 `nativeapi` 依赖全面升级 (`v3.1.7`)**：升级核心依赖（`window_manager 0.7.0`、`tray_manager 0.9.0`、`flutter_local_notifications 23.0.3`、`fluent_ui 4.17.0`、`mmkv 2.4.3` 等），桌面端全面迁移至 `nativeapi` / Dart Native Assets 原生同步窗口与托盘 API；<br>• **真 3D 双 Blob 水滴融球形变菜单 (`GlassMenu` Premium) 与 UI 层级优化**：全量锁定 `GlassQuality.premium` 实时全组件 Backdrop 3D 凸透镜折射与无白边参数，保留水滴拉丝 J 曲线与欠阻尼弹簧碰撞回弹；修复课表纵向滚动穿透星期表头与横屏日历底栏遮挡；<br>• **真液态玻璃清晰度修复与 SharedElement 圆角矩形卡片转场**：为悬浮 `GlassContainer` 全面启用独立渲染层（`useOwnLayer: true`）与微模糊清透参数，实现从被点击圆角矩形卡片原位等比展开/缩回及双曲橡皮筋阻尼预见性返回；<br>• **Android SDK 37.2 / NDK r30 工具链与实况通知跨天防歧义**：升级适配 Android API 37.2、NDK `30.0.16248370`、16KB 页对齐与 R8 `fullMode`；实况通知显式标注 `今日周X` / `明日周X` 与午夜 0 点自动刷新。 |
+| **v3.1.4 ~ v3.1.8**<br>*(2026-11)* | • **Windows 秒开开屏、DWM 原生圆角对齐与托盘/重启动唤醒修复 (`v3.1.8`)**：C++ 居中预建 `1024x768` 无边框区域并等待首帧开屏动画 GPU 光栅化后再显现窗口，彻底消除空窗等待与二次重建；对齐 `DWMWCP_ROUND` + `DWMWA_COLOR_NONE` 零边框满铺画布，并通过 `DesktopWindowService` 与单实例原生消息通道修复隐藏至托盘后无法从托盘及再次点击图标唤醒的问题；<br>• **Windows 文件级 SHA-256 增量热更新与 Android 应用内流式更新 (`v3.1.7`)**：Windows 端通过比对本地编译文件与远端 `windows-manifest.json` 哈希差异，利用 HTTP Range (`206 Partial Content`) 仅拉取变更文件块并原子替换重启（节省 90%+ 流量）；Android 端恢复设置页检查更新，支持应用内流式下载、SHA-256 校验与系统安装器自动调起；<br>• **Flutter 3.50.0 / Dart 3.14.0 与 `nativeapi` 依赖全面升级 (`v3.1.7`)**：升级核心依赖（`window_manager 0.7.0`、`tray_manager 0.9.0`、`flutter_local_notifications 23.0.3`、`fluent_ui 4.17.0`、`mmkv 2.4.3` 等），桌面端全面迁移至 `nativeapi` / Dart Native Assets 原生同步窗口与托盘 API；<br>• **真 3D 双 Blob 水滴融球形变菜单 (`GlassMenu` Premium) 与 UI 层级优化**：全量锁定 `GlassQuality.premium` 实时全组件 Backdrop 3D 凸透镜折射与无白边参数，保留水滴拉丝 J 曲线与欠阻尼弹簧碰撞回弹；修复课表纵向滚动穿透星期表头与横屏日历底栏遮挡；<br>• **真液态玻璃清晰度修复与 SharedElement 圆角矩形卡片转场**：为悬浮 `GlassContainer` 全面启用独立渲染层（`useOwnLayer: true`）与微模糊清透参数，实现从被点击圆角矩形卡片原位等比展开/缩回及双曲橡皮筋阻尼预见性返回；<br>• **Android SDK 37.2 / NDK r30 工具链与实况通知跨天防歧义**：升级适配 Android API 37.2、NDK `30.0.16248370`、16KB 页对齐与 R8 `fullMode`；实况通知显式标注 `今日周X` / `明日周X` 与午夜 0 点自动刷新。 |
 | **v3.1.2 ~ v3.1.3**<br>*(2026-11)* | • **Android 16 实况通知粗胶囊轨道恢复**：定制 8~10dp 粗胶囊轨道、课节圆点节点与高 DPI 游标，隐藏通知左上角冗余软件名；<br>• **系统日程（ICS）同步校准**：修复导出旧快照导致第二节课时间错位及 UTC 展开跨日导致星期偏移的问题；<br>• **120Hz 渲染管线优化**：引入常驻预热主页面池、硬件级 `RSuperellipse` 单通解析渲染、课表滚动 `RepaintBoundary` 光栅隔离与速度包络 1D 动态模糊。 |
 | **v3.1.0 ~ v3.1.1**<br>*(2026-10)* | • **实况通知单课单节点与排版升级**：重构 `1 节课 = 1 个进度段`，支持“居中圆点”与“按时长分段”双样式切换，放大突出课程与倒计时主标题；<br>• **日历页与课表页同源联动**：重构月/周日历视图与课表数据同源实时联动，支持纯色无壁纸模式（浅色纯白 / 深色深灰）与响应式防溢出课程卡片。 |
 | **v3.0.0 ~ v3.0.9**<br>*(2026-09 ~ 10)* | • **SQLite Schema v4 节次固化**：持久化保存课程节次索引，解决修改课时长度导致课程移位或被吞的问题；<br>• **全链路无损导入导出与 WebView 会话保持**：支持携带作息配置的 ICS 双向导入导出、HTML 解析与 JSON 备份；Windows WebView2 独立数据目录与凭据自动回填；<br>• **静态壁纸预烘焙模糊架构**：引入 `StaticBlurService` 视口级壁纸预烘焙与 `HyperOSCard` 无边框漫反射阴影设计。 |

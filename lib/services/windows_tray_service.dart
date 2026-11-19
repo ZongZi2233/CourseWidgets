@@ -3,9 +3,9 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:tray_manager/tray_manager.dart' as tray;
 import 'package:path/path.dart' as path;
-import 'package:window_manager/window_manager.dart';
 import '../providers/schedule_provider.dart';
 import '../models/course_event.dart';
+import 'desktop_window_service.dart';
 import 'notification_manager.dart';
 
 /// [v2.2.8] Windows 系统托盘服务 - 使用 tray_manager 0.9.0 原生 API
@@ -39,6 +39,7 @@ class WindowsTrayService {
 
   void setPreventCloseOnHide(bool value) {
     _preventCloseOnHide = value;
+    unawaited(DesktopWindowService().setPreventCloseOnHide(value));
   }
 
   /// 初始化托盘服务
@@ -47,6 +48,16 @@ class WindowsTrayService {
       debugPrint('⚠️ 非 Windows 平台，跳过托盘服务初始化');
       return;
     }
+
+    DesktopWindowService().bindNativeCallbacks(
+      onWakeUp: () {
+        _isBackgroundMode = false;
+        debugPrint('📱 收到原生单实例唤醒信号，已重置后台状态');
+      },
+      onCloseRequested: () {
+        unawaited(enterBackgroundMode());
+      },
+    );
 
     if (_isInitialized) return;
 
@@ -187,8 +198,9 @@ class WindowsTrayService {
   /// 退出应用
   Future<void> _exitApp() async {
     _isExiting = true;
+    await DesktopWindowService().setPreventCloseOnHide(false);
     await dispose();
-    WindowManager.instance.getCurrent()?.close();
+    await DesktopWindowService().forceCloseForExit();
     exit(0); // [v2.4.8] 确保 Dart isolate 终止
   }
 
@@ -201,17 +213,9 @@ class WindowsTrayService {
   /// 显示窗口
   Future<void> _showWindow() async {
     try {
-      final window = WindowManager.instance.getCurrent();
-      if (window != null) {
-        if (window.isMinimized) {
-          window.restore();
-        }
-        window
-          ..show()
-          ..focus();
-      }
+      await DesktopWindowService().showAndFocusWindow();
       _isBackgroundMode = false;
-      debugPrint('📱 窗口已显示');
+      debugPrint('📱 窗口已唤醒并显示');
     } catch (e) {
       debugPrint('❌ 显示窗口失败: $e');
     }
@@ -241,7 +245,7 @@ class WindowsTrayService {
     if (!Platform.isWindows) return;
 
     try {
-      WindowManager.instance.getCurrent()?.hide();
+      await DesktopWindowService().hideWindow();
       _isBackgroundMode = true;
 
       // [v2.8.0] 发送后台运行通知

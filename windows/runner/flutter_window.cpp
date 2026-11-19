@@ -1,6 +1,8 @@
 #include "flutter_window.h"
 
+#include <flutter/standard_method_codec.h>
 #include <optional>
+#include <variant>
 
 #include "flutter/generated_plugin_registrant.h"
 
@@ -27,19 +29,47 @@ bool FlutterWindow::OnCreate() {
   RegisterPlugins(flutter_controller_->engine());
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
-  // flutter_controller_->engine()->SetNextFrameCallback([&]() {
-  //   this->Show();
-  // });
-
-  // Flutter can complete the first frame before the "show window" callback is
-  // registered. The following call ensures a frame is pending to ensure the
-  // window is shown. It is a no-op if the first frame hasn't completed yet.
-  // flutter_controller_->ForceRedraw();
+  desktop_window_channel_ =
+      std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+          flutter_controller_->engine()->messenger(),
+          "com.zongzi.schedule/desktop_window",
+          &flutter::StandardMethodCodec::GetInstance());
+  desktop_window_channel_->SetMethodCallHandler(
+      [this](const flutter::MethodCall<flutter::EncodableValue>& call,
+             std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>
+                 result) {
+        if (call.method_name() == "showOrRestore") {
+          this->ShowOrRestore();
+          if (flutter_controller_) {
+            flutter_controller_->ForceRedraw();
+          }
+          result->Success(flutter::EncodableValue(true));
+        } else if (call.method_name() == "hideWindow") {
+          this->HideWindow();
+          result->Success(flutter::EncodableValue(true));
+        } else if (call.method_name() == "applyDwmStyle") {
+          Win32Window::ApplyBorderlessDwmStyle(this->GetHandle());
+          result->Success(flutter::EncodableValue(true));
+        } else if (call.method_name() == "setPreventCloseOnHide") {
+          if (const auto* val = std::get_if<bool>(call.arguments())) {
+            this->SetPreventCloseOnHide(*val);
+          }
+          result->Success(flutter::EncodableValue(true));
+        } else if (call.method_name() == "forceClose") {
+          this->SetPreventCloseOnHide(false);
+          this->HideWindow();
+          result->Success(flutter::EncodableValue(true));
+          PostQuitMessage(0);
+        } else {
+          result->NotImplemented();
+        }
+      });
 
   return true;
 }
 
 void FlutterWindow::OnDestroy() {
+  desktop_window_channel_.reset();
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
   }
@@ -61,9 +91,32 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     }
   }
 
+  if (message == Win32Window::GetWakeUpMessageId()) {
+    ShowOrRestore();
+    if (flutter_controller_) {
+      flutter_controller_->ForceRedraw();
+    }
+    if (desktop_window_channel_) {
+      desktop_window_channel_->InvokeMethod("onNativeWakeUp", nullptr);
+    }
+    return 0;
+  }
+
   switch (message) {
+    case WM_CLOSE:
+      if (ShouldPreventCloseOnHide()) {
+        HideWindow();
+        if (desktop_window_channel_) {
+          desktop_window_channel_->InvokeMethod("onNativeCloseRequested",
+                                                nullptr);
+        }
+        return 0;
+      }
+      break;
     case WM_FONTCHANGE:
-      flutter_controller_->engine()->ReloadSystemFonts();
+      if (flutter_controller_) {
+        flutter_controller_->engine()->ReloadSystemFonts();
+      }
       break;
   }
 

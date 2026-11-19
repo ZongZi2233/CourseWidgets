@@ -89,7 +89,7 @@ class ThemeService extends ChangeNotifier {
   }
 
   /// 初始化主题服务
-  Future<void> initialize() async {
+  Future<void> initialize({bool deferMonetRefresh = false}) async {
     // 监听壁纸和深色模式全局广播，自动触发动态莫奈重新取色
     globalBackgroundPath.removeListener(_onBackgroundOrThemeChanged);
     globalBackgroundPath.addListener(_onBackgroundOrThemeChanged);
@@ -115,8 +115,10 @@ class ThemeService extends ChangeNotifier {
         _secondaryColor = _generateSecondaryColor(_primaryColor);
         debugPrint('✅ 恢复莫奈取色: $_primaryColor');
       }
-      // 启动后异步自动校准当前壁纸与深浅色模式色彩
-      refreshMonetColors();
+      // 桌面端冷启动先使用缓存莫奈色，待开屏动画上屏后再并行校准提取，避免阻塞首帧
+      if (!deferMonetRefresh) {
+        refreshMonetColors();
+      }
     } else if (_themeMode == ThemeMode.defaultMode) {
       _primaryColor = defaultPrimaryColor;
       _secondaryColor = defaultSecondaryColor;

@@ -4,9 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:provider/provider.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
+import '../../services/desktop_window_service.dart';
 import '../../services/windows_tray_service.dart';
 import '../../providers/schedule_provider.dart';
-import '../widgets/macos_traffic_lights.dart';
 import '../animations/app_motion.dart';
 import '../transitions/smooth_slide_transitions.dart';
 import 'windows_schedule_screen.dart';
@@ -42,7 +42,6 @@ class WindowsCustomWindow extends StatefulWidget {
 
 class _WindowsCustomWindowState extends State<WindowsCustomWindow> {
   int _selectedIndex = 0;
-  bool _isMaximized = false;
   Window? _nativeWindow;
   ListenerId? _windowListenerId;
 
@@ -84,32 +83,28 @@ class _WindowsCustomWindowState extends State<WindowsCustomWindow> {
     });
   }
 
-  Future<void> _initWindow() async {
-    await Future.delayed(const Duration(milliseconds: 150));
-    if (!mounted) return;
+  void _initWindow() {
+    final window = DesktopWindowService().resolveWindow();
+    if (window == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _nativeWindow == null) {
+          _initWindow();
+        }
+      });
+      return;
+    }
+    if (_nativeWindow?.id == window.id && _windowListenerId != null) return;
 
-    final window = WindowManager.instance.getCurrent();
-    if (window == null) return;
     _nativeWindow = window;
     _windowListenerId = window.addListener(_onWindowEvent);
 
     // [v3.0.0] 严禁调用 setFrameless() 导致丢失系统原生拉伸边框与贴靠布局 (Snap Layouts)
     window
       ..isResizable = true
-      ..minimumSize = const Size(800, 600).toNative()
-      ..titleBarStyle = TitleBarStyle.hidden
-      ..hasShadow = true
-      ..backgroundColor = Colors.transparent.toNative()
-      ..setSize(const Size(1024, 768).toNative(), false)
-      ..center();
+      ..minimumSize = const Size(800, 600).toNative();
 
-    _isMaximized = window.isMaximized;
-    windowsGlobalIsMaximized.value = _isMaximized;
-    if (mounted) {
-      setState(() {});
-    }
-
-    debugPrint('✅ Windows DWM 原生窗口初始化完成: 1024x768, 交通灯模式已激活');
+    windowsGlobalIsMaximized.value = window.isMaximized;
+    debugPrint('✅ Windows DWM 原生窗口监听器与约束初始化完成');
   }
 
   @override
@@ -125,11 +120,11 @@ class _WindowsCustomWindowState extends State<WindowsCustomWindow> {
     switch (event) {
       case WindowMaximizedEvent():
         windowsGlobalIsMaximized.value = true;
-        if (mounted) setState(() => _isMaximized = true);
+        if (mounted) setState(() {});
       case WindowRestoredEvent():
         final isMax = _nativeWindow?.isMaximized ?? false;
         windowsGlobalIsMaximized.value = isMax;
-        if (mounted) setState(() => _isMaximized = isMax);
+        if (mounted) setState(() {});
       case WindowFocusedEvent():
         if (mounted) setState(() {});
       case WindowCloseRequestedEvent(:final request):

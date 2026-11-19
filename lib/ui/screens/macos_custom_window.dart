@@ -5,6 +5,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:figma_squircle/figma_squircle.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import '../../constants/theme_constants.dart';
+import '../../services/desktop_window_service.dart';
 import 'windows_schedule_screen.dart';
 import 'settings_main_screen.dart';
 import 'calendar_view_screen.dart';
@@ -32,7 +33,7 @@ class _MacosCustomWindowState extends State<MacosCustomWindow> {
     await Future.delayed(const Duration(milliseconds: 150));
     if (!mounted) return;
 
-    final window = WindowManager.instance.getCurrent();
+    final window = DesktopWindowService().resolveWindow();
     if (window == null) return;
     _nativeWindow = window;
     _windowListenerId = window.addListener(_onWindowEvent);

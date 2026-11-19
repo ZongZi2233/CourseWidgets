@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 import '../../providers/schedule_provider.dart';
+import '../../services/desktop_window_service.dart';
 import '../../services/windows_tray_service.dart';
 import 'macos_traffic_lights.dart';
 import '../screens/windows_custom_window.dart' show windowsGlobalIsMaximized;
@@ -86,16 +87,16 @@ class WindowsDesktopTitleBar extends StatelessWidget {
       await WindowsTrayService().enterBackgroundMode(courses: courses);
       debugPrint('🌙 [Windows] 窗口已最小化到托盘，后台保活');
     } catch (_) {
-      WindowManager.instance.getCurrent()?.close();
+      DesktopWindowService().resolveWindow()?.close();
     }
   }
 
   void _handleMinimize() {
-    WindowManager.instance.getCurrent()?.minimize();
+    DesktopWindowService().resolveWindow()?.minimize();
   }
 
   void _handleMaximize() {
-    final window = WindowManager.instance.getCurrent();
+    final window = DesktopWindowService().resolveWindow();
     if (window == null) return;
     if (window.isMaximized) {
       window.unmaximize();

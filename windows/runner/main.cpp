@@ -26,10 +26,17 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
       existingHwnd = FindWindow(L"FLUTTER_RUNNER_WIN32_WINDOW", L"CourseWidgets Beta");
     }
     if (existingHwnd) {
-      if (IsIconic(existingHwnd)) {
-        ShowWindow(existingHwnd, SW_RESTORE);
+      DWORD pid = 0;
+      GetWindowThreadProcessId(existingHwnd, &pid);
+      if (pid != 0) {
+        AllowSetForegroundWindow(pid);
       }
+      if (!IsWindowVisible(existingHwnd) || IsIconic(existingHwnd)) {
+        ShowWindow(existingHwnd, IsIconic(existingHwnd) ? SW_RESTORE : SW_SHOW);
+      }
+      BringWindowToTop(existingHwnd);
       SetForegroundWindow(existingHwnd);
+      PostMessage(existingHwnd, Win32Window::GetWakeUpMessageId(), 0, 0);
     }
     CloseHandle(hMutex);
     return EXIT_SUCCESS;
@@ -48,29 +55,14 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
 
   // Enable Impeller graphics engine
   _wputenv(L"FLUTTER_ENABLE_IMPELLER=1");
+  project.set_impeller_switch(flutter::ImpellerSwitch::Enabled);
 
   FlutterWindow window(project);
-  Win32Window::Point origin(10, 10);
-  Win32Window::Size size(1280, 720);
-  
-  // Set window title and icon
-  if (!window.Create(L"CourseWidgets", origin, size)) {
+  Win32Window::Size size(1024, 768);
+
+  // Set window title, icon, centered bounds, and borderless DWM style before showing
+  if (!window.CreateCentered(L"CourseWidgets", size)) {
     return EXIT_FAILURE;
-  }
-  
-  HWND hwnd = window.GetHandle();
-  HINSTANCE hInst = GetModuleHandle(nullptr);
-  HICON hIconBig = (HICON)LoadImage(hInst, MAKEINTRESOURCE(IDI_APP_ICON), IMAGE_ICON,
-                                    GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON),
-                                    LR_DEFAULTCOLOR);
-  HICON hIconSmall = (HICON)LoadImage(hInst, MAKEINTRESOURCE(IDI_APP_ICON), IMAGE_ICON,
-                                      GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON),
-                                      LR_DEFAULTCOLOR);
-  if (hIconBig) {
-    SendMessage(hwnd, WM_SETICON, ICON_BIG, (LPARAM)hIconBig);
-  }
-  if (hIconSmall) {
-    SendMessage(hwnd, WM_SETICON, ICON_SMALL, (LPARAM)hIconSmall);
   }
   
   window.SetQuitOnClose(true);

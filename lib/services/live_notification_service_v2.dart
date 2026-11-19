@@ -333,16 +333,10 @@ class LiveNotificationServiceV2 {
     );
 
     if (Platform.isWindows) {
-      final windowToast = LocalNotification(
+      await _showWindowsLocalNotification(
         title: '10 分钟后上课',
-        body: _stripHtml('${_currentCourse!.name} ${_currentCourse!.location}'),
+        body: '${_currentCourse!.name} ${_currentCourse!.location}',
       );
-      windowToast.onClick = () {
-        if (_onNotificationTapCallback != null && _currentCourse != null) {
-          _onNotificationTapCallback!(_currentCourse!);
-        }
-      };
-      await windowToast.show();
     } else {
       await _notificationsPlugin.show(
         id: _reminderNotificationId,
@@ -654,18 +648,7 @@ class LiveNotificationServiceV2 {
     }
 
     if (Platform.isWindows) {
-      final cleanTitle = _stripHtml(title);
-      final cleanBody = _stripHtml(body);
-      final windowToast = LocalNotification(
-        title: cleanTitle,
-        body: cleanBody,
-      );
-      windowToast.onClick = () {
-        if (_onNotificationTapCallback != null && _currentCourse != null) {
-          _onNotificationTapCallback!(_currentCourse!);
-        }
-      };
-      await windowToast.show();
+      await _showWindowsLocalNotification(title: title, body: body);
     } else if (Platform.isAndroid && useLiveUpdate) {
       bool nativeSucceeded = false;
       try {
@@ -792,6 +775,27 @@ class LiveNotificationServiceV2 {
 
   Future<void> dispose() async {
     await cancelNotification();
+  }
+
+  /// Safely displays a Windows local toast without failing startup if `localNotifier` is unready.
+  Future<void> _showWindowsLocalNotification({
+    required String title,
+    required String body,
+  }) async {
+    try {
+      final windowToast = LocalNotification(
+        title: _stripHtml(title),
+        body: _stripHtml(body),
+      );
+      windowToast.onClick = () {
+        if (_onNotificationTapCallback != null && _currentCourse != null) {
+          _onNotificationTapCallback!(_currentCourse!);
+        }
+      };
+      await windowToast.show();
+    } catch (e) {
+      debugPrint('⚠️ Windows Toast 通知发送跳过: $e');
+    }
   }
 
   static String _stripHtml(String input) {

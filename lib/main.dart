@@ -13,6 +13,7 @@ import 'package:local_notifier/local_notifier.dart';
 import 'services/theme_service.dart';
 import 'services/notification_manager.dart'; // [v2.7.0] 通知管理器
 import 'services/onboarding_service.dart';
+import 'services/desktop_window_service.dart';
 import 'services/windows_tray_service.dart';
 import 'services/storage_service.dart';
 import 'services/background_task_service.dart'; // [v2.2.9] 后台任务服务
@@ -103,12 +104,18 @@ Future<void> loadGlobalBackground() async {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  final bool isDesktop =
+      Platform.isWindows || Platform.isLinux || Platform.isMacOS;
 
   // [v3.1.0] 预解码开屏 Logo，避免开屏首帧图标缺失/黑块
   await preloadSplashIcon();
 
-  // [v2.7.8] 初始化 Logcat 级结构化持久化日志系统
-  await AppLogger.initialize();
+  // [v3.1.8] 桌面端异步挂载磁盘日志系统，避免文件 I/O 拖慢首帧显现
+  if (isDesktop) {
+    unawaited(AppLogger.initialize());
+  } else {
+    await AppLogger.initialize();
+  }
 
   // 捕获 Flutter 框架层渲染与布局异常
   FlutterError.onError = (FlutterErrorDetails details) {
@@ -173,8 +180,21 @@ void main() async {
   await StorageService().initialize();
   AppLogger.data('MMKV StorageService 初始化完成');
 
-  // [v2.1.10] 初始化主题服务
-  await ThemeService().initialize();
+  // [v3.1.8] 在 runApp 前同步读取初始深浅色模式，确保桌面开屏第 1 帧配色零闪烁
+  final storage = StorageService();
+  final darkMode = storage.getBool(StorageService.keyDarkMode) ?? false;
+  final adaptiveMode =
+      storage.getBool(StorageService.keyAdaptiveDarkMode) ?? false;
+  final bool initialDark = adaptiveMode
+      ? WidgetsBinding.instance.platformDispatcher.platformBrightness ==
+            Brightness.dark
+      : darkMode;
+  GlassOpacityManager().setDarkMode(initialDark);
+  globalUseDarkMode = initialDark;
+  globalDarkModeNotifier.value = initialDark;
+
+  // [v2.1.10] 初始化主题服务（桌面端跳过启动阻塞式莫奈全图像素量化，延后至开屏上屏后并行）
+  await ThemeService().initialize(deferMonetRefresh: isDesktop);
   AppLogger.ui('ThemeService 初始化完成');
 
   // [v3.0.0-alpha18] 强制使用完整 3D 渲染着色器 (Premium)，杜绝高性能 2D 降级
@@ -186,17 +206,16 @@ void main() async {
   AppLogger.render('StaticBlurredWallpaperService 初始化完毕');
 
   await loadGlobalBackground();
-  await ThemeService().refreshMonetColors();
+  if (!isDesktop) {
+    await ThemeService().refreshMonetColors();
+  }
 
   // [v3.0.0-alpha18] 全时全刻强制 Premium 旗舰材质，彻底禁用运行时自动降级
   ThemeService.globalGlassQualityNotifier.value = GlassQuality.premium;
-  final storage = StorageService();
   await storage.setString('glass_quality', GlassQuality.premium.name);
   await storage.setString('global_glass_quality', GlassQuality.premium.name);
 
   final scheduleProvider = ScheduleProvider();
-  final bool isDesktop =
-      Platform.isWindows || Platform.isLinux || Platform.isMacOS;
 
   if (!isDesktop) {
     // 移动端（Android/iOS）：在系统原生单层开屏画面期间并行完成着色器预热与课表数据装载，
@@ -231,68 +250,70 @@ void main() async {
     }());
   }
 
-  runApp(
-    LiquidGlassWidgets.wrap(
-      child: Phoenix(
-        child: MultiProvider(
-          providers: [
-            ChangeNotifierProvider.value(value: scheduleProvider),
-            ChangeNotifierProvider.value(value: ThemeService()),
-          ],
-          child: const MyApp(),
-        ),
-      ),
-      adaptiveQuality: false,
-      theme: GlassThemeData.simple(
-        quality: GlassQuality.premium,
-      ),
-    ),
-  );
+  Future<void> onDesktopSplashFirstFrame() async {
+    final winService = DesktopWindowService();
+    final splashBaseColor = globalDarkModeNotifier.value
+        ? const Color(0xFF0D0F14)
+        : const Color(0xFFF6F8FC);
 
-  // [v3.1.4] 桌面端（Windows/macOS/Linux）：首帧立即显现窗口并展示 AnimatedSplashOverlay 呼吸加载动画，
-  // 彻底解决 Windows 启动时长时间透明无动画空窗期问题！大字体、着色器、数据库、托盘全部在开屏动画下并行加载。
-  if (isDesktop) {
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final window = WindowManager.instance.getCurrent();
-      if (window != null) {
-        if (window.isFullScreen) window.isFullScreen = false;
-        if (window.isMaximized) window.unmaximize();
-        if (window.isMinimized) window.restore();
-        window
-          ..titleBarStyle = TitleBarStyle.hidden
-          ..setSize(const Size(1024, 768).toNative(), false)
-          ..center()
-          ..isVisibleInTaskbar = true
-          ..hasShadow = true
-          ..backgroundColor = Colors.transparent.toNative()
-          ..show()
-          ..focus();
-      }
+    final preWindow = winService.resolveWindow();
+    if (preWindow != null) {
+      if (preWindow.isFullScreen) preWindow.isFullScreen = false;
+      if (preWindow.isMaximized) preWindow.unmaximize();
+      if (preWindow.isMinimized) preWindow.restore();
+      preWindow
+        ..isResizable = true
+        ..minimumSize = const Size(800, 600).toNative()
+        ..titleBarStyle = TitleBarStyle.hidden
+        ..isVisibleInTaskbar = true
+        ..hasShadow = true
+        ..backgroundColor = splashBaseColor.toNative();
+    }
 
+    // 在开屏第 1 帧 GPU 光栅化完成后再立即显现窗口，彻底杜绝空窗等待与尺寸二次重建
+    await winService.showAndFocusWindow();
+
+    final postWindow = winService.resolveWindow();
+    if (postWindow != null && preWindow == null) {
+      postWindow
+        ..isResizable = true
+        ..minimumSize = const Size(800, 600).toNative()
+        ..titleBarStyle = TitleBarStyle.hidden
+        ..isVisibleInTaskbar = true
+        ..hasShadow = true
+        ..backgroundColor = splashBaseColor.toNative();
+    }
+    await winService.applyDwmStyle();
+    WindowsTrayService().setPreventCloseOnHide(true);
+    await winService.setPreventCloseOnHide(true);
+
+    unawaited(() async {
       try {
-        await Future.wait([
-          // 1. 异步并行加载桌面端大字体文件
-          () async {
-            if (Platform.isWindows || Platform.isMacOS) {
-              try {
-                final sfProLoader = FontLoader('SFPro');
-                sfProLoader.addFont(rootBundle.load('assets/fonts/SF-Pro.ttf'));
-                final pingFangLoader = FontLoader('PingFangSC');
-                pingFangLoader.addFont(
-                  rootBundle.load('assets/fonts/PingFangSC-Semibold.otf'),
-                );
-                await Future.wait([
-                  sfProLoader.load(),
-                  pingFangLoader.load(),
-                ]);
-                globalDesktopFontsLoadedNotifier.value = true;
-                AppLogger.engine('Desktop Custom Fonts Loaded.');
-              } catch (e, st) {
-                AppLogger.error('FONT', 'Failed to load custom fonts: $e', e, st);
-              }
+        // 1. 桌面端 38MB 字体与莫奈壁纸取色完全后台异步执行，绝不阻塞开屏退场（就绪后通过 Notifier 响应式生效）
+        if (Platform.isWindows || Platform.isMacOS) {
+          unawaited(() async {
+            try {
+              final sfProLoader = FontLoader('SFPro');
+              sfProLoader.addFont(rootBundle.load('assets/fonts/SF-Pro.ttf'));
+              final pingFangLoader = FontLoader('PingFangSC');
+              pingFangLoader.addFont(
+                rootBundle.load('assets/fonts/PingFangSC-Semibold.otf'),
+              );
+              await Future.wait([
+                sfProLoader.load(),
+                pingFangLoader.load(),
+              ]);
+              globalDesktopFontsLoadedNotifier.value = true;
+              AppLogger.engine('Desktop Custom Fonts Loaded.');
+            } catch (e, st) {
+              AppLogger.error('FONT', 'Failed to load custom fonts: $e', e, st);
             }
-          }(),
-          // 2. 异步并行预热液态玻璃与渐变模糊着色器
+          }());
+        }
+        unawaited(ThemeService().refreshMonetColors());
+
+        // 2. 仅等待核心着色器预热 + 托盘/通知/SQLite 数据装载，并附带 2 秒超时兜底
+        await Future.wait<void>([
           () async {
             await LiquidGlassWidgets.initialize(
               warmUpMode: GlassWarmUpMode.always,
@@ -303,51 +324,74 @@ void main() async {
             await ProgressiveBlur.preload();
             AppLogger.render('Desktop Shaders Initialized.');
           }(),
-          // 3. 异步并行装载 SQLite 课表数据
-          scheduleProvider.loadSavedData(),
-        ]);
+          () async {
+            try {
+              await NotificationManager().initialize();
+            } catch (e, st) {
+              AppLogger.error('NOTIF', '系统通知管理器初始化失败: $e', e, st);
+            }
+            if (Platform.isWindows) {
+              try {
+                final appData = Platform.environment['APPDATA'];
+                if (appData != null) {
+                  final oldLnk = File(
+                    '$appData\\Microsoft\\Windows\\Start Menu\\Programs\\CourseWidgets.lnk',
+                  );
+                  if (oldLnk.existsSync()) {
+                    oldLnk.deleteSync();
+                  }
+                }
+                await localNotifier.setup(
+                  appName: 'CourseWidgets',
+                  shortcutPolicy: ShortcutPolicy.requireCreate,
+                );
+                WindowsTrayService().setPreventCloseOnHide(true);
+                await WindowsTrayService().initialize();
+                debugPrint('✅ Windows 托盘与通知服务后台初始化完成');
+              } catch (e) {
+                debugPrint('Windows 托盘/通知初始化异常: $e');
+              }
+            }
+            await scheduleProvider.loadSavedData();
+          }(),
+        ]).timeout(
+          const Duration(seconds: 2),
+          onTimeout: () => <void>[],
+        );
       } catch (e, st) {
         AppLogger.error('STARTUP', 'Desktop parallel startup error: $e', e, st);
       } finally {
         globalStartupReadyNotifier.value = true;
       }
-
-      // 4. 托盘与桌面通知在开屏揭晓后异步挂载，零阻塞
-      unawaited(() async {
-        try {
-          await NotificationManager().initialize();
-        } catch (e, st) {
-          AppLogger.error('NOTIF', '系统通知管理器初始化失败: $e', e, st);
-        }
-        if (Platform.isWindows) {
-          try {
-            final appData = Platform.environment['APPDATA'];
-            if (appData != null) {
-              final oldLnk = File(
-                '$appData\\Microsoft\\Windows\\Start Menu\\Programs\\CourseWidgets.lnk',
-              );
-              if (oldLnk.existsSync()) {
-                oldLnk.deleteSync();
-              }
-            }
-            await localNotifier.setup(
-              appName: 'CourseWidgets',
-              shortcutPolicy: ShortcutPolicy.requireCreate,
-            );
-            WindowsTrayService().setPreventCloseOnHide(true);
-            await WindowsTrayService().initialize();
-            debugPrint('✅ Windows 托盘与通知服务后台初始化完成');
-          } catch (e) {
-            debugPrint('Windows 托盘/通知初始化异常: $e');
-          }
-        }
-      }());
-    });
+    }());
   }
+
+  runApp(
+    LiquidGlassWidgets.wrap(
+      child: Phoenix(
+        child: MultiProvider(
+          providers: [
+            ChangeNotifierProvider.value(value: scheduleProvider),
+            ChangeNotifierProvider.value(value: ThemeService()),
+          ],
+          child: MyApp(
+            onDesktopSplashFirstFrame:
+                isDesktop ? onDesktopSplashFirstFrame : null,
+          ),
+        ),
+      ),
+      adaptiveQuality: false,
+      theme: GlassThemeData.simple(
+        quality: GlassQuality.premium,
+      ),
+    ),
+  );
 }
 
 class MyApp extends StatefulWidget {
-  const MyApp({super.key});
+  final Future<void> Function()? onDesktopSplashFirstFrame;
+
+  const MyApp({super.key, this.onDesktopSplashFirstFrame});
 
   @override
   State<MyApp> createState() => _MyAppState();
@@ -689,68 +733,55 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                       ),
                     );
 
-                    // [v3.1.0] Windows/macOS 窗口圆角：最大化时零裁剪，非最大化时采用硬件加速 ClipRRect
-                    if (Platform.isWindows || Platform.isMacOS) {
-                      return ValueListenableBuilder<bool>(
-                        valueListenable: windowsGlobalIsMaximized,
-                        builder: (context, isMaximized, _) {
-                          if (isMaximized) return coreStack;
-                          return ClipRRect(
-                            borderRadius: BorderRadius.circular(14.0),
-                            child: coreStack,
-                          );
-                        },
+                    // [v3.1.8] Windows 由 DWM DWMWCP_ROUND 原生硬件圆角 + DWMWA_COLOR_NONE 零边框承接，
+                    // Flutter 画布 100% 满铺覆盖 ClientRect，消除 14px 与 8px 圆角差造成的露底边问题；macOS 保持 14px ClipRRect。
+                    final Widget desktopRoot = Platform.isMacOS
+                        ? ValueListenableBuilder<bool>(
+                            valueListenable: windowsGlobalIsMaximized,
+                            builder: (context, isMaximized, _) {
+                              if (isMaximized) return coreStack;
+                              return ClipRRect(
+                                borderRadius: BorderRadius.circular(14.0),
+                                child: coreStack,
+                              );
+                            },
+                          )
+                        : coreStack;
+
+                    if (Platform.isWindows ||
+                        Platform.isMacOS ||
+                        Platform.isLinux) {
+                      return AnimatedSplashOverlay(
+                        startupReadyNotifier: globalStartupReadyNotifier,
+                        deferChildUntilFirstFrame: true,
+                        onSplashShown: widget.onDesktopSplashFirstFrame,
+                        child: desktopRoot,
                       );
                     }
 
                     return coreStack;
                   },
-                  // [v3.1.4] Android 端已具备原生 SplashScreen，不再叠加第二层 Flutter 开屏动画，仅保留单层开屏；
-                  // Windows/桌面端则首帧立即呈现 AnimatedSplashOverlay，彻底消除透明空窗期。
-                  home: Platform.isAndroid
-                      ? AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 450),
-                          switchInCurve: AppCurves.pageSlide,
-                          switchOutCurve: AppCurves.pageSlideReverse,
-                          transitionBuilder: (child, animation) {
-                            return FadeTransition(
-                              opacity: animation,
-                              child: child,
-                            );
-                          },
-                          child: _showOnboarding
-                              ? OnboardingScreen(
-                                  key: const ValueKey('onboarding_screen'),
-                                  onComplete: _completeOnboarding,
-                                )
-                              : KeyedSubtree(
-                                  key: const ValueKey('home_screen'),
-                                  child: _getHomeParams(),
-                                ),
-                        )
-                      : AnimatedSplashOverlay(
-                          startupReadyNotifier: globalStartupReadyNotifier,
-                          child: AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 450),
-                            switchInCurve: AppCurves.pageSlide,
-                            switchOutCurve: AppCurves.pageSlideReverse,
-                            transitionBuilder: (child, animation) {
-                              return FadeTransition(
-                                opacity: animation,
-                                child: child,
-                              );
-                            },
-                            child: _showOnboarding
-                                ? OnboardingScreen(
-                                    key: const ValueKey('onboarding_screen'),
-                                    onComplete: _completeOnboarding,
-                                  )
-                                : KeyedSubtree(
-                                    key: const ValueKey('home_screen'),
-                                    child: _getHomeParams(),
-                                  ),
+                  // Android 端复用原生单层开屏；桌面端已在 CupertinoApp.builder 外层全幅覆盖 AnimatedSplashOverlay
+                  home: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 450),
+                    switchInCurve: AppCurves.pageSlide,
+                    switchOutCurve: AppCurves.pageSlideReverse,
+                    transitionBuilder: (child, animation) {
+                      return FadeTransition(
+                        opacity: animation,
+                        child: child,
+                      );
+                    },
+                    child: _showOnboarding
+                        ? OnboardingScreen(
+                            key: const ValueKey('onboarding_screen'),
+                            onComplete: _completeOnboarding,
+                          )
+                        : KeyedSubtree(
+                            key: const ValueKey('home_screen'),
+                            child: _getHomeParams(),
                           ),
-                        ),
+                  ),
                 );
               },
             );

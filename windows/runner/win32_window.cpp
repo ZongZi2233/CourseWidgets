@@ -1,5 +1,7 @@
 #include "win32_window.h"
 
+#include <algorithm>
+#include <cmath>
 #include <dwmapi.h>
 #include <flutter_windows.h>
 
@@ -12,11 +14,20 @@ namespace {
 /// Redefined in case the developer's machine has a Windows SDK older than
 /// version 10.0.22000.0.
 /// See: https://docs.microsoft.com/windows/win32/api/dwmapi/ne-dwmapi-dwmwindowattribute
+#ifndef DWMWA_NCRENDERING_POLICY
+#define DWMWA_NCRENDERING_POLICY 2
+#endif
 #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
 #define DWMWA_USE_IMMERSIVE_DARK_MODE 20
 #endif
+#ifndef DWMWA_WINDOW_CORNER_PREFERENCE
+#define DWMWA_WINDOW_CORNER_PREFERENCE 33
+#endif
 #ifndef DWMWA_BORDER_COLOR
 #define DWMWA_BORDER_COLOR 34
+#endif
+#ifndef DWMWA_CAPTION_COLOR
+#define DWMWA_CAPTION_COLOR 35
 #endif
 #ifndef DWMWA_COLOR_NONE
 #define DWMWA_COLOR_NONE 0xFFFFFFFE
@@ -160,17 +171,102 @@ bool Win32Window::Create(const std::wstring& title,
   if (hIconBig) SendMessage(window, WM_SETICON, ICON_BIG, (LPARAM)hIconBig);
   if (hIconSmall) SendMessage(window, WM_SETICON, ICON_SMALL, (LPARAM)hIconSmall);
 
-  // 隐藏 Windows 11 原生主题色边框，避免与内层产生双重曲率不匹配的突兀边框线
-  COLORREF border_color = DWMWA_COLOR_NONE;
-  DwmSetWindowAttribute(window, DWMWA_BORDER_COLOR, &border_color, sizeof(border_color));
-
+  ApplyBorderlessDwmStyle(window);
   UpdateTheme(window);
+  SetWindowPos(window, nullptr, 0, 0, 0, 0,
+               SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
+                   SWP_FRAMECHANGED);
 
   return OnCreate();
 }
 
+bool Win32Window::CreateCentered(const std::wstring& title, const Size& size) {
+  POINT cursor = {0, 0};
+  GetCursorPos(&cursor);
+  HMONITOR monitor = MonitorFromPoint(cursor, MONITOR_DEFAULTTONEAREST);
+  MONITORINFO mi = {sizeof(mi)};
+  if (!GetMonitorInfo(monitor, &mi)) {
+    return Create(title, Point(100, 100), size);
+  }
+  UINT dpi = FlutterDesktopGetDpiForMonitor(monitor);
+  double scale_factor = dpi > 0 ? dpi / 96.0 : 1.0;
+
+  int work_w_logical = static_cast<int>(
+      std::lround((mi.rcWork.right - mi.rcWork.left) / scale_factor));
+  int work_h_logical = static_cast<int>(
+      std::lround((mi.rcWork.bottom - mi.rcWork.top) / scale_factor));
+  int left_logical = static_cast<int>(std::lround(mi.rcWork.left / scale_factor));
+  int top_logical = static_cast<int>(std::lround(mi.rcWork.top / scale_factor));
+
+  int origin_x =
+      left_logical + std::max(0, (work_w_logical - static_cast<int>(size.width)) / 2);
+  int origin_y =
+      top_logical + std::max(0, (work_h_logical - static_cast<int>(size.height)) / 2);
+
+  return Create(title, Point(static_cast<unsigned int>(std::max(0, origin_x)),
+                             static_cast<unsigned int>(std::max(0, origin_y))),
+                size);
+}
+
 bool Win32Window::Show() {
   return ShowWindow(window_handle_, SW_SHOWNORMAL);
+}
+
+void Win32Window::ShowOrRestore() {
+  if (!window_handle_ || !IsWindow(window_handle_)) {
+    return;
+  }
+  ApplyBorderlessDwmStyle(window_handle_);
+  if (IsIconic(window_handle_)) {
+    ShowWindow(window_handle_, SW_RESTORE);
+  } else {
+    ShowWindow(window_handle_, SW_SHOW);
+  }
+  BringWindowToTop(window_handle_);
+  SetForegroundWindow(window_handle_);
+  if (child_content_ != nullptr) {
+    SetFocus(child_content_);
+  }
+}
+
+void Win32Window::HideWindow() {
+  if (window_handle_ && IsWindow(window_handle_)) {
+    ShowWindow(window_handle_, SW_HIDE);
+  }
+}
+
+void Win32Window::ApplyBorderlessDwmStyle(HWND window) {
+  if (!window || !IsWindow(window)) {
+    return;
+  }
+  DWMNCRENDERINGPOLICY policy = DWMNCRP_USEWINDOWSTYLE;
+  DwmSetWindowAttribute(window, DWMWA_NCRENDERING_POLICY, &policy,
+                        sizeof(policy));
+
+  // Windows 11 原生圆角 (DWMWCP_ROUND = 2) + 彻底隐藏原生主题色边框与标题栏色
+  int corner_preference = 2;
+  DwmSetWindowAttribute(window, DWMWA_WINDOW_CORNER_PREFERENCE,
+                        &corner_preference, sizeof(corner_preference));
+
+  COLORREF color_none = DWMWA_COLOR_NONE;
+  DwmSetWindowAttribute(window, DWMWA_BORDER_COLOR, &color_none,
+                        sizeof(color_none));
+  DwmSetWindowAttribute(window, DWMWA_CAPTION_COLOR, &color_none,
+                        sizeof(color_none));
+}
+
+UINT Win32Window::GetWakeUpMessageId() {
+  static const UINT msg = RegisterWindowMessageW(L"CourseWidgets_WakeUpWindow");
+  return msg;
+}
+
+void Win32Window::SetPreventCloseOnHide(bool prevent_close) {
+  prevent_close_on_hide_ = prevent_close;
+}
+
+void Win32Window::ForceClose() {
+  is_exiting_ = true;
+  Destroy();
 }
 
 // static
@@ -227,14 +323,47 @@ Win32Window::MessageHandler(HWND hwnd,
       return 0;
     }
 
+    case WM_NCCALCSIZE:
+      if (borderless_titlebar_) {
+        if (wparam == TRUE) {
+          auto* params = reinterpret_cast<NCCALCSIZE_PARAMS*>(lparam);
+          const RECT proposed = params->rgrc[0];
+          const LRESULT result = DefWindowProc(hwnd, message, wparam, lparam);
+          if (IsZoomed(hwnd)) {
+            MONITORINFO monitor = {sizeof(monitor)};
+            if (GetMonitorInfoW(
+                    MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST),
+                    &monitor)) {
+              params->rgrc[0] = monitor.rcWork;
+            }
+          } else {
+            params->rgrc[0].top = proposed.top;
+          }
+          return result;
+        } else {
+          auto* proposed = reinterpret_cast<RECT*>(lparam);
+          const RECT original = *proposed;
+          const LRESULT result = DefWindowProc(hwnd, message, wparam, lparam);
+          proposed->top = original.top;
+          return result;
+        }
+      }
+      break;
+
+    case WM_ERASEBKGND:
+      // 由 Flutter/DirectComposition 直接接管绘制，禁止 GDI 擦除造成首帧白/黑闪烁
+      return 1;
+
     case WM_ACTIVATE:
       if (child_content_ != nullptr) {
         SetFocus(child_content_);
       }
+      ApplyBorderlessDwmStyle(hwnd);
       return 0;
 
     case WM_DWMCOLORIZATIONCOLORCHANGED:
       UpdateTheme(hwnd);
+      ApplyBorderlessDwmStyle(hwnd);
       return 0;
   }
 

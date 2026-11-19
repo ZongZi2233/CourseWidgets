@@ -1,26 +1,32 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:window_manager/window_manager.dart';
 import '../../providers/schedule_provider.dart';
 import '../../services/static_blur_service.dart';
 import 'zero_flicker_splash_preloader.dart';
 
-/// [v3.0.0] 秒开开屏加载动画与主界面并行渲染就绪门 (AnimatedSplashOverlay)
+/// [v3.1.8] 秒开开屏加载动画与主界面并行渲染就绪门 (AnimatedSplashOverlay)
 ///
 /// 核心特性：
-/// 1. 【秒开显示】：在第 0 帧立即呈现高奢品牌呼吸动效与渐变，绝无纯黑/纯白屏停滞；
-/// 2. 【并行预渲染】：底层并行唤醒真实主界面（SQLite 数据装载、课时对齐、静态壁纸模糊单次烘焙、首次光栅化）；
-/// 3. 【就绪门控检测】：监听数据装载完成、壁纸烘焙完成以及第一帧落盘 (endOfFrame)，杜绝未烘焙切片导致的二次闪烁；
-/// 4. 【非线性淡出溶图】：满足优雅最小观感时长（650ms）后，以 350ms 非线性微缩放淡出溶图揭晓主界面；
-/// 5. 【零常驻开销】：淡出完成后彻底从 Widget 树中卸载，日常使用 0 CPU / 0 GPU 负担。
+/// 1. 【第0帧秒开】：在桌面端首次启动时首帧仅渲染极轻量的 [ZeroFlickerSplashPreloader]，
+///    待首帧光栅化落盘并显示窗口后立即在开屏背后延迟挂载重型主界面（避免重组件/着色器阻塞首帧）；
+/// 2. 【并行预渲染】：底层并行唤醒真实主界面（SQLite 数据装载、字体、着色器、静态壁纸模糊烘焙）；
+/// 3. 【真实可视计时】：680ms 最小品牌动效时长从窗口真正可见那一刻开始计时，绝不在隐藏阶段提前消耗；
+/// 4. 【零重建平滑揭晓】：淡出卸载时保持底层 `widget.child` 始终位于 Stack 同槽位，零闪烁零重建。
 class AnimatedSplashOverlay extends StatefulWidget {
   final Widget child;
   final ValueNotifier<bool>? startupReadyNotifier;
+  final bool deferChildUntilFirstFrame;
+  final Future<void> Function()? onSplashShown;
 
   const AnimatedSplashOverlay({
     super.key,
     required this.child,
     this.startupReadyNotifier,
+    this.deferChildUntilFirstFrame = false,
+    this.onSplashShown,
   });
 
   @override
@@ -35,7 +41,8 @@ class _AnimatedSplashOverlayState extends State<AnimatedSplashOverlay>
 
   bool _isDismissed = false;
   bool _isGatePassed = false;
-  final DateTime _startTime = DateTime.now();
+  late bool _childMounted;
+  DateTime _visibleStartTime = DateTime.now();
 
   Timer? _safetyTimer;
   ScheduleProvider? _scheduleProvider;
@@ -43,6 +50,7 @@ class _AnimatedSplashOverlayState extends State<AnimatedSplashOverlay>
   @override
   void initState() {
     super.initState();
+    _childMounted = !widget.deferChildUntilFirstFrame;
 
     _fadeController = AnimationController(
       vsync: this,
@@ -77,15 +85,34 @@ class _AnimatedSplashOverlayState extends State<AnimatedSplashOverlay>
     StaticBlurredWallpaperService.instance.addListener(_onBlurServiceChanged);
     widget.startupReadyNotifier?.addListener(_onStartupReadyChanged);
 
-    // 安全超时保护：若后台数据或着色器异常，3500ms 强制开门揭晓主界面，确保永远不卡死
-    _safetyTimer = Timer(const Duration(milliseconds: 3500), () {
+    // 安全超时保护：若后台数据或着色器异常，4000ms 强制开门揭晓主界面，确保永远不卡死
+    _safetyTimer = Timer(const Duration(milliseconds: 4000), () {
       _triggerDismiss();
     });
 
-    // 启动就绪检测流
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkReadiness();
-    });
+    if (widget.deferChildUntilFirstFrame) {
+      // 等待极轻量开屏第 1 帧完成 GPU 光栅化并显示窗口后，再开始计时并在幕后挂载主工作区
+      unawaited(
+        WidgetsBinding.instance.waitUntilFirstFrameRasterized.then((_) async {
+          if (!mounted) return;
+          if (widget.onSplashShown != null) {
+            await widget.onSplashShown!();
+          }
+          if (!mounted) return;
+          _visibleStartTime = DateTime.now();
+          setState(() {
+            _childMounted = true;
+          });
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _checkReadiness();
+          });
+        }),
+      );
+    } else {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _checkReadiness();
+      });
+    }
   }
 
   @override
@@ -113,7 +140,7 @@ class _AnimatedSplashOverlayState extends State<AnimatedSplashOverlay>
 
   /// 综合判定渲染与数据准备完成度
   void _checkReadiness() {
-    if (_isGatePassed || !mounted) return;
+    if (_isGatePassed || !mounted || !_childMounted) return;
 
     final provider = _scheduleProvider;
     final isStartupReady = widget.startupReadyNotifier?.value ?? true;
@@ -132,11 +159,17 @@ class _AnimatedSplashOverlayState extends State<AnimatedSplashOverlay>
 
   void _triggerDismiss() {
     if (_isGatePassed || !mounted) return;
+    if (!_childMounted) {
+      setState(() {
+        _childMounted = true;
+      });
+    }
     _isGatePassed = true;
     _safetyTimer?.cancel();
 
-    // 确保至少呈现优雅的品牌动效 680ms，杜绝闪跳
-    final elapsedMs = DateTime.now().difference(_startTime).inMilliseconds;
+    // 确保在窗口真正显示后至少呈现优雅的品牌动效 680ms，杜绝闪跳
+    final elapsedMs =
+        DateTime.now().difference(_visibleStartTime).inMilliseconds;
     final remainingMs = 680 - elapsedMs;
 
     if (remainingMs > 0) {
@@ -162,34 +195,48 @@ class _AnimatedSplashOverlayState extends State<AnimatedSplashOverlay>
 
   @override
   Widget build(BuildContext context) {
-    if (_isDismissed) {
-      return widget.child;
-    }
-
+    final isDesktop = Platform.isWindows || Platform.isMacOS || Platform.isLinux;
+    // 保持底层 widget.child 始终在 Stack 槽位 0，防止开屏卸载时销毁重建导航树造成二次闪烁
     return Stack(
       fit: StackFit.expand,
       children: [
-        // 底层真实主界面（立即启动并行渲染与数据管道）
-        widget.child,
-
-        // 顶层秒开高奢过渡动效
-        Positioned.fill(
-          child: AnimatedBuilder(
-            animation: _fadeController,
-            builder: (context, child) {
-              return IgnorePointer(
-                ignoring: _isGatePassed, // 开始淡出时即解除下层交互限制
-                child: FadeTransition(
-                  opacity: _fadeAnimation,
-                  child: ScaleTransition(
-                    scale: _scaleAnimation,
-                    child: const ZeroFlickerSplashPreloader(),
+        if (_childMounted)
+          widget.child
+        else
+          const SizedBox.expand(),
+        if (!_isDismissed)
+          Positioned.fill(
+            child: AnimatedBuilder(
+              animation: _fadeController,
+              builder: (context, child) {
+                return IgnorePointer(
+                  ignoring: _isGatePassed,
+                  child: FadeTransition(
+                    opacity: _fadeAnimation,
+                    child: ScaleTransition(
+                      scale: _scaleAnimation,
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          const ZeroFlickerSplashPreloader(),
+                          if (isDesktop)
+                            Positioned(
+                              top: 0,
+                              left: 0,
+                              right: 0,
+                              height: 36,
+                              child: DragToMoveArea(
+                                child: const SizedBox.expand(),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
-              );
-            },
+                );
+              },
+            ),
           ),
-        ),
       ],
     );
   }

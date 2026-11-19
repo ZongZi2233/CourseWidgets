@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:window_manager/window_manager.dart';
+import '../../services/desktop_window_service.dart';
 
 /// [v3.0.0] macOS 27 Golden Gate 风格一体化交通灯窗口控制组件
 /// 严格对齐 Apple HIG 规范：
@@ -30,7 +30,7 @@ class _MacosTrafficLightsState extends State<MacosTrafficLights> {
     if (widget.onClose != null) {
       widget.onClose!();
     } else {
-      WindowManager.instance.getCurrent()?.close();
+      DesktopWindowService().resolveWindow()?.close();
     }
   }
 
@@ -38,7 +38,7 @@ class _MacosTrafficLightsState extends State<MacosTrafficLights> {
     if (widget.onMinimize != null) {
       widget.onMinimize!();
     } else {
-      WindowManager.instance.getCurrent()?.minimize();
+      DesktopWindowService().resolveWindow()?.minimize();
     }
   }
 
@@ -46,7 +46,7 @@ class _MacosTrafficLightsState extends State<MacosTrafficLights> {
     if (widget.onMaximize != null) {
       widget.onMaximize!();
     } else {
-      final window = WindowManager.instance.getCurrent();
+      final window = DesktopWindowService().resolveWindow();
       if (window == null) return;
       if (window.isMaximized) {
         window.unmaximize();
