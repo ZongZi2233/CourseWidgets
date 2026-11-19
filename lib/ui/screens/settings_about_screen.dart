@@ -5,9 +5,8 @@ import 'dart:ui';
 import '../../constants/theme_constants.dart';
 import '../../constants/version.dart';
 import 'dart:io';
-import 'dart:convert';
+import '../widgets/app_update_dialog.dart';
 import '../widgets/liquid_components.dart' as liquid;
-import '../widgets/liquid_toast.dart';
 import '../widgets/immersive_status_bar_backdrop.dart';
 import '../widgets/windows_desktop_title_bar.dart'
     show setWindowsDesktopTitle, clearWindowsDesktopTitle;
@@ -246,238 +245,16 @@ class _SettingsAboutScreenState extends State<SettingsAboutScreen>
 
   bool _isCheckingUpdate = false;
 
-  /// [v2.6.3] 语义化版本比较：remote > local 才算有更新
-  bool _isNewerVersion(String remote, String local) {
-    // 去掉前缀 v
-    final r = remote.replaceAll(RegExp(r'^v'), '');
-    final l = local.replaceAll(RegExp(r'^v'), '');
-    final rParts = r.split('.').map((s) => int.tryParse(s) ?? 0).toList();
-    final lParts = l.split('.').map((s) => int.tryParse(s) ?? 0).toList();
-    for (int i = 0; i < 3; i++) {
-      final rv = i < rParts.length ? rParts[i] : 0;
-      final lv = i < lParts.length ? lParts[i] : 0;
-      if (rv > lv) return true;
-      if (rv < lv) return false;
-    }
-    return false;
-  }
-
-  /// [v3.1.5] 根据平台和版本号构造下载地址
-  String _buildDownloadUrl(String version) {
-    final ver = version.replaceAll(RegExp(r'^v'), '');
-    if (Platform.isWindows) {
-      return 'https://github.com/ZongZi2233/CourseWidgets/releases/download/v$ver/CourseWidgets-v$ver-windows-x64.zip';
-    } else {
-      // Android arm64
-      return 'https://github.com/ZongZi2233/CourseWidgets/releases/download/v$ver/CourseWidgets-v$ver-android-arm64-v8a.apk';
-    }
-  }
-
-  void _checkForUpdates() async {
-    setState(() => _isCheckingUpdate = true);
-    try {
-      final url = Uri.parse(
-        'https://api.github.com/repos/ZongZi2233/CourseWidgets/releases/latest',
-      );
-      final request = await HttpClient().getUrl(url);
-      request.headers.add('User-Agent', 'CourseWidgets_App');
-      final response = await request.close();
-      if (response.statusCode == 200) {
-        final resBody = await response.transform(utf8.decoder).join();
-        final data = jsonDecode(resBody);
-        final latestTag = (data['tag_name'] as String?) ?? '';
-        final releaseBody = (data['body'] as String?) ?? '暂无更新说明';
-
-        if (!mounted) return;
-
-        if (_isNewerVersion(latestTag, appVersion)) {
-          // 有新版本 → 弹窗显示更新内容
-          _showUpdateDialog(latestTag, releaseBody);
-        } else {
-          LiquidToast.success(context, '当前 v$appVersion 已是最新版本');
-        }
-      } else {
-        if (!mounted) return;
-        LiquidToast.error(context, '检查更新失败: HTTP ${response.statusCode}');
-      }
-    } catch (e) {
-      if (!mounted) return;
-      LiquidToast.error(context, '网络错误: $e');
-    } finally {
-      if (mounted) setState(() => _isCheckingUpdate = false);
-    }
-  }
-
-  /// [v3.1.6] 弹窗展示版本更新内容与下载按钮（统一使用 showLiquidDialog 与单层静态高斯采样）
-  void _showUpdateDialog(String latestTag, String releaseBody) {
-    final downloadUrl = _buildDownloadUrl(latestTag);
-    final isDark = GlassSettingsHelper.isDark(context);
-
-    liquid.showLiquidDialog(
-      context: context,
-      builder: Builder(
-        builder: (ctx) => BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-          child: Dialog(
-            backgroundColor: Colors.transparent,
-            insetPadding: const EdgeInsets.symmetric(horizontal: 24),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
-              child: liquid.HyperOSCard(
-                cornerRadius: 28,
-                useBlur: true,
-                shadows: liquid.HyperOSShadows.modal(isDark),
-                padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          color: AppThemeColors.babyPink.withValues(alpha: 0.22),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Icon(
-                          CupertinoIcons.arrow_down_circle_fill,
-                          color: AppThemeColors.babyPink,
-                          size: 26,
-                        ),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '发现新版本 $latestTag',
-                              style: TextStyle(
-                                color: isDark ? Colors.white : const Color(0xFF1A1A2E),
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              '当前版本: v$appVersion (Build $buildNumber)',
-                              style: TextStyle(
-                                color: isDark ? Colors.white60 : Colors.black54,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 18),
-                  Container(
-                    constraints: const BoxConstraints(maxHeight: 220),
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: isDark
-                          ? Colors.white.withValues(alpha: 0.05)
-                          : Colors.black.withValues(alpha: 0.03),
-                      borderRadius: BorderRadius.circular(18),
-                    ),
-                    child: SingleChildScrollView(
-                      physics: const BouncingScrollPhysics(),
-                      child: Text(
-                        releaseBody,
-                        style: TextStyle(
-                          color: isDark
-                              ? Colors.white.withValues(alpha: 0.88)
-                              : const Color(0xFF2C3240),
-                          fontSize: 13.5,
-                          height: 1.55,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextButton(
-                          onPressed: () => Navigator.of(ctx).pop(),
-                          style: TextButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                          ),
-                          child: Text(
-                            '稍后再说',
-                            style: TextStyle(
-                              color: isDark ? Colors.white60 : Colors.black54,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        flex: 2,
-                        child: Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            onTap: () async {
-                              HapticFeedback.mediumImpact();
-                              Navigator.of(ctx).pop();
-                              if (Platform.isWindows) {
-                                await Process.run('cmd', ['/c', 'start', downloadUrl]);
-                              } else if (Platform.isAndroid) {
-                                await Process.run('am', [
-                                  'start',
-                                  '-a',
-                                  'android.intent.action.VIEW',
-                                  '-d',
-                                  downloadUrl,
-                                ]);
-                              }
-                            },
-                            borderRadius: BorderRadius.circular(16),
-                            child: Ink(
-                              height: 48,
-                              decoration: BoxDecoration(
-                                color: AppThemeColors.babyPink,
-                                borderRadius: BorderRadius.circular(16),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: AppThemeColors.babyPink
-                                        .withValues(alpha: 0.35),
-                                    blurRadius: 12,
-                                    offset: const Offset(0, 4),
-                                  ),
-                                ],
-                              ),
-                              child: Center(
-                                child: Text(
-                                  Platform.isWindows ? '下载 Windows 版' : '立即下载 APK',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        ),
-      ),
+  void _checkForUpdates() {
+    if (_isCheckingUpdate) return;
+    AppUpdateDialog.checkAndShow(
+      context,
+      onStart: () {
+        if (mounted) setState(() => _isCheckingUpdate = true);
+      },
+      onFinish: () {
+        if (mounted) setState(() => _isCheckingUpdate = false);
+      },
     );
   }
 
@@ -525,7 +302,9 @@ class _SettingsAboutScreenState extends State<SettingsAboutScreen>
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '当前为正式版 v$appVersion',
+                    Platform.isWindows
+                        ? '当前 v$appVersion · 支持编译文件差异增量热更新'
+                        : '当前 v$appVersion · 自动比对 GitHub Release 最新版本',
                     style: TextStyle(
                       fontSize: 12,
                       color: isDark ? Colors.white60 : Colors.black54,

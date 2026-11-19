@@ -198,9 +198,7 @@ void main() async {
   final bool isDesktop =
       Platform.isWindows || Platform.isLinux || Platform.isMacOS;
 
-  if (isDesktop) {
-    await windowManager.ensureInitialized();
-  } else {
+  if (!isDesktop) {
     // 移动端（Android/iOS）：在系统原生单层开屏画面期间并行完成着色器预热与课表数据装载，
     // 确保原生开屏结束后直接进入已就绪的主界面，杜绝两层开屏动画！
     await Future.wait([
@@ -255,19 +253,21 @@ void main() async {
   // 彻底解决 Windows 启动时长时间透明无动画空窗期问题！大字体、着色器、数据库、托盘全部在开屏动画下并行加载。
   if (isDesktop) {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      const WindowOptions windowOptions = WindowOptions(
-        size: Size(1024, 768),
-        center: true,
-        skipTaskbar: false,
-        titleBarStyle: TitleBarStyle.hidden,
-        backgroundColor: Colors.transparent,
-      );
-      windowManager.waitUntilReadyToShow(windowOptions, () async {
-        await windowManager.setHasShadow(true);
-        await windowManager.setBackgroundColor(Colors.transparent);
-        await windowManager.show();
-        await windowManager.focus();
-      });
+      final window = WindowManager.instance.getCurrent();
+      if (window != null) {
+        if (window.isFullScreen) window.isFullScreen = false;
+        if (window.isMaximized) window.unmaximize();
+        if (window.isMinimized) window.restore();
+        window
+          ..titleBarStyle = TitleBarStyle.hidden
+          ..setSize(const Size(1024, 768).toNative(), false)
+          ..center()
+          ..isVisibleInTaskbar = true
+          ..hasShadow = true
+          ..backgroundColor = Colors.transparent.toNative()
+          ..show()
+          ..focus();
+      }
 
       try {
         await Future.wait([
@@ -334,7 +334,7 @@ void main() async {
               appName: 'CourseWidgets',
               shortcutPolicy: ShortcutPolicy.requireCreate,
             );
-            await windowManager.setPreventClose(true);
+            WindowsTrayService().setPreventCloseOnHide(true);
             await WindowsTrayService().initialize();
             debugPrint('✅ Windows 托盘与通知服务后台初始化完成');
           } catch (e) {

@@ -82,28 +82,26 @@ class WindowsDesktopTitleBar extends StatelessWidget {
 
   void _handleClose(BuildContext context) async {
     try {
-      final provider = Provider.of<ScheduleProvider>(context, listen: false);
-      final courses = provider.courses;
-      await windowManager.hide();
-      final tray = WindowsTrayService();
-      await tray.enterBackgroundMode(courses: courses);
+      final courses = Provider.of<ScheduleProvider>(context, listen: false).courses;
+      await WindowsTrayService().enterBackgroundMode(courses: courses);
       debugPrint('🌙 [Windows] 窗口已最小化到托盘，后台保活');
     } catch (_) {
-      await windowManager.close();
+      WindowManager.instance.getCurrent()?.close();
     }
   }
 
-  void _handleMinimize() async {
-    await windowManager.minimize();
+  void _handleMinimize() {
+    WindowManager.instance.getCurrent()?.minimize();
   }
 
-  void _handleMaximize() async {
-    final isMax = await windowManager.isMaximized();
-    if (isMax) {
-      await windowManager.unmaximize();
+  void _handleMaximize() {
+    final window = WindowManager.instance.getCurrent();
+    if (window == null) return;
+    if (window.isMaximized) {
+      window.unmaximize();
       windowsGlobalIsMaximized.value = false;
     } else {
-      await windowManager.maximize();
+      window.maximize();
       windowsGlobalIsMaximized.value = true;
     }
   }

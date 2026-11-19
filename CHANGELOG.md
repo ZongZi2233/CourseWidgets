@@ -2,6 +2,21 @@
 
 本文档记录 CourseWidgets 各版本更新的动态活动演进，重点关注架构改进、渲染优化、故障诊断与教务抓取能力提升。
 
+## [v3.1.7] - 2026-11-19 (Build 3170 正式版)
+
+### 1. 跨平台工程级软件更新引擎 (`AppUpdateService` & `AppUpdateDialog`)
+- **恢复并升级设置主页与关于页的一键检查更新**：在 `SettingsMainScreen`（设置主页面“数据与关于”分组）与 `SettingsAboutScreen`（关于软件页）同步提供“检查更新”入口，直连 `ZongZi2233/CourseWidgets` GitHub Releases 最新 Tag 接口，支持语义化版本号自动比对与 `assets` 产物列表动态解析；
+- **Android 应用内流式 APK 下载、SHA-256 校验与原生安装器调起**：修复此前 Android 端通过 `Process.run('am', ...)` 无法在应用沙盒内唤起下载的问题；重构为应用内 `HttpClient` 流式下载 `arm64-v8a` Release APK（实时展示下载百分比与字节进度）、自动比对 `SHA256SUMS.txt` 校验和，并通过 `MainActivity` 原生 `FileProvider` + `ACTION_VIEW (application/vnd.android.package-archive)` 直接调起系统安装程序（同时提供原生 `Intent.ACTION_VIEW` 浏览器下载回退按钮）；
+- **Windows 编译产物文件级 SHA-256 差异比对与 HTTP Range 增量热更新**：
+  - **构建期编译索引清单 (`windows-manifest.json`)**：`collect_release.py` 在打包 Windows Release 时自动扫描全部 56 个编译产物文件，生成包含每个文件相对路径、原始大小、`SHA-256` 校验和、`CRC32`、Deflate 压缩大小及在 Release ZIP 中精确字节偏移量（`dataOffset`）的 `windows-manifest.json`（同时内置远端 ZIP 尾部 Central Directory 64KB Range 解析回退通道）；
+  - **本地文件哈希比对与按需字节流拉取**：Windows 客户端在更新前自动扫描本地运行目录并与远端清单逐文件比对 `SHA-256`，跳过未发生变化的字库、壁纸、引擎与插件 DLL（通常节省 90% 以上流量，仅需增量拉取 `~3.5 MB` 的 `data/app.so` 等变更文件）；通过 GitHub Release CDN 的 `HTTP 206 Partial Content (Range)` 仅下载变更文件的压缩数据块，在内存中执行原始 Deflate 解压与 `SHA-256` 强校验；
+  - **独立守护脚本原子热替换与自动重启**：校验通过后将增量文件写入 `_update_staging` 暂存区，启动独立无窗口 PowerShell 守护进程等待旧进程释放文件句柄、原子覆盖更新文件、清理暂存区并自动重新拉起新版 `CourseWidgets.exe`。
+
+### 2. 工具链与核心依赖全量兼容升级 (Flutter 3.50.0 / Dart 3.14.0 & NativeAPI Architecture)
+- **升级 Flutter & Dart 工具链**：Flutter SDK 升级至 `3.50.0 Stable`，Dart SDK 升级至 `3.14.0`，同步更新 `pubspec.yaml` 环境约束（`sdk: ^3.14.0`、`flutter: ^3.50.0`）；
+- **全量升级最新兼容依赖**：升级 `window_manager (0.7.0)`、`tray_manager (0.9.0)`、`flutter_local_notifications (23.0.3)`、`desktop_webview_window (0.4.3)`、`fluent_ui (4.17.0)`、`mmkv (2.4.3)`、`sqflite (2.4.6)` / `sqflite_common_ffi (2.4.7)`、`sqlite3 (3.9.1)`、`image (4.13.1)`、`webview_flutter (4.14.1)`、`url_launcher (6.3.3)`、`sensors_plus (7.1.1)`、`timezone (0.11.2)`、`crypto (3.0.8)`、`archive (4.7.1)`、`xml (7.1.0)`、`build_runner (2.17.1)`、`json_serializable (6.15.2)` 等 69 项依赖包（保留本地 AGP 9 补丁插件覆盖以兼容 Android 16 实况通知与底层构建）；
+- **桌面端全面迁移至 `nativeapi` / Dart Native Assets 原生 API**：重构 `lib/main.dart`、`WindowsTrayService`、`WindowsCustomWindow`、`WindowsDesktopTitleBar`、`MacosCustomWindow` 与 `MacosTrafficLights`，接入 `WindowManager.instance.getCurrent()`、`WindowCloseRequestedEvent`、`tray.TrayIcon` / `tray.Menu` 与同步 FFI 原生窗口控制，消除 `window_manager 0.5.x` 弃用桥接警告并保持原生对象强引用生命周期管理。
+
 ## [v3.1.6] - 2026-11-11 (Build 3160 正式版)
 
 ### 1. 深度调优真 3D 液态形变菜单 (`GlassMenu` / `GlassContextMenu`) 与双 Blob 水滴融球光学折射 (True Premium Two-Blob Metaball Morph Engine)

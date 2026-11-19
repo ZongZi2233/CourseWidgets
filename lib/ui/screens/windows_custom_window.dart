@@ -40,15 +40,15 @@ class WindowsCustomWindow extends StatefulWidget {
   State<WindowsCustomWindow> createState() => _WindowsCustomWindowState();
 }
 
-class _WindowsCustomWindowState extends State<WindowsCustomWindow>
-    with WindowListener {
+class _WindowsCustomWindowState extends State<WindowsCustomWindow> {
   int _selectedIndex = 0;
   bool _isMaximized = false;
+  Window? _nativeWindow;
+  ListenerId? _windowListenerId;
 
   @override
   void initState() {
     super.initState();
-    windowManager.addListener(this);
     _initWindow();
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -84,21 +84,26 @@ class _WindowsCustomWindowState extends State<WindowsCustomWindow>
     });
   }
 
-  void _initWindow() async {
+  Future<void> _initWindow() async {
     await Future.delayed(const Duration(milliseconds: 150));
+    if (!mounted) return;
 
-    await windowManager.setResizable(true);
-    await windowManager.setMinimumSize(const Size(800, 600));
+    final window = WindowManager.instance.getCurrent();
+    if (window == null) return;
+    _nativeWindow = window;
+    _windowListenerId = window.addListener(_onWindowEvent);
 
-    // [v3.0.0] 严禁调用 setAsFrameless() 导致丢失系统原生拉伸边框与贴靠布局 (Snap Layouts)
-    await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
-    await windowManager.setHasShadow(true);
-    await windowManager.setBackgroundColor(Colors.transparent);
+    // [v3.0.0] 严禁调用 setFrameless() 导致丢失系统原生拉伸边框与贴靠布局 (Snap Layouts)
+    window
+      ..isResizable = true
+      ..minimumSize = const Size(800, 600).toNative()
+      ..titleBarStyle = TitleBarStyle.hidden
+      ..hasShadow = true
+      ..backgroundColor = Colors.transparent.toNative()
+      ..setSize(const Size(1024, 768).toNative(), false)
+      ..center();
 
-    await windowManager.setSize(const Size(1024, 768));
-    await windowManager.center();
-
-    _isMaximized = await windowManager.isMaximized();
+    _isMaximized = window.isMaximized;
     windowsGlobalIsMaximized.value = _isMaximized;
     if (mounted) {
       setState(() {});
@@ -109,54 +114,39 @@ class _WindowsCustomWindowState extends State<WindowsCustomWindow>
 
   @override
   void dispose() {
-    windowManager.removeListener(this);
+    if (_nativeWindow != null && _windowListenerId != null) {
+      _nativeWindow!.removeListener(_windowListenerId!);
+      _windowListenerId = null;
+    }
     super.dispose();
   }
 
-  @override
-  void onWindowMaximize() {
-    windowsGlobalIsMaximized.value = true;
-    setState(() => _isMaximized = true);
-  }
-
-  @override
-  void onWindowUnmaximize() {
-    windowsGlobalIsMaximized.value = false;
-    setState(() => _isMaximized = false);
-  }
-
-  @override
-  Future<void> onWindowClose() async {
-    final provider = Provider.of<ScheduleProvider>(context, listen: false);
-    final courses = provider.courses;
-    // 隐藏至托盘，不触发自绘多余动画
-    await windowManager.hide();
-    final tray = WindowsTrayService();
-    await tray.enterBackgroundMode(courses: courses);
-    debugPrint('🌙 窗口已最小化到托盘，进程继续运行');
-  }
-
-  void _handleMinimize() async {
-    // 由系统 DWM 硬件合成器原生最小化，0 顿挫
-    await windowManager.minimize();
-  }
-
-  void _handleMaximize() async {
-    if (_isMaximized) {
-      await windowManager.unmaximize();
-    } else {
-      await windowManager.maximize();
+  void _onWindowEvent(WindowEvent event) {
+    switch (event) {
+      case WindowMaximizedEvent():
+        windowsGlobalIsMaximized.value = true;
+        if (mounted) setState(() => _isMaximized = true);
+      case WindowRestoredEvent():
+        final isMax = _nativeWindow?.isMaximized ?? false;
+        windowsGlobalIsMaximized.value = isMax;
+        if (mounted) setState(() => _isMaximized = isMax);
+      case WindowFocusedEvent():
+        if (mounted) setState(() {});
+      case WindowCloseRequestedEvent(:final request):
+        final tray = WindowsTrayService();
+        if (tray.isExiting || !tray.preventCloseOnHide) return;
+        request.cancel();
+        _hideWindowToTray();
+      default:
+        break;
     }
   }
 
-  @override
-  void onWindowRestore() {
-    setState(() {});
-  }
-
-  @override
-  void onWindowFocus() {
-    setState(() {});
+  Future<void> _hideWindowToTray() async {
+    final courses = Provider.of<ScheduleProvider>(context, listen: false).courses;
+    // 隐藏至托盘，不触发自绘多余动画
+    await WindowsTrayService().enterBackgroundMode(courses: courses);
+    debugPrint('🌙 窗口已最小化到托盘，进程继续运行');
   }
 
   @override

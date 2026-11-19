@@ -30,7 +30,7 @@ class _MacosTrafficLightsState extends State<MacosTrafficLights> {
     if (widget.onClose != null) {
       widget.onClose!();
     } else {
-      windowManager.close();
+      WindowManager.instance.getCurrent()?.close();
     }
   }
 
@@ -38,19 +38,20 @@ class _MacosTrafficLightsState extends State<MacosTrafficLights> {
     if (widget.onMinimize != null) {
       widget.onMinimize!();
     } else {
-      windowManager.minimize();
+      WindowManager.instance.getCurrent()?.minimize();
     }
   }
 
-  void _handleMaximize() async {
+  void _handleMaximize() {
     if (widget.onMaximize != null) {
       widget.onMaximize!();
     } else {
-      final isMax = await windowManager.isMaximized();
-      if (isMax) {
-        await windowManager.unmaximize();
+      final window = WindowManager.instance.getCurrent();
+      if (window == null) return;
+      if (window.isMaximized) {
+        window.unmaximize();
       } else {
-        await windowManager.maximize();
+        window.maximize();
       }
     }
   }

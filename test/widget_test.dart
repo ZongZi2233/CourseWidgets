@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:coursewidgets/ui/widgets/glass_context_menu.dart';
+import 'package:coursewidgets/services/app_update_service.dart';
 
 void main() {
   testWidgets('GlassMenu toggles and renders items',
@@ -114,5 +115,14 @@ void main() {
     await tester.pump();
     await tester.pumpAndSettle();
     expect(find.text('Action A'), findsNothing);
+  });
+
+  test('AppUpdateService version comparison and byte formatting', () {
+    expect(AppUpdateService.isNewerVersion('v3.1.7', '3.1.6'), isTrue);
+    expect(AppUpdateService.isNewerVersion('3.2.0', 'v3.1.9'), isTrue);
+    expect(AppUpdateService.isNewerVersion('v3.1.7', '3.1.7'), isFalse);
+    expect(AppUpdateService.isNewerVersion('v3.1.5', '3.1.7'), isFalse);
+    expect(AppUpdateService.formatBytes(1536), '1.5 KB');
+    expect(AppUpdateService.formatBytes(3670016), '3.50 MB');
   });
 }

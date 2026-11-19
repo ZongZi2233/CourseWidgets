@@ -15,35 +15,39 @@ class MacosCustomWindow extends StatefulWidget {
   State<MacosCustomWindow> createState() => _MacosCustomWindowState();
 }
 
-class _MacosCustomWindowState extends State<MacosCustomWindow>
-    with WindowListener {
+class _MacosCustomWindowState extends State<MacosCustomWindow> {
   int _selectedIndex = 0;
   bool _isMaximized = false;
+  Window? _nativeWindow;
+  ListenerId? _windowListenerId;
 
   @override
   void initState() {
     super.initState();
-    windowManager.addListener(this);
     _initWindow();
   }
 
-  void _initWindow() async {
+  Future<void> _initWindow() async {
     // 延迟以确保引擎已就绪
     await Future.delayed(const Duration(milliseconds: 150));
+    if (!mounted) return;
 
-    await windowManager.setResizable(true);
-    await windowManager.setMinimumSize(const Size(800, 600));
+    final window = WindowManager.instance.getCurrent();
+    if (window == null) return;
+    _nativeWindow = window;
+    _windowListenerId = window.addListener(_onWindowEvent);
 
     // macOS使用hidden保留红黄绿三个原生按钮（左上角）
-    await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
-    await windowManager.setHasShadow(true);
-    await windowManager.setBackgroundColor(Colors.black);
+    window
+      ..isResizable = true
+      ..minimumSize = const Size(800, 600).toNative()
+      ..titleBarStyle = TitleBarStyle.hidden
+      ..hasShadow = true
+      ..backgroundColor = Colors.black.toNative()
+      ..setSize(const Size(1024, 768).toNative(), false)
+      ..center();
 
-    // 设置初始大小和居中
-    await windowManager.setSize(const Size(1024, 768));
-    await windowManager.center();
-
-    _isMaximized = await windowManager.isMaximized();
+    _isMaximized = window.isMaximized;
     if (mounted) {
       setState(() {});
     }
@@ -52,18 +56,23 @@ class _MacosCustomWindowState extends State<MacosCustomWindow>
 
   @override
   void dispose() {
-    windowManager.removeListener(this);
+    if (_nativeWindow != null && _windowListenerId != null) {
+      _nativeWindow!.removeListener(_windowListenerId!);
+      _windowListenerId = null;
+    }
     super.dispose();
   }
 
-  @override
-  void onWindowMaximize() {
-    setState(() => _isMaximized = true);
-  }
-
-  @override
-  void onWindowUnmaximize() {
-    setState(() => _isMaximized = false);
+  void _onWindowEvent(WindowEvent event) {
+    switch (event) {
+      case WindowMaximizedEvent():
+        if (mounted) setState(() => _isMaximized = true);
+      case WindowRestoredEvent():
+        final isMax = _nativeWindow?.isMaximized ?? false;
+        if (mounted) setState(() => _isMaximized = isMax);
+      default:
+        break;
+    }
   }
 
   @override

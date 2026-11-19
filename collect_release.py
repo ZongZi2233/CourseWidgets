@@ -12,6 +12,8 @@ import re
 import shutil
 import hashlib
 import json
+import zipfile
+import struct
 from datetime import datetime
 
 # Windows 控制台编码安全
@@ -199,6 +201,46 @@ def collect_windows_release(version, build):
         'updated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     })
     print(f"[OK] 已打包收集 Windows 客户端: {zip_name} ({format_size(size)})")
+
+    # [v3.1.7] 生成 Windows 文件级 SHA-256 与 ZIP 字节偏移清单 (windows-manifest.json)
+    win_files_entries = []
+    with zipfile.ZipFile(full_zip, 'r') as zf, open(full_zip, 'rb') as fp:
+        for info in zf.infolist():
+            if info.is_dir():
+                continue
+            fp.seek(info.header_offset)
+            hdr = fp.read(30)
+            sig, ver, flags, comp, mtime, mdate, crc, csize, usize, flen, elen = struct.unpack('<4s5HL2L2H', hdr)
+            data_offset = info.header_offset + 30 + flen + elen
+            rel_path = info.filename.replace('\\', '/')
+            disk_file = os.path.join(win_dir, *rel_path.split('/'))
+            file_sha256 = calculate_sha256(disk_file) if os.path.exists(disk_file) else ''
+            win_files_entries.append({
+                'path': rel_path,
+                'size': info.file_size,
+                'sha256': file_sha256,
+                'crc32': info.CRC & 0xFFFFFFFF,
+                'compressType': info.compress_type,
+                'compressedSize': info.compress_size,
+                'dataOffset': data_offset,
+                'localHeaderOffset': info.header_offset,
+            })
+
+    win_manifest_data = {
+        'version': version,
+        'buildNumber': int(build),
+        'generatedAt': datetime.now().isoformat(),
+        'zipFilename': zip_name,
+        'zipSize': size,
+        'zipSha256': sha,
+        'filesCount': len(win_files_entries),
+        'files': win_files_entries,
+    }
+    win_manifest_path = os.path.join(RELEASE_DIR, 'windows-manifest.json')
+    with open(win_manifest_path, 'w', encoding='utf-8') as f:
+        json.dump(win_manifest_data, f, ensure_ascii=False, indent=2)
+    print(f"[OK] 已生成 Windows 增量更新索引清单: windows-manifest.json ({len(win_files_entries)} 个编译文件)")
+
     return collected
 
 def main():

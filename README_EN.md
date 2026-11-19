@@ -8,11 +8,11 @@
 *Featuring full Android 16 Live Updates integration and an optimized Liquid Glass optical rendering system*
 
 [![License](https://img.shields.io/badge/License-AGPL%203.0-blue.svg)](LICENSE)
-[![Flutter](https://img.shields.io/badge/Flutter-3.47.0+-02569B?logo=flutter)](https://flutter.dev)
-[![Dart](https://img.shields.io/badge/Dart-3.13.0+-0175C2?logo=dart)](https://dart.dev)
+[![Flutter](https://img.shields.io/badge/Flutter-3.50.0+-02569B?logo=flutter)](https://flutter.dev)
+[![Dart](https://img.shields.io/badge/Dart-3.14.0+-0175C2?logo=dart)](https://dart.dev)
 [![Android](https://img.shields.io/badge/Android-15%2B%20(API%2035--37.2)-3DDC84?logo=android)](https://github.com/ZongZi2233/CourseWidgets/releases)
 [![Windows](https://img.shields.io/badge/Windows-10%2F11%20x64-0078D6?logo=windows)](https://github.com/ZongZi2233/CourseWidgets/releases)
-[![Version](https://img.shields.io/badge/Release-v3.1.6%20(Build%203160)-FF9BAE)](https://github.com/ZongZi2233/CourseWidgets/releases/tag/v3.1.6)
+[![Version](https://img.shields.io/badge/Release-v3.1.7%20(Build%203170)-FF9BAE)](https://github.com/ZongZi2233/CourseWidgets/releases/tag/v3.1.7)
 
 **English** | [简体中文](README.md)
 
@@ -20,10 +20,10 @@
 
 ---
 
-## 📦 Latest Release: [v3.1.6 (Build 3160)](https://github.com/ZongZi2233/CourseWidgets/releases/tag/v3.1.6)
+## 📦 Latest Release: [v3.1.7 (Build 3170)](https://github.com/ZongZi2233/CourseWidgets/releases/tag/v3.1.7)
 
-* **Android Client (`arm64-v8a`)**: [`CourseWidgets-v3.1.6-android-arm64-v8a.apk`](https://github.com/ZongZi2233/CourseWidgets/releases/download/v3.1.6/CourseWidgets-v3.1.6-android-arm64-v8a.apk) — Requires Android 15+ (API 35+, compiled against API 37.2 & NDK r30), with full support for Android 16 Live Updates, `arm64-v8a`-only ABI split, R8 obfuscation & resource shrinking, and Dart AOT optimization.
-* **Windows Desktop (`x64`)**: [`CourseWidgets-v3.1.6-windows-x64.zip`](https://github.com/ZongZi2233/CourseWidgets/releases/download/v3.1.6/CourseWidgets-v3.1.6-windows-x64.zip) — Portable x64 package (built with MSVC `/O2` + `/OPT:REF,/OPT:ICF` linker optimization and Dart AOT optimization) featuring a custom borderless title bar, system tray residency, keyboard shortcuts, and 4K High-DPI scaling.
+* **Android Client (`arm64-v8a`)**: [`CourseWidgets-v3.1.7-android-arm64-v8a.apk`](https://github.com/ZongZi2233/CourseWidgets/releases/download/v3.1.7/CourseWidgets-v3.1.7-android-arm64-v8a.apk) — Requires Android 15+ (API 35+, compiled against API 37.2 & NDK r30), with full support for Android 16 Live Updates, in-app streaming APK update with SHA-256 verification, `arm64-v8a`-only ABI split, R8 obfuscation & resource shrinking, and Dart AOT optimization.
+* **Windows Desktop (`x64`)**: [`CourseWidgets-v3.1.7-windows-x64.zip`](https://github.com/ZongZi2233/CourseWidgets/releases/download/v3.1.7/CourseWidgets-v3.1.7-windows-x64.zip) — Portable x64 package (built with MSVC `/O2` + `/OPT:REF,/OPT:ICF` linker optimization and Dart AOT optimization) featuring file-level `SHA-256` differential hot updates via HTTP Range, a custom borderless title bar, system tray residency, keyboard shortcuts, and 4K High-DPI scaling.
 
 ---
 
@@ -54,13 +54,13 @@
 
 ---
 
-## 📜 Release History Summary (v2.0 ~ v3.1.6 Overview)
+## 📜 Release History Summary (v2.0 ~ v3.1.7 Overview)
 
 For complete per-version details, see [CHANGELOG.md](CHANGELOG.md).
 
 | Version Series | Key Architectural & Feature Highlights |
 | :--- | :--- |
-| **v3.1.4 ~ v3.1.6**<br>*(2026-11)* | • **True 3D Two-Blob Metaball Morphing Menu (`GlassMenu` Premium) & UI Hierarchy Polish**: Locked `GlassQuality.premium` with live full-component backdrop 3D convex-lens refraction, zero white rim borders, J-curve teardrop stretching, and underdamped spring bounce; fixed schedule grid vertical scroll bleed under weekday headers and landscape calendar dock overlap;<br>• **Floating Liquid Glass Clarity & Rounded-Rectangle Card Morph**: Enabled dedicated rendering layers (`useOwnLayer: true`) with ultra-clear micro-blur (`blur: 0.5`), accurate rounded-rectangle SharedElement card expansion/contraction, and rubber-band damped predictive back;<br>• **Android SDK 37.2 / NDK r30 Toolchain & Weekday-Explicit Live Updates**: Upgraded to Android API 37.2, NDK `30.0.16248370`, 16KB page alignment, and R8 `fullMode`; added `Today/Tomorrow + Weekday` Live Update labels with midnight `00:00:02` auto-refresh. |
+| **v3.1.4 ~ v3.1.7**<br>*(2026-11)* | • **Windows Differential Hot Updater & Android In-App Streaming Updater (`v3.1.7`)**: Windows compares local compiled files against `windows-manifest.json` (`SHA-256`), downloads only changed file streams via HTTP Range (`206 Partial Content`), and atomically hot-swaps and restarts (saving 90%+ bandwidth); Android adds direct update checking in Settings with in-app APK streaming, SHA-256 verification, and native `FileProvider` package installer invocation;<br>• **Flutter 3.50.0 / Dart 3.14.0 & NativeAPI Dependency Upgrades (`v3.1.7`)**: Upgraded core packages (`window_manager 0.7.0`, `tray_manager 0.9.0`, `flutter_local_notifications 23.0.3`, `fluent_ui 4.17.0`, `mmkv 2.4.3`, etc.) and migrated desktop window/tray management to synchronous `nativeapi` / Dart Native Assets;<br>• **True 3D Two-Blob Metaball Morphing Menu (`GlassMenu` Premium) & UI Hierarchy Polish**: Locked `GlassQuality.premium` with live full-component backdrop 3D convex-lens refraction, zero white rim borders, J-curve teardrop stretching, and underdamped spring bounce; fixed schedule grid vertical scroll bleed under weekday headers and landscape calendar dock overlap;<br>• **Floating Liquid Glass Clarity & Rounded-Rectangle Card Morph**: Enabled dedicated rendering layers (`useOwnLayer: true`) with ultra-clear micro-blur (`blur: 0.5`), accurate rounded-rectangle SharedElement card expansion/contraction, and rubber-band damped predictive back;<br>• **Android SDK 37.2 / NDK r30 Toolchain & Weekday-Explicit Live Updates**: Upgraded to Android API 37.2, NDK `30.0.16248370`, 16KB page alignment, and R8 `fullMode`; added `Today/Tomorrow + Weekday` Live Update labels with midnight `00:00:02` auto-refresh. |
 | **v3.1.2 ~ v3.1.3**<br>*(2026-11)* | • **Android 16 Live Update Thick Pill Track**: Restored 8–10dp thick capsule progress track with section dot nodes and high-DPI tracker icons; hid redundant app name in notification headers;<br>• **System Calendar (ICS) Alignment**: Fixed section time drift and UTC recurrence weekday shift when exporting schedules to system calendars;<br>• **120Hz Rendering Pipeline**: Introduced pre-warmed main page slots, hardware `RSuperellipse` analytic clipping/shadows, `RepaintBoundary` scroll isolation, and velocity-envelope 1D motion blur. |
 | **v3.1.0 ~ v3.1.1**<br>*(2026-10)* | • **Single-Node-Per-Course Live Updates**: Redesigned progress segmentation (`1 course = 1 node`) with switchable *Centered Dot* and *Duration-Proportional* styles and prominent hero typography;<br>• **Unified Schedule & Calendar Data Source**: Synchronized Calendar view directly with `ScheduleProvider`, added solid-color background mode (pure white / dark gray), and overflow-safe course cards. |
 | **v3.0.0 ~ v3.0.9**<br>*(2026-09 ~ 10)* | • **SQLite Schema v4 Section Persistence**: Persisted semantic section numbers to prevent course displacement when customizing period durations;<br>• **Lossless Import/Export & WebView Session Persistence**: Added `X-SCHEDULE-CONFIG` ICS round-trip support, HTML timetable import, JSON backup, and dedicated Windows WebView2 user data profiles;<br>• **Pre-Baked Static Wallpaper Blur**: Introduced `StaticBlurService` and borderless `HyperOSCard` ambient shadow rendering. |
@@ -85,8 +85,8 @@ For complete per-version details, see [CHANGELOG.md](CHANGELOG.md).
 
 ### 1. Development Environment Requirements
 ```yaml
-Flutter SDK:   >= 3.47.0 (Verified on 3.47.7 Stable)
-Dart SDK:      >= 3.13.0 (Verified on 3.13.5 Stable)
+Flutter SDK:   >= 3.50.0 (Verified on 3.50.0 Stable)
+Dart SDK:      >= 3.14.0 (Verified on 3.14.0 Stable)
 Android SDK:   CompileSDK 37.2 (Extension 24), TargetSDK 37, MinSDK 35 (Android 15+)
 Build-Tools:   37.0.0 / Android SDK Command-line Tools 23.0
 Android NDK:   30.0.16248370 (r30)

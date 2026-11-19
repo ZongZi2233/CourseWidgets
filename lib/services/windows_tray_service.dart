@@ -1,15 +1,15 @@
 import 'dart:io';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import 'package:tray_manager/tray_manager.dart';
+import 'package:tray_manager/tray_manager.dart' as tray;
 import 'package:path/path.dart' as path;
 import 'package:window_manager/window_manager.dart';
 import '../providers/schedule_provider.dart';
 import '../models/course_event.dart';
 import 'notification_manager.dart';
 
-/// [v2.2.8] Windows 系统托盘服务 - 使用 tray_manager
-class WindowsTrayService with TrayListener {
+/// [v2.2.8] Windows 系统托盘服务 - 使用 tray_manager 0.9.0 原生 API
+class WindowsTrayService {
   static final WindowsTrayService _instance = WindowsTrayService._internal();
   factory WindowsTrayService() => _instance;
 
@@ -17,12 +17,29 @@ class WindowsTrayService with TrayListener {
 
   bool _isInitialized = false;
   bool _isBackgroundMode = false;
+  bool _preventCloseOnHide = false;
+  bool _isExiting = false;
   final NotificationManager _notificationManager = NotificationManager();
+
+  // 持有原生句柄引用，防止 GC 过早释放底层 C++ 对象
+  tray.TrayIcon? _trayIcon;
+  tray.Image? _trayIconImage;
+  tray.Menu? _trayMenu;
+  final List<tray.MenuItem> _trayMenuItems = [];
+  final List<(tray.MenuItem, tray.ListenerId)> _menuItemListeners = [];
+  tray.ListenerId? _trayListenerId;
 
   // [v2.5.0] 用于通知 UI 切换页面的流控制器
   final StreamController<int> _navigationController =
       StreamController<int>.broadcast();
   Stream<int> get navigationStream => _navigationController.stream;
+
+  bool get preventCloseOnHide => _preventCloseOnHide;
+  bool get isExiting => _isExiting;
+
+  void setPreventCloseOnHide(bool value) {
+    _preventCloseOnHide = value;
+  }
 
   /// 初始化托盘服务
   Future<void> initialize() async {
@@ -51,18 +68,27 @@ class WindowsTrayService with TrayListener {
   Future<void> _initializeSystemTray() async {
     try {
       // 查找托盘图标
-      String iconPath = await _findTrayIcon();
+      final iconPath = await _findTrayIcon();
       debugPrint('🎨 托盘图标路径: $iconPath');
 
-      // 设置托盘图标
-      await trayManager.setIcon(iconPath);
-      await trayManager.setToolTip('CourseWidgets - 课程表');
+      final trayIcon = tray.TrayIcon.create();
+      if (trayIcon == null) {
+        debugPrint('❌ 创建原生托盘图标失败');
+        return;
+      }
 
-      // 创建托盘菜单
-      await _createTrayMenu();
+      _trayIconImage = tray.Image.fromFile(iconPath);
+      if (_trayIconImage != null) {
+        trayIcon.icon = _trayIconImage;
+      }
+      trayIcon.setTooltip('CourseWidgets - 课程表');
 
-      // 注册事件监听
-      trayManager.addListener(this);
+      // 创建托盘菜单与右键触发器
+      _createTrayMenu(trayIcon);
+      trayIcon.setContextMenuTrigger(tray.ContextMenuTrigger.rightClicked);
+      _trayListenerId = trayIcon.addListener(_onTrayIconEvent);
+      trayIcon.setVisible(true);
+      _trayIcon = trayIcon;
 
       debugPrint('✅ Windows 托盘初始化完成');
     } catch (e, stackTrace) {
@@ -115,59 +141,54 @@ class WindowsTrayService with TrayListener {
   }
 
   /// 创建托盘菜单
-  Future<void> _createTrayMenu() async {
-    Menu menu = Menu(
-      items: [
-        MenuItem(key: 'course', label: '课程'),
-        MenuItem(key: 'calendar', label: '日历'),
-        MenuItem(key: 'general_settings', label: '通用设置'),
-        MenuItem(key: 'course_settings', label: '课程设置'),
-        MenuItem(key: 'about', label: '关于软件'),
-        MenuItem.separator(),
-        MenuItem(key: 'exit', label: '退出软件'),
-      ],
-    );
-    await trayManager.setContextMenu(menu);
+  void _createTrayMenu(tray.TrayIcon trayIcon) {
+    final menu = tray.Menu.create();
+    if (menu == null) {
+      debugPrint('❌ 创建托盘菜单失败');
+      return;
+    }
+
+    void addItem(String label, VoidCallback onClick) {
+      final item = tray.MenuItem.createWithLabelAndType(
+        label,
+        tray.MenuItemType.normal,
+      );
+      if (item == null) return;
+      final listenerId = item.addListener((event) {
+        if (event is tray.MenuItemClickedEvent) {
+          onClick();
+        }
+      });
+      _trayMenuItems.add(item);
+      _menuItemListeners.add((item, listenerId));
+      menu.addItem(item);
+    }
+
+    addItem('课程', () => _showWindowAndNavigate(0));
+    addItem('日历', () => _showWindowAndNavigate(1));
+    addItem('通用设置', () => _showWindowAndNavigate(2));
+    addItem('课程设置', () => _showWindowAndNavigate(2));
+    addItem('关于软件', () => _showWindowAndNavigate(2));
+    menu.addSeparator();
+    addItem('退出软件', _exitApp);
+
+    trayIcon.setContextMenu(menu);
+    _trayMenu = menu;
     debugPrint('✅ 托盘菜单设置成功');
   }
 
-  // TrayListener 回调
-  @override
-  void onTrayIconMouseDown() {
-    // 左键点击显示窗口
-    _showWindow();
-  }
-
-  @override
-  void onTrayIconRightMouseDown() {
-    // 右键点击显示菜单
-    trayManager.popUpContextMenu();
-  }
-
-  @override
-  void onTrayMenuItemClick(MenuItem menuItem) {
-    switch (menuItem.key) {
-      case 'course':
-        _showWindowAndNavigate(0); // 假设 0 是课程页面
-        break;
-      case 'calendar':
-        _showWindowAndNavigate(1); // 假设 1 是日历页面
-        break;
-      case 'general_settings':
-      case 'course_settings':
-      case 'about':
-        _showWindowAndNavigate(2); // 假设 2 是设置页面，暂统一跳设置主页
-        break;
-      case 'exit':
-        _exitApp();
-        break;
+  void _onTrayIconEvent(tray.TrayIconEvent event) {
+    if (event is tray.TrayIconClickedEvent ||
+        event is tray.TrayIconDoubleClickedEvent) {
+      _showWindow();
     }
   }
 
   /// 退出应用
   Future<void> _exitApp() async {
+    _isExiting = true;
     await dispose();
-    await windowManager.destroy();
+    WindowManager.instance.getCurrent()?.close();
     exit(0); // [v2.4.8] 确保 Dart isolate 终止
   }
 
@@ -180,12 +201,15 @@ class WindowsTrayService with TrayListener {
   /// 显示窗口
   Future<void> _showWindow() async {
     try {
-      final isMinimized = await windowManager.isMinimized();
-      if (isMinimized) {
-        await windowManager.restore();
+      final window = WindowManager.instance.getCurrent();
+      if (window != null) {
+        if (window.isMinimized) {
+          window.restore();
+        }
+        window
+          ..show()
+          ..focus();
       }
-      await windowManager.show();
-      await windowManager.focus();
       _isBackgroundMode = false;
       debugPrint('📱 窗口已显示');
     } catch (e) {
@@ -217,7 +241,7 @@ class WindowsTrayService with TrayListener {
     if (!Platform.isWindows) return;
 
     try {
-      await windowManager.hide();
+      WindowManager.instance.getCurrent()?.hide();
       _isBackgroundMode = true;
 
       // [v2.8.0] 发送后台运行通知
@@ -241,10 +265,33 @@ class WindowsTrayService with TrayListener {
 
   /// 清理资源
   Future<void> dispose() async {
-    _navigationController.close();
+    if (!_navigationController.isClosed) {
+      await _navigationController.close();
+    }
     _notificationManager.stopCourseCheck();
-    trayManager.removeListener(this);
-    await trayManager.destroy();
+
+    if (_trayIcon != null && _trayListenerId != null) {
+      _trayIcon!.removeListener(_trayListenerId!);
+      _trayListenerId = null;
+    }
+    for (final (item, listenerId) in _menuItemListeners) {
+      item.removeListener(listenerId);
+    }
+    _menuItemListeners.clear();
+
+    for (final item in _trayMenuItems) {
+      item.dispose();
+    }
+    _trayMenuItems.clear();
+
+    _trayMenu?.dispose();
+    _trayMenu = null;
+
+    _trayIcon?.dispose();
+    _trayIcon = null;
+
+    _trayIconImage?.dispose();
+    _trayIconImage = null;
 
     _isInitialized = false;
     _isBackgroundMode = false;

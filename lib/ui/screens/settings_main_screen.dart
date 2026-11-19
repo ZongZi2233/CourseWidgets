@@ -1,5 +1,8 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../constants/theme_constants.dart';
+import '../../constants/version.dart';
 import '../../services/theme_service.dart';
 import '../../utils/responsive_utils.dart';
 import 'new_settings_screen.dart';
@@ -7,6 +10,7 @@ import 'settings_general_screen.dart';
 import 'settings_about_screen.dart';
 import 'settings_data_screen.dart';
 import 'settings_notification_screen.dart';
+import '../widgets/app_update_dialog.dart';
 import '../widgets/liquid_components.dart' as liquid;
 import '../transitions/smooth_slide_transitions.dart';
 import '../animations/app_motion.dart';
@@ -19,6 +23,21 @@ class SettingsMainScreen extends StatefulWidget {
 }
 
 class _SettingsMainScreenState extends State<SettingsMainScreen> {
+  bool _isCheckingUpdate = false;
+
+  void _triggerUpdateCheck() {
+    if (_isCheckingUpdate) return;
+    AppUpdateDialog.checkAndShow(
+      context,
+      onStart: () {
+        if (mounted) setState(() => _isCheckingUpdate = true);
+      },
+      onFinish: () {
+        if (mounted) setState(() => _isCheckingUpdate = false);
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = ThemeService().isDarkMode;
@@ -119,6 +138,26 @@ class _SettingsMainScreenState extends State<SettingsMainScreen> {
                     isDark: isDark,
                   ),
                   _buildSettingsRow(
+                    title: '检查更新',
+                    subtitle: Platform.isWindows
+                        ? '当前 v$appVersion · 编译文件差异增量热更新'
+                        : '当前 v$appVersion · 自动比对 GitHub Release 最新版本',
+                    icon: Icons.system_update_alt_rounded,
+                    onTap: _triggerUpdateCheck,
+                    isDark: isDark,
+                    recordSharedElement: false,
+                    trailing: _isCheckingUpdate
+                        ? SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.0,
+                              color: AppThemeColors.babyPink,
+                            ),
+                          )
+                        : null,
+                  ),
+                  _buildSettingsRow(
                     title: '关于软件',
                     subtitle: '版本信息、开源协议、检查更新',
                     icon: Icons.info_outline_rounded,
@@ -177,6 +216,26 @@ class _SettingsMainScreenState extends State<SettingsMainScreen> {
               icon: Icons.cloud_sync_rounded,
               onTap: () => _navigateTo(const SettingsDataScreen()),
               isDark: isDark,
+            ),
+            _buildSettingsRow(
+              title: '检查更新',
+              subtitle: Platform.isWindows
+                  ? '当前 v$appVersion · 编译文件差异增量热更新'
+                  : '当前 v$appVersion · 自动比对 GitHub Release 最新版本',
+              icon: Icons.system_update_alt_rounded,
+              onTap: _triggerUpdateCheck,
+              isDark: isDark,
+              recordSharedElement: false,
+              trailing: _isCheckingUpdate
+                  ? SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.0,
+                        color: AppThemeColors.babyPink,
+                      ),
+                    )
+                  : null,
             ),
             _buildSettingsRow(
               title: '关于软件',
@@ -240,15 +299,19 @@ class _SettingsMainScreenState extends State<SettingsMainScreen> {
     required IconData icon,
     required VoidCallback onTap,
     required bool isDark,
+    bool recordSharedElement = true,
+    Widget? trailing,
   }) {
     return Builder(
       builder: (rowContext) => InkWell(
         onTap: () {
           HapticFeedback.lightImpact();
-          SharedElementSourceRegistry.recordFromContext(
-            rowContext,
-            cornerRadius: 20.0,
-          );
+          if (recordSharedElement) {
+            SharedElementSourceRegistry.recordFromContext(
+              rowContext,
+              cornerRadius: 20.0,
+            );
+          }
           onTap();
         },
         borderRadius: BorderRadius.circular(16),
@@ -292,11 +355,12 @@ class _SettingsMainScreenState extends State<SettingsMainScreen> {
                   ],
                 ),
               ),
-              Icon(
-                Icons.chevron_right_rounded,
-                color: isDark ? Colors.white30 : Colors.black26,
-                size: 20,
-              ),
+              trailing ??
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    color: isDark ? Colors.white30 : Colors.black26,
+                    size: 20,
+                  ),
             ],
           ),
         ),

@@ -149,6 +149,24 @@ class MainActivity : FlutterActivity() {
                         result.error("INVALID_PATH", "filePath is null", null)
                     }
                 }
+                "installApk" -> {
+                    val filePath = call.argument<String>("filePath")
+                    if (filePath != null) {
+                        val success = installApkFile(filePath)
+                        result.success(success)
+                    } else {
+                        result.error("INVALID_PATH", "filePath is null", null)
+                    }
+                }
+                "openExternalUrl" -> {
+                    val url = call.argument<String>("url")
+                    if (!url.isNullOrEmpty()) {
+                        val success = openExternalBrowser(url)
+                        result.success(success)
+                    } else {
+                        result.error("INVALID_URL", "url is null or empty", null)
+                    }
+                }
                 else -> result.notImplemented()
             }
         }
@@ -275,6 +293,41 @@ class MainActivity : FlutterActivity() {
             true
         } catch (e: Exception) {
             android.util.Log.e("CourseWidgets", "打开系统日历失败: ${e.message}", e)
+            false
+        }
+    }
+
+    private fun installApkFile(filePath: String): Boolean {
+        return try {
+            val file = File(filePath)
+            if (!file.exists()) return false
+
+            val uri = androidx.core.content.FileProvider.getUriForFile(
+                this,
+                "${packageName}.fileprovider",
+                file
+            )
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            startActivity(intent)
+            true
+        } catch (e: Exception) {
+            android.util.Log.e("CourseWidgets", "调起 APK 安装器失败: ${e.message}", e)
+            false
+        }
+    }
+
+    private fun openExternalBrowser(url: String): Boolean {
+        return try {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(intent)
+            true
+        } catch (e: Exception) {
+            android.util.Log.e("CourseWidgets", "打开外部链接失败: ${e.message}", e)
             false
         }
     }
