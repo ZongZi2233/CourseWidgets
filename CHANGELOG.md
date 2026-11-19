@@ -18,6 +18,16 @@
   - 解决 `window_manager 0.7.0` 中 `WindowManager.instance.getCurrent()` 在窗口隐藏（`SW_HIDE`）或失焦时调用 Win32 `GetActiveWindow()` 返回 `null` 导致托盘点击与右键菜单均无法唤醒 UI 的缺陷；建立持久 `WindowId` 缓存并新增 C++ 原生 `com.zongzi.schedule/desktop_window` 通道（`showOrRestore` / `hideWindow` / `applyDwmStyle` / `forceClose` / `ForceRedraw`）；
 - **单实例重启动一键拉起隐藏窗口**：修复 `windows/runner/main.cpp` 单实例互斥校验，除最小化（`IsIconic`）外同步兼容已隐藏至托盘（`!IsWindowVisible`）的窗口，调用 `AllowSetForegroundWindow`、`ShowWindow(SW_SHOW)` 并发送自定义唤醒消息触发重绘与托盘后台状态同步，实现点击托盘图标、托盘菜单与再次点击桌面/开始菜单应用图标 100% 秒速唤醒。
 
+### 3. 检查更新弹窗 FlClash 液态玻璃重塑、Markdown 净化与 Windows 热更新重启修复
+- **更新日志过滤与原生 Markdown 排版重构 (`AppUpdateService` & `AppUpdateDialog`)**：
+  - 自动剥离 GitHub Release Notes 中的“构建产物与 SHA-256 校验和”章节、`SHA-256` 哈希串、`*text` / ```` ```text ```` 代码块围栏及 `.apk` / `.zip` 附件文件名噪音；
+  - 将原先纯 `Text` 展示替换为原生 Markdown 排版解析渲染器，支持标题层次、悬挂缩进项目符号与序号列表、`**粗体**`、`` `行内代码` ``、引用块及可点击链接；
+- **FlClash 风格真实液态玻璃更新弹窗与轻度全屏背景模糊**：
+  - 将弹窗容器从 `HyperOSCard` 升级为 `GlassContainer(useOwnLayer: true)` 真实着色器折射材质（零人工白边、柔和超椭圆阴影与高低对比自适配玻璃底色），入场保留 FlClash 弹性缩放轨迹；全屏背景保留克制且通透的 `sigma = 6.5` 轻度高斯模糊与低遮罩幕布，确保下方壁纸/页面轮廓与弹窗正文可读性；
+- **修复 Windows 热更新脚本未执行替换与未重启旧版本的问题 (`FlutterWindow` & `AppUpdateService`)**：
+  - 排查定位 Dart `Process.start(..., mode: ProcessStartMode.detached)` 传入 `DETACHED_PROCESS` 标志导致 PowerShell 5.1 静默退出未执行、以及无 BOM UTF-8 中文注释被 CP936 解析吞行导致 `Start-Process` 被并入注释行的双重根因；
+  - 新增 C++ 原生 `launchDetachedProcess`（`CreateProcessW` + `CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP` + Job Breakaway 回退）与 `cmd /c start /b` 兜底通道，更新脚本采用纯 ASCII 注释 + UTF-8 BOM (`0xEF 0xBB 0xBF`) + CRLF 编码写入，确保退出主程序后完整替换 `_update_staging` 增量文件并可靠拉起新版客户端。
+
 ## [v3.1.7] - 2026-11-19 (Build 3170 正式版)
 
 ### 1. 跨平台工程级软件更新引擎 (`AppUpdateService` & `AppUpdateDialog`)

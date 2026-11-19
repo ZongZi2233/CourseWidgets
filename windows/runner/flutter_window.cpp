@@ -1,10 +1,65 @@
 #include "flutter_window.h"
 
+#include <windows.h>
 #include <flutter/standard_method_codec.h>
 #include <optional>
+#include <string>
 #include <variant>
 
 #include "flutter/generated_plugin_registrant.h"
+
+namespace {
+
+std::wstring Utf8ToWide(const std::string& utf8) {
+  if (utf8.empty()) {
+    return std::wstring();
+  }
+  const int required =
+      MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(), -1, nullptr, 0);
+  if (required <= 1) {
+    return std::wstring();
+  }
+  std::wstring wide(static_cast<size_t>(required), L'\0');
+  MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(), -1, wide.data(), required);
+  wide.pop_back();
+  return wide;
+}
+
+bool LaunchDetachedHiddenProcess(const std::string& command_line_utf8,
+                                 const std::string& working_dir_utf8) {
+  std::wstring cmd_wide = Utf8ToWide(command_line_utf8);
+  if (cmd_wide.empty()) {
+    return false;
+  }
+  std::wstring work_dir_wide = Utf8ToWide(working_dir_utf8);
+  const wchar_t* work_dir_ptr =
+      work_dir_wide.empty() ? nullptr : work_dir_wide.c_str();
+
+  STARTUPINFOW si{};
+  si.cb = sizeof(si);
+  si.dwFlags = STARTF_USESHOWWINDOW;
+  si.wShowWindow = SW_HIDE;
+
+  PROCESS_INFORMATION pi{};
+  const DWORD base_flags = CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP;
+  BOOL created = CreateProcessW(
+      nullptr, cmd_wide.data(), nullptr, nullptr, FALSE,
+      base_flags | CREATE_BREAKAWAY_FROM_JOB, nullptr, work_dir_ptr, &si, &pi);
+  if (!created && GetLastError() == ERROR_ACCESS_DENIED) {
+    // Retry without breakaway when the parent Job object disallows breakaway.
+    std::wstring retry_cmd = Utf8ToWide(command_line_utf8);
+    created = CreateProcessW(nullptr, retry_cmd.data(), nullptr, nullptr, FALSE,
+                             base_flags, nullptr, work_dir_ptr, &si, &pi);
+  }
+  if (!created) {
+    return false;
+  }
+  CloseHandle(pi.hThread);
+  CloseHandle(pi.hProcess);
+  return true;
+}
+
+}  // namespace
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
@@ -60,6 +115,28 @@ bool FlutterWindow::OnCreate() {
           this->HideWindow();
           result->Success(flutter::EncodableValue(true));
           PostQuitMessage(0);
+        } else if (call.method_name() == "launchDetachedProcess") {
+          bool launched = false;
+          if (const auto* args =
+                  std::get_if<flutter::EncodableMap>(call.arguments())) {
+            std::string cmd_line;
+            std::string work_dir;
+            auto cmd_it = args->find(flutter::EncodableValue("commandLine"));
+            if (cmd_it != args->end()) {
+              if (const auto* s = std::get_if<std::string>(&cmd_it->second)) {
+                cmd_line = *s;
+              }
+            }
+            auto wd_it =
+                args->find(flutter::EncodableValue("workingDirectory"));
+            if (wd_it != args->end()) {
+              if (const auto* s = std::get_if<std::string>(&wd_it->second)) {
+                work_dir = *s;
+              }
+            }
+            launched = LaunchDetachedHiddenProcess(cmd_line, work_dir);
+          }
+          result->Success(flutter::EncodableValue(launched));
         } else {
           result->NotImplemented();
         }

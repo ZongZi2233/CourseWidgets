@@ -3,23 +3,96 @@ import 'dart:ui';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import '../../constants/theme_constants.dart';
 import '../../constants/version.dart';
 import '../../services/app_update_service.dart';
+import '../../services/theme_service.dart';
 import '../../utils/glass_settings_helper.dart';
+import '../animations/app_motion.dart';
+import '../theme/squircle_geometry.dart';
 import 'liquid_components.dart' as liquid;
 import 'liquid_toast.dart';
 
-/// [v3.1.7] 跨平台统一液态玻璃版本更新弹窗
-/// - Android：GitHub Release Tag 比对 + 应用内流式下载 APK + SHA-256 校验 + 自动调起系统安装器
-/// - Windows：本地编译产物 SHA-256 差异比对 + HTTP Range 文件级增量热更新 + 自动原子替换重启
+/// [v3.1.7 / v3.1.8] 跨平台 FlClash 风格真实液态玻璃版本更新弹窗
+/// - 轻度可控的全屏背景高斯模糊 (`sigma = 6.5`) + 低遮罩透光幕布，兼顾阅读性与通透度
+/// - `GlassContainer` 原生着色器折射 + 无白边柔光立体阴影
+/// - 原生 Markdown 更新日志过滤与排版解析（屏蔽 SHA-256 校验和及冗余代码块）
 class AppUpdateDialog extends StatefulWidget {
   final AppUpdateInfo updateInfo;
+  final bool autoAnalyzeWindowsDiff;
 
   const AppUpdateDialog({
     super.key,
     required this.updateInfo,
+    this.autoAnalyzeWindowsDiff = true,
   });
+
+  /// 统一以真实液态玻璃与轻度全屏背景模糊展示更新弹窗
+  static Future<void> show(
+    BuildContext context,
+    AppUpdateInfo info, {
+    bool autoAnalyzeWindowsDiff = true,
+  }) {
+    final isDark = GlassSettingsHelper.isDark(context);
+    return showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Dismiss',
+      barrierColor: Colors.transparent,
+      transitionDuration: const Duration(milliseconds: 340),
+      pageBuilder: (dialogCtx, anim1, anim2) => AppUpdateDialog(
+        updateInfo: info,
+        autoAnalyzeWindowsDiff: autoAnalyzeWindowsDiff,
+      ),
+      transitionBuilder: (dialogCtx, anim1, anim2, child) {
+        final isReversing = anim1.status == AnimationStatus.reverse;
+        final double scale;
+        if (isReversing) {
+          scale = 1.0;
+        } else {
+          final curved = AppCurves.spring.transform(anim1.value);
+          scale = (1.10 - 0.10 * curved).clamp(0.96, 1.12);
+        }
+        final fadeAnim = CurvedAnimation(
+          parent: anim1,
+          curve: AppCurves.easeDecel,
+          reverseCurve: AppCurves.easeAccel,
+        );
+        final fade = fadeAnim.value.clamp(0.0, 1.0);
+        final blurSigma = (6.5 * fade).clamp(0.0, 6.5);
+        final scrimColor = Colors.black.withValues(
+          alpha: (isDark ? 0.26 : 0.13) * fade,
+        );
+
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            Positioned.fill(
+              child: IgnorePointer(
+                child: blurSigma > 0.05
+                    ? BackdropFilter(
+                        filter: ImageFilter.blur(
+                          sigmaX: blurSigma,
+                          sigmaY: blurSigma,
+                        ),
+                        child: ColoredBox(color: scrimColor),
+                      )
+                    : ColoredBox(color: scrimColor),
+              ),
+            ),
+            FadeTransition(
+              opacity: fadeAnim,
+              child: Transform.scale(
+                scale: scale,
+                child: child,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
 
   /// 检查 GitHub 最新 Release 并在有新版本时弹出更新窗口
   static Future<void> checkAndShow(
@@ -33,10 +106,7 @@ class AppUpdateDialog extends StatefulWidget {
       if (!context.mounted) return;
 
       if (info.hasUpdate) {
-        await liquid.showLiquidDialog(
-          context: context,
-          builder: AppUpdateDialog(updateInfo: info),
-        );
+        await show(context, info);
       } else {
         LiquidToast.success(
           context,
@@ -56,6 +126,7 @@ class AppUpdateDialog extends StatefulWidget {
 }
 
 class _AppUpdateDialogState extends State<AppUpdateDialog> {
+  final ScrollController _notesScrollController = ScrollController();
   WindowsIncrementalPlan? _winPlan;
   bool _isAnalyzingDiff = false;
   String? _diffError;
@@ -67,9 +138,15 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
   @override
   void initState() {
     super.initState();
-    if (Platform.isWindows) {
+    if (Platform.isWindows && widget.autoAnalyzeWindowsDiff) {
       _analyzeWindowsIncrementalDiff();
     }
+  }
+
+  @override
+  void dispose() {
+    _notesScrollController.dispose();
+    super.dispose();
   }
 
   Future<void> _analyzeWindowsIncrementalDiff() async {
@@ -154,233 +231,316 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
     await AppUpdateService.instance.openExternalDownloadUrl(url);
   }
 
+  LiquidGlassSettings _buildDialogGlassSettings(bool isDark) {
+    final base = GlassSettingsHelper.getDialogSettings();
+    return base.copyWith(
+      glassColor: isDark
+          ? const Color(0x9E151822)
+          : const Color(0x9DF7F9FE),
+      blur: 10.0,
+      thickness: 22.0,
+      refractiveIndex: 1.48,
+      chromaticAberration: 0.08,
+      lightIntensity: 0.72,
+      ambientStrength: 0.34,
+      ambientRim: 0.0,
+      fresnelStrength: 0.0,
+      edgeAbsorption: 0.0,
+      saturation: 1.40,
+      specularSharpness: GlassSpecularSharpness.sharp,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = GlassSettingsHelper.isDark(context);
     final info = widget.updateInfo;
     final titleColor = isDark ? Colors.white : const Color(0xFF1A1A2E);
-    final subColor = isDark ? Colors.white60 : Colors.black54;
+    final subColor = isDark ? Colors.white70 : const Color(0xFF4A5060);
+    final cleanNotes = AppUpdateService.filterReleaseNotes(info.releaseNotes);
+    final insetBg = isDark
+        ? Colors.white.withValues(alpha: 0.065)
+        : Colors.black.withValues(alpha: 0.04);
 
-    return BackdropFilter(
-      filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-      child: Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.symmetric(horizontal: 22, vertical: 24),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 450),
-          child: liquid.HyperOSCard(
-            cornerRadius: 28,
-            useBlur: true,
-            shadows: liquid.HyperOSShadows.modal(isDark),
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // 1. 顶部标题区
-                Row(
-                  children: [
-                    Container(
-                      width: 46,
-                      height: 46,
-                      decoration: BoxDecoration(
-                        color: AppThemeColors.babyPink.withValues(alpha: 0.22),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Icon(
-                        Platform.isWindows
-                            ? CupertinoIcons.bolt_horizontal_circle_fill
-                            : CupertinoIcons.arrow_down_circle_fill,
-                        color: AppThemeColors.babyPink,
-                        size: 26,
-                      ),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '发现新版本 ${info.latestTag}',
-                            style: TextStyle(
-                              color: titleColor,
-                              fontSize: 18.5,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            '当前版本: v$appVersion (Build $buildNumber)',
-                            style: TextStyle(
-                              color: subColor,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 16),
-
-                // 2. 平台专属更新摘要卡片（Windows 增量差异比对 / Android APK 信息）
-                if (Platform.isWindows)
-                  _buildWindowsDiffCard(isDark)
-                else
-                  _buildAndroidPackageBadge(isDark),
-
-                const SizedBox(height: 14),
-
-                // 3. 更新日志滚动区
-                Container(
-                  constraints: const BoxConstraints(maxHeight: 190),
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(14),
+    return PopScope(
+      canPop: !_isUpdating,
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 468),
+              child: Material(
+                type: MaterialType.transparency,
+                child: DecoratedBox(
                   decoration: BoxDecoration(
-                    color: isDark
-                        ? Colors.white.withValues(alpha: 0.05)
-                        : Colors.black.withValues(alpha: 0.035),
-                    borderRadius: BorderRadius.circular(18),
+                    borderRadius: SquircleGeometry.smoothRadius(28),
+                    boxShadow: liquid.HyperOSShadows.modal(isDark),
                   ),
-                  child: SingleChildScrollView(
-                    physics: const BouncingScrollPhysics(),
-                    child: Text(
-                      info.releaseNotes,
-                      style: TextStyle(
-                        color: isDark
-                            ? Colors.white.withValues(alpha: 0.88)
-                            : const Color(0xFF2C3240),
-                        fontSize: 13,
-                        height: 1.55,
-                      ),
-                    ),
-                  ),
-                ),
-
-                // 4. 实时进度条或错误提示
-                if (_isUpdating && _progress != null) ...[
-                  const SizedBox(height: 16),
-                  _buildProgressSection(isDark, _progress!),
-                ],
-
-                if (_updateError != null) ...[
-                  const SizedBox(height: 12),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.redAccent.withValues(alpha: 0.14),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      '更新异常: $_updateError',
-                      style: const TextStyle(
-                        color: Colors.redAccent,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-
-                const SizedBox(height: 18),
-
-                // 5. 底部操作按钮
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextButton(
-                        onPressed:
-                            _isUpdating ? null : () => Navigator.of(context).pop(),
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 13),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                        ),
-                        child: Text(
-                          '稍后再说',
-                          style: TextStyle(
-                            color: subColor,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    TextButton(
-                      onPressed: _isUpdating ? null : _openBrowserFallback,
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 13,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                      ),
-                      child: Text(
-                        '浏览器下载',
-                        style: TextStyle(
-                          color: isDark ? Colors.white70 : const Color(0xFF3A4150),
-                          fontSize: 13.5,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      flex: 2,
-                      child: Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          onTap: (_isUpdating || _isAnalyzingDiff)
-                              ? null
-                              : _startUpdate,
-                          borderRadius: BorderRadius.circular(16),
-                          child: Ink(
-                            height: 46,
-                            decoration: BoxDecoration(
-                              color: (_isUpdating || _isAnalyzingDiff)
-                                  ? AppThemeColors.babyPink.withValues(alpha: 0.45)
-                                  : AppThemeColors.babyPink,
-                              borderRadius: BorderRadius.circular(16),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: AppThemeColors.babyPink
-                                      .withValues(alpha: 0.32),
-                                  blurRadius: 12,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ],
+                  child: GlassContainer(
+                    useOwnLayer: true,
+                    quality: ThemeService().glassQuality,
+                    clipBehavior: Clip.antiAlias,
+                    shape: const LiquidRoundedSuperellipse(borderRadius: 28),
+                    padding: const EdgeInsets.all(24),
+                    settings: _buildDialogGlassSettings(isDark),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // 1. FlClash 风格头部（图标徽章 + 版本跨度标签）
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Container(
+                              width: 46,
+                              height: 46,
+                              decoration: BoxDecoration(
+                                color: AppThemeColors.babyPink
+                                    .withValues(alpha: isDark ? 0.24 : 0.16),
+                                borderRadius: SquircleGeometry.smoothRadius(15),
+                              ),
+                              child: Icon(
+                                Platform.isWindows
+                                    ? CupertinoIcons.bolt_horizontal_circle_fill
+                                    : CupertinoIcons.arrow_down_circle_fill,
+                                color: AppThemeColors.babyPink,
+                                size: 25,
+                              ),
                             ),
-                            child: Center(
-                              child: Text(
-                                _isUpdating
-                                    ? '正在更新...'
-                                    : (Platform.isWindows
-                                        ? '增量更新并重启'
-                                        : '立即下载并安装'),
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 14.5,
-                                  fontWeight: FontWeight.bold,
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '发现新版本 ${info.latestTag}',
+                                    style: TextStyle(
+                                      color: titleColor,
+                                      fontSize: 18.5,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: -0.2,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 5),
+                                  Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 2.5,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: insetBg,
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                        ),
+                                        child: Text(
+                                          'v$appVersion  →  v${info.latestVersion}',
+                                          style: TextStyle(
+                                            color: subColor,
+                                            fontSize: 11.5,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 16),
+
+                        // 2. 平台专属更新摘要卡片（Windows 增量差异比对 / Android APK 信息）
+                        if (Platform.isWindows)
+                          _buildWindowsDiffCard(isDark)
+                        else
+                          _buildAndroidPackageBadge(isDark),
+
+                        const SizedBox(height: 12),
+
+                        // 3. 过滤校验杂音后的原生 Markdown 更新日志滚动区
+                        Container(
+                          constraints: const BoxConstraints(maxHeight: 220),
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: insetBg,
+                            borderRadius: SquircleGeometry.smoothRadius(18),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: SquircleGeometry.smoothRadius(18),
+                            child: Scrollbar(
+                              controller: _notesScrollController,
+                              child: SingleChildScrollView(
+                                controller: _notesScrollController,
+                                physics: const BouncingScrollPhysics(),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 15,
+                                  vertical: 14,
+                                ),
+                                child: _ReleaseNotesMarkdownView(
+                                  markdown: cleanNotes,
+                                  isDark: isDark,
+                                  onLinkTap: (url) => AppUpdateService.instance
+                                      .openExternalDownloadUrl(url),
                                 ),
                               ),
                             ),
                           ),
                         ),
-                      ),
+
+                        // 4. 实时进度条或错误提示
+                        if (_isUpdating && _progress != null) ...[
+                          const SizedBox(height: 16),
+                          _buildProgressSection(isDark, _progress!),
+                        ],
+
+                        if (_updateError != null) ...[
+                          const SizedBox(height: 12),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.redAccent.withValues(alpha: 0.14),
+                              borderRadius: SquircleGeometry.smoothRadius(12),
+                            ),
+                            child: Text(
+                              '更新异常: $_updateError',
+                              style: const TextStyle(
+                                color: Colors.redAccent,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+
+                        const SizedBox(height: 18),
+
+                        // 5. FlClash 风格操作按钮栏
+                        Row(
+                          children: [
+                            _buildSecondaryActionButton(
+                              label: '稍后再说',
+                              isDark: isDark,
+                              onTap: _isUpdating
+                                  ? null
+                                  : () => Navigator.of(context).pop(),
+                            ),
+                            const SizedBox(width: 8),
+                            _buildSecondaryActionButton(
+                              label: '浏览器',
+                              icon: CupertinoIcons.globe,
+                              isDark: isDark,
+                              onTap:
+                                  _isUpdating ? null : _openBrowserFallback,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  onTap: (_isUpdating || _isAnalyzingDiff)
+                                      ? null
+                                      : _startUpdate,
+                                  borderRadius:
+                                      SquircleGeometry.smoothRadius(16),
+                                  child: Ink(
+                                    height: 46,
+                                    decoration: BoxDecoration(
+                                      color: (_isUpdating || _isAnalyzingDiff)
+                                          ? AppThemeColors.babyPink
+                                              .withValues(alpha: 0.45)
+                                          : AppThemeColors.babyPink,
+                                      borderRadius:
+                                          SquircleGeometry.smoothRadius(16),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: AppThemeColors.babyPink
+                                              .withValues(alpha: 0.30),
+                                          blurRadius: 12,
+                                          offset: const Offset(0, 4),
+                                        ),
+                                      ],
+                                    ),
+                                    child: Center(
+                                      child: Text(
+                                        _isUpdating
+                                            ? '正在更新...'
+                                            : (Platform.isWindows
+                                                ? '增量更新并重启'
+                                                : '立即下载并安装'),
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 14.5,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
-              ],
+              ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSecondaryActionButton({
+    required String label,
+    IconData? icon,
+    required bool isDark,
+    VoidCallback? onTap,
+  }) {
+    final bg = isDark
+        ? Colors.white.withValues(alpha: 0.09)
+        : Colors.black.withValues(alpha: 0.055);
+    final fg = isDark ? Colors.white.withValues(alpha: 0.85) : const Color(0xFF2B313D);
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: SquircleGeometry.smoothRadius(15),
+        child: Ink(
+          height: 46,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(
+            color: onTap == null ? bg.withValues(alpha: 0.5) : bg,
+            borderRadius: SquircleGeometry.smoothRadius(15),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (icon != null) ...[
+                Icon(icon, size: 15, color: fg),
+                const SizedBox(width: 5),
+              ],
+              Text(
+                label,
+                style: TextStyle(
+                  color: fg,
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -622,5 +782,368 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
         ),
       ],
     );
+  }
+}
+
+/// 原生 Markdown 更新日志渲染组件（支持标题层级、悬挂缩进列表、粗体/行内代码/引用/链接）
+class _ReleaseNotesMarkdownView extends StatelessWidget {
+  final String markdown;
+  final bool isDark;
+  final ValueChanged<String>? onLinkTap;
+
+  const _ReleaseNotesMarkdownView({
+    required this.markdown,
+    required this.isDark,
+    this.onLinkTap,
+  });
+
+  static final RegExp _headingRegex = RegExp(r'^(#{1,6})\s+(.+?)\s*$');
+  static final RegExp _unorderedRegex = RegExp(r'^(\s*)[*\-+•]\s+(.+?)\s*$');
+  static final RegExp _orderedRegex = RegExp(r'^(\s*)(\d+)\.\s+(.+?)\s*$');
+  static final RegExp _quoteRegex = RegExp(r'^>\s?(.*)$');
+  static final RegExp _inlineRegex = RegExp(
+    r'(\*\*[^*\n]+?\*\*|`[^`\n]+?`|\[[^\]\n]+?\]\([^\)\n]+?\)|\*[^*\n]+?\*)',
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final lines = markdown.replaceAll('\r\n', '\n').split('\n');
+    final bodyColor =
+        isDark ? Colors.white.withValues(alpha: 0.88) : const Color(0xFF282E3B);
+    final headingColor = isDark ? Colors.white : const Color(0xFF151926);
+    final mutedColor = isDark ? Colors.white60 : const Color(0xFF5A6272);
+    final codeColor = isDark
+        ? Color.lerp(AppThemeColors.babyPink, Colors.white, 0.35)!
+        : Color.lerp(AppThemeColors.babyPink, const Color(0xFF1A1A2E), 0.35)!;
+
+    final baseStyle = TextStyle(
+      color: bodyColor,
+      fontSize: 13,
+      height: 1.58,
+      fontWeight: FontWeight.w400,
+    );
+
+    final List<Widget> blocks = [];
+    final List<String> paragraphBuffer = [];
+
+    void flushParagraph() {
+      if (paragraphBuffer.isEmpty) return;
+      final text = paragraphBuffer.join(' ').trim();
+      paragraphBuffer.clear();
+      if (text.isEmpty) return;
+      blocks.add(
+        Padding(
+          padding: const EdgeInsets.only(bottom: 7),
+          child: Text.rich(
+            TextSpan(
+              children: _parseInlineSpans(
+                text,
+                baseStyle: baseStyle,
+                boldColor: headingColor,
+                codeColor: codeColor,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    for (final rawLine in lines) {
+      final line = rawLine.trimRight();
+      final trimmed = line.trim();
+
+      if (trimmed.isEmpty) {
+        flushParagraph();
+        continue;
+      }
+
+      final headingMatch = _headingRegex.firstMatch(trimmed);
+      if (headingMatch != null) {
+        flushParagraph();
+        final level = headingMatch.group(1)!.length;
+        final headingText = headingMatch.group(2)!.trim();
+        final bool isMajor = level <= 3;
+        blocks.add(
+          Padding(
+            padding: EdgeInsets.only(
+              top: blocks.isEmpty ? 0 : (isMajor ? 10 : 7),
+              bottom: 5,
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Container(
+                  width: isMajor ? 3.5 : 3,
+                  height: isMajor ? 14 : 12,
+                  decoration: BoxDecoration(
+                    color: AppThemeColors.babyPink
+                        .withValues(alpha: isMajor ? 0.95 : 0.65),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: Text.rich(
+                    TextSpan(
+                      children: _parseInlineSpans(
+                        headingText,
+                        baseStyle: TextStyle(
+                          color: headingColor,
+                          fontSize: isMajor ? 14.2 : 13.4,
+                          fontWeight:
+                              isMajor ? FontWeight.w800 : FontWeight.w700,
+                          height: 1.38,
+                        ),
+                        boldColor: headingColor,
+                        codeColor: codeColor,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+        continue;
+      }
+
+      final unorderedMatch = _unorderedRegex.firstMatch(line);
+      if (unorderedMatch != null) {
+        flushParagraph();
+        final indentLen = (unorderedMatch.group(1) ?? '').length;
+        final itemText = unorderedMatch.group(2)!.trim();
+        final nested = indentLen >= 2;
+        blocks.add(
+          Padding(
+            padding: EdgeInsets.only(
+              left: nested ? 16 : 2,
+              bottom: 6,
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 7.5, right: 8),
+                  child: Container(
+                    width: nested ? 4.5 : 5.5,
+                    height: nested ? 4.5 : 5.5,
+                    decoration: BoxDecoration(
+                      color: AppThemeColors.babyPink
+                          .withValues(alpha: nested ? 0.55 : 0.85),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Text.rich(
+                    TextSpan(
+                      children: _parseInlineSpans(
+                        itemText,
+                        baseStyle: baseStyle,
+                        boldColor: headingColor,
+                        codeColor: codeColor,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+        continue;
+      }
+
+      final orderedMatch = _orderedRegex.firstMatch(line);
+      if (orderedMatch != null) {
+        flushParagraph();
+        final indentLen = (orderedMatch.group(1) ?? '').length;
+        final indexStr = orderedMatch.group(2)!;
+        final itemText = orderedMatch.group(3)!.trim();
+        blocks.add(
+          Padding(
+            padding: EdgeInsets.only(
+              left: indentLen >= 2 ? 14 : 2,
+              bottom: 6,
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(right: 6),
+                  child: Text(
+                    '$indexStr.',
+                    style: TextStyle(
+                      color: AppThemeColors.babyPink,
+                      fontSize: 12.8,
+                      fontWeight: FontWeight.w700,
+                      height: 1.58,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Text.rich(
+                    TextSpan(
+                      children: _parseInlineSpans(
+                        itemText,
+                        baseStyle: baseStyle,
+                        boldColor: headingColor,
+                        codeColor: codeColor,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+        continue;
+      }
+
+      final quoteMatch = _quoteRegex.firstMatch(trimmed);
+      if (quoteMatch != null) {
+        flushParagraph();
+        final quoteText = quoteMatch.group(1)!.trim();
+        if (quoteText.isNotEmpty) {
+          blocks.add(
+            Container(
+              margin: const EdgeInsets.only(bottom: 7),
+              padding: const EdgeInsets.only(left: 10, top: 2, bottom: 2),
+              decoration: BoxDecoration(
+                border: Border(
+                  left: BorderSide(
+                    color: AppThemeColors.babyPink.withValues(alpha: 0.65),
+                    width: 2.5,
+                  ),
+                ),
+              ),
+              child: Text.rich(
+                TextSpan(
+                  children: _parseInlineSpans(
+                    quoteText,
+                    baseStyle: baseStyle.copyWith(color: mutedColor),
+                    boldColor: headingColor,
+                    codeColor: codeColor,
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
+        continue;
+      }
+
+      paragraphBuffer.add(trimmed);
+    }
+
+    flushParagraph();
+
+    if (blocks.isEmpty) {
+      return Text(markdown.trim(), style: baseStyle);
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: blocks,
+    );
+  }
+
+  List<InlineSpan> _parseInlineSpans(
+    String input, {
+    required TextStyle baseStyle,
+    required Color boldColor,
+    required Color codeColor,
+  }) {
+    final List<InlineSpan> spans = [];
+    int cursor = 0;
+
+    for (final match in _inlineRegex.allMatches(input)) {
+      if (match.start > cursor) {
+        spans.add(
+          TextSpan(
+            text: input.substring(cursor, match.start),
+            style: baseStyle,
+          ),
+        );
+      }
+
+      final token = match.group(0)!;
+      if (token.startsWith('**') && token.endsWith('**') && token.length > 4) {
+        final inner = token.substring(2, token.length - 2);
+        spans.add(
+          TextSpan(
+            children: _parseInlineSpans(
+              inner,
+              baseStyle: baseStyle.copyWith(
+                color: boldColor,
+                fontWeight: FontWeight.w700,
+              ),
+              boldColor: boldColor,
+              codeColor: codeColor,
+            ),
+          ),
+        );
+      } else if (token.startsWith('`') &&
+          token.endsWith('`') &&
+          token.length > 2) {
+        final code = token.substring(1, token.length - 1);
+        spans.add(
+          TextSpan(
+            text: code,
+            style: baseStyle.copyWith(
+              color: codeColor,
+              fontFamily: Platform.isWindows ? 'Consolas' : 'monospace',
+              fontSize: (baseStyle.fontSize ?? 13) - 0.6,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        );
+      } else if (token.startsWith('[') && token.contains('](')) {
+        final splitIdx = token.indexOf('](');
+        final label = token.substring(1, splitIdx);
+        final url = token.substring(splitIdx + 2, token.length - 1);
+        spans.add(
+          WidgetSpan(
+            alignment: PlaceholderAlignment.baseline,
+            baseline: TextBaseline.alphabetic,
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: GestureDetector(
+                onTap: onLinkTap != null ? () => onLinkTap!(url) : null,
+                child: Text(
+                  label,
+                  style: baseStyle.copyWith(
+                    color: AppThemeColors.babyPink,
+                    fontWeight: FontWeight.w600,
+                    decoration: TextDecoration.underline,
+                    decorationColor:
+                        AppThemeColors.babyPink.withValues(alpha: 0.6),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      } else if (token.startsWith('*') &&
+          token.endsWith('*') &&
+          token.length > 2) {
+        final italicText = token.substring(1, token.length - 1);
+        spans.add(
+          TextSpan(
+            text: italicText,
+            style: baseStyle.copyWith(fontStyle: FontStyle.italic),
+          ),
+        );
+      } else {
+        spans.add(TextSpan(text: token, style: baseStyle));
+      }
+
+      cursor = match.end;
+    }
+
+    if (cursor < input.length) {
+      spans.add(TextSpan(text: input.substring(cursor), style: baseStyle));
+    }
+
+    return spans;
   }
 }

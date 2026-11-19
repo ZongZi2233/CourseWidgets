@@ -140,4 +140,26 @@ class DesktopWindowService {
     }
     resolveWindow()?.close();
   }
+
+  /// Launches a completely detached hidden Windows process outside Dart's
+  /// `DETACHED_PROCESS` stdio restrictions so PowerShell updaters survive exit.
+  Future<bool> launchDetachedProcess({
+    required String commandLine,
+    String? workingDirectory,
+  }) async {
+    if (!Platform.isWindows) return false;
+    try {
+      final launched = await _channel.invokeMethod<bool>(
+        'launchDetachedProcess',
+        <String, dynamic>{
+          'commandLine': commandLine,
+          'workingDirectory': workingDirectory ?? '',
+        },
+      );
+      return launched ?? false;
+    } catch (e) {
+      debugPrint('⚠️ [DesktopWindow] launchDetachedProcess failed: $e');
+      return false;
+    }
+  }
 }

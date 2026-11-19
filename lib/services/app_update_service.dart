@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import '../constants/version.dart';
+import 'desktop_window_service.dart';
 
 /// 远端版本发布信息模型
 class AppUpdateInfo {
@@ -179,6 +180,124 @@ class AppUpdateService {
     return '${(bytes / (1024.0 * 1024.0)).toStringAsFixed(2)} MB';
   }
 
+  /// 过滤 GitHub Release Notes 中的构建产物下载列表、SHA-256 校验和与冗余代码块
+  static String filterReleaseNotes(String rawMarkdown) {
+    if (rawMarkdown.trim().isEmpty) {
+      return '• 优化应用稳定性与交互体验';
+    }
+
+    final normalized = rawMarkdown.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+    final rawLines = normalized.split('\n');
+
+    final headingPattern = RegExp(r'^\s*(#{1,6})\s+(.+?)\s*$');
+    final topBannerPattern = RegExp(
+      r'^\s*#{1,3}\s+CourseWidgets\s+v[\d.]+.*$',
+      caseSensitive: false,
+    );
+    final noiseSectionPattern = RegExp(
+      r'(构建产物|校验和|sha-?256|产物下载|checksums?|artifacts?|downloads?|release\s*assets?)',
+      caseSensitive: false,
+    );
+    final fencePattern = RegExp(r'^\s*(```|~~~)');
+    final brokenTextFencePattern = RegExp(
+      r'^\s*([*`~]{1,3})?\s*(text|txt|sha-?256|checksums?)\s*$',
+      caseSensitive: false,
+    );
+    final dividerPattern = RegExp(r'^\s*([-*_])\s*\1\s*\1[\s\-*_]*$');
+    final hexLinePattern = RegExp(r'^\s*[0-9a-fA-F]{12,}(?:\s+.*)?$');
+    final artifactLinePattern = RegExp(
+      r'(CourseWidgets-v[\d.]+-|\.(apk|zip)\b|windows-manifest\.json|SHA256SUMS\.txt)',
+      caseSensitive: false,
+    );
+
+    final List<String> cleaned = [];
+    bool skippingArtifactSection = false;
+    bool inFence = false;
+    final List<String> fenceBuffer = [];
+
+    void flushFenceIfClean() {
+      if (fenceBuffer.isEmpty) return;
+      final joined = fenceBuffer.join('\n');
+      final looksLikeChecksums =
+          hexLinePattern.hasMatch(joined) ||
+          fenceBuffer.any(
+            (l) => hexLinePattern.hasMatch(l) || artifactLinePattern.hasMatch(l),
+          );
+      if (!looksLikeChecksums && !skippingArtifactSection) {
+        cleaned.addAll(fenceBuffer);
+      }
+      fenceBuffer.clear();
+    }
+
+    for (int i = 0; i < rawLines.length; i++) {
+      final line = rawLines[i];
+      final trimmed = line.trim();
+
+      if (fencePattern.hasMatch(trimmed)) {
+        if (!inFence) {
+          inFence = true;
+          fenceBuffer.clear();
+        } else {
+          inFence = false;
+          flushFenceIfClean();
+        }
+        continue;
+      }
+
+      if (inFence) {
+        fenceBuffer.add(line);
+        continue;
+      }
+
+      final headingMatch = headingPattern.firstMatch(line);
+      if (headingMatch != null) {
+        final headingText = headingMatch.group(2) ?? '';
+        if (noiseSectionPattern.hasMatch(headingText)) {
+          skippingArtifactSection = true;
+          continue;
+        }
+        if (topBannerPattern.hasMatch(line)) {
+          skippingArtifactSection = false;
+          continue;
+        }
+        skippingArtifactSection = false;
+        cleaned.add(line);
+        continue;
+      }
+
+      if (skippingArtifactSection) {
+        continue;
+      }
+
+      if (brokenTextFencePattern.hasMatch(trimmed) ||
+          dividerPattern.hasMatch(trimmed)) {
+        continue;
+      }
+
+      if (hexLinePattern.hasMatch(trimmed) ||
+          artifactLinePattern.hasMatch(trimmed)) {
+        // Also discard short wrapped tail fragments such as "arm64-v8a.apk" / "x64.zip"
+        continue;
+      }
+
+      cleaned.add(line);
+    }
+
+    if (inFence && fenceBuffer.isNotEmpty) {
+      flushFenceIfClean();
+    }
+
+    final collapsed = cleaned
+        .join('\n')
+        .replaceAll(RegExp(r'\n{3,}'), '\n\n')
+        .trim();
+
+    if (collapsed.isEmpty) {
+      return '• 优化应用稳定性与交互体验';
+    }
+    return collapsed;
+  }
+
   /// 1. 检查 GitHub 最新 Release 版本信息
   Future<AppUpdateInfo> checkForUpdate() async {
     final client = HttpClient()
@@ -200,8 +319,8 @@ class AppUpdateService {
       final normalizedTag = rawTag.startsWith('v') ? rawTag : 'v$cleanVer';
       final releaseName =
           (releaseData['name'] as String?)?.trim() ?? 'CourseWidgets $normalizedTag';
-      final releaseNotes =
-          (releaseData['body'] as String?)?.trim() ?? '暂无更新说明';
+      final rawNotes = (releaseData['body'] as String?)?.trim() ?? '';
+      final releaseNotes = filterReleaseNotes(rawNotes);
       final publishedAt = (releaseData['published_at'] as String?) ?? '';
       final htmlUrl = (releaseData['html_url'] as String?) ??
           'https://github.com/$repoOwner/$repoName/releases/tag/$normalizedTag';
@@ -876,6 +995,137 @@ class AppUpdateService {
     return localHeaderOffset + 30 + fnameLen + extraLen;
   }
 
+  /// 构建纯净 ASCII 注释 + UTF-8 BOM 安全编码的 PowerShell 热替换脚本，避免 CP936 吞行故障
+  @visibleForTesting
+  static String buildWindowsUpdaterScript({
+    required int targetPid,
+    required String appDir,
+    required String stagingDir,
+    required String exePath,
+    required String exeName,
+    String? logPath,
+  }) {
+    final escapedAppDir = appDir.replaceAll("'", "''");
+    final escapedStagingDir = stagingDir.replaceAll("'", "''");
+    final escapedExePath = exePath.replaceAll("'", "''");
+    final escapedExeName = exeName.replaceAll("'", "''");
+    final escapedLogPath = (logPath ?? '').replaceAll("'", "''");
+
+    final buffer = StringBuffer();
+    buffer.writeln(r"$ErrorActionPreference = 'Continue'");
+    buffer.writeln('\$targetPid = $targetPid');
+    buffer.writeln("\$appDir = '$escapedAppDir'");
+    buffer.writeln("\$stagingDir = '$escapedStagingDir'");
+    buffer.writeln("\$exePath = '$escapedExePath'");
+    buffer.writeln("\$exeName = '$escapedExeName'");
+    buffer.writeln(
+      escapedLogPath.isNotEmpty
+          ? "\$logPath = '$escapedLogPath'"
+          : r"$logPath = Join-Path $env:TEMP 'coursewidgets_updater_last.log'",
+    );
+    buffer.writeln('');
+    buffer.writeln(r'function Write-UpdaterLog([string]$msg) {');
+    buffer.writeln(r'  try {');
+    buffer.writeln(r'    $ts = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss.fff")');
+    buffer.writeln(r'    Add-Content -LiteralPath $logPath -Value "[$ts] $msg" -Encoding UTF8 -ErrorAction SilentlyContinue');
+    buffer.writeln(r'  } catch {}');
+    buffer.writeln(r'}');
+    buffer.writeln('');
+    buffer.writeln(r'Set-Content -LiteralPath $logPath -Value "" -Encoding UTF8 -ErrorAction SilentlyContinue');
+    buffer.writeln(r'Write-UpdaterLog "Updater started: targetPid=$targetPid appDir=$appDir stagingDir=$stagingDir"');
+    buffer.writeln('');
+    buffer.writeln('# Step 1: wait for main app process exit and close lingering locks');
+    buffer.writeln(r'for ($i = 0; $i -lt 45; $i++) {');
+    buffer.writeln(r'  $proc = Get-Process -Id $targetPid -ErrorAction SilentlyContinue');
+    buffer.writeln(r'  if ($null -eq $proc) { break }');
+    buffer.writeln(r'  Start-Sleep -Milliseconds 150');
+    buffer.writeln(r'  if ($i -eq 18) {');
+    buffer.writeln(r'    Stop-Process -Id $targetPid -Force -ErrorAction SilentlyContinue');
+    buffer.writeln(r'  }');
+    buffer.writeln(r'}');
+    buffer.writeln('');
+    buffer.writeln(r'try {');
+    buffer.writeln(r'  $others = Get-Process -ErrorAction SilentlyContinue | Where-Object {');
+    buffer.writeln(r'    $pPath = $null; try { $pPath = $_.Path } catch {};');
+    buffer.writeln(r'    $pPath -and ($pPath -ieq $exePath) -and ($_.Id -ne $targetPid)');
+    buffer.writeln(r'  }');
+    buffer.writeln(r'  foreach ($o in $others) {');
+    buffer.writeln(r'    Write-UpdaterLog "Stopping lingering instance pid=$($o.Id)"');
+    buffer.writeln(r'    Stop-Process -Id $o.Id -Force -ErrorAction SilentlyContinue');
+    buffer.writeln(r'  }');
+    buffer.writeln(r'} catch {}');
+    buffer.writeln(r'Start-Sleep -Milliseconds 300');
+    buffer.writeln('');
+    buffer.writeln('# Step 2: atomically copy all staged files into appDir');
+    buffer.writeln(r'$copiedCount = 0');
+    buffer.writeln(r'$failedCount = 0');
+    buffer.writeln(r'if (Test-Path -LiteralPath $stagingDir) {');
+    buffer.writeln(r'  $stagingRoot = (Resolve-Path -LiteralPath $stagingDir).Path.TrimEnd("\", "/")');
+    buffer.writeln(r'  $files = Get-ChildItem -LiteralPath $stagingRoot -Recurse -File');
+    buffer.writeln(r'  foreach ($f in $files) {');
+    buffer.writeln(r'    $rel = $f.FullName.Substring($stagingRoot.Length).TrimStart("\", "/")');
+    buffer.writeln(r'    $dest = Join-Path $appDir $rel');
+    buffer.writeln(r'    $destParent = Split-Path -Path $dest -Parent');
+    buffer.writeln(r'    if (-not (Test-Path -LiteralPath $destParent)) {');
+    buffer.writeln(r'      New-Item -ItemType Directory -Path $destParent -Force | Out-Null');
+    buffer.writeln(r'    }');
+    buffer.writeln(r'    $ok = $false');
+    buffer.writeln(r'    for ($retry = 0; $retry -lt 40; $retry++) {');
+    buffer.writeln(r'      try {');
+    buffer.writeln(r'        if (Test-Path -LiteralPath $dest) {');
+    buffer.writeln(r'          try { [System.IO.File]::SetAttributes($dest, [System.IO.FileAttributes]::Normal) } catch {}');
+    buffer.writeln(r'        }');
+    buffer.writeln(r'        [System.IO.File]::Copy($f.FullName, $dest, $true)');
+    buffer.writeln(r'        if ((Get-Item -LiteralPath $dest).Length -eq $f.Length) {');
+    buffer.writeln(r'          $ok = $true');
+    buffer.writeln(r'          break');
+    buffer.writeln(r'        }');
+    buffer.writeln(r'      } catch {}');
+    buffer.writeln(r'      Start-Sleep -Milliseconds 150');
+    buffer.writeln(r'    }');
+    buffer.writeln(r'    if ($ok) {');
+    buffer.writeln(r'      $copiedCount++');
+    buffer.writeln(r'    } else {');
+    buffer.writeln(r'      $failedCount++');
+    buffer.writeln(r'      Write-UpdaterLog "Failed copying: $rel -> $dest"');
+    buffer.writeln(r'    }');
+    buffer.writeln(r'  }');
+    buffer.writeln(r'} else {');
+    buffer.writeln(r'  Write-UpdaterLog "Staging directory missing: $stagingDir"');
+    buffer.writeln(r'  $failedCount++');
+    buffer.writeln(r'}');
+    buffer.writeln(r'Write-UpdaterLog "Copy summary: copied=$copiedCount failed=$failedCount"');
+    buffer.writeln('');
+    buffer.writeln('# Step 3: cleanup staging when all files copied');
+    buffer.writeln(r'if ($failedCount -eq 0 -and (Test-Path -LiteralPath $stagingDir)) {');
+    buffer.writeln(r'  Remove-Item -LiteralPath $stagingDir -Recurse -Force -ErrorAction SilentlyContinue');
+    buffer.writeln(r'}');
+    buffer.writeln(r'Start-Sleep -Milliseconds 250');
+    buffer.writeln('');
+    buffer.writeln('# Step 4: relaunch updated application');
+    buffer.writeln(r'Write-UpdaterLog "Relaunching $exePath"');
+    buffer.writeln(r'if (Test-Path -LiteralPath $exePath) {');
+    buffer.writeln(r'  Start-Process -FilePath $exePath -WorkingDirectory $appDir');
+    buffer.writeln(r'} else {');
+    buffer.writeln(r'  Write-UpdaterLog "Executable missing: $exePath"');
+    buffer.writeln(r'}');
+    buffer.writeln('');
+    buffer.writeln('# Step 5: self-cleanup updater script');
+    buffer.writeln(r'$selfPath = $MyInvocation.MyCommand.Path');
+    buffer.writeln(r'if ($selfPath -and (Test-Path -LiteralPath $selfPath)) {');
+    buffer.writeln(r'  Remove-Item -LiteralPath $selfPath -Force -ErrorAction SilentlyContinue');
+    buffer.writeln(r'}');
+
+    return buffer.toString().replaceAll('\r\n', '\n').replaceAll('\n', '\r\n');
+  }
+
+  /// Encode PowerShell script with UTF-8 BOM + CRLF for Windows PowerShell 5.1 safety.
+  @visibleForTesting
+  static List<int> encodeWindowsScriptBytes(String script) {
+    final normalized = script.replaceAll('\r\n', '\n').replaceAll('\n', '\r\n');
+    return <int>[0xEF, 0xBB, 0xBF, ...utf8.encode(normalized)];
+  }
+
   /// 启动独立无窗口 PowerShell 守护脚本：等待当前进程退出 -> 原子覆盖差异文件 -> 自动重启新版本
   Future<void> _spawnWindowsAtomicSwapAndRestart({
     required String appDir,
@@ -886,74 +1136,69 @@ class AppUpdateService {
     final tempDir = await getTemporaryDirectory();
     final scriptFile =
         File(p.join(tempDir.path, 'coursewidgets_updater_$currentPid.ps1'));
+    final exePath = p.join(appDir, exeName);
+    final logPath = p.join(tempDir.path, 'coursewidgets_updater_last.log');
 
-    final escapedAppDir = appDir.replaceAll("'", "''");
-    final escapedStagingDir = stagingDir.replaceAll("'", "''");
-    final escapedExePath = p.join(appDir, exeName).replaceAll("'", "''");
-
-    final psScript = '''
-\$ErrorActionPreference = 'SilentlyContinue'
-\$targetPid = $currentPid
-\$appDir = '$escapedAppDir'
-\$stagingDir = '$escapedStagingDir'
-\$exePath = '$escapedExePath'
-
-# 1. 等待旧版本进程退出并释放文件句柄
-for (\$i = 0; \$i -lt 40; \$i++) {
-    \$proc = Get-Process -Id \$targetPid -ErrorAction SilentlyContinue
-    if (\$null -eq \$proc) { break }
-    Start-Sleep -Milliseconds 150
-    if (\$i -eq 20) {
-        Stop-Process -Id \$targetPid -Force -ErrorAction SilentlyContinue
-    }
-}
-Start-Sleep -Milliseconds 300
-
-# 2. 将 _update_staging 中的所有增量文件逐个原子替换至程序根目录
-\$files = Get-ChildItem -Path \$stagingDir -Recurse -File
-foreach (\$f in \$files) {
-    \$rel = \$f.FullName.Substring(\$stagingDir.Length).TrimStart('\\', '/')
-    \$dest = Join-Path \$appDir \$rel
-    \$destParent = Split-Path -Path \$dest -Parent
-    if (-not (Test-Path \$destParent)) {
-        New-Item -ItemType Directory -Path \$destParent -Force | Out-Null
-    }
-    for (\$retry = 0; \$retry -lt 25; \$retry++) {
-        Copy-Item -Path \$f.FullName -Destination \$dest -Force -ErrorAction SilentlyContinue
-        if (\$?) { break }
-        Start-Sleep -Milliseconds 200
-    }
-}
-
-# 3. 清理暂存目录
-Remove-Item -Path \$stagingDir -Recurse -Force -ErrorAction SilentlyContinue
-
-# 4. 重新拉起新版客户端
-Start-Process -FilePath \$exePath -WorkingDirectory \$appDir
-
-# 5. 自清理更新脚本
-Remove-Item -Path \$MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue
-''';
-
-    await scriptFile.writeAsString(psScript, flush: true);
-
-    await Process.start(
-      'powershell.exe',
-      [
-        '-NoProfile',
-        '-NonInteractive',
-        '-ExecutionPolicy',
-        'Bypass',
-        '-WindowStyle',
-        'Hidden',
-        '-File',
-        scriptFile.path,
-      ],
-      mode: ProcessStartMode.detached,
+    final psScript = buildWindowsUpdaterScript(
+      targetPid: currentPid,
+      appDir: appDir,
+      stagingDir: stagingDir,
+      exePath: exePath,
+      exeName: exeName,
+      logPath: logPath,
     );
 
-    // 稍作延迟确保子进程已独立挂载，随后立即退出当前进程以释放文件锁
-    await Future<void>.delayed(const Duration(milliseconds: 180));
+    await scriptFile.writeAsBytes(
+      encodeWindowsScriptBytes(psScript),
+      flush: true,
+    );
+
+    await DesktopWindowService().setPreventCloseOnHide(false);
+    await DesktopWindowService().hideWindow();
+
+    final psCmdLine =
+        'powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "${scriptFile.path}"';
+
+    bool started = await DesktopWindowService().launchDetachedProcess(
+      commandLine: psCmdLine,
+      workingDirectory: tempDir.path,
+    );
+
+    if (!started) {
+      // Fallback via cmd `start /b` avoids Dart `DETACHED_PROCESS` stdio breaking PowerShell.
+      try {
+        await Process.start(
+          'cmd.exe',
+          [
+            '/c',
+            'start',
+            '/b',
+            '""',
+            'powershell.exe',
+            '-NoProfile',
+            '-NonInteractive',
+            '-ExecutionPolicy',
+            'Bypass',
+            '-WindowStyle',
+            'Hidden',
+            '-File',
+            scriptFile.path,
+          ],
+          workingDirectory: tempDir.path,
+          mode: ProcessStartMode.detached,
+        );
+        started = true;
+      } catch (e) {
+        debugPrint('❌ 启动独立更新脚本失败: $e');
+      }
+    }
+
+    if (!started) {
+      throw Exception('无法拉起 Windows 独立热替换进程，请尝试使用“浏览器下载”更新');
+    }
+
+    // 等待 OS 完成子进程加载与独立句柄分离，随后退出释放当前进程全部 DLL/EXE 文件锁
+    await Future<void>.delayed(const Duration(milliseconds: 280));
     exit(0);
   }
 
