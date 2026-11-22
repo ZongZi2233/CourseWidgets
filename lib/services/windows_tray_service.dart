@@ -16,6 +16,7 @@ class WindowsTrayService {
   WindowsTrayService._internal();
 
   bool _isInitialized = false;
+  Future<void>? _inFlightInit;
   bool _isBackgroundMode = false;
   bool _preventCloseOnHide = false;
   bool _isExiting = false;
@@ -60,19 +61,29 @@ class WindowsTrayService {
     );
 
     if (_isInitialized) return;
-
-    try {
-      // 初始化通知管理器
-      await _notificationManager.initialize();
-
-      // 初始化系统托盘
-      await _initializeSystemTray();
-
-      _isInitialized = true;
-      debugPrint('✅ Windows 托盘服务初始化成功');
-    } catch (e) {
-      debugPrint('❌ 初始化托盘服务失败: $e');
+    if (_inFlightInit != null) {
+      return _inFlightInit!;
     }
+
+    final future = () async {
+      try {
+        // 初始化通知管理器
+        await _notificationManager.initialize();
+
+        // 初始化系统托盘
+        await _initializeSystemTray();
+
+        _isInitialized = true;
+        debugPrint('✅ Windows 托盘服务初始化成功');
+      } catch (e) {
+        debugPrint('❌ 初始化托盘服务失败: $e');
+      } finally {
+        _inFlightInit = null;
+      }
+    }();
+
+    _inFlightInit = future;
+    return future;
   }
 
   /// 初始化系统托盘

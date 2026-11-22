@@ -47,9 +47,6 @@ class StaticBlurredWallpaperService extends ChangeNotifier with WidgetsBindingOb
 
     // 立即启动单次离屏静态模糊烘焙，确保卡片与背景在首帧及转场打开时纹理即刻就绪
     bakeCurrentWallpaper();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      bakeCurrentWallpaper();
-    });
   }
 
   Timer? _metricsDebounceTimer;

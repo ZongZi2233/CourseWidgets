@@ -129,6 +129,12 @@ class MigrationRunner {
         if (val is int) currentVersion = val;
       }
 
+      // 若已达到目标 Schema 版本，跳过全表结构检查与额外 DDL 查询，加速冷启动
+      if (currentVersion >= kTargetSchemaVersion) {
+        debugPrint('✅ [MigrationRunner] SQLite Schema 已处于最新版本 v$currentVersion，跳过迁移检查');
+        return;
+      }
+
       AppLogger.data('数据库当前 Schema 版本: v$currentVersion (目标: v$kTargetSchemaVersion)');
 
       // 2. 依次应用未执行的迁移
@@ -141,7 +147,7 @@ class MigrationRunner {
         }
       }
 
-      // 3. 幂等性兜底防卫：确保核心表即便在特殊场景下也绝对完备
+      // 3. 幂等性兜底防卫：确保核心表在迁移后绝对完备
       await _ensureIntegrityFallback(db);
 
       AppLogger.data('✅ 数据库 Schema 迁移完成，当前版本: v$currentVersion');

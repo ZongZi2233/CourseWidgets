@@ -2,10 +2,11 @@ import 'dart:io';
 import '../main.dart' show globalDarkModeNotifier, globalBackgroundPath;
 export '../main.dart' show globalBackgroundPath;
 
-/// 当前版本：[v3.1.8 正式版] 主线正式发布（Build 3180）
-const String appVersion = '3.1.8';
-const int buildNumber = 3180;
-const String copyright = '© 2025-2026 CourseWidgets. All rights reserved.';
+/// 当前版本：[v3.1.9 正式版] 主线正式发布（Build 3190）
+const String appVersion = '3.1.9';
+const int buildNumber = 3190;
+const String copyright = 'Copyright © ZongZi';
+const String githubRepoUrl = 'https://github.com/ZongZi2233/CourseWidgets';
 
 /// [v3.1.0] 纯色无壁纸模式标识符（浅色纯白 #FFFFFF，深色微信夜间深灰近黑 #111111）
 const String kSolidColorBackground = 'none';

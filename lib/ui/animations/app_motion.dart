@@ -1,11 +1,16 @@
+import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/physics.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import '../widgets/app_background_layer.dart';
+import '../widgets/windows_desktop_title_bar.dart'
+    show kWindowsDesktopTitleBarHeight;
 
 /// [v3.1.5] 借鉴 FlClash (`prism_ui` `open_container.dart`) 的次级页面 SharedElement 圆角矩形卡片源位置注册表
 ///
@@ -28,7 +33,7 @@ class SharedElementSourceRegistry {
   /// 将圆角半径严格约束为“圆角矩形”形态（绝不允许 radius >= minSide * 0.42 变成圆形或椭圆胶囊）
   static double _normalizeCardRadius(Rect rect, double preferredRadius) {
     final minSide = math.min(rect.width, rect.height);
-    final maxAllowed = (minSide * 0.30).clamp(10.0, 24.0);
+    final maxAllowed = (minSide * 0.36).clamp(10.0, 26.0);
     return preferredRadius.clamp(10.0, maxAllowed);
   }
 
@@ -52,7 +57,7 @@ class SharedElementSourceRegistry {
         if (target is RenderBox && target.hasSize && target.attached) {
           final size = target.size;
           // 排除全屏/近全屏容器与过小的图标/小圆点
-          if (size.width >= screenSize.width * 0.96 ||
+          if (size.width >= screenSize.width * 0.98 ||
               size.height >= screenSize.height * 0.80) {
             continue;
           }
@@ -206,7 +211,7 @@ class SharedElementSourceRegistry {
       _lastWidgetRect = null;
       _lastWidgetTime = null;
 
-      final isSubScreenWidget = rect.width < screenSize.width * 0.96 &&
+      final isSubScreenWidget = rect.width < screenSize.width * 0.98 &&
           rect.height < screenSize.height * 0.85;
       if (ageMs <= 1200 && isSubScreenWidget) {
         candidateRect = rect;
@@ -223,7 +228,7 @@ class SharedElementSourceRegistry {
       _lastHitCardRect = null;
       _lastPointerTime = null;
 
-      final isSubScreenWidget = rect.width < screenSize.width * 0.96 &&
+      final isSubScreenWidget = rect.width < screenSize.width * 0.98 &&
           rect.height < screenSize.height * 0.85;
       if (ageMs <= 1200 && isSubScreenWidget) {
         candidateRect = rect;
@@ -234,15 +239,16 @@ class SharedElementSourceRegistry {
     if (candidateRect != null &&
         screenSize.width > 0 &&
         screenSize.height > 0) {
+      // 保留精确的全局窗口坐标系矩形（交由目标视口通过 localToGlobal 原位减去标题栏/容器偏移）
       final double clampedWidth =
-          candidateRect.width.clamp(64.0, screenSize.width - 16.0).toDouble();
+          candidateRect.width.clamp(48.0, screenSize.width).toDouble();
       final double clampedHeight =
-          candidateRect.height.clamp(42.0, screenSize.height * 0.82).toDouble();
+          candidateRect.height.clamp(38.0, screenSize.height * 0.85).toDouble();
       final double clampedLeft = candidateRect.left
-          .clamp(4.0, math.max(4.0, screenSize.width - clampedWidth - 4.0))
+          .clamp(0.0, math.max(0.0, screenSize.width - clampedWidth))
           .toDouble();
       final double clampedTop = candidateRect.top
-          .clamp(4.0, math.max(4.0, screenSize.height - clampedHeight - 4.0))
+          .clamp(0.0, math.max(0.0, screenSize.height - clampedHeight))
           .toDouble();
       final normalizedRect = Rect.fromLTWH(
         clampedLeft,
@@ -260,10 +266,63 @@ class SharedElementSourceRegistry {
   }
 }
 
-/// [v3.1.0] 全局统一灵动非线性动画曲线系统与跟手物理引擎
+/// 物理弹簧仿真曲线（借鉴 FlClash `prism_ui/lib_motion.dart` `SpringCurve`），
+/// 在 [seconds] 时长内求解真实弹簧微分方程并将微弱残差平滑收敛至 1.0。
+class PhysicsSpringCurve extends Curve {
+  PhysicsSpringCurve(
+    SpringDescription spring, {
+    required this.seconds,
+    double initialVelocity = 0.0,
+  }) : _simulation = SpringSimulation(spring, 0.0, 1.0, initialVelocity);
+
+  final double seconds;
+  final SpringSimulation _simulation;
+  late final double _residual = 1.0 - _simulation.x(seconds);
+
+  @override
+  double transformInternal(double t) {
+    return (_simulation.x(t * seconds) + _residual * t).clamp(0.0, 1.0);
+  }
+}
+
+/// 解析静止视口容器左上角相对根窗口原点的坐标，确保嵌套容器内的壁纸补偿层与根壁纸像素对齐
+Offset _resolveStationaryGlobalOrigin(BuildContext context) {
+  try {
+    final ro = context.findRenderObject();
+    if (ro is RenderBox && ro.attached && ro.hasSize) {
+      final origin = ro.localToGlobal(Offset.zero);
+      if (origin.dx.isFinite && origin.dy.isFinite) {
+        return origin;
+      }
+    }
+  } catch (_) {}
+  return Offset(0.0, Platform.isWindows ? kWindowsDesktopTitleBarHeight : 0.0);
+}
+
+/// [v3.1.0 / v3.1.9] 全局统一灵动非线性动画曲线系统与跟手物理引擎
 /// 对齐 Apple iOS 26 Fluid Motion、HyperOS 2.0 与 Miuix 阻尼弹簧动效规范
 class AppCurves {
   AppCurves._();
+
+  /// 次级页面 SharedElement 卡片展开临界阻尼弹簧曲线（360ms + 高初速灵动弹出 + 丝滑停靠）
+  static final Curve sharedElementOpen = PhysicsSpringCurve(
+    SpringDescription.withDurationAndBounce(
+      duration: const Duration(milliseconds: 360),
+      bounce: 0.0,
+    ),
+    seconds: 0.36,
+    initialVelocity: 3.0,
+  );
+
+  /// 次级页面 SharedElement 卡片收敛临界阻尼弹簧曲线（320ms）
+  static final Curve sharedElementClose = PhysicsSpringCurve(
+    SpringDescription.withDurationAndBounce(
+      duration: const Duration(milliseconds: 320),
+      bounce: 0.0,
+    ),
+    seconds: 0.32,
+    initialVelocity: 1.4,
+  );
 
   /// 页面全幅转场与切周曲线 (Fluid Quintic Out): 瞬时灵动响应 -> 极速巡航 -> 丝滑无感停靠
   static const Curve pageSlide = Cubic(0.22, 1.0, 0.36, 1.0);
@@ -504,6 +563,8 @@ class _PageControllerMotionBlurState extends State<PageControllerMotionBlur>
   @override
   Widget build(BuildContext context) {
     final bool hasBlur = _quantizedSigma > 0.28;
+    final Offset stationaryOrigin =
+        hasBlur ? _resolveStationaryGlobalOrigin(context) : Offset.zero;
     return ImageFiltered(
       enabled: hasBlur,
       imageFilter: _resolveFilter(_quantizedSigma),
@@ -511,8 +572,12 @@ class _PageControllerMotionBlurState extends State<PageControllerMotionBlur>
         fit: StackFit.expand,
         children: [
           if (hasBlur)
-            const IgnorePointer(
-              child: AppBackgroundLayer(blur: 0.0, tintColor: Colors.transparent),
+            IgnorePointer(
+              child: AppBackgroundLayer(
+                blur: 0.0,
+                tintColor: Colors.transparent,
+                viewportOffset: stationaryOrigin,
+              ),
             ),
           widget.child,
         ],
@@ -571,6 +636,7 @@ class _DirectionalMotionBlurSwitcherState
   final Set<int> _activatedIndices = <int>{};
   double _lastQuantizedSigma = 0.0;
   ImageFilter _cachedFilter = _zeroFilter;
+  Timer? _prewarmTimer;
 
   @override
   void initState() {
@@ -599,9 +665,9 @@ class _DirectionalMotionBlurSwitcherState
       }
     });
 
-    // 首帧渲染完毕后，在下一空闲帧静默预热其余主页面 (如日历页、设置页)，
-    // 确保首次点击切换“课程 ↔ 日历”时子树与 Layout 已经 100% 就绪，消除首帧构建卡顿。
-    SchedulerBinding.instance.addPostFrameCallback((_) {
+    // 错峰预热其余主页面 (如日历页、设置页)：延迟 450ms 待开屏褪去后再静默激活，
+    // 既避免与冷启动首两帧抢占光栅化资源，又保证切换“课程 ↔ 日历 ↔ 设置”时零重建瞬时响应。
+    _prewarmTimer = Timer(const Duration(milliseconds: 450), () {
       if (!mounted) return;
       bool added = false;
       for (int i = 0; i < widget.pageCount; i++) {
@@ -644,6 +710,7 @@ class _DirectionalMotionBlurSwitcherState
 
   @override
   void dispose() {
+    _prewarmTimer?.cancel();
     _controller.dispose();
     super.dispose();
   }
@@ -684,6 +751,8 @@ class _DirectionalMotionBlurSwitcherState
         final bool hasBlur = isAnimating && quantizedSigma > 0.28;
         final ImageFilter activeFilter =
             hasBlur ? _resolveFilter(quantizedSigma) : _zeroFilter;
+        final Offset stationaryOrigin =
+            hasBlur ? _resolveStationaryGlobalOrigin(context) : Offset.zero;
 
         return Stack(
           fit: StackFit.expand,
@@ -698,6 +767,7 @@ class _DirectionalMotionBlurSwitcherState
                   sign: sign,
                   hasBlur: hasBlur,
                   activeFilter: activeFilter,
+                  stationaryOrigin: stationaryOrigin,
                 ),
           ],
         );
@@ -713,6 +783,7 @@ class _DirectionalMotionBlurSwitcherState
     required double sign,
     required bool hasBlur,
     required ImageFilter activeFilter,
+    required Offset stationaryOrigin,
   }) {
     final bool isCurrent = index == _currentIndex;
     final bool isExiting = isAnimating && index == _previousIndex;
@@ -748,10 +819,11 @@ class _DirectionalMotionBlurSwitcherState
                     if (enableSlotBlur)
                       FractionalTranslation(
                         translation: Offset(-translation.dx, -translation.dy),
-                        child: const IgnorePointer(
+                        child: IgnorePointer(
                           child: AppBackgroundLayer(
                             blur: 0.0,
                             tintColor: Colors.transparent,
+                            viewportOffset: stationaryOrigin,
                           ),
                         ),
                       ),

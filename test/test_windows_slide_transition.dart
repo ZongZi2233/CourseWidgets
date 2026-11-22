@@ -7,9 +7,7 @@ import 'package:coursewidgets/main.dart';
 import 'package:coursewidgets/services/storage_service.dart';
 import 'package:coursewidgets/providers/schedule_provider.dart';
 import 'package:coursewidgets/services/theme_service.dart';
-import 'package:coursewidgets/ui/screens/windows_custom_window.dart';
 import 'package:coursewidgets/ui/screens/settings_general_screen.dart';
-import 'package:coursewidgets/ui/transitions/smooth_slide_transitions.dart';
 
 void main() {
   testWidgets('Test SmoothSlideTransitionsBuilder on Windows Desktop', (tester) async {
@@ -60,15 +58,18 @@ void main() {
     expect(screenFinder, findsOneWidget);
 
     final RenderBox screenBox = tester.renderObject(screenFinder) as RenderBox;
-    debugPrint('SettingsGeneralScreen globalOffset: ${screenBox.localToGlobal(Offset.zero)}');
+    final Offset screenOffset = screenBox.localToGlobal(Offset.zero);
+    debugPrint('SettingsGeneralScreen globalOffset: $screenOffset');
     debugPrint('SettingsGeneralScreen size: ${screenBox.size}');
+    expect(screenOffset.dx, equals(0.0));
+    expect(screenOffset.dy, equals(40.0));
+    expect(screenBox.size, equals(const Size(1280.0, 760.0)));
 
-    // 检查文字
-    final textFinder = find.text('自适应深色模式');
-    debugPrint('Found text "自适应深色模式": ${textFinder.evaluate().length}');
-    if (textFinder.evaluate().isNotEmpty) {
-      final RenderBox textBox = tester.renderObject(textFinder.first) as RenderBox;
-      debugPrint('Text globalOffset: ${textBox.localToGlobal(Offset.zero)}, size: ${textBox.size}');
-    }
+    // Pop back to SettingsMainScreen and confirm it returns cleanly
+    Navigator.of(tester.element(screenFinder)).maybePop();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 120));
+    await tester.pumpAndSettle();
+    expect(find.byType(SettingsGeneralScreen), findsNothing);
   });
 }

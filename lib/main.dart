@@ -201,23 +201,48 @@ void main() async {
   GlassEffect.useHighPerformanceShader = false;
   AppLogger.render('🎨 着色器模式: 旗舰高质量 (Premium)');
 
-  // [v3.0.0] 初始化全局静态单次壁纸模糊烘焙服务
-  StaticBlurredWallpaperService.instance.initialize();
-  AppLogger.render('StaticBlurredWallpaperService 初始化完毕');
-
   await loadGlobalBackground();
   if (!isDesktop) {
+    // 移动端在原生单层开屏期间同步就绪静态壁纸模糊纹理与莫奈色彩
+    StaticBlurredWallpaperService.instance.initialize();
+    AppLogger.render('StaticBlurredWallpaperService 初始化完毕');
     await ThemeService().refreshMonetColors();
   }
 
-  // [v3.0.0-alpha18] 全时全刻强制 Premium 旗舰材质，彻底禁用运行时自动降级
+  // [v3.0.0-alpha18] 全时全刻强制 Premium 旗舰材质，彻底禁用运行时自动降级（仅在值变化时写盘）
   ThemeService.globalGlassQualityNotifier.value = GlassQuality.premium;
-  await storage.setString('glass_quality', GlassQuality.premium.name);
-  await storage.setString('global_glass_quality', GlassQuality.premium.name);
+  final premiumQualityName = GlassQuality.premium.name;
+  if (storage.getString('glass_quality') != premiumQualityName) {
+    await storage.setString('glass_quality', premiumQualityName);
+  }
+  if (storage.getString('global_glass_quality') != premiumQualityName) {
+    await storage.setString('global_glass_quality', premiumQualityName);
+  }
 
   final scheduleProvider = ScheduleProvider();
+  Future<void>? desktopCoreInitFuture;
 
-  if (!isDesktop) {
+  if (isDesktop) {
+    // 桌面端：在 runApp 前即刻并行启动核心着色器预热与 SQLite 课表装载（不阻塞首帧 Splash 上屏）
+    desktopCoreInitFuture = Future.wait<void>([
+      () async {
+        await LiquidGlassWidgets.initialize(
+          warmUpMode: GlassWarmUpMode.always,
+        );
+        GlassPerformanceMonitor.rasterBudget =
+            const Duration(microseconds: 8333);
+        GlassPerformanceMonitor.sustainedFrameThreshold = 120;
+        await ProgressiveBlur.preload();
+        AppLogger.render('Desktop Shaders Initialized.');
+      }(),
+      scheduleProvider.loadSavedData(),
+    ]).then(
+      (_) {},
+      onError: (Object e, StackTrace st) {
+        AppLogger.error('STARTUP', 'Desktop core init error: $e', e, st);
+      },
+    );
+  } else {
     // 移动端（Android/iOS）：在系统原生单层开屏画面期间并行完成着色器预热与课表数据装载，
     // 确保原生开屏结束后直接进入已就绪的主界面，杜绝两层开屏动画！
     await Future.wait([
@@ -283,86 +308,81 @@ void main() async {
         ..hasShadow = true
         ..backgroundColor = splashBaseColor.toNative();
     }
-    await winService.applyDwmStyle();
+    unawaited(winService.applyDwmStyle());
     WindowsTrayService().setPreventCloseOnHide(true);
-    await winService.setPreventCloseOnHide(true);
 
+    // 窗口显现后再启动静态壁纸模糊烘焙，避免与开屏首帧争抢解码与 GPU 带宽
+    StaticBlurredWallpaperService.instance.initialize();
+    AppLogger.render('StaticBlurredWallpaperService 初始化完毕');
+
+    // 等待并行核心（着色器 + SQLite 课表）就绪，放行开屏过渡门禁（1600ms 安全超时兜底）
     unawaited(() async {
       try {
-        // 1. 桌面端 38MB 字体与莫奈壁纸取色完全后台异步执行，绝不阻塞开屏退场（就绪后通过 Notifier 响应式生效）
-        if (Platform.isWindows || Platform.isMacOS) {
-          unawaited(() async {
-            try {
-              final sfProLoader = FontLoader('SFPro');
-              sfProLoader.addFont(rootBundle.load('assets/fonts/SF-Pro.ttf'));
-              final pingFangLoader = FontLoader('PingFangSC');
-              pingFangLoader.addFont(
-                rootBundle.load('assets/fonts/PingFangSC-Semibold.otf'),
-              );
-              await Future.wait([
-                sfProLoader.load(),
-                pingFangLoader.load(),
-              ]);
-              globalDesktopFontsLoadedNotifier.value = true;
-              AppLogger.engine('Desktop Custom Fonts Loaded.');
-            } catch (e, st) {
-              AppLogger.error('FONT', 'Failed to load custom fonts: $e', e, st);
-            }
-          }());
-        }
-        unawaited(ThemeService().refreshMonetColors());
-
-        // 2. 仅等待核心着色器预热 + 托盘/通知/SQLite 数据装载，并附带 2 秒超时兜底
-        await Future.wait<void>([
-          () async {
-            await LiquidGlassWidgets.initialize(
-              warmUpMode: GlassWarmUpMode.always,
-            );
-            GlassPerformanceMonitor.rasterBudget =
-                const Duration(microseconds: 8333);
-            GlassPerformanceMonitor.sustainedFrameThreshold = 120;
-            await ProgressiveBlur.preload();
-            AppLogger.render('Desktop Shaders Initialized.');
-          }(),
-          () async {
-            try {
-              await NotificationManager().initialize();
-            } catch (e, st) {
-              AppLogger.error('NOTIF', '系统通知管理器初始化失败: $e', e, st);
-            }
-            if (Platform.isWindows) {
-              try {
-                final appData = Platform.environment['APPDATA'];
-                if (appData != null) {
-                  final oldLnk = File(
-                    '$appData\\Microsoft\\Windows\\Start Menu\\Programs\\CourseWidgets.lnk',
-                  );
-                  if (oldLnk.existsSync()) {
-                    oldLnk.deleteSync();
-                  }
-                }
-                await localNotifier.setup(
-                  appName: 'CourseWidgets',
-                  shortcutPolicy: ShortcutPolicy.requireCreate,
-                );
-                WindowsTrayService().setPreventCloseOnHide(true);
-                await WindowsTrayService().initialize();
-                debugPrint('✅ Windows 托盘与通知服务后台初始化完成');
-              } catch (e) {
-                debugPrint('Windows 托盘/通知初始化异常: $e');
-              }
-            }
-            await scheduleProvider.loadSavedData();
-          }(),
-        ]).timeout(
-          const Duration(seconds: 2),
-          onTimeout: () => <void>[],
+        await (desktopCoreInitFuture ?? Future<void>.value()).timeout(
+          const Duration(milliseconds: 1600),
+          onTimeout: () {},
         );
       } catch (e, st) {
         AppLogger.error('STARTUP', 'Desktop parallel startup error: $e', e, st);
       } finally {
         globalStartupReadyNotifier.value = true;
       }
+    }());
+
+    // 非阻塞后台初始化：托盘、通知服务，以及错峰延迟加载超大字体与莫奈取色
+    unawaited(() async {
+      try {
+        await NotificationManager().initialize();
+      } catch (e, st) {
+        AppLogger.error('NOTIF', '系统通知管理器初始化失败: $e', e, st);
+      }
+      if (Platform.isWindows) {
+        try {
+          if (storage.getBool('win_legacy_lnk_cleaned_v319') != true) {
+            final appData = Platform.environment['APPDATA'];
+            if (appData != null) {
+              final oldLnk = File(
+                '$appData\\Microsoft\\Windows\\Start Menu\\Programs\\CourseWidgets.lnk',
+              );
+              if (oldLnk.existsSync()) {
+                oldLnk.deleteSync();
+              }
+            }
+            await storage.setBool('win_legacy_lnk_cleaned_v319', true);
+          }
+          await localNotifier.setup(
+            appName: 'CourseWidgets',
+            shortcutPolicy: ShortcutPolicy.requireCreate,
+          );
+          WindowsTrayService().setPreventCloseOnHide(true);
+          await WindowsTrayService().initialize();
+          debugPrint('✅ Windows 托盘与通知服务后台初始化完成');
+        } catch (e) {
+          debugPrint('Windows 托盘/通知初始化异常: $e');
+        }
+      }
+
+      // 错峰延迟 280ms 加载 38MB 自定义字体与莫奈取色，避开开屏退场主画布光栅化窗口
+      await Future<void>.delayed(const Duration(milliseconds: 280));
+      if (Platform.isWindows || Platform.isMacOS) {
+        try {
+          final sfProLoader = FontLoader('SFPro');
+          sfProLoader.addFont(rootBundle.load('assets/fonts/SF-Pro.ttf'));
+          final pingFangLoader = FontLoader('PingFangSC');
+          pingFangLoader.addFont(
+            rootBundle.load('assets/fonts/PingFangSC-Semibold.otf'),
+          );
+          await Future.wait([
+            sfProLoader.load(),
+            pingFangLoader.load(),
+          ]);
+          globalDesktopFontsLoadedNotifier.value = true;
+          AppLogger.engine('Desktop Custom Fonts Loaded.');
+        } catch (e, st) {
+          AppLogger.error('FONT', 'Failed to load custom fonts: $e', e, st);
+        }
+      }
+      unawaited(ThemeService().refreshMonetColors());
     }());
   }
 

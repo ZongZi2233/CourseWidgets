@@ -2,6 +2,24 @@
 
 本文档记录 CourseWidgets 各版本更新的动态活动演进，重点关注架构改进、渲染优化、故障诊断与教务抓取能力提升。
 
+## [v3.1.9] - 2026-11-22 (Build 3190 正式版)
+
+### 1. Windows 冷启动全链路提速
+- **消除每次启动的重复 SQLite 迁移与全表重算**：将 `DatabaseHelper` 打开版本号对齐至 `MigrationRunner.kTargetSchemaVersion (v4)` 并对已达目标版本的数据库跳过重复 DDL 校验；`ScheduleProvider` 启动装载时仅在课表时间戳或节次确有变化时写库，在内存中直接计算可用周次并将通知同步异步化，大幅削减 SQLite 启动耗时；
+- **并行预热着色器与数据、去重非关键 I/O**：在 `runApp()` 前即并行发起着色器预热与课表数据加载，桌面端静态壁纸模糊烘焙移至首帧显现之后，移除每帧冗余 MMKV 写入、过时的 Start Menu 快捷方式反复重建与重叠初始化调用；
+- **开屏与主 tab 错峰调度**：将 `AnimatedSplashOverlay` 最短展示时长与淡出时长分别收敛至 `220ms`，将日历/设置页 Offstage 预热推迟至开屏退场后 (`450ms`)，大幅缩短桌面端冷启动至可交互时间。
+
+### 2. 修复 Windows 切换页面时壁纸上下跳动
+- **全窗口坐标系像素级对齐 (`AppBackgroundLayer` & `RenderSharedBlurStencil`)**：为嵌套于 40px 持久化标题栏（`kWindowsDesktopTitleBarHeight`）及课表网格边距内部的 `AppBackgroundLayer` 与静态模糊卡片采样层引入 `viewportOffset` 坐标转换与 `OverflowBox` 偏移对齐，确保切换 Tab（课程/日历/设置）、切周或进出次级页面时动态模糊补偿壁纸与底层根壁纸保持 100% 像素级重合，彻底根除壁纸纵向跳动与微缩错位。
+
+### 3. SharedElement 次级页面转场物理弹簧与高帧率重构
+- **修复 Windows Y 轴偏移，精准从被点击圆角矩形卡片展开/缩回**：在 `_SharedElementMorphTransition` 中引入 `LayoutBuilder` 精确视口尺寸与 `Navigator` 局部坐标原点映射（扣除顶部标题栏高度），并保留全局 `SharedElementSourceRegistry` 精确圆角矩形边界；
+- **物理弹簧仿真与高帧率合成管线 (`PhysicsSpringCurve` & `smooth_slide_transitions.dart`)**：引入真实临界阻尼 `SpringSimulation` 展开/收敛曲线及中断折返锚点；移除整屏每帧 `ImageFiltered` 离屏模糊与双层嵌套 `Opacity` `saveLayer`，改用单层 `OverflowBox` + `Transform.scale` + 轻量化微晶过渡高光，同时移除 `SettingsAboutScreen` 内部冗余的 `600ms` 二次淡入延迟；
+- **跟手预见性返回升级**：增大可触发阻尼区间并保留划动释放速度惯性，取消返回时采用弹簧过冲回弹；次级页面被覆盖时采用居中 Z 轴景深微缩（0.965），避免与入口卡片横向脱节。
+
+### 4. 关于软件页版权文案精简与 GitHub 仓库直达
+- 移除关于软件页及项目文档版权声明中的 `2025-2026` 日期年份（统一为 `Copyright © ZongZi`），点击关于软件页底部版权卡片可自动唤起系统默认浏览器访问 `https://github.com/ZongZi2233/CourseWidgets`。
+
 ## [v3.1.8] - 2026-11-20 (Build 3180 正式版)
 
 ### 1. Windows 首帧秒开开屏、DWM 原生硬件圆角对齐与无边框透底优化

@@ -1432,6 +1432,14 @@ class _RenderSharedBlurStencil extends RenderProxyBox {
         current = current.parent;
       }
       Offset pos = localToGlobal(Offset.zero, ancestor: pageRoot);
+      if (pageRoot != null) {
+        // 保留外层静止视口（如 Windows 顶部 40px 标题栏以下）相对整窗壁纸的纵向基准偏移，
+        // 仅剥离横向切页产生的水平位移，避免卡片采样出的静态模糊切片与主壁纸错位。
+        final double rootTopY = pageRoot.localToGlobal(Offset.zero).dy;
+        if (rootTopY.isFinite) {
+          pos = Offset(pos.dx, pos.dy + rootTopY);
+        }
+      }
       if (refSize.width > 0 && (pos.dx < 0.0 || pos.dx >= refSize.width)) {
         pos = Offset(
           ((pos.dx % refSize.width) + refSize.width) % refSize.width,

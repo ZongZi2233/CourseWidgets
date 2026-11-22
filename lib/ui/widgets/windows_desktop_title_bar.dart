@@ -10,6 +10,9 @@ import '../../services/windows_tray_service.dart';
 import 'macos_traffic_lights.dart';
 import '../screens/windows_custom_window.dart' show windowsGlobalIsMaximized;
 
+/// Windows 桌面端持久化顶部标题栏固定高度（逻辑像素）
+const double kWindowsDesktopTitleBarHeight = 40.0;
+
 /// 全局 NavigatorKey，供桌面端标题栏控制路由回退与感知层级
 final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -168,7 +171,7 @@ class WindowsDesktopTitleBar extends StatelessWidget {
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
         child: Container(
-          height: 40,
+          height: kWindowsDesktopTitleBarHeight,
           padding: const EdgeInsets.symmetric(horizontal: 16),
           decoration: BoxDecoration(
             color: isDark

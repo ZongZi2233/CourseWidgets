@@ -5,13 +5,14 @@ import 'dart:ui';
 import '../../constants/theme_constants.dart';
 import '../../constants/version.dart';
 import 'dart:io';
+import 'package:url_launcher/url_launcher.dart';
+import '../../services/app_update_service.dart';
 import '../widgets/app_update_dialog.dart';
 import '../widgets/liquid_components.dart' as liquid;
 import '../widgets/immersive_status_bar_backdrop.dart';
 import '../widgets/windows_desktop_title_bar.dart'
     show setWindowsDesktopTitle, clearWindowsDesktopTitle;
 import '../../utils/glass_settings_helper.dart';
-import '../../utils/responsive_utils.dart';
 import 'package:smooth_scroll_multiplatform/smooth_scroll_multiplatform.dart';
 
 /// [修复7] iOS 26 液态玻璃风格关于软件页面
@@ -21,36 +22,36 @@ class SettingsAboutScreen extends StatefulWidget {
   State<SettingsAboutScreen> createState() => _SettingsAboutScreenState();
 }
 
-class _SettingsAboutScreenState extends State<SettingsAboutScreen>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _fadeAnimation;
-  late Animation<Offset> _slideAnimation;
-
+class _SettingsAboutScreenState extends State<SettingsAboutScreen> {
   @override
   void initState() {
     super.initState();
     setWindowsDesktopTitle('关于软件');
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 600),
-      vsync: this,
-    );
-    _fadeAnimation = CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeOut,
-    );
-    _slideAnimation = Tween<Offset>(
-      begin: const Offset(0, 0.1),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
-    _controller.forward();
   }
 
   @override
   void dispose() {
     clearWindowsDesktopTitle('关于软件');
-    _controller.dispose();
     super.dispose();
+  }
+
+  Future<void> _openGithubRepository() async {
+    HapticFeedback.lightImpact();
+    final uri = Uri.parse(githubRepoUrl);
+    try {
+      final launched = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+      if (launched) return;
+    } catch (_) {}
+    try {
+      await AppUpdateService.instance.openExternalDownloadUrl(githubRepoUrl);
+    } catch (_) {
+      if (mounted) {
+        liquid.showLiquidToast(context, '无法打开浏览器，请手动访问 GitHub 仓库');
+      }
+    }
   }
 
   @override
@@ -74,145 +75,180 @@ class _SettingsAboutScreenState extends State<SettingsAboutScreen>
             child: DynMouseScroll(
               durationMS: 250,
               scrollSpeed: 1.2,
-              builder: (context, controller, physics) => FadeTransition(
-                opacity: _fadeAnimation,
-                child: SlideTransition(
-                  position: _slideAnimation,
-                  child: ListView(
-                    controller: controller,
-                    physics: physics,
-                    padding: EdgeInsets.fromLTRB(20, topPadding, 20, isDesktop ? 32 : 100),
-                    children: [
-                      Center(
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 860),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              liquid.HyperOSCard(
-                        padding: const EdgeInsets.all(32),
-                        child: Column(
-                        children: [
-                          // App Icon with glow effect
-                          Container(
-                            width: 120,
-                            height: 120,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(32),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: AppThemeColors.babyPink.withValues(
-                                    alpha: 0.3,
-                                  ),
-                                  blurRadius: 30,
-                                  spreadRadius: 5,
-                                ),
-                              ],
-                            ),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(32),
-                              child: Image.asset(
-                                'assets/icon.png',
-                                fit: BoxFit.cover,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 24),
-
-                          // App Name
-                          Text(
-                            'CourseWidgets',
-                            style: TextStyle(
-                              fontSize: 32,
-                              fontWeight: FontWeight.w900,
-                              color: primaryTextColor,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-
-                          // Version Badge (轻量胶囊，杜绝卡片内嵌套玻璃卡片)
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: AppThemeColors.babyPink.withValues(alpha: 0.25),
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: Text(
-                              'v$appVersion · Build $buildNumber',
-                              style: const TextStyle(
-                                fontSize: 13,
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 20),
-
-                    _buildUpdateCheckButton(),
-
-                    const SizedBox(height: 20),
-
-                    // Copyright Card
-                    liquid.HyperOSCard(
-                      padding: const EdgeInsets.all(20),
+              builder: (context, controller, physics) => ListView(
+                controller: controller,
+                physics: physics,
+                padding: EdgeInsets.fromLTRB(20, topPadding, 20, isDesktop ? 32 : 100),
+                children: [
+                  Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 860),
                       child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Icon(
-                            CupertinoIcons.heart_fill,
-                            color: AppThemeColors.babyPink.withValues(
-                              alpha: 0.6,
+                          liquid.HyperOSCard(
+                    padding: const EdgeInsets.all(32),
+                    child: Column(
+                    children: [
+                      // App Icon with glow effect
+                      Container(
+                        width: 120,
+                        height: 120,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(32),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppThemeColors.babyPink.withValues(
+                                alpha: 0.3,
+                              ),
+                              blurRadius: 30,
+                              spreadRadius: 5,
                             ),
-                            size: 32,
+                          ],
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(32),
+                          child: Image.asset(
+                            'assets/icon.png',
+                            fit: BoxFit.cover,
                           ),
-                          const SizedBox(height: 12),
-                          // [v2.1.8修复5] 修改copyright为开发者名称
-                          Text(
-                            'Copyright © 2025-2026 ZongZi',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: secondaryTextColor,
-                              height: 1.5,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Open Source under GNU AGPL-3.0 License',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: tertiaryTextColor,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Made with Flutter & Liquid Glass',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: tertiaryTextColor.withValues(alpha: 0.7),
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
-                    ),
+                      const SizedBox(height: 24),
 
-                    const SizedBox(height: 100),
-                            ],
+                      // App Name
+                      Text(
+                        'CourseWidgets',
+                        style: TextStyle(
+                          fontSize: 32,
+                          fontWeight: FontWeight.w900,
+                          color: primaryTextColor,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+
+                      // Version Badge (轻量胶囊，杜绝卡片内嵌套玻璃卡片)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: AppThemeColors.babyPink.withValues(alpha: 0.25),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Text(
+                          'v$appVersion · Build $buildNumber',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
                       ),
                     ],
                   ),
                 ),
+
+                const SizedBox(height: 20),
+
+                _buildUpdateCheckButton(),
+
+                const SizedBox(height: 20),
+
+                // Copyright Card（点击直接跳转默认浏览器打开 GitHub 仓库主页）
+                MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: liquid.HyperOSCard(
+                    padding: const EdgeInsets.all(20),
+                    onTap: _openGithubRepository,
+                    child: Column(
+                      children: [
+                        Icon(
+                          CupertinoIcons.heart_fill,
+                          color: AppThemeColors.babyPink.withValues(
+                            alpha: 0.6,
+                          ),
+                          size: 32,
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          copyright,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w500,
+                            color: secondaryTextColor,
+                            height: 1.5,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Open Source under GNU AGPL-3.0 License',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: tertiaryTextColor,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Made with Flutter & Liquid Glass',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: tertiaryTextColor.withValues(alpha: 0.7),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: (isDark ? Colors.white : Colors.black)
+                                .withValues(alpha: isDark ? 0.08 : 0.05),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                CupertinoIcons.link,
+                                size: 12,
+                                color: secondaryTextColor,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                'github.com/ZongZi2233/CourseWidgets',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                  color: secondaryTextColor,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Icon(
+                                CupertinoIcons.arrow_up_right,
+                                size: 11,
+                                color: tertiaryTextColor,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 100),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
 
           // 2. 状态栏微模糊避让 (0..48dp)
           if (!isDesktop) const ImmersiveStatusBarBackdrop(),

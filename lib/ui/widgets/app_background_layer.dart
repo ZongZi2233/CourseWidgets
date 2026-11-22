@@ -4,16 +4,24 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../constants/version.dart' show globalBackgroundPath, kSolidColorBackground;
 import '../../main.dart' show globalDarkModeNotifier;
+import 'windows_desktop_title_bar.dart' show kWindowsDesktopTitleBarHeight;
 
-/// [v2.9.3 / v3.1.0] 全局统一壁纸背景层（支持高斯模糊、亚克力通透微乳磨砂、纯色无壁纸模式与深浅色自适应）
+/// [v2.9.3 / v3.1.0 / v3.1.9] 全局统一壁纸背景层（支持全窗口坐标对齐、高斯模糊、亚克力通透微乳磨砂与纯色模式）
 class AppBackgroundLayer extends StatelessWidget {
   final double blur;
   final Color? tintColor;
+
+  /// 当前组件左上角相对根窗口原点的偏移（如 Windows 标题栏下方为 `Offset(0, 40)`），
+  /// 用于在嵌套/裁剪容器中绘制时与根壁纸保持 100% 像素对齐，消除切换页面时壁纸上下跳动。
+  final Offset? viewportOffset;
+  final bool alignToWindow;
 
   const AppBackgroundLayer({
     super.key,
     this.blur = 16.0,
     this.tintColor,
+    this.viewportOffset,
+    this.alignToWindow = true,
   });
 
   static String? _cachedKey;
@@ -124,10 +132,46 @@ class AppBackgroundLayer extends StatelessWidget {
                     ? const Color(0x6012151B)
                     : const Color(0x35FFFFFF));
 
-            Widget bg = DecoratedBox(
-              decoration: BoxDecoration(image: decImage),
-              child: const SizedBox.expand(),
-            );
+            final Size windowSize = MediaQuery.sizeOf(context);
+            final Offset resolvedOrigin = alignToWindow
+                ? (viewportOffset ??
+                    Offset(
+                      0.0,
+                      Platform.isWindows ? kWindowsDesktopTitleBarHeight : 0.0,
+                    ))
+                : Offset.zero;
+            final bool needsWindowAlignment =
+                resolvedOrigin != Offset.zero &&
+                windowSize.width > 0 &&
+                windowSize.height > 0;
+
+            Widget bg;
+            if (needsWindowAlignment) {
+              bg = ClipRect(
+                child: OverflowBox(
+                  alignment: Alignment.topLeft,
+                  minWidth: windowSize.width,
+                  maxWidth: windowSize.width,
+                  minHeight: windowSize.height,
+                  maxHeight: windowSize.height,
+                  child: Transform.translate(
+                    offset: Offset(-resolvedOrigin.dx, -resolvedOrigin.dy),
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(image: decImage),
+                      child: SizedBox(
+                        width: windowSize.width,
+                        height: windowSize.height,
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            } else {
+              bg = DecoratedBox(
+                decoration: BoxDecoration(image: decImage),
+                child: const SizedBox.expand(),
+              );
+            }
 
             if (blur > 0.0) {
               bg = ImageFiltered(

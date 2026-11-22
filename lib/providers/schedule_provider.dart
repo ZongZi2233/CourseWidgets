@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import '../models/course_event.dart';
@@ -52,6 +53,19 @@ class ScheduleProvider with ChangeNotifier {
       semesterStartDate: _currentConfig.semesterStartDate,
       nextCourse: nextCourse,
     );
+  }
+
+  /// 根据当前内存中的课程直接计算有效周次（避免冷启动重复全表扫描 SQLite）
+  void _recomputeAvailableWeeksFromMemory() {
+    int maxWeek = 25;
+    for (final course in _courses) {
+      final w = course.getWeekNumber(_currentConfig.semesterStartDate);
+      if (w > maxWeek) {
+        maxWeek = w;
+      }
+    }
+    maxWeek = maxWeek.clamp(25, 35);
+    _availableWeeks = List.generate(maxWeek, (i) => i + 1);
   }
 
   /// 刷新有效周次缓存
@@ -316,21 +330,23 @@ class ScheduleProvider with ChangeNotifier {
           );
           await alignScheduleToStartDate(targetMonday);
         }
-        // 确保数据库中的所有课程起止时分与当前课时配置 100% 严格同步
-        await _recalculateAllTimestamps(_currentConfig, _currentConfig);
-        await _refreshAvailableWeeks();
-        await Future.microtask(() async {
-          await _jumpToCurrentDate();
-          _syncNativeWidgetAndNotification();
-          debugPrint(
-            '✅ 数据加载完成，已跳转到当前日期：第 $_currentWeek 周，星期 $_currentDay',
-          );
-        });
+        // 确保数据库中的所有课程起止时分与当前课时配置 100% 严格同步（仅当时间戳/节次有变更时写库）
+        await _recalculateAllTimestamps(
+          _currentConfig,
+          _currentConfig,
+          syncNative: false,
+        );
+        _recomputeAvailableWeeksFromMemory();
+        await _jumpToCurrentDate();
+        unawaited(Future.microtask(_syncNativeWidgetAndNotification));
+        debugPrint(
+          '✅ 数据加载完成，已跳转到当前日期：第 $_currentWeek 周，星期 $_currentDay',
+        );
       } else {
         _availableWeeks = List.generate(25, (i) => i + 1);
         if (_currentWeek < 1) _currentWeek = 1;
         if (_currentDay < 1 || _currentDay > 7) _currentDay = 1;
-        _syncNativeWidgetAndNotification();
+        unawaited(Future.microtask(_syncNativeWidgetAndNotification));
         debugPrint('⚠️ 没有课程数据，使用默认周次 1~25 和星期');
       }
     } catch (e) {
@@ -628,8 +644,9 @@ class ScheduleProvider with ChangeNotifier {
 
   Future<void> _recalculateAllTimestamps(
     ScheduleConfigModel oldConfig,
-    ScheduleConfigModel newConfig,
-  ) async {
+    ScheduleConfigModel newConfig, {
+    bool syncNative = true,
+  }) async {
     final oldStartDate = oldConfig.semesterStartDate;
     final oldStartDayOnly = DateTime(
       oldStartDate.year,
@@ -642,6 +659,7 @@ class ScheduleProvider with ChangeNotifier {
     final baseMonday =
         TimeAlignmentEngine.getEarliestCourseMonday(_courses) ?? oldStartMonday;
     final newCourses = <CourseEvent>[];
+    bool hasChanges = false;
 
     for (final course in _courses) {
       final startDt = DateTime.fromMillisecondsSinceEpoch(course.startTime);
@@ -745,22 +763,34 @@ class ScheduleProvider with ChangeNotifier {
         startSection,
         endSection,
       );
+      final newStartMs = newStartTime.millisecondsSinceEpoch;
+      final newEndMs = newEndTime.millisecondsSinceEpoch;
+      if (newStartMs != course.startTime ||
+          newEndMs != course.endTime ||
+          startSection != course.startSection ||
+          endSection != course.endSection) {
+        hasChanges = true;
+      }
 
       newCourses.add(
         course.copyWith(
-          startTime: newStartTime.millisecondsSinceEpoch,
-          endTime: newEndTime.millisecondsSinceEpoch,
+          startTime: newStartMs,
+          endTime: newEndMs,
           startSection: startSection,
           endSection: endSection,
         ),
       );
     }
 
-    _courses = newCourses;
-    await DatabaseHelper.instance.insertCourses(newCourses);
-    debugPrint('✅ 已重新计算 ${newCourses.length} 个课程的时间戳，杜绝午休穿透与跨时段重叠');
+    if (hasChanges) {
+      _courses = newCourses;
+      await DatabaseHelper.instance.insertCourses(newCourses);
+      debugPrint('✅ 已重新计算 ${newCourses.length} 个课程的时间戳，杜绝午休穿透与跨时段重叠');
+    }
 
-    _syncNativeWidgetAndNotification();
+    if (syncNative) {
+      _syncNativeWidgetAndNotification();
+    }
   }
 
   void useDefaultConfig() {

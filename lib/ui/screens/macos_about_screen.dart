@@ -1,5 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' as material;
+import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../constants/version.dart';
 
 // 常量定义
@@ -77,14 +79,27 @@ class MacOSSAboutScreen extends StatelessWidget {
               // 技术栈卡片
               _buildInfoCard(
                 '技术栈',
-                'Flutter 3.40.0\nDart 3.11.0\nImpeller 渲染引擎\nCupertino UI (macOS原生)',
+                'Flutter 3.50.0\nDart 3.14.0\nImpeller 渲染引擎\nCupertino UI (macOS原生)',
                 CupertinoIcons.book_solid,
               ),
 
               const SizedBox(height: 16),
 
-              // 版权信息卡片
-              _buildInfoCard('版权信息', copyright, CupertinoIcons.info_circle),
+              // 版权信息卡片（点击打开 GitHub 仓库）
+              GestureDetector(
+                onTap: () {
+                  HapticFeedback.lightImpact();
+                  launchUrl(
+                    Uri.parse(githubRepoUrl),
+                    mode: LaunchMode.externalApplication,
+                  );
+                },
+                child: _buildInfoCard(
+                  '版权信息',
+                  copyright,
+                  CupertinoIcons.info_circle,
+                ),
+              ),
 
               const SizedBox(height: 32),
 

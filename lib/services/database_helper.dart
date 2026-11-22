@@ -43,8 +43,9 @@ class DatabaseHelper {
     if (kIsWeb) {
       _database = await openDatabase(
         inMemoryDatabasePath,
-        version: 1,
+        version: MigrationRunner.kTargetSchemaVersion,
         onCreate: _createDB,
+        onUpgrade: _upgradeDB,
       );
       return _database!;
     }
@@ -54,7 +55,7 @@ class DatabaseHelper {
 
     _database = await _initDB('schedule.db');
 
-    // 确保所有表都存在（检查并创建缺失的表）
+    // 若外部或历史库结构尚未对齐，按 PRAGMA user_version 幂等校准（已达 v4 时零 DDL 立即返回）
     if (_database != null) {
       await _ensureTablesExist(_database!);
     }
@@ -88,8 +89,9 @@ class DatabaseHelper {
         // 移动端使用默认路径
         return await openDatabase(
           join(await getDatabasesPath(), filePath),
-          version: 1,
+          version: MigrationRunner.kTargetSchemaVersion,
           onCreate: _createDB,
+          onUpgrade: _upgradeDB,
         );
       } else {
         // 其他平台使用当前目录的临时目录
@@ -103,10 +105,19 @@ class DatabaseHelper {
     }
 
     AppLogger.data('打开 SQLite 数据库: $dbPath');
-    return await openDatabase(dbPath, version: 1, onCreate: _createDB);
+    return await openDatabase(
+      dbPath,
+      version: MigrationRunner.kTargetSchemaVersion,
+      onCreate: _createDB,
+      onUpgrade: _upgradeDB,
+    );
   }
 
   Future _createDB(Database db, int version) async {
+    await MigrationRunner.runMigrations(db);
+  }
+
+  Future _upgradeDB(Database db, int oldVersion, int newVersion) async {
     await MigrationRunner.runMigrations(db);
   }
 

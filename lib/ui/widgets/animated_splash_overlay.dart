@@ -54,17 +54,17 @@ class _AnimatedSplashOverlayState extends State<AnimatedSplashOverlay>
 
     _fadeController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 350),
+      duration: const Duration(milliseconds: 220),
     );
 
     _fadeAnimation = Tween<double>(begin: 1.0, end: 0.0).animate(
       CurvedAnimation(
         parent: _fadeController,
-        curve: Curves.easeInOutCubic,
+        curve: Curves.easeOutCubic,
       ),
     );
 
-    _scaleAnimation = Tween<double>(begin: 1.0, end: 1.04).animate(
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 1.035).animate(
       CurvedAnimation(
         parent: _fadeController,
         curve: Curves.easeOutCubic,
@@ -85,8 +85,8 @@ class _AnimatedSplashOverlayState extends State<AnimatedSplashOverlay>
     StaticBlurredWallpaperService.instance.addListener(_onBlurServiceChanged);
     widget.startupReadyNotifier?.addListener(_onStartupReadyChanged);
 
-    // 安全超时保护：若后台数据或着色器异常，4000ms 强制开门揭晓主界面，确保永远不卡死
-    _safetyTimer = Timer(const Duration(milliseconds: 4000), () {
+    // 安全超时保护：若后台数据或着色器异常，2500ms 强制开门揭晓主界面，确保永远不卡死
+    _safetyTimer = Timer(const Duration(milliseconds: 2500), () {
       _triggerDismiss();
     });
 
@@ -167,10 +167,10 @@ class _AnimatedSplashOverlayState extends State<AnimatedSplashOverlay>
     _isGatePassed = true;
     _safetyTimer?.cancel();
 
-    // 确保在窗口真正显示后至少呈现优雅的品牌动效 680ms，杜绝闪跳
+    // 确保在窗口真正显示后至少呈现简洁丝滑的品牌开屏动效 220ms，兼顾极速冷启动与零闪跳
     final elapsedMs =
         DateTime.now().difference(_visibleStartTime).inMilliseconds;
-    final remainingMs = 680 - elapsedMs;
+    final remainingMs = 220 - elapsedMs;
 
     if (remainingMs > 0) {
       Future.delayed(Duration(milliseconds: remainingMs), () {
