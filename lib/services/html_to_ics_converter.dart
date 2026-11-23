@@ -1,5 +1,6 @@
 import 'dart:convert';
 import '../models/schedule_config.dart';
+import 'edu_schedule_extractor.dart';
 
 /// 数据模型
 class Course {
@@ -429,6 +430,11 @@ class EamsHtmlParser {
 
   /// 从完整 HTML 页面源码中提取课程列表
   static List<Map<String, dynamic>> parseFromHtml(String rawHtml) {
+    final unified = EduScheduleExtractor.parseRawContent(rawHtml);
+    if (unified.isNotEmpty) {
+      return unified;
+    }
+
     final List<Map<String, dynamic>> results = [];
     final Set<String> seenKeys = {};
 

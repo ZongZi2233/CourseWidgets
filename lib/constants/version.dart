@@ -2,9 +2,9 @@ import 'dart:io';
 import '../main.dart' show globalDarkModeNotifier, globalBackgroundPath;
 export '../main.dart' show globalBackgroundPath;
 
-/// 当前版本：[v3.1.9 正式版] 主线正式发布（Build 3190）
-const String appVersion = '3.1.9';
-const int buildNumber = 3190;
+/// 当前版本：[v3.2.0 正式版] 主线正式发布（Build 3200）
+const String appVersion = '3.2.0';
+const int buildNumber = 3200;
 const String copyright = 'Copyright © ZongZi';
 const String githubRepoUrl = 'https://github.com/ZongZi2233/CourseWidgets';
 

@@ -6,7 +6,8 @@ import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import '../../providers/schedule_provider.dart';
 import '../../services/data_import_service.dart';
 import '../../constants/theme_constants.dart';
-import '../../services/theme_service.dart'; // Added this import
+import '../../services/theme_service.dart';
+import '../../utils/glass_settings_helper.dart';
 import '../widgets/liquid_components.dart' as liquid;
 import '../widgets/liquid_toast.dart';
 import '../widgets/immersive_status_bar_backdrop.dart';
@@ -69,12 +70,11 @@ class _SettingsDataScreenState extends State<SettingsDataScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // [v3.0.0] 大卡片 1：数据导入
-                          _buildSectionHeader('数据导入', isDark),
+                          _buildSectionHeader('课表导入', isDark),
                           _buildCardGroup([
                           _buildActionRow(
-                            '教务系统导入',
-                            '支持超星、正方、青果等主流系统',
+                            '智能教务系统导入',
+                            '自动识别树维、正方、强智、URP、青果、金智等主流教务',
                             CupertinoIcons.globe,
                             () {
                               if (Platform.isAndroid ||
@@ -98,7 +98,7 @@ class _SettingsDataScreenState extends State<SettingsDataScreen> {
                           ),
                           _buildActionRow(
                             '导入 ICS 日历',
-                            '通用日历 iCalendar 格式文件',
+                            '兼容 WakeUp / 苹果日历等标准 iCalendar 文件',
                             Icons.calendar_month_rounded,
                             () async {
                               final success = await provider.importData();
@@ -109,8 +109,8 @@ class _SettingsDataScreenState extends State<SettingsDataScreen> {
                             isDark,
                           ),
                           _buildActionRow(
-                            '导入 HTML 课表',
-                            '教务网课程表离线网页文件',
+                            '导入 HTML / 接口网页',
+                            '支持树维、正方、强智、青果离线课表网页源码',
                             Icons.code_rounded,
                             () async {
                               final success = await provider.importHtmlData();
@@ -122,7 +122,7 @@ class _SettingsDataScreenState extends State<SettingsDataScreen> {
                           ),
                           _buildActionRow(
                             '导入 JSON 课表',
-                            '备份数据与自定义时间配置',
+                            '还原备份或解析正方/URP/金智接口 JSON 文件',
                             Icons.receipt_long_rounded,
                             () async {
                               final success = await provider.importJsonFile();
@@ -282,16 +282,20 @@ class _SettingsDataScreenState extends State<SettingsDataScreen> {
               future: dataImportService.getAllHistory(),
               builder: (context, snapshot) {
                 if (!snapshot.hasData) {
-                  return const Center(
-                    child: CupertinoActivityIndicator(color: Colors.white),
+                  return Center(
+                    child: CupertinoActivityIndicator(
+                      color: GlassSettingsHelper.getTextColor(context),
+                    ),
                   );
                 }
                 final history = snapshot.data!;
                 if (history.isEmpty) {
-                  return const Center(
+                  return Center(
                     child: Text(
                       '暂无历史记录',
-                      style: TextStyle(color: Colors.white),
+                      style: TextStyle(
+                        color: GlassSettingsHelper.getSecondaryTextColor(context),
+                      ),
                     ),
                   );
                 }
@@ -360,7 +364,7 @@ class _SettingsDataScreenState extends State<SettingsDataScreen> {
                                       Text(
                                         '${item['semester']} | ${item['source_type']}',
                                         style: TextStyle(
-                                          color: Colors.white.withOpacity(0.6),
+                                          color: GlassSettingsHelper.getSecondaryTextColor(dialogContext),
                                           fontSize: 12,
                                         ),
                                       ),
@@ -374,9 +378,9 @@ class _SettingsDataScreenState extends State<SettingsDataScreen> {
                                     size: 24,
                                   )
                                 else
-                                  const Icon(
+                                  Icon(
                                     CupertinoIcons.arrow_right_circle,
-                                    color: Colors.white70,
+                                    color: GlassSettingsHelper.getSecondaryTextColor(dialogContext),
                                     size: 22,
                                   ),
                               ],

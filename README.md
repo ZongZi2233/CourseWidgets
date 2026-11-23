@@ -12,7 +12,7 @@
 [![Dart](https://img.shields.io/badge/Dart-3.14.0+-0175C2?logo=dart)](https://dart.dev)
 [![Android](https://img.shields.io/badge/Android-15%2B%20(API%2035--37.2)-3DDC84?logo=android)](https://github.com/ZongZi2233/CourseWidgets/releases)
 [![Windows](https://img.shields.io/badge/Windows-10%2F11%20x64-0078D6?logo=windows)](https://github.com/ZongZi2233/CourseWidgets/releases)
-[![Version](https://img.shields.io/badge/Release-v3.1.9%20(Build%203190)-FF9BAE)](https://github.com/ZongZi2233/CourseWidgets/releases/tag/v3.1.9)
+[![Version](https://img.shields.io/badge/Release-v3.2.0%20(Build%203200)-FF9BAE)](https://github.com/ZongZi2233/CourseWidgets/releases/tag/v3.2.0)
 
 [English](README_EN.md) | **简体中文**
 
@@ -20,10 +20,10 @@
 
 ---
 
-## 📦 最新正式版下载：[v3.1.9 (Build 3190)](https://github.com/ZongZi2233/CourseWidgets/releases/tag/v3.1.9)
+## 📦 最新正式版下载：[v3.2.0 (Build 3200)](https://github.com/ZongZi2233/CourseWidgets/releases/tag/v3.2.0)
 
-* **Android 客户端 (`arm64-v8a`)**：[`CourseWidgets-v3.1.9-android-arm64-v8a.apk`](https://github.com/ZongZi2233/CourseWidgets/releases/download/v3.1.9/CourseWidgets-v3.1.9-android-arm64-v8a.apk) —— 支持 Android 15+（API 35+，基于 API 37.2 与 NDK r30 编译），完整适配 Android 16 实况通知（Live Updates），内置应用内流式更新与 SHA-256 校验安装，开启仅 `arm64-v8a` 纯净分包、R8 代码混淆压缩与 Dart AOT 编译优化。
-* **Windows 桌面端 (`x64`)**：[`CourseWidgets-v3.1.9-windows-x64.zip`](https://github.com/ZongZi2233/CourseWidgets/releases/download/v3.1.9/CourseWidgets-v3.1.9-windows-x64.zip) —— 免安装便携版（开启 MSVC `/O2` + `/OPT:REF,/OPT:ICF` 链接裁剪优化与 Dart AOT 编译优化），内置基于编译产物 `SHA-256` 差异比对与 HTTP Range 的文件级增量热更新引擎、极速冷启动开屏、Windows 11 DWM 原生零边框圆角对齐、系统托盘与重启动单实例毫秒唤醒及 4K 高分屏缩放。
+* **Android 客户端 (`arm64-v8a`)**：[`CourseWidgets-v3.2.0-android-arm64-v8a.apk`](https://github.com/ZongZi2233/CourseWidgets/releases/download/v3.2.0/CourseWidgets-v3.2.0-android-arm64-v8a.apk) —— 支持 Android 15+（API 35+，基于 API 37.2 与 NDK r30 编译），完整适配 Android 16 实况通知（Live Updates）与 JR/轨道交通导视排版，内置智能 9 大教务抓取、应用内流式更新与 SHA-256 校验安装，开启仅 `arm64-v8a` 纯净分包、R8 代码混淆压缩与 Dart AOT 编译优化。
+* **Windows 桌面端 (`x64`)**：[`CourseWidgets-v3.2.0-windows-x64.zip`](https://github.com/ZongZi2233/CourseWidgets/releases/download/v3.2.0/CourseWidgets-v3.2.0-windows-x64.zip) —— 免安装便携版（开启 MSVC `/O2` + `/OPT:REF,/OPT:ICF` 链接裁剪优化与 Dart AOT 编译优化），内置基于编译产物 `SHA-256` 差异比对与 HTTP Range 的文件级增量热更新引擎、极速冷启动开屏、WebView2 9 大教务系统智能嗅探提取、Windows 11 DWM 原生零边框圆角对齐、系统托盘与重启动单实例毫秒唤醒。
 
 ---
 
@@ -33,7 +33,7 @@
 * **原生 `Notification.ProgressStyle` 与状态栏胶囊**：深度适配 Android 16 实况通知 API，在状态栏胶囊（`setShortCriticalText`）、锁屏界面与下拉通知中心实时展示当前课程进度、课间倒计时或待上课程预告。
 * **加粗胶囊进度轨道与单课单节点设计**：定制高辨识度粗胶囊进度轨道、高 DPI 矢量跟踪游标（`ProgressTrackerIcon`）与课节圆点节点（`ProgressStyle.Point`）。严格遵循 **`1 节课 = 1 个课节节点`** 的直观映射，并提供“居中圆点样式”与“按时长分段样式”两种进度条风格切换。
 * **跨天与午夜防歧义星期标注**：在预告次日、后天及今日待上课程（尤其是午夜 0 点过后至早课开始前）时，通知标题与副标题显式注明 **`今日周X` / `明日周X` / `后天周X`** 与上下课时间点，状态栏胶囊显示 **`周X·第Y节`**，并内置午夜 `00:00:02` 精准闹钟自动刷新星期归属。
-* **精简通知顶栏与多级提醒**：移除通知栏左上角冗余应用名称占位，突出放大课程名称与教室地点；同时支持课前双次提醒（如课前 15 分钟与 5 分钟）及 Windows 桌面端系统通知与托盘驻留。
+* **JR / 重庆地铁导视级信息层次与零重复排版**：采用高对比度线路色块徽章、大字号加粗主课程名与突出站台/教室号，配合简洁清晰的 `▸ 下节/候课` 次级指引，剔除重复星期/冗余字段；同时支持课前双次提醒与 Windows 桌面端系统通知与托盘驻留。
 
 ### 2. 💎 全新优化的 Liquid Glass（液态玻璃）材质与 120Hz 渲染架构
 * **分层混合液态玻璃管线**：
@@ -48,19 +48,20 @@
 ### 3. 📅 精准课表引擎与多源无损导入导出
 * **语义节次持久化（SQLite Schema v4）**：将每门课程的起始节次（`startSection`）与结束节次（`endSection`）独立落盘存储。调整作息时间或学期开学日时，课程自动按节次重新校准时间戳，不会发生错位或丢失。
 * **学期首周周一自动归一与系统日程对齐**：无论用户在日历中选择周几作为开学参考日，系统自动将其归一至当周周一；导出的 `.ics` 日历文件实时读取最新课程与作息时间，确保同步至系统日历时星期与上下课时间 100% 对齐。
-* **内置教务系统 WebView 导入与多格式支持**：
-  * **教务系统抓取**：内置跨平台 WebView，支持主流高校教务系统（树维 EAMS、正方、强智、青果等）登录抓取、会话 Cookie 保持与凭据安全填充；
+* **智能教务系统 WebView 导入与多格式支持**：
+  * **9 大教务系统智能识别与提取**：内置 Android & Windows 对等 WebView 引擎，自动识别新老正方 (`jwglxt`/`#Table1`)、强智 (`jsxsd`)、树维 EAMS / 微服务 V8、新老 URP (`thisSemesterCurriculum`)、青果 (`Kingosoft`) 与金智/今日校园 (`Wisedu`)，支持 XHR/Fetch 透明拦截与一键直达课表页；
+  * **120Hz 课时配置与撤回保护**：支持从已导入课表智能反推真实作息、保留自定义午晚锚点的智慧顺推以及“撤回到上次编辑”无损回退；
   * **标准格式互通**：支持 `.ics`（iCalendar，内嵌 `X-SCHEDULE-CONFIG` 作息参数）、`.html` 教务网页课表导入，以及 `.json` 全量数据与自定义作息备份恢复。
 
 ---
 
-## 📜 版本演进摘要（v2.0 ~ v3.1.9 CHANGELOG 概览）
+## 📜 版本演进摘要（v2.0 ~ v3.2.0 CHANGELOG 概览）
 
 完整的逐版本详细记录请参阅 [CHANGELOG.md](CHANGELOG.md)。
 
 | 阶段 / 版本 | 核心架构演进与功能更新摘要 |
 | :--- | :--- |
-| **v3.1.4 ~ v3.1.9**<br>*(2026-11)* | • **Windows 极速冷启动、壁纸像素对齐与物理弹簧 SharedElement 转场 (`v3.1.9`)**：消除重复 SQLite Schema 迁移与启动写库并并行预热着色器，大幅压缩 Windows 冷启动耗时；通过 `viewportOffset` 与 `OverflowBox` 对齐嵌套壁纸坐标系彻底根除切换页面壁纸上下跳动；采用临界阻尼 `SpringSimulation`、Navigator 局部坐标映射与零整屏 `ImageFiltered` 合成重构次级页面卡片展开/收回与跟手预见性返回；精简关于页版权信息并支持点击跳转 GitHub 仓库；<br>• **Windows 秒开开屏、DWM 原生圆角对齐与托盘/重启动唤醒修复 (`v3.1.8`)**：C++ 居中预建 `1024x768` 无边框区域并等待首帧开屏动画 GPU 光栅化后再显现窗口，彻底消除空窗等待与二次重建；对齐 `DWMWCP_ROUND` + `DWMWA_COLOR_NONE` 零边框满铺画布，并通过 `DesktopWindowService` 与单实例原生消息通道修复隐藏至托盘后无法从托盘及再次点击图标唤醒的问题；<br>• **Windows 文件级 SHA-256 增量热更新与 Android 应用内流式更新 (`v3.1.7`)**：Windows 端通过比对本地编译文件与远端 `windows-manifest.json` 哈希差异，利用 HTTP Range (`206 Partial Content`) 仅拉取变更文件块并原子替换重启（节省 90%+ 流量）；Android 端恢复设置页检查更新，支持应用内流式下载、SHA-256 校验与系统安装器自动调起；<br>• **Flutter 3.50.0 / Dart 3.14.0 与 `nativeapi` 依赖全面升级 (`v3.1.7`)**：升级核心依赖（`window_manager 0.7.0`、`tray_manager 0.9.0`、`flutter_local_notifications 23.0.3`、`fluent_ui 4.17.0`、`mmkv 2.4.3` 等），桌面端全面迁移至 `nativeapi` / Dart Native Assets 原生同步窗口与托盘 API；<br>• **真 3D 双 Blob 水滴融球形变菜单 (`GlassMenu` Premium) 与 UI 层级优化**：全量锁定 `GlassQuality.premium` 实时全组件 Backdrop 3D 凸透镜折射与无白边参数，保留水滴拉丝 J 曲线与欠阻尼弹簧碰撞回弹；修复课表纵向滚动穿透星期表头与横屏日历底栏遮挡；<br>• **真液态玻璃清晰度修复与 SharedElement 圆角矩形卡片转场**：为悬浮 `GlassContainer` 全面启用独立渲染层（`useOwnLayer: true`）与微模糊清透参数，实现从被点击圆角矩形卡片原位等比展开/缩回及双曲橡皮筋阻尼预见性返回；<br>• **Android SDK 37.2 / NDK r30 工具链与实况通知跨天防歧义**：升级适配 Android API 37.2、NDK `30.0.16248370`、16KB 页对齐与 R8 `fullMode`；实况通知显式标注 `今日周X` / `明日周X` 与午夜 0 点自动刷新。 |
+| **v3.1.4 ~ v3.2.0**<br>*(2026-11)* | • **智能 9 大教务导入、导视级实况通知与 120Hz 课时配置撤回 (`v3.2.0`)**：重构 `EduScheduleExtractor` 自动指纹识别并支持正方/树维 EAMS & V8/强智/URP/青果/金智全端对等拦截提取；重塑 Android 16 实况通知为 JR/轨道交通导视牌强字号对比与零重复排版；重构课时设置页至 120Hz（移除常驻 28 个输入框重绘与冗余写库）、升级智慧推算与原位对齐，并加入持久化“撤回到上次编辑”及全部设置页实时导视摘要；<br>• **Windows 极速冷启动、壁纸像素对齐与物理弹簧 SharedElement 转场 (`v3.1.9`)**：消除重复 SQLite Schema 迁移与启动写库并并行预热着色器，大幅压缩 Windows 冷启动耗时；通过 `viewportOffset` 与 `OverflowBox` 对齐嵌套壁纸坐标系彻底根除切换页面壁纸上下跳动；采用临界阻尼 `SpringSimulation`、Navigator 局部坐标映射与零整屏 `ImageFiltered` 合成重构次级页面卡片展开/收回与跟手预见性返回；精简关于页版权信息并支持点击跳转 GitHub 仓库；<br>• **Windows 秒开开屏、DWM 原生圆角对齐与托盘/重启动唤醒修复 (`v3.1.8`)**：C++ 居中预建 `1024x768` 无边框区域并等待首帧开屏动画 GPU 光栅化后再显现窗口，彻底消除空窗等待与二次重建；对齐 `DWMWCP_ROUND` + `DWMWA_COLOR_NONE` 零边框满铺画布，并通过 `DesktopWindowService` 与单实例原生消息通道修复隐藏至托盘后无法从托盘及再次点击图标唤醒的问题；<br>• **Windows 文件级 SHA-256 增量热更新与 Android 应用内流式更新 (`v3.1.7`)**：Windows 端通过比对本地编译文件与远端 `windows-manifest.json` 哈希差异，利用 HTTP Range (`206 Partial Content`) 仅拉取变更文件块并原子替换重启（节省 90%+ 流量）；Android 端恢复设置页检查更新，支持应用内流式下载、SHA-256 校验与系统安装器自动调起；<br>• **Flutter 3.50.0 / Dart 3.14.0 与 `nativeapi` 依赖全面升级 (`v3.1.7`)**：升级核心依赖（`window_manager 0.7.0`、`tray_manager 0.9.0`、`flutter_local_notifications 23.0.3`、`fluent_ui 4.17.0`、`mmkv 2.4.3` 等），桌面端全面迁移至 `nativeapi` / Dart Native Assets 原生同步窗口与托盘 API；<br>• **真 3D 双 Blob 水滴融球形变菜单 (`GlassMenu` Premium) 与 UI 层级优化**：全量锁定 `GlassQuality.premium` 实时全组件 Backdrop 3D 凸透镜折射与无白边参数，保留水滴拉丝 J 曲线与欠阻尼弹簧碰撞回弹；修复课表纵向滚动穿透星期表头与横屏日历底栏遮挡；<br>• **真液态玻璃清晰度修复与 SharedElement 圆角矩形卡片转场**：为悬浮 `GlassContainer` 全面启用独立渲染层（`useOwnLayer: true`）与微模糊清透参数，实现从被点击圆角矩形卡片原位等比展开/缩回及双曲橡皮筋阻尼预见性返回；<br>• **Android SDK 37.2 / NDK r30 工具链与实况通知跨天防歧义**：升级适配 Android API 37.2、NDK `30.0.16248370`、16KB 页对齐与 R8 `fullMode`；实况通知显式标注 `今日周X` / `明日周X` 与午夜 0 点自动刷新。 |
 | **v3.1.2 ~ v3.1.3**<br>*(2026-11)* | • **Android 16 实况通知粗胶囊轨道恢复**：定制 8~10dp 粗胶囊轨道、课节圆点节点与高 DPI 游标，隐藏通知左上角冗余软件名；<br>• **系统日程（ICS）同步校准**：修复导出旧快照导致第二节课时间错位及 UTC 展开跨日导致星期偏移的问题；<br>• **120Hz 渲染管线优化**：引入常驻预热主页面池、硬件级 `RSuperellipse` 单通解析渲染、课表滚动 `RepaintBoundary` 光栅隔离与速度包络 1D 动态模糊。 |
 | **v3.1.0 ~ v3.1.1**<br>*(2026-10)* | • **实况通知单课单节点与排版升级**：重构 `1 节课 = 1 个进度段`，支持“居中圆点”与“按时长分段”双样式切换，放大突出课程与倒计时主标题；<br>• **日历页与课表页同源联动**：重构月/周日历视图与课表数据同源实时联动，支持纯色无壁纸模式（浅色纯白 / 深色深灰）与响应式防溢出课程卡片。 |
 | **v3.0.0 ~ v3.0.9**<br>*(2026-09 ~ 10)* | • **SQLite Schema v4 节次固化**：持久化保存课程节次索引，解决修改课时长度导致课程移位或被吞的问题；<br>• **全链路无损导入导出与 WebView 会话保持**：支持携带作息配置的 ICS 双向导入导出、HTML 解析与 JSON 备份；Windows WebView2 独立数据目录与凭据自动回填；<br>• **静态壁纸预烘焙模糊架构**：引入 `StaticBlurService` 视口级壁纸预烘焙与 `HyperOSCard` 无边框漫反射阴影设计。 |

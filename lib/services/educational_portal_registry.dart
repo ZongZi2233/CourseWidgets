@@ -18,55 +18,61 @@ class EducationalPortal {
 }
 
 class EducationalPortalRegistry {
-  /// 通用教务系统规范
+  /// 通用教务系统智能适配模板（支持域名/路径/JS/DOM 指纹自动识别与提取）
   static const List<EducationalPortal> genericSystems = [
     EducationalPortal(
-      name: '正方教务 (新版)',
-      pinyin: 'zhengfang zf zfjw xinban',
-      systemType: '正方新版',
-      hint: '支持大多数以 /jwglxt 或 /xtgl 为路径的高校正方系统',
+      name: '新正方教务 (jwglxt)',
+      pinyin: 'zhengfang zf zfjw xinban jwglxt',
+      systemType: '新正方教务',
+      hint: '自动拦截 kbList 接口与 #kbgrid_table_0 课表网格，支持直达课表页',
     ),
     EducationalPortal(
-      name: '正方教务 (老版/经典)',
-      pinyin: 'zhengfang zf zfjw laoban',
-      systemType: '正方老版',
-      hint: '经典版正方教务系统 (包含 default2.aspx 或 xskbcx.aspx)',
+      name: '老正方教务 (经典 aspx)',
+      pinyin: 'zhengfang zf zfjw laoban xskbcx Table1',
+      systemType: '老正方教务',
+      hint: '支持 xskbcx.aspx / iframeautoheight / #Table1 单双周结构化提取',
     ),
     EducationalPortal(
       name: '树维教务 (EAMS 教学管理)',
-      pinyin: 'shuwei sw eams courseTableForStd',
+      pinyin: 'shuwei sw eams courseTableForStd TaskActivity',
       systemType: '树维EAMS',
-      hint: '路径通常为 /eams/courseTableForStd.action，支持全自动模拟查询',
+      hint: '路径常含 /eams/courseTableForStd.action，支持沙箱执行与同源直取',
     ),
     EducationalPortal(
-      name: '树维教务 (微服务 V8/新版)',
-      pinyin: 'shuwei sw v8 weifuwu student',
+      name: '树维教务 (微服务 V8)',
+      pinyin: 'shuwei sw v8 weifuwu for-std',
       systemType: '树维微服务V8',
-      hint: '现代 SPA 单页应用微服务教务，支持数据接口深度抽取',
+      hint: '支持 /for-std/course-table 单页接口嗅探与 studentTableVms 解析',
     ),
     EducationalPortal(
-      name: '强智教务 (新版综合教学)',
-      pinyin: 'qiangzhi qz qzjw jsxsd',
+      name: '强智综合教务 (jsxsd)',
+      pinyin: 'qiangzhi qz qzjw jsxsd xskb',
       systemType: '强智教务',
-      hint: '路径通常包含 /jsxsd/xskb/xskb_list.do 或综合教务平台',
-    ),
-    EducationalPortal(
-      name: '青果综合教务 (Kingosoft)',
-      pinyin: 'qingguo qg kingosoft',
-      systemType: '青果教务',
-      hint: '青果软件教务系统，包含常规课表与选课表',
+      hint: '支持 /jsxsd/xskb/xskb_list.do、kbcontent/kbcontent1 与 font 属性提取',
     ),
     EducationalPortal(
       name: '新 URP 综合教务',
-      pinyin: 'urp newurp zonghe',
+      pinyin: 'urp newurp zonghe thisSemesterCurriculum',
       systemType: '新URP',
-      hint: '包含 /urp 或 /academic 路径的高校综合教务系统',
+      hint: '支持 thisSemesterCurriculum JSON 嗅探、bitmask 位串与直连接口',
     ),
     EducationalPortal(
-      name: '金智综合教务 (方正)',
-      pinyin: 'jinzhi jz fangzheng',
-      systemType: '金智教务',
-      hint: '金智教育/方正教务综合管理系统',
+      name: '老 URP 教务 (xkAction)',
+      pinyin: 'urp oldurp xkAction displayTag',
+      systemType: '老URP',
+      hint: '支持 /xkAction.do?actionType=6 课表清单自动解析',
+    ),
+    EducationalPortal(
+      name: '青果教务 (Kingosoft)',
+      pinyin: 'qingguo qg kingosoft znpk Pri_StuSel',
+      systemType: '青果教务',
+      hint: '自动穿透 frmRpt iframe 框架，提取个人课表与选课报告',
+    ),
+    EducationalPortal(
+      name: '金智教务 / 今日校园 (Wisedu)',
+      pinyin: 'jinzhi jz wisedu wdkb ehall xskcb',
+      systemType: '金智/今日校园',
+      hint: '支持 /jwapp/sys/wdkb 接口嗅探、SKZC 周次位串及主动拉取',
     ),
   ];
 

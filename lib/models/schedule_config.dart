@@ -209,17 +209,41 @@ class ScheduleConfigModel {
     );
   }
 
+  // 精确比较两份配置是否在作息时间、时长、显示周末与开学日期上完全一致
+  bool sameAs(ScheduleConfigModel other) {
+    if (semesterStartDate.year != other.semesterStartDate.year ||
+        semesterStartDate.month != other.semesterStartDate.month ||
+        semesterStartDate.day != other.semesterStartDate.day ||
+        breakTime != other.breakTime ||
+        useCustomConfig != other.useCustomConfig ||
+        showWeekends != other.showWeekends ||
+        isEqualDuration != other.isEqualDuration ||
+        defaultDuration != other.defaultDuration) {
+      return false;
+    }
+    for (int i = 1; i <= 13; i++) {
+      if ((sectionStartTimes[i] ?? 0) != (other.sectionStartTimes[i] ?? 0) ||
+          (sectionDurations[i] ?? 0) != (other.sectionDurations[i] ?? 0)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   // 获取配置描述文本
   String getDescription() {
-    if (!useCustomConfig) {
-      return '默认配置 (8:00开始, 50分钟/节, 10分钟休息)';
-    }
-
     final firstStart = sectionStartTimes[1] ?? 480;
-    final firstDuration = sectionDurations[1] ?? 50;
+    final firstDuration =
+        isEqualDuration ? defaultDuration : (sectionDurations[1] ?? defaultDuration);
     final hour = firstStart ~/ 60;
     final minute = firstStart % 60;
+    final startText =
+        '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
 
-    return '自定义配置 (${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}开始, $firstDuration分钟/节, $breakTime分钟休息)';
+    if (!useCustomConfig) {
+      return '标准配置 ($startText开始, $firstDuration分钟/节, $breakTime分钟休息)';
+    }
+
+    return '自定义配置 ($startText开始, $firstDuration分钟/节, $breakTime分钟休息)';
   }
 }

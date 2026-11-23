@@ -7,6 +7,7 @@ import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
 import 'ics_parser.dart';
 import 'database_helper.dart';
+import 'edu_schedule_extractor.dart';
 import 'html_to_ics_converter.dart';
 import '../models/course_event.dart';
 import '../models/schedule_config.dart';
@@ -184,12 +185,12 @@ class DataImportService {
     final clean = weeksStr.trim();
     if (clean.isEmpty) return List.generate(20, (i) => i + 1);
 
-    // 1. 如果是纯 0/1 位串 (例如 "1111111100000000" 或 "010101010101")
+    // 1. 如果是纯 0/1 位串 (例如 "111111110000" 或 EAMS 53位 "011000...")
     if (RegExp(r'^[01]{6,}$').hasMatch(clean)) {
       final list = <int>[];
       // EAMS 53位标准位串索引0为占位符'0'，索引1为第1周；
-      // 若首位为'0'且长度>=20则为1-based，否则为0-based
-      final isOneBased = (clean.startsWith('0') && clean.length >= 20);
+      // 若首位为'0'且长度>=45则为1-based，否则为0-based（新URP/金智等多为18-30位0-based）
+      final isOneBased = (clean.startsWith('0') && clean.length >= 45);
       for (int i = 0; i < clean.length; i++) {
         if (clean[i] == '1') {
           list.add(isOneBased ? i : i + 1);
@@ -240,7 +241,13 @@ class DataImportService {
   }) async {
     try {
       final trimmed = htmlContent.trim();
-      // 1. 如果传入的是 JSON 字符串直接导流至 JSON 解析
+      // 1. 先尝试通过统一智能教务解析引擎直接提取 (兼容正方/强智/树维/URP/青果/金智 JSON/HTML)
+      if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+        final multiParsed = EduScheduleExtractor.parseRawContent(trimmed);
+        if (multiParsed.isNotEmpty) {
+          return await importFromJsonData(multiParsed, config: config);
+        }
+      }
       if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
         try {
           final decoded = jsonDecode(trimmed);

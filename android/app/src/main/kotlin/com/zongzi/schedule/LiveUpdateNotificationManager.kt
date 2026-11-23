@@ -19,6 +19,7 @@ import android.graphics.drawable.Icon
 import android.os.Build
 import android.text.Spannable
 import android.text.SpannableStringBuilder
+import android.text.style.BackgroundColorSpan
 import android.text.style.ForegroundColorSpan
 import android.text.style.RelativeSizeSpan
 import android.text.style.StyleSpan
@@ -100,6 +101,28 @@ object LiveUpdateNotificationManager {
         if (bold) {
             setSpan(StyleSpan(Typeface.BOLD), start, end, flags)
         }
+        return this
+    }
+
+    /**
+     * JR / 重庆轨道交通导视风格：高对比度圆方色块线路徽章（使用系统可安全渲染的原生 Span）
+     */
+    private fun SpannableStringBuilder.appendTransitBadge(
+        label: String,
+        bgColor: Int,
+        textColor: Int = 0xFFFFFFFF.toInt(),
+        relativeSize: Float = 0.78f
+    ): SpannableStringBuilder {
+        if (label.isEmpty()) return this
+        val padded = " $label "
+        val start = length
+        append(padded)
+        val end = length
+        val flags = Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+        setSpan(BackgroundColorSpan(bgColor), start, end, flags)
+        setSpan(ForegroundColorSpan(textColor), start, end, flags)
+        setSpan(RelativeSizeSpan(relativeSize), start, end, flags)
+        setSpan(StyleSpan(Typeface.BOLD), start, end, flags)
         return this
     }
 
@@ -627,57 +650,72 @@ object LiveUpdateNotificationManager {
             val nextIdx = todayCourses.indexOfFirst { it.startTime > now }
 
             if (activeIdx >= 0) {
-                // ==================== 状态 A：正在上课 ====================
+                // ==================== 状态 A：正在上课 (JR / 轨道导视高对比站牌排版) ====================
                 val current = todayCourses[activeIdx]
                 val nextCourse = if (activeIdx + 1 < todayCourses.size) todayCourses[activeIdx + 1] else null
                 val isLastOrEvening = (activeIdx == todayCourses.size - 1 && todayCourses.size >= 2) ||
                     current.startSection >= 9 ||
                     getHourOfDay(current.startTime) >= 18
 
-                val accentHex = if (isLastOrEvening) "#F2CE69" else "#8AE29A"
-                val accentColor = if (isLastOrEvening) 0xFFF2CE69.toInt() else 0xFF8AE29A.toInt()
-                val trackColor = if (isLastOrEvening) 0xFF4B3F24.toInt() else 0xFF2C4332.toInt()
+                val accentColor = if (isLastOrEvening) 0xFFF59E0B.toInt() else 0xFF10B981.toInt()
+                val badgeBgColor = if (isLastOrEvening) 0xFFD97706.toInt() else 0xFF059669.toInt()
+                val trackColor = if (isLastOrEvening) 0xFF4B3F24.toInt() else 0xFF1F4235.toInt()
 
-                val sectionLabel = formatSectionLabel(current)
+                val secBadge = formatCompactSectionBadge(current)
                 val startStr = timeFmt.format(Date(current.startTime))
                 val endStr = timeFmt.format(Date(current.endTime))
-                val locStr = cleanLocation(current.location, "教室待定")
+                val locStr = cleanLocation(current.location, "")
 
                 val totalMs = max(1L, current.endTime - current.startTime)
                 val progressFraction = ((now - current.startTime).toFloat() / totalMs.toFloat()).coerceIn(0.03f, 1f)
                 val remainingMin = max(1, ((current.endTime - now + 59_999L) / 60_000L).toInt())
 
-                val nextHintPlain = if (nextCourse != null) {
-                    val nextLoc = cleanLocation(nextCourse.location, timeFmt.format(Date(nextCourse.startTime)))
-                    "下节 ${nextCourse.name} $nextLoc"
-                } else {
-                    "今天最后一节"
-                }
-
+                // 主视区大标：[ 1-2节 ]  高等数学  A101（强字号对比：主课名 1.36x + 站台教室 1.12x）
                 val heroTitleSpan = SpannableStringBuilder()
-                    .appendStyled("上课 ", relativeSize = 0.68f, color = 0xFF9EA4B0.toInt(), bold = false)
-                    .appendStyled(startStr, relativeSize = 1.48f, color = accentColor, bold = true)
-                    .appendStyled(" · ", relativeSize = 0.72f, color = 0xFF6E737D.toInt(), bold = false)
-                    .appendStyled(endStr, relativeSize = 1.48f, color = accentColor, bold = true)
-                    .appendStyled(" 下课", relativeSize = 0.68f, color = 0xFF9EA4B0.toInt(), bold = false)
+                    .appendTransitBadge(secBadge, bgColor = badgeBgColor)
+                    .appendStyled("  ", relativeSize = 0.85f)
+                    .appendStyled(current.name, relativeSize = 1.36f, color = null, bold = true)
+                    .apply {
+                        if (locStr.isNotEmpty()) {
+                            appendStyled("  ", relativeSize = 0.9f)
+                            appendStyled(locStr, relativeSize = 1.12f, color = accentColor, bold = true)
+                        }
+                    }
 
-                // 显著拉大主次字号差距：课程名称放大 1.38x 加粗，教室 1.15x 主题色加粗，下节提示缩小至 0.68x 弱化
+                // 次视区副栏：09:40 下课  ▸ 下节 大学英语 · B203（零信息重复）
                 val detailBodySpan = SpannableStringBuilder()
-                    .appendStyled(current.name, relativeSize = 1.38f, color = null, bold = true)
-                    .appendStyled("  ", relativeSize = 1.0f)
-                    .appendStyled(locStr, relativeSize = 1.15f, color = accentColor, bold = true)
-                    .appendStyled("   ｜ $nextHintPlain", relativeSize = 0.68f, color = 0xFF8A8F99.toInt(), bold = false)
+                    .appendStyled(endStr, relativeSize = 1.08f, color = accentColor, bold = true)
+                    .appendStyled(" 下课", relativeSize = 0.82f, color = 0xFF8E95A3.toInt(), bold = false)
+                    .apply {
+                        if (nextCourse != null) {
+                            val nextStartStr = timeFmt.format(Date(nextCourse.startTime))
+                            val nextLoc = cleanLocation(nextCourse.location, "")
+                            appendStyled("   ▸ 下节 ", relativeSize = 0.80f, color = 0xFF7D8594.toInt(), bold = false)
+                            appendStyled(nextCourse.name, relativeSize = 0.96f, color = null, bold = true)
+                            if (nextLoc.isNotEmpty()) {
+                                appendStyled(" · $nextLoc", relativeSize = 0.84f, color = 0xFF8E95A3.toInt())
+                            } else {
+                                appendStyled(" · $nextStartStr", relativeSize = 0.84f, color = 0xFF8E95A3.toInt())
+                            }
+                        } else {
+                            appendStyled("   ▸ 今日终班 · $weekLabel", relativeSize = 0.82f, color = 0xFF8E95A3.toInt())
+                        }
+                    }
 
                 val segments = todayCourses.map { c ->
                     val durMin = ((c.endTime - c.startTime) / 60000f).coerceIn(25f, 120f)
                     TimelineSegment(weight = durMin, isBreak = false)
                 }
 
-                val todayWeekday = formatWeekday(now)
+                val capsule = if (remainingMin >= 60) {
+                    "剩${remainingMin / 60}时${remainingMin % 60}分"
+                } else {
+                    "剩${remainingMin}分"
+                }
 
                 return LiveUpdateSnapshot(
-                    headerSubText = "今日$todayWeekday · $sectionLabel · $weekLabel",
-                    shortCapsuleText = "剩${remainingMin}分",
+                    headerSubText = "进行中 · $startStr–$endStr",
+                    shortCapsuleText = capsule,
                     heroTitleSpan = heroTitleSpan,
                     detailBodySpan = detailBodySpan,
                     smallIconRes = R.drawable.ic_live_monster,
@@ -693,19 +731,20 @@ object LiveUpdateNotificationManager {
                     progressStyleMode = progressStyleMode
                 )
             } else if (nextIdx >= 0) {
-                // ==================== 状态 B：课间休息 / 待上课 ====================
+                // ==================== 状态 B：课间候课 / 今日首节前 ====================
                 val nextCourse = todayCourses[nextIdx]
                 val prevCourse = if (nextIdx > 0) todayCourses[nextIdx - 1] else null
 
-                val accentColor = 0xFFEB7A99.toInt()
-                val trackColor = 0xFF562939.toInt()
+                val accentColor = 0xFFF43F5E.toInt()
+                val badgeBgColor = 0xFFE11D48.toInt()
+                val trackColor = 0xFF522334.toInt()
 
                 val todayWeekday = formatWeekday(now)
-                val sectionLabel = formatSectionLabel(nextCourse)
+                val secBadge = formatCompactSectionBadge(nextCourse)
                 val breakStartMs = prevCourse?.endTime ?: max(todayStart, nextCourse.startTime - 45 * 60_000L)
                 val nextStartStr = timeFmt.format(Date(nextCourse.startTime))
                 val nextEndStr = timeFmt.format(Date(nextCourse.endTime))
-                val nextLoc = cleanLocation(nextCourse.location, "教室待定")
+                val nextLoc = cleanLocation(nextCourse.location, "")
 
                 val totalBreakMs = max(1L, nextCourse.startTime - breakStartMs)
                 val progressFraction = if (prevCourse != null || now >= breakStartMs) {
@@ -714,47 +753,56 @@ object LiveUpdateNotificationManager {
                     0.05f
                 }
                 val diffMin = max(1, ((nextCourse.startTime - now + 59_999L) / 60_000L).toInt())
+                val remainTodayCount = todayCourses.size - nextIdx
 
-                val heroTitleSpan = if (prevCourse != null) {
-                    val breakStartStr = timeFmt.format(Date(prevCourse.endTime))
-                    SpannableStringBuilder()
-                        .appendStyled("课间 ", relativeSize = 0.68f, color = 0xFF9EA4B0.toInt(), bold = false)
-                        .appendStyled(breakStartStr, relativeSize = 1.36f, color = 0xFFD0D4DE.toInt(), bold = true)
-                        .appendStyled(" · ", relativeSize = 0.72f, color = 0xFF6E737D.toInt(), bold = false)
-                        .appendStyled(nextStartStr, relativeSize = 1.48f, color = accentColor, bold = true)
-                        .appendStyled(" 上课", relativeSize = 0.68f, color = 0xFF9EA4B0.toInt(), bold = false)
-                } else {
-                    // 今日首节课前（尤其是半夜 00:00 过后）：显式标明「今日周X」与首节课起止时间，彻底消除过零点后的日期误解
-                    val prefixLabel = if (diffMin <= 45) "即将上课 " else "今日$todayWeekday "
-                    SpannableStringBuilder()
-                        .appendStyled(prefixLabel, relativeSize = 0.72f, color = 0xFF9EA4B0.toInt(), bold = true)
-                        .appendStyled(nextStartStr, relativeSize = 1.48f, color = accentColor, bold = true)
-                        .appendStyled(" · ", relativeSize = 0.72f, color = 0xFF6E737D.toInt(), bold = false)
-                        .appendStyled(nextEndStr, relativeSize = 1.36f, color = 0xFFD0D4DE.toInt(), bold = true)
-                        .appendStyled(" 下课", relativeSize = 0.68f, color = 0xFF9EA4B0.toInt(), bold = false)
-                }
+                // 主视区大标：[ NEXT ] 或 [ 3-4节 ]  大学英语  B203
+                val heroTitleSpan = SpannableStringBuilder()
+                    .appendTransitBadge(
+                        if (diffMin <= 20) "NEXT $secBadge" else secBadge,
+                        bgColor = badgeBgColor
+                    )
+                    .appendStyled("  ", relativeSize = 0.85f)
+                    .appendStyled(nextCourse.name, relativeSize = 1.36f, color = null, bold = true)
+                    .apply {
+                        if (nextLoc.isNotEmpty()) {
+                            appendStyled("  ", relativeSize = 0.9f)
+                            appendStyled(nextLoc, relativeSize = 1.12f, color = accentColor, bold = true)
+                        }
+                    }
 
-                val breakSubHint = if (prevCourse != null) {
-                    "上节 ${prevCourse.name}"
-                } else {
-                    "今日$todayWeekday · 共 ${todayCourses.size} 节"
-                }
+                // 次视区副栏：当系统 Chronometer <=90m 在右上角跳秒时，副栏不再重复播报“距开课 XX分”
                 val detailBodySpan = SpannableStringBuilder()
-                    .appendStyled(nextCourse.name, relativeSize = 1.38f, color = null, bold = true)
-                    .appendStyled("  ", relativeSize = 1.0f)
-                    .appendStyled(nextLoc, relativeSize = 1.15f, color = accentColor, bold = true)
-                    .appendStyled("   ｜ $breakSubHint", relativeSize = 0.68f, color = 0xFF8A8F99.toInt(), bold = false)
+                    .appendStyled(nextStartStr, relativeSize = 1.08f, color = accentColor, bold = true)
+                    .appendStyled(" 开课", relativeSize = 0.82f, color = 0xFF8E95A3.toInt(), bold = false)
+                    .apply {
+                        if (diffMin <= 90) {
+                            val hintLabel = if (diffMin <= 15) "提前入座" else "课间候课"
+                            appendStyled("   ▸ $hintLabel", relativeSize = 0.84f, color = 0xFF8E95A3.toInt())
+                            if (remainTodayCount > 1) {
+                                appendStyled(" · 余${remainTodayCount}门", relativeSize = 0.80f, color = 0xFF7D8594.toInt())
+                            }
+                        } else {
+                            val waitStr = if (diffMin >= 60) "${diffMin / 60}小时${diffMin % 60}分" else "${diffMin}分钟"
+                            appendStyled("   ▸ 距开课 ", relativeSize = 0.80f, color = 0xFF7D8594.toInt())
+                            appendStyled(waitStr, relativeSize = 0.96f, color = null, bold = true)
+                            appendStyled(" · 今日共${todayCourses.size}门", relativeSize = 0.80f, color = 0xFF8E95A3.toInt())
+                        }
+                    }
 
-                // 严格按今日真实课程数生成分段（不插入虚拟课间段），当前高亮指向即将上课的 nextIdx
                 val segments = todayCourses.map { c ->
                     val durMin = ((c.endTime - c.startTime) / 60000f).coerceIn(28f, 120f)
                     TimelineSegment(weight = durMin, isBreak = false)
                 }
 
-                val shortCapsule = if (diffMin <= 60) "${diffMin}分后" else "$todayWeekday$nextStartStr"
+                val shortCapsule = if (diffMin <= 90) "${diffMin}分后" else "${todayWeekday}·$nextStartStr"
+                val headerLabel = when {
+                    prevCourse == null -> "今日${todayWeekday} · $nextStartStr–$nextEndStr"
+                    diffMin <= 15 -> "即将开课 · $nextStartStr–$nextEndStr"
+                    else -> "课间候课 · $nextStartStr–$nextEndStr"
+                }
 
                 return LiveUpdateSnapshot(
-                    headerSubText = "今日$todayWeekday · $sectionLabel · $weekLabel",
+                    headerSubText = headerLabel,
                     shortCapsuleText = shortCapsule,
                     heroTitleSpan = heroTitleSpan,
                     detailBodySpan = detailBodySpan,
@@ -775,19 +823,18 @@ object LiveUpdateNotificationManager {
 
         // ==================== 状态 C：今日课程已结束或无课（展示后续预告） ====================
         val futureCourse = allCourses.filter { it.startTime > now }.minByOrNull { it.startTime }
-        val accentColor = 0xFF8AE29A.toInt()
-        val trackColor = 0xFF2C4332.toInt()
+        val accentColor = 0xFF3B82F6.toInt()
+        val badgeBgColor = 0xFF2563EB.toInt()
+        val trackColor = 0xFF1E3254.toInt()
 
         if (futureCourse != null) {
             val startStr = timeFmt.format(Date(futureCourse.startTime))
             val endStr = timeFmt.format(Date(futureCourse.endTime))
             val relDay = formatRelativeDay(futureCourse.startTime, now)
             val targetWeekday = formatWeekday(futureCourse.startTime)
-            val todayWeekday = formatWeekday(now)
-            val locStr = cleanLocation(futureCourse.location, "教室待定")
+            val locStr = cleanLocation(futureCourse.location, "")
             val sectionLabel = formatSectionLabel(futureCourse)
 
-            // 统计目标日期总节数
             val targetCal = Calendar.getInstance().apply {
                 timeInMillis = futureCourse.startTime
                 set(Calendar.HOUR_OF_DAY, 0)
@@ -807,28 +854,34 @@ object LiveUpdateNotificationManager {
                 listOf(TimelineSegment(45f), TimelineSegment(45f))
             }
 
+            // 主视区大标：[ 明日周三 ]  线性代数  D404
             val heroTitleSpan = SpannableStringBuilder()
-                .appendStyled("$relDay ", relativeSize = 0.72f, color = 0xFF9EA4B0.toInt(), bold = true)
-                .appendStyled(startStr, relativeSize = 1.48f, color = accentColor, bold = true)
-                .appendStyled(" · ", relativeSize = 0.72f, color = 0xFF6E737D.toInt(), bold = false)
-                .appendStyled(endStr, relativeSize = 1.36f, color = 0xFF9E9EA6.toInt(), bold = true)
-                .appendStyled(" 下课", relativeSize = 0.68f, color = 0xFF9EA4B0.toInt(), bold = false)
+                .appendTransitBadge(relDay, bgColor = badgeBgColor)
+                .appendStyled("  ", relativeSize = 0.85f)
+                .appendStyled(futureCourse.name, relativeSize = 1.32f, color = null, bold = true)
+                .apply {
+                    if (locStr.isNotEmpty()) {
+                        appendStyled("  ", relativeSize = 0.9f)
+                        appendStyled(locStr, relativeSize = 1.10f, color = accentColor, bold = true)
+                    }
+                }
 
-            val todayFinishHint = if (todayCourses.isNotEmpty()) {
-                "今日($todayWeekday)已下课 · ${relDay}共${targetCount}节"
-            } else {
-                "今日($todayWeekday)无课 · ${relDay}共${targetCount}节"
-            }
-
+            // 次视区副栏：08:00–09:40  ▸ 第 1-2 节 · 张教授（绝不重复 relDay 与共几节）
             val detailBodySpan = SpannableStringBuilder()
-                .appendStyled(futureCourse.name, relativeSize = 1.38f, color = null, bold = true)
-                .appendStyled("  ", relativeSize = 1.0f)
-                .appendStyled(locStr, relativeSize = 1.15f, color = accentColor, bold = true)
-                .appendStyled("   ｜ $todayFinishHint", relativeSize = 0.68f, color = 0xFF8A8F99.toInt(), bold = false)
+                .appendStyled("$startStr–$endStr", relativeSize = 1.06f, color = accentColor, bold = true)
+                .appendStyled("   ▸ $sectionLabel", relativeSize = 0.84f, color = 0xFF8E95A3.toInt())
+                .apply {
+                    val teacher = futureCourse.teacher.trim()
+                    if (teacher.isNotEmpty()) {
+                        appendStyled(" · $teacher", relativeSize = 0.82f, color = 0xFF7D8594.toInt())
+                    }
+                }
+
+            val todayPrefix = if (todayCourses.isNotEmpty()) "今日已结课" else "今日无课"
 
             return LiveUpdateSnapshot(
-                headerSubText = "$relDay · $sectionLabel · $weekLabel",
-                shortCapsuleText = "${targetWeekday}${targetCount}节",
+                headerSubText = "$todayPrefix · 后续共${targetCount}门 · $weekLabel",
+                shortCapsuleText = "$targetWeekday·$startStr",
                 heroTitleSpan = heroTitleSpan,
                 detailBodySpan = detailBodySpan,
                 smallIconRes = R.drawable.ic_live_walker,
@@ -847,18 +900,20 @@ object LiveUpdateNotificationManager {
 
         val pct = if (fallbackMax > 0) (fallbackProgress.toFloat() / fallbackMax).coerceIn(0f, 1f) else 1f
         val fallbackTitleSpan = SpannableStringBuilder()
-            .appendStyled(fallbackTitle.ifEmpty { "今日无课 · 轻松休息" }, relativeSize = 1.25f, bold = true)
+            .appendTransitBadge("休", bgColor = 0xFF4B5563.toInt())
+            .appendStyled("  ", relativeSize = 0.85f)
+            .appendStyled(fallbackTitle.ifEmpty { "近期暂无排课" }, relativeSize = 1.24f, bold = true)
         val fallbackBodySpan = SpannableStringBuilder()
-            .appendStyled(fallbackBody.ifEmpty { "课程表全天候实时同步中，点击查看完整课表" }, relativeSize = 0.85f, color = 0xFF9EA4B0.toInt())
+            .appendStyled(fallbackBody.ifEmpty { "点击查看完整课表" }, relativeSize = 0.86f, color = 0xFF8E95A3.toInt())
 
         return LiveUpdateSnapshot(
-            headerSubText = weekLabel,
+            headerSubText = "$weekLabel · 今日无课",
             shortCapsuleText = fallbackSubLocation ?: "今日无课",
             heroTitleSpan = fallbackTitleSpan,
             detailBodySpan = fallbackBodySpan,
             smallIconRes = R.drawable.ic_live_monster,
-            accentColor = accentColor,
-            trackColor = trackColor,
+            accentColor = 0xFF10B981.toInt(),
+            trackColor = 0xFF1F4235.toInt(),
             isOngoingClass = false,
             targetWhenMs = fallbackWhenTime,
             usesChronometer = fallbackUsesChronometer,
@@ -1054,6 +1109,18 @@ object LiveUpdateNotificationManager {
             }
         }
         return prefs.getInt(KEY_CURRENT_WEEK, 1).coerceAtLeast(1)
+    }
+
+    private fun formatCompactSectionBadge(course: ParsedCourse): String {
+        if (course.startSection > 0 && course.endSection >= course.startSection) {
+            return if (course.startSection == course.endSection) {
+                "${course.startSection}节"
+            } else {
+                "${course.startSection}-${course.endSection}节"
+            }
+        }
+        val label = formatSectionLabel(course)
+        return label.replace("第 ", "").replace(" ", "")
     }
 
     private fun formatSectionLabel(course: ParsedCourse): String {

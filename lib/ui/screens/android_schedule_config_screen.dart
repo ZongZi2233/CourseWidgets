@@ -1,21 +1,24 @@
+import 'dart:async';
 import 'dart:io';
-import 'dart:math' as math;
-import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:provider/provider.dart';
+import 'package:smooth_scroll_multiplatform/smooth_scroll_multiplatform.dart';
+import '../../constants/theme_constants.dart';
 import '../../models/schedule_config.dart';
 import '../../providers/schedule_provider.dart';
-import '../../constants/theme_constants.dart';
+import '../../services/time_alignment_engine.dart';
+import '../../utils/glass_settings_helper.dart';
+import '../widgets/immersive_status_bar_backdrop.dart';
 import '../widgets/liquid_components.dart' as liquid;
 import '../widgets/liquid_glass_pickers.dart';
-import '../widgets/immersive_status_bar_backdrop.dart';
 import '../widgets/windows_desktop_title_bar.dart'
     show setWindowsDesktopTitle, clearWindowsDesktopTitle;
-import 'package:smooth_scroll_multiplatform/smooth_scroll_multiplatform.dart';
 
 class AndroidScheduleConfigScreen extends StatefulWidget {
-  /// [v2.3.0] 是否显示导航元素（返回按钮、保存按钮）
-  /// 在引导页面中嵌入时设为 false，独立使用时设为 true
+  /// 是否显示导航元素（独立进入时为 true，嵌入引导页时为 false）
   final bool showNavigation;
   final EdgeInsetsGeometry? contentPadding;
 
@@ -32,95 +35,50 @@ class AndroidScheduleConfigScreen extends StatefulWidget {
 
 class AndroidScheduleConfigScreenState
     extends State<AndroidScheduleConfigScreen> {
-  late ScheduleConfigModel _config;
-  final _semesterDateController = TextEditingController();
-  final _breakTimeController = TextEditingController();
-  final List<TextEditingController> _startControllers = [];
-  final List<TextEditingController> _durationControllers = [];
-  bool _showWeekends = true;
+  late ScheduleConfigModel _workingConfig;
+  final List<ScheduleConfigModel> _sessionUndoStack = [];
+  bool _isApplying = false;
 
-  /// 供外部（如 Onboarding）显式触发静默保存并更新课表
+  /// 供引导页父组件显式保存当前课时配置
   void saveConfigFromParent() {
-    _saveConfigQuietly();
+    unawaited(_commitConfig(_workingConfig, recordSnapshot: true));
   }
 
   @override
   void initState() {
     super.initState();
     setWindowsDesktopTitle('课时配置');
-    final provider = context.read<ScheduleProvider>();
-    _config = provider.currentConfig;
+    _workingConfig = context.read<ScheduleProvider>().currentConfig;
+  }
 
-    _semesterDateController.text =
-        '${_config.semesterStartDate.year}-${_config.semesterStartDate.month.toString().padLeft(2, '0')}-${_config.semesterStartDate.day.toString().padLeft(2, '0')}';
-    _breakTimeController.text = _config.breakTime.toString();
-    _showWeekends = _config.showWeekends;
-
-    for (int i = 1; i <= 13; i++) {
-      _startControllers.add(
-        TextEditingController(
-          text: _formatMinutes(_config.sectionStartTimes[i] ?? (480 + (i - 1) * 60)),
-        ),
-      );
-      _durationControllers.add(
-        TextEditingController(
-          text: (_config.sectionDurations[i] ?? 50).toString(),
-        ),
-      );
-    }
+  @override
+  void dispose() {
+    clearWindowsDesktopTitle('课时配置');
+    super.dispose();
   }
 
   String _formatMinutes(int minutes) {
-    final hour = minutes ~/ 60;
-    final minute = minutes % 60;
-    return '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
+    final safe = minutes.clamp(0, 23 * 60 + 59);
+    final h = safe ~/ 60;
+    final m = safe % 60;
+    return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}';
   }
 
-  DateTime _parseDate(String dateStr) {
-    final parts = dateStr.split('-');
-    if (parts.length == 3) {
-      return DateTime(
-        int.parse(parts[0]),
-        int.parse(parts[1]),
-        int.parse(parts[2]),
-      );
-    }
-    return _config.semesterStartDate;
+  String _formatDateText(DateTime dt) {
+    return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
   }
 
-  void _pickSemesterDate() async {
-    final currentDate = _parseDate(_semesterDateController.text);
-    final picked = await showLiquidGlassCalendarPicker(
-      context: context,
-      initialDate: currentDate,
-    );
-    if (picked != null) {
-      final normalizedMonday = DateTime(
-        picked.year,
-        picked.month,
-        picked.day,
-      ).subtract(Duration(days: picked.weekday - 1));
-      setState(() {
-        _semesterDateController.text =
-            '${normalizedMonday.year}-${normalizedMonday.month.toString().padLeft(2, '0')}-${normalizedMonday.day.toString().padLeft(2, '0')}';
-      });
-      _saveConfigQuietly();
-    }
-  }
-
-  int? _parseTime(String timeStr) {
-    final clean = timeStr
+  int? _parseTimeInput(String raw) {
+    final clean = raw
         .trim()
         .replaceAll('分', '')
         .replaceAll('点', ':')
         .replaceAll('：', ':');
-    // 匹配 "8:30", "8.30", "8-30", "8 30", "8.3"
     final sepMatch = RegExp(r'^(\d{1,2})[\s.:\-_](\d{1,2})$').firstMatch(clean);
     if (sepMatch != null) {
       final h = int.tryParse(sepMatch.group(1)!);
       final mStr = sepMatch.group(2)!;
       int? m = int.tryParse(mStr);
-      // 若用户输入 8.3，则 3 视为 30 分钟
       if (mStr.length == 1 && m != null && m > 0 && m < 6) {
         m = m * 10;
       }
@@ -128,7 +86,6 @@ class AndroidScheduleConfigScreenState
         return h * 60 + m;
       }
     }
-    // 纯数字 "830" or "0830"
     if (clean.length == 3 || clean.length == 4) {
       final digits = int.tryParse(clean);
       if (digits != null) {
@@ -139,7 +96,6 @@ class AndroidScheduleConfigScreenState
         }
       }
     }
-    // 纯小时 "8" or "08"
     final singleHour = int.tryParse(clean);
     if (singleHour != null && singleHour >= 0 && singleHour < 24) {
       return singleHour * 60;
@@ -147,501 +103,839 @@ class AndroidScheduleConfigScreenState
     return null;
   }
 
-  void _smartCascadeSectionTimes() {
-    final firstStartStr = _startControllers[0].text;
-    final firstStartMin = _parseTime(firstStartStr) ?? (8 * 60); // 默认 8:00 (480分钟)
-    const duration = 45; // 45分钟一节
-    const smallBreak = 5; // 小课间5分钟
-    const bigBreak = 15; // 大课间15分钟
+  Future<void> _commitConfig(
+    ScheduleConfigModel nextConfig, {
+    bool recordSnapshot = true,
+  }) async {
+    if (_workingConfig.sameAs(nextConfig) &&
+        context.read<ScheduleProvider>().currentConfig.sameAs(nextConfig)) {
+      return;
+    }
 
-    int currentMin = firstStartMin;
-    for (int i = 0; i < 13; i++) {
-      if (i == 0) {
-        currentMin = firstStartMin;
-      } else if (i == 1) {
-        // 第2节：与第1节同门课，中途小课间5分钟
-        currentMin += duration + smallBreak;
-      } else if (i == 2) {
-        // 第3节：第2节与第3节之间大课间15分钟
-        currentMin += duration + bigBreak;
-      } else if (i == 3) {
-        // 第4节：与第3节同门课，中途小课间5分钟
-        currentMin += duration + smallBreak;
-      } else if (i == 4) {
-        // 第5节：下午第一节，保证14:00起课（或根据上午结束自动顺延）
-        currentMin = math.max(currentMin + duration + 120, 14 * 60);
-      } else if (i == 5) {
-        // 第6节：与第5节同门课，中途小课间5分钟
-        currentMin += duration + smallBreak;
-      } else if (i == 6) {
-        // 第7节：第6节与第7节之间下午大课间15分钟
-        currentMin += duration + bigBreak;
-      } else if (i == 7) {
-        // 第8节：与第7节同门课，中途小课间5分钟
-        currentMin += duration + smallBreak;
-      } else if (i == 8) {
-        // 第9节：晚自习第一节，保证18:30起课（或根据下午结束自动顺延）
-        currentMin = math.max(currentMin + duration + 60, 18 * 60 + 30);
-      } else if (i == 9) {
-        // 第10节：与第9节同门课，中途小课间5分钟
-        currentMin += duration + smallBreak;
-      } else if (i == 10) {
-        // 第11节：第10节与第11节之间晚上大课间15分钟
-        currentMin += duration + bigBreak;
-      } else if (i == 11) {
-        // 第12节：与第11节同门课，中途小课间5分钟
-        currentMin += duration + smallBreak;
-      } else if (i == 12) {
-        // 第13节：晚自习第4节，中途小课间5分钟
-        currentMin += duration + smallBreak;
+    if (recordSnapshot && !_workingConfig.sameAs(nextConfig)) {
+      _pushSessionUndo(_workingConfig);
+    }
+
+    setState(() => _workingConfig = nextConfig);
+    if (!mounted) return;
+    await context.read<ScheduleProvider>().updateConfig(
+          nextConfig,
+          recordUndoSnapshot: recordSnapshot,
+        );
+  }
+
+  void _pushSessionUndo(ScheduleConfigModel snapshot) {
+    if (_sessionUndoStack.isNotEmpty && _sessionUndoStack.last.sameAs(snapshot)) {
+      return;
+    }
+    _sessionUndoStack.add(snapshot);
+    if (_sessionUndoStack.length > 20) {
+      _sessionUndoStack.removeAt(0);
+    }
+  }
+
+  Future<void> _pickSemesterDate() async {
+    HapticFeedback.selectionClick();
+    final picked = await showLiquidGlassCalendarPicker(
+      context: context,
+      initialDate: _workingConfig.semesterStartDate,
+    );
+    if (picked == null || !mounted) return;
+
+    final normalizedMonday = DateTime(
+      picked.year,
+      picked.month,
+      picked.day,
+    ).subtract(Duration(days: picked.weekday - 1));
+
+    await _commitConfig(
+      _workingConfig.copyWith(semesterStartDate: normalizedMonday),
+    );
+    if (mounted) {
+      liquid.showLiquidToast(
+        context,
+        '开学第1周周一已设为 ${_formatDateText(normalizedMonday)}',
+      );
+    }
+  }
+
+  /// 一键智能对齐全部课表（保留当前页面，自动写入撤回快照）
+  Future<void> _alignScheduleNow() async {
+    if (_isApplying) return;
+    HapticFeedback.mediumImpact();
+    setState(() => _isApplying = true);
+    try {
+      final provider = context.read<ScheduleProvider>();
+      final beforeSnapshot = provider.currentConfig;
+      _pushSessionUndo(beforeSnapshot);
+
+      await provider.savePreviousConfigSnapshot(beforeSnapshot);
+      await provider.updateConfig(_workingConfig, recordUndoSnapshot: false);
+
+      final earliestMonday = provider.getEarliestCourseMonday();
+      final targetStart = _workingConfig.semesterStartDate;
+      final targetMonday = DateTime(
+        targetStart.year,
+        targetStart.month,
+        targetStart.day,
+      ).subtract(Duration(days: targetStart.weekday - 1));
+
+      if (earliestMonday != null && earliestMonday != targetMonday) {
+        await provider.alignScheduleToStartDate(targetMonday);
+      } else {
+        await provider.recalculateAllCourseTimes(_workingConfig);
       }
 
-      _startControllers[i].text = _formatMinutes(currentMin);
-      _durationControllers[i].text = duration.toString();
+      if (mounted) {
+        final count = provider.courses.length;
+        liquid.showLiquidToast(
+          context,
+          count > 0
+              ? '已校准 $count 条课程时间并与第1周对齐（可点击撤回还原）'
+              : '课时设置已保存并与第1周同步（可点击撤回还原）',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        liquid.showLiquidToast(context, '对齐失败: $e');
+      }
+    } finally {
+      if (mounted) setState(() => _isApplying = false);
     }
-    _breakTimeController.text = smallBreak.toString();
-    setState(() {});
-    _saveConfigQuietly();
-    liquid.showLiquidToast(
-      context,
-      '已推算大学大小课间：45m课时+5m小课间+15m大课间 (下午14:00/晚间18:30)',
+  }
+
+  /// 右上角保存按钮：确保落盘后温和返回
+  Future<void> _saveAndPop() async {
+    HapticFeedback.mediumImpact();
+    await _commitConfig(_workingConfig);
+    if (mounted) {
+      liquid.showLiquidToast(context, '课时配置已保存');
+      Navigator.pop(context);
+    }
+  }
+
+  /// 撤回到上次编辑（优先消费本次会话撤回栈，次选跨会话持久化快照）
+  Future<void> _undoLastEdit() async {
+    if (_isApplying) return;
+    HapticFeedback.mediumImpact();
+    final provider = context.read<ScheduleProvider>();
+
+    if (_sessionUndoStack.isNotEmpty) {
+      final target = _sessionUndoStack.removeLast();
+      setState(() {
+        _isApplying = true;
+        _workingConfig = target;
+      });
+      try {
+        await provider.updateConfig(target, recordUndoSnapshot: false);
+        if (mounted) {
+          liquid.showLiquidToast(context, '已撤回到上次课时时间配置');
+        }
+      } finally {
+        if (mounted) setState(() => _isApplying = false);
+      }
+      return;
+    }
+
+    if (provider.canUndoConfig) {
+      setState(() => _isApplying = true);
+      try {
+        final ok = await provider.undoLastConfigUpdate();
+        if (ok && mounted) {
+          setState(() => _workingConfig = provider.currentConfig);
+          liquid.showLiquidToast(context, '已撤回到上次课时时间配置');
+        }
+      } finally {
+        if (mounted) setState(() => _isApplying = false);
+      }
+    }
+  }
+
+  /// 弹出增强版「智慧推算」选择器（真实课表反推 + 自定义顺推 + 高校预设）
+  void _showSmartDeduceSheet() {
+    HapticFeedback.selectionClick();
+    final provider = context.read<ScheduleProvider>();
+    final hasCourses = provider.courses.isNotEmpty;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final accent = AppThemeColors.babyPink;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (sheetCtx) => Container(
+        padding: EdgeInsets.fromLTRB(
+          20,
+          14,
+          20,
+          MediaQuery.of(sheetCtx).padding.bottom + 24,
+        ),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF191C24) : const Color(0xFFF9FAFC),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          border: Border.all(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.08)
+                : Colors.black.withValues(alpha: 0.06),
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 38,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.white24 : Colors.black12,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              '智慧作息推算引擎',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: GlassSettingsHelper.getTextColor(sheetCtx),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '推算前会自动备份当前课时配置，可随时通过「撤回上次」无损恢复',
+              style: TextStyle(
+                fontSize: 12,
+                color: GlassSettingsHelper.getSecondaryTextColor(sheetCtx),
+              ),
+            ),
+            const SizedBox(height: 16),
+            if (hasCourses) ...[
+              _buildSheetOptionTile(
+                ctx: sheetCtx,
+                icon: Icons.auto_graph_rounded,
+                badge: '推荐',
+                color: const Color(0xFF10B981),
+                title: '从已导入课表智能反推',
+                subtitle:
+                    '分析当前 ${provider.courses.length} 门课程真实起止时间与大小课间',
+                onTap: () async {
+                  Navigator.pop(sheetCtx);
+                  final deduced = ScheduleConfigIntelligence.deduceFromCourses(
+                    provider.courses,
+                    fallback: _workingConfig,
+                  );
+                  if (deduced != null) {
+                    await _commitConfig(deduced);
+                    if (mounted) {
+                      liquid.showLiquidToast(
+                        context,
+                        '已根据课表反推作息（首节 ${_formatMinutes(deduced.sectionStartTimes[1] ?? 480)} · ${deduced.defaultDuration}分钟/节）',
+                      );
+                    }
+                  } else if (mounted) {
+                    liquid.showLiquidToast(context, '课表暂无足够时间信息，改用智能顺推');
+                  }
+                },
+              ),
+              const SizedBox(height: 10),
+            ],
+            _buildSheetOptionTile(
+              ctx: sheetCtx,
+              icon: Icons.auto_awesome_rounded,
+              color: accent,
+              title: '按首节与参数智能顺推',
+              subtitle:
+                  '基于第1节 ${_formatMinutes(_workingConfig.sectionStartTimes[1] ?? 480)}、${_workingConfig.defaultDuration}分钟/节、${_workingConfig.breakTime}分钟课间并保留午晚锚点',
+              onTap: () async {
+                Navigator.pop(sheetCtx);
+                final cascaded = ScheduleConfigIntelligence.smartCascade(
+                  base: _workingConfig,
+                  section1Start: _workingConfig.sectionStartTimes[1] ?? 480,
+                  defaultDuration: _workingConfig.defaultDuration,
+                  smallBreak: _workingConfig.breakTime,
+                );
+                await _commitConfig(cascaded);
+                if (mounted) {
+                  liquid.showLiquidToast(
+                    context,
+                    '已按 ${_formatMinutes(cascaded.sectionStartTimes[1] ?? 480)} 起课智能顺推 1–13 节',
+                  );
+                }
+              },
+            ),
+            const SizedBox(height: 14),
+            Text(
+              '常用高校作息预设',
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+                color: GlassSettingsHelper.getSecondaryTextColor(sheetCtx),
+              ),
+            ),
+            const SizedBox(height: 8),
+            ...ScheduleConfigIntelligence.kPresets.map(
+              (preset) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: _buildSheetOptionTile(
+                  ctx: sheetCtx,
+                  icon: Icons.schedule_rounded,
+                  color: const Color(0xFF4FACFE),
+                  title: preset.title,
+                  subtitle: preset.subtitle,
+                  onTap: () async {
+                    Navigator.pop(sheetCtx);
+                    final applied = ScheduleConfigIntelligence.smartCascade(
+                      base: _workingConfig,
+                      section1Start: preset.section1StartMin,
+                      defaultDuration: preset.durationMin,
+                      smallBreak: preset.smallBreakMin,
+                      customAfternoonStart: preset.afternoonStartMin,
+                      customEveningStart: preset.eveningStartMin,
+                      forceEqualDuration: true,
+                    );
+                    await _commitConfig(applied);
+                    if (mounted) {
+                      liquid.showLiquidToast(
+                        context,
+                        '已应用预设「${preset.title}」',
+                      );
+                    }
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
-  Future<void> _saveConfig() async {
-    try {
-      final newStartDate = _parseDate(_semesterDateController.text);
-      final newConfig = ScheduleConfigModel(
-        semesterStartDate: newStartDate,
-        breakTime: int.tryParse(_breakTimeController.text) ?? _config.breakTime,
-        showWeekends: _showWeekends,
-        sectionStartTimes: Map.from(_config.sectionStartTimes),
-        sectionDurations: Map.from(_config.sectionDurations),
-      );
-
-      // 解析时间
-      for (int i = 1; i <= 13; i++) {
-        final timeStr = _startControllers[i - 1].text;
-        final minutes = _parseTime(timeStr);
-        if (minutes != null) {
-          newConfig.sectionStartTimes[i] = minutes;
-        }
-
-        final duration = int.tryParse(_durationControllers[i - 1].text);
-        if (duration != null) {
-          newConfig.sectionDurations[i] = duration;
-        }
-      }
-
-      final defaultDur =
-          int.tryParse(_durationControllers[0].text) ?? _config.defaultDuration;
-      final savedConfig = newConfig.copyWith(
-        isEqualDuration: _config.isEqualDuration,
-        defaultDuration: defaultDur,
-      );
-
-      final provider = context.read<ScheduleProvider>();
-      final earliestMonday = provider.getEarliestCourseMonday();
-      final targetMonday = DateTime(newStartDate.year, newStartDate.month, newStartDate.day)
-          .subtract(Duration(days: newStartDate.weekday - 1));
-
-      // 1. 保存配置并重算节次时间
-      await provider.updateConfig(savedConfig);
-
-      // 2. [v2.10.1] 显式确保所有已存在课程时间戳按照新配置全量重算并对齐
-      await provider.recalculateAllCourseTimes(savedConfig);
-
-      // 3. 若课表首周与设置的目标开学日不同步，执行首周课表平移对齐
-      if (earliestMonday != null && earliestMonday != targetMonday) {
-        await provider.alignScheduleToStartDate(targetMonday);
-      }
-
-      if (mounted) {
-        liquid.showLiquidToast(context, '配置已保存并智能重算对齐全部课表');
-        Navigator.pop(context);
-      }
-    } catch (e) {
-      if (mounted) {
-        liquid.showLiquidToast(context, '保存失败: $e');
-      }
-    }
+  Widget _buildSheetOptionTile({
+    required BuildContext ctx,
+    required IconData icon,
+    required Color color,
+    required String title,
+    required String subtitle,
+    String? badge,
+    required VoidCallback onTap,
+  }) {
+    final isDark = Theme.of(ctx).brightness == Brightness.dark;
+    return Material(
+      color: isDark
+          ? Colors.white.withValues(alpha: 0.05)
+          : Colors.black.withValues(alpha: 0.035),
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.16),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: color, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          title,
+                          style: TextStyle(
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.w700,
+                            color: GlassSettingsHelper.getTextColor(ctx),
+                          ),
+                        ),
+                        if (badge != null) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 1.5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: color.withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              badge,
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: color,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: GlassSettingsHelper.getSecondaryTextColor(ctx),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                CupertinoIcons.chevron_right,
+                size: 14,
+                color: GlassSettingsHelper.getDisabledTextColor(ctx),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
-  void _saveConfigQuietly() {
-    try {
-      final newConfig = ScheduleConfigModel(
-        semesterStartDate: _parseDate(_semesterDateController.text),
-        breakTime: int.tryParse(_breakTimeController.text) ?? _config.breakTime,
-        showWeekends: _showWeekends,
-        sectionStartTimes: Map.from(_config.sectionStartTimes),
-        sectionDurations: Map.from(_config.sectionDurations),
-      );
+  /// 点击单节课时弹窗快捷编辑（取代 26 个常驻 TextField，确保滑动满帧 120Hz）
+  Future<void> _showSectionEditDialog(int section) async {
+    HapticFeedback.selectionClick();
+    final curStart = _workingConfig.sectionStartTimes[section] ??
+        (480 + (section - 1) * 55);
+    final curDur = _workingConfig.isEqualDuration
+        ? _workingConfig.defaultDuration
+        : (_workingConfig.sectionDurations[section] ??
+            _workingConfig.defaultDuration);
 
-      for (int i = 1; i <= 13; i++) {
-        final timeStr = _startControllers[i - 1].text;
-        final minutes = _parseTime(timeStr);
-        if (minutes != null) {
-          newConfig.sectionStartTimes[i] = minutes;
-        }
+    int draftStart = curStart;
+    int draftDur = curDur;
+    bool cascadeFollowing = section == 1;
 
-        final duration = int.tryParse(_durationControllers[i - 1].text);
-        if (duration != null) {
-          newConfig.sectionDurations[i] = duration;
-        }
-      }
+    final startCtrl = TextEditingController(text: _formatMinutes(curStart));
+    final durCtrl = TextEditingController(text: curDur.toString());
 
-      final defaultDur =
-          int.tryParse(_durationControllers[0].text) ?? _config.defaultDuration;
-      final savedConfig = newConfig.copyWith(
-        isEqualDuration: _config.isEqualDuration,
-        defaultDuration: defaultDur,
-      );
+    await showDialog<void>(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          final textColor = GlassSettingsHelper.getTextColor(ctx);
+          final subColor = GlassSettingsHelper.getSecondaryTextColor(ctx);
+          final isDark = Theme.of(ctx).brightness == Brightness.dark;
 
-      if (mounted) {
-        final provider = context.read<ScheduleProvider>();
-        provider.updateConfig(savedConfig);
-      }
-    } catch (e) {
-      debugPrint('静默保存配置失败: $e');
-    }
+          void applyStart(int m) {
+            draftStart = m.clamp(6 * 60, 23 * 60 + 30);
+            startCtrl.text = _formatMinutes(draftStart);
+          }
+
+          void applyDur(int d) {
+            draftDur = d.clamp(20, 120);
+            durCtrl.text = draftDur.toString();
+          }
+
+          return liquid.LiquidGlassDialog(
+            title: '第 $section 节作息时间',
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '下课时间将自动算作 ${_formatMinutes(draftStart + draftDur)}',
+                  style: TextStyle(fontSize: 12.5, color: subColor),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  '上课时间',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: subColor,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    _buildMiniStepButton(
+                      label: '-5分',
+                      isDark: isDark,
+                      onTap: () => setDialogState(() => applyStart(draftStart - 5)),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: CupertinoTextField(
+                        controller: startCtrl,
+                        textAlign: TextAlign.center,
+                        keyboardType: TextInputType.datetime,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 9,
+                        ),
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? Colors.white.withValues(alpha: 0.08)
+                              : Colors.black.withValues(alpha: 0.05),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.14)
+                                : Colors.black.withValues(alpha: 0.08),
+                          ),
+                        ),
+                        style: TextStyle(
+                          color: textColor,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        onChanged: (v) {
+                          final parsed = _parseTimeInput(v);
+                          if (parsed != null) {
+                            setDialogState(() => draftStart = parsed);
+                          }
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    _buildMiniStepButton(
+                      label: '+5分',
+                      isDark: isDark,
+                      onTap: () => setDialogState(() => applyStart(draftStart + 5)),
+                    ),
+                  ],
+                ),
+                if (!_workingConfig.isEqualDuration || section == 1) ...[
+                  const SizedBox(height: 14),
+                  Text(
+                    _workingConfig.isEqualDuration
+                        ? '统一单节时长 (分钟)'
+                        : '本节时长 (分钟)',
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: subColor,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      _buildMiniStepButton(
+                        label: '-5分',
+                        isDark: isDark,
+                        onTap: () => setDialogState(() => applyDur(draftDur - 5)),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: CupertinoTextField(
+                          controller: durCtrl,
+                          textAlign: TextAlign.center,
+                          keyboardType: TextInputType.number,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 9,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.08)
+                                : Colors.black.withValues(alpha: 0.05),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: isDark
+                                  ? Colors.white.withValues(alpha: 0.14)
+                                  : Colors.black.withValues(alpha: 0.08),
+                            ),
+                          ),
+                          style: TextStyle(
+                            color: textColor,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          onChanged: (v) {
+                            final parsed = int.tryParse(v.trim());
+                            if (parsed != null && parsed >= 20 && parsed <= 120) {
+                              setDialogState(() => draftDur = parsed);
+                            }
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      _buildMiniStepButton(
+                        label: '+5分',
+                        isDark: isDark,
+                        onTap: () => setDialogState(() => applyDur(draftDur + 5)),
+                      ),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 12),
+                GestureDetector(
+                  onTap: () => setDialogState(
+                    () => cascadeFollowing = !cascadeFollowing,
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        cascadeFollowing
+                            ? CupertinoIcons.checkmark_square_fill
+                            : CupertinoIcons.square,
+                        size: 19,
+                        color: cascadeFollowing ? AppThemeColors.babyPink : subColor,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          section == 1
+                              ? '按当前参数同步顺推全部 1–13 节'
+                              : '同步顺推本时段后续节次',
+                          style: TextStyle(fontSize: 12.5, color: textColor),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              GlassDialogAction(
+                label: '取消',
+                onPressed: () => Navigator.pop(dialogCtx),
+              ),
+              GlassDialogAction(
+                label: '应用',
+                isPrimary: true,
+                onPressed: () async {
+                  final finalStart = _parseTimeInput(startCtrl.text) ?? draftStart;
+                  final finalDur =
+                      (int.tryParse(durCtrl.text.trim()) ?? draftDur).clamp(20, 120);
+                  Navigator.pop(dialogCtx);
+
+                  ScheduleConfigModel next;
+                  if (section == 1 && cascadeFollowing) {
+                    next = ScheduleConfigIntelligence.smartCascade(
+                      base: _workingConfig,
+                      section1Start: finalStart,
+                      defaultDuration: finalDur,
+                      smallBreak: _workingConfig.breakTime,
+                    );
+                  } else {
+                    final newStarts =
+                        Map<int, int>.from(_workingConfig.sectionStartTimes);
+                    final newDurs =
+                        Map<int, int>.from(_workingConfig.sectionDurations);
+                    newStarts[section] = finalStart;
+                    if (_workingConfig.isEqualDuration && section == 1) {
+                      for (int i = 1; i <= 13; i++) {
+                        newDurs[i] = finalDur;
+                      }
+                    } else {
+                      newDurs[section] = finalDur;
+                    }
+                    if (cascadeFollowing && section < 13) {
+                      final periodEnd =
+                          section <= 4 ? 4 : (section <= 8 ? 8 : 13);
+                      int prevEnd = finalStart + finalDur;
+                      for (int s = section + 1; s <= periodEnd; s++) {
+                        final gap = (s == 3 || s == 7 || s == 11)
+                            ? (_workingConfig.breakTime <= 5 ? 15 : _workingConfig.breakTime + 10)
+                            : _workingConfig.breakTime;
+                        newStarts[s] = prevEnd + gap;
+                        final d = _workingConfig.isEqualDuration
+                            ? (_workingConfig.defaultDuration)
+                            : (newDurs[s] ?? _workingConfig.defaultDuration);
+                        prevEnd = newStarts[s]! + d;
+                      }
+                    }
+                    next = _workingConfig.copyWith(
+                      sectionStartTimes: newStarts,
+                      sectionDurations: newDurs,
+                      defaultDuration: (_workingConfig.isEqualDuration && section == 1)
+                          ? finalDur
+                          : _workingConfig.defaultDuration,
+                      useCustomConfig: true,
+                    );
+                  }
+                  await _commitConfig(next);
+                },
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    startCtrl.dispose();
+    durCtrl.dispose();
   }
 
-  @override
-  void dispose() {
-    clearWindowsDesktopTitle('课时配置');
-    _saveConfigQuietly();
-    _semesterDateController.dispose();
-    _breakTimeController.dispose();
-    for (var controller in _startControllers) {
-      controller.dispose();
+  Widget _buildMiniStepButton({
+    required String label,
+    required bool isDark,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        decoration: BoxDecoration(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.black.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: AppThemeColors.babyPink,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _adjustBreakTime(int delta) async {
+    HapticFeedback.selectionClick();
+    final nextBreak = (_workingConfig.breakTime + delta).clamp(1, 30);
+    if (nextBreak == _workingConfig.breakTime) return;
+    await _commitConfig(_workingConfig.copyWith(breakTime: nextBreak));
+  }
+
+  Future<void> _adjustDefaultDuration(int delta) async {
+    HapticFeedback.selectionClick();
+    final nextDur = (_workingConfig.defaultDuration + delta).clamp(25, 100);
+    if (nextDur == _workingConfig.defaultDuration) return;
+    final newDurs = Map<int, int>.from(_workingConfig.sectionDurations);
+    if (_workingConfig.isEqualDuration) {
+      for (int i = 1; i <= 13; i++) {
+        newDurs[i] = nextDur;
+      }
     }
-    for (var controller in _durationControllers) {
-      controller.dispose();
-    }
-    super.dispose();
+    await _commitConfig(
+      _workingConfig.copyWith(
+        defaultDuration: nextDur,
+        sectionDurations: newDurs,
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDark ? Colors.white : const Color(0xFF1A1A2E);
+    final secondaryColor =
+        isDark ? Colors.white60 : const Color(0xFF6B7280);
+    final providerUndoAvailable = context.select<ScheduleProvider, bool>(
+      (p) => p.canUndoConfig,
+    );
+    final canUndo = _sessionUndoStack.isNotEmpty || providerUndoAvailable;
 
     final isDesktop =
         Platform.isWindows || Platform.isMacOS || Platform.isLinux;
     final topPadding = widget.showNavigation
         ? (isDesktop ? 20.0 : (MediaQuery.paddingOf(context).top + 60))
         : 0.0;
-    final defaultPadding = EdgeInsets.fromLTRB(
-      16,
-      topPadding > 0 ? topPadding : 16,
-      16,
-      isDesktop ? 32 : 100,
-    );
+    final resolvedPadding = widget.contentPadding?.resolve(
+          Directionality.of(context),
+        ) ??
+        EdgeInsets.fromLTRB(
+          16,
+          topPadding > 0 ? topPadding : 16,
+          16,
+          isDesktop ? 32 : 110,
+        );
 
-    return PopScope(
-      canPop: true,
-      onPopInvokedWithResult: (didPop, result) {
-        if (didPop) {
-          _saveConfigQuietly();
-        }
-      },
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        body: Stack(
-          children: [
-            // 1. 全出血自由滑动内容区
-            Positioned.fill(
-              child: DynMouseScroll(
-                durationMS: 250,
-                scrollSpeed: 1.2,
-                builder: (context, controller, physics) => ListView(
-                  controller: controller,
-                  padding: widget.contentPadding ?? defaultPadding,
-                  physics: physics,
-                  children: [
-                    // 基础设置
-                    liquid.HyperOSCard(
-                      cornerRadius: 24,
-                      padding: const EdgeInsets.all(20),
-                      child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '基础设置',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: textColor,
-                          ),
+    final List<Widget> scrollBlocks = [
+      // 1. 基础设置卡片
+      RepaintBoundary(
+        child: _buildBasicConfigCard(isDark, textColor, secondaryColor),
+      ),
+      const SizedBox(height: 14),
+
+      // 2. 智能作息操作工具栏（智慧推算 / 对齐课表 / 撤回上次）
+      RepaintBoundary(
+        child: _buildActionToolbarCard(
+          isDark,
+          textColor,
+          secondaryColor,
+          canUndo: canUndo,
+        ),
+      ),
+      const SizedBox(height: 16),
+
+      // 3. 上午 / 下午 / 晚间 分组课时表
+      RepaintBoundary(
+        child: _buildPeriodScheduleCard(
+          title: '上午课程 (1–4 节)',
+          badgeColor: const Color(0xFF10B981),
+          startSection: 1,
+          endSection: 4,
+          isDark: isDark,
+          textColor: textColor,
+          secondaryColor: secondaryColor,
+        ),
+      ),
+      const SizedBox(height: 14),
+      RepaintBoundary(
+        child: _buildPeriodScheduleCard(
+          title: '下午课程 (5–8 节)',
+          badgeColor: AppThemeColors.babyPink,
+          startSection: 5,
+          endSection: 8,
+          isDark: isDark,
+          textColor: textColor,
+          secondaryColor: secondaryColor,
+        ),
+      ),
+      const SizedBox(height: 14),
+      RepaintBoundary(
+        child: _buildPeriodScheduleCard(
+          title: '晚间课程 (9–13 节)',
+          badgeColor: const Color(0xFF6366F1),
+          startSection: 9,
+          endSection: 13,
+          isDark: isDark,
+          textColor: textColor,
+          secondaryColor: secondaryColor,
+        ),
+      ),
+    ];
+
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: DynMouseScroll(
+              durationMS: 250,
+              scrollSpeed: 1.2,
+              builder: (context, controller, physics) => CustomScrollView(
+                controller: controller,
+                physics: physics,
+                slivers: [
+                  SliverPadding(
+                    padding: resolvedPadding,
+                    sliver: SliverList.builder(
+                      itemCount: scrollBlocks.length,
+                      itemBuilder: (context, idx) => Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 860),
+                          child: scrollBlocks[idx],
                         ),
-                        const SizedBox(height: 16),
-                        liquid.LiquidInput(
-                          controller: _semesterDateController,
-                          label: '开学日期',
-                          icon: Icons.calendar_today_rounded,
-                          isReadOnly: true,
-                          onTap: _pickSemesterDate,
-                        ),
-                        liquid.LiquidInput(
-                          controller: _breakTimeController,
-                          label: '课间休息 (分钟)',
-                          icon: Icons.timer_rounded,
-                        ),
-                        const SizedBox(height: 16),
-                        // [v2.6.0] 增加周末显示开关
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(
-                                  Icons.weekend_rounded,
-                                  color: AppThemeColors.babyPink,
-                                  size: 24,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  '显示周末',
-                                  style: TextStyle(
-                                    color: textColor,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            CupertinoSwitch(
-                              value: _showWeekends,
-                              activeColor: AppThemeColors.babyPink,
-                              onChanged: (val) {
-                                setState(() {
-                                  _showWeekends = val;
-                                });
-                                // [v2.6.6修复] 返回时不丢失状态
-                                _saveConfigQuietly();
-                              },
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        // [v2.7.0] 增加等长课时开关
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(
-                                  Icons.access_time_filled_rounded,
-                                  color: AppThemeColors.babyPink,
-                                  size: 24,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  '等长课时统一定义',
-                                  style: TextStyle(
-                                    color: textColor,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            CupertinoSwitch(
-                              value: _config.isEqualDuration,
-                              activeColor: AppThemeColors.babyPink,
-                              onChanged: (val) {
-                                setState(() {
-                                  _config = _config.copyWith(
-                                    isEqualDuration: val,
-                                  );
-                                });
-                                _saveConfigQuietly();
-                              },
-                            ),
-                          ],
-                        ),
-                      ],
+                      ),
                     ),
                   ),
-
-                  // [v2.8.6] 保证无论是否导入课表，基础设置与课时设置均有优雅间距
-                  const SizedBox(height: 16),
-
-                  // [v2.8.0] 课表首周智能对齐卡片
-                  Consumer<ScheduleProvider>(
-                    builder: (context, provider, _) {
-                      final earliestMonday = provider.getEarliestCourseMonday();
-                      if (earliestMonday == null) return const SizedBox.shrink();
-                      final targetStartDate = _parseDate(_semesterDateController.text);
-                      final targetMonday = DateTime(targetStartDate.year, targetStartDate.month, targetStartDate.day)
-                          .subtract(Duration(days: targetStartDate.weekday - 1));
-                      final diffDays = earliestMonday.difference(targetMonday).inDays;
-
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 16),
-                        child: liquid.HyperOSCard(
-                          cornerRadius: 24,
-                          padding: const EdgeInsets.all(20),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Icon(
-                                    diffDays == 0 ? CupertinoIcons.checkmark_seal_fill : CupertinoIcons.calendar_badge_plus,
-                                    color: diffDays == 0 ? Colors.greenAccent : const Color(0xFF4FACFE),
-                                    size: 22,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    '课表首周校准与智能对齐',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                      color: textColor,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                diffDays == 0
-                                    ? '当前课表首周与开学日期 (${targetMonday.month}月${targetMonday.day}日) 已对齐。'
-                                    : '检测到已导入课表首周 (${earliestMonday.month}月${earliestMonday.day}日) 与设置的开学日期 (${targetMonday.month}月${targetMonday.day}日) 相差 ${(diffDays.abs() / 7).round()} 周。点击下方一键智能平移，可将全学期课表对齐至开学第 1 周！',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: isDark ? Colors.white70 : const Color(0x991A1A2E),
-                                  height: 1.4,
-                                ),
-                              ),
-                              if (diffDays != 0) ...[
-                                const SizedBox(height: 12),
-                                SizedBox(
-                                  width: double.infinity,
-                                  child: liquid.LiquidButton(
-                                    text: '一键校准：对齐首周至 ${targetMonday.month}月${targetMonday.day}日 (第1周)',
-                                    color: isDark
-                                        ? Colors.white.withValues(alpha: 0.12)
-                                        : Colors.black.withValues(alpha: 0.06),
-                                    textColor: textColor,
-                                    onTap: () async {
-                                      await provider.alignScheduleToStartDate(targetMonday);
-                                      if (context.mounted) {
-                                        liquid.showLiquidToast(
-                                          context,
-                                          '已成功将课表对齐至 ${targetMonday.month}月${targetMonday.day}日 第 1 周！',
-                                        );
-                                      }
-                                    },
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-
-                  // 课时设置
-                  liquid.HyperOSCard(
-                    cornerRadius: 24,
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              '课时设置',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: textColor,
-                              ),
-                            ),
-                            Row(
-                              children: [
-                                liquid.LiquidButton(
-                                  text: '对齐课表',
-                                  color: isDark
-                                      ? Colors.white.withValues(alpha: 0.12)
-                                      : Colors.black.withValues(alpha: 0.06),
-                                  textColor: textColor,
-                                  onTap: () async {
-                                    await _saveConfig();
-                                  },
-                                ),
-                                const SizedBox(width: 8),
-                                liquid.LiquidButton(
-                                  text: '智慧推算',
-                                  color: isDark
-                                      ? Colors.white.withValues(alpha: 0.12)
-                                      : Colors.black.withValues(alpha: 0.06),
-                                  textColor: textColor,
-                                  onTap: _smartCascadeSectionTimes,
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        // 表头
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                '节次',
-                                style: TextStyle(
-                                  color: textColor,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 13,
-                                ),
-                              ),
-                            ),
-                            Expanded(
-                              flex: 2,
-                              child: Text(
-                                '开始时间',
-                                style: TextStyle(
-                                  color: textColor,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 13,
-                                ),
-                              ),
-                            ),
-                            Expanded(
-                              child: Text(
-                                '时长',
-                                style: TextStyle(
-                                  color: textColor,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 13,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        // 课时列表
-                        ...List.generate(
-                          13,
-                          (index) => _buildSectionRow(index),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 32), // 底部留白
                 ],
               ),
             ),
           ),
 
-          // 2. 状态栏微模糊避让 (0..48dp)
           if (widget.showNavigation && !isDesktop)
             const ImmersiveStatusBarBackdrop(),
 
-          // 3. 悬浮标题栏与保存按钮
           if (widget.showNavigation)
             Positioned(
               top: 0,
@@ -665,7 +959,7 @@ class AndroidScheduleConfigScreenState
                         text: '保存',
                         width: 76,
                         height: 38,
-                        onTap: _saveConfig,
+                        onTap: _saveAndPop,
                         color: AppThemeColors.babyPink,
                       ),
                     ],
@@ -674,96 +968,638 @@ class AndroidScheduleConfigScreenState
               ),
             ),
 
-          // 4. [v2.9.7] 悬浮右下角返回按钮（仅移动端展示）
           if (widget.showNavigation && !isDesktop)
             const liquid.FloatingLiquidBackButton(),
         ],
       ),
-    ),
-  );
-}
+    );
+  }
 
-  Widget _buildSectionRow(int index) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textColor = isDark ? Colors.white : const Color(0xFF1A1A2E);
+  Widget _buildBasicConfigCard(
+    bool isDark,
+    Color textColor,
+    Color secondaryColor,
+  ) {
+    final dividerColor = isDark
+        ? Colors.white.withValues(alpha: 0.06)
+        : Colors.black.withValues(alpha: 0.05);
+    final semesterStr = _formatDateText(_workingConfig.semesterStartDate);
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(vertical: 4),
+    return liquid.HyperOSCard(
+      cornerRadius: 24,
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '学期与全局作息',
+            style: TextStyle(
+              fontSize: 15.5,
+              fontWeight: FontWeight.w800,
+              color: textColor,
+            ),
+          ),
+          const SizedBox(height: 8),
+          InkWell(
+            onTap: _pickSemesterDate,
+            borderRadius: BorderRadius.circular(14),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.calendar_today_rounded,
+                    color: AppThemeColors.babyPink,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '开学日期（自动锚定第1周周一）',
+                          style: TextStyle(
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.w600,
+                            color: textColor,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          semesterStr,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: secondaryColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppThemeColors.babyPink.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      semesterStr,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                        color: AppThemeColors.babyPink,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Divider(height: 1, thickness: 0.6, color: dividerColor),
+          _buildStepperRow(
+            icon: Icons.timer_rounded,
+            title: '小课间休息',
+            subtitle: '同连堂课程之间的课间休息时长',
+            valueText: '${_workingConfig.breakTime} 分钟',
+            onDec: () => _adjustBreakTime(-1),
+            onInc: () => _adjustBreakTime(1),
+            isDark: isDark,
+            textColor: textColor,
+            secondaryColor: secondaryColor,
+          ),
+          Divider(height: 1, thickness: 0.6, color: dividerColor),
+          _buildStepperRow(
+            icon: Icons.schedule_rounded,
+            title: '单节标准时长',
+            subtitle: _workingConfig.isEqualDuration
+                ? '等长模式下全天 1–13 节统一生效'
+                : '默认新建/推算单节课时长度',
+            valueText: '${_workingConfig.defaultDuration} 分钟',
+            onDec: () => _adjustDefaultDuration(-5),
+            onInc: () => _adjustDefaultDuration(5),
+            isDark: isDark,
+            textColor: textColor,
+            secondaryColor: secondaryColor,
+          ),
+          Divider(height: 1, thickness: 0.6, color: dividerColor),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.access_time_filled_rounded,
+                  color: AppThemeColors.babyPink,
+                  size: 20,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '等长课时统一定义',
+                        style: TextStyle(
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w600,
+                          color: textColor,
+                        ),
+                      ),
+                      Text(
+                        _workingConfig.isEqualDuration
+                            ? '全部节次保持统一时长'
+                            : '点击下方任意节次可单独调整时长',
+                        style: TextStyle(fontSize: 11.5, color: secondaryColor),
+                      ),
+                    ],
+                  ),
+                ),
+                liquid.LiquidSwitch(
+                  value: _workingConfig.isEqualDuration,
+                  onChanged: (val) => _commitConfig(
+                    _workingConfig.copyWith(isEqualDuration: val),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Divider(height: 1, thickness: 0.6, color: dividerColor),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.weekend_rounded,
+                  color: AppThemeColors.babyPink,
+                  size: 20,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    '课表网格显示周末',
+                    style: TextStyle(
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w600,
+                      color: textColor,
+                    ),
+                  ),
+                ),
+                liquid.LiquidSwitch(
+                  value: _workingConfig.showWeekends,
+                  onChanged: (val) => _commitConfig(
+                    _workingConfig.copyWith(showWeekends: val),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStepperRow({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required String valueText,
+    required VoidCallback onDec,
+    required VoidCallback onInc,
+    required bool isDark,
+    required Color textColor,
+    required Color secondaryColor,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
         children: [
-          // 节次
+          Icon(icon, color: AppThemeColors.babyPink, size: 20),
+          const SizedBox(width: 12),
           Expanded(
-            child: Text(
-              '第 ${index + 1} 节',
-              style: TextStyle(color: textColor, fontSize: 13),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w600,
+                    color: textColor,
+                  ),
+                ),
+                Text(
+                  subtitle,
+                  style: TextStyle(fontSize: 11.5, color: secondaryColor),
+                ),
+              ],
             ),
           ),
+          Container(
+            decoration: BoxDecoration(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.06)
+                  : Colors.black.withValues(alpha: 0.045),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                InkWell(
+                  onTap: onDec,
+                  borderRadius: const BorderRadius.horizontal(
+                    left: Radius.circular(12),
+                  ),
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                    child: Icon(Icons.remove_rounded, size: 16),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  child: Text(
+                    valueText,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: textColor,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ),
+                InkWell(
+                  onTap: onInc,
+                  borderRadius: const BorderRadius.horizontal(
+                    right: Radius.circular(12),
+                  ),
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                    child: Icon(Icons.add_rounded, size: 16),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
-          // 开始时间
-          Expanded(
-            flex: 2,
-            child: Container(
-              margin: const EdgeInsets.only(right: 8),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+  /// 智能作息操作工具栏：智慧推算 / 对齐课表 / 撤回上次
+  Widget _buildActionToolbarCard(
+    bool isDark,
+    Color textColor,
+    Color secondaryColor, {
+    required bool canUndo,
+  }) {
+    final primary = Theme.of(context).colorScheme.primary;
+    final earliestMonday = context.select<ScheduleProvider, DateTime?>(
+      (p) => p.getEarliestCourseMonday(),
+    );
+    final tStart = _workingConfig.semesterStartDate;
+    final targetMonday = DateTime(tStart.year, tStart.month, tStart.day)
+        .subtract(Duration(days: tStart.weekday - 1));
+    final diffWeeks = earliestMonday == null
+        ? 0
+        : (earliestMonday.difference(targetMonday).inDays / 7).round();
+
+    return liquid.HyperOSCard(
+      cornerRadius: 24,
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.auto_fix_high_rounded,
+                size: 18,
+                color: AppThemeColors.babyPink,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '智能作息与时间校准',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                  color: textColor,
+                ),
+              ),
+              const Spacer(),
+              if (earliestMonday != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: (diffWeeks == 0
+                            ? const Color(0xFF10B981)
+                            : const Color(0xFF4FACFE))
+                        .withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    diffWeeks == 0
+                        ? '首周已对齐'
+                        : '首周偏移 ${diffWeeks.abs()} 周',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: diffWeeks == 0
+                          ? const Color(0xFF10B981)
+                          : const Color(0xFF4FACFE),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _buildToolPillButton(
+                  icon: Icons.auto_awesome_rounded,
+                  label: '智慧推算',
+                  accentColor: primary,
+                  filled: true,
+                  isDark: isDark,
+                  textColor: textColor,
+                  onTap: _showSmartDeduceSheet,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildToolPillButton(
+                  icon: Icons.sync_rounded,
+                  label: '对齐课表',
+                  accentColor: const Color(0xFF4FACFE),
+                  filled: false,
+                  isDark: isDark,
+                  textColor: textColor,
+                  onTap: _isApplying ? null : _alignScheduleNow,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildToolPillButton(
+                  icon: Icons.undo_rounded,
+                  label: '撤回上次',
+                  accentColor: const Color(0xFFF59E0B),
+                  filled: false,
+                  enabled: canUndo && !_isApplying,
+                  isDark: isDark,
+                  textColor: textColor,
+                  onTap: canUndo && !_isApplying ? _undoLastEdit : null,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildToolPillButton({
+    required IconData icon,
+    required String label,
+    required Color accentColor,
+    required bool filled,
+    bool enabled = true,
+    required bool isDark,
+    required Color textColor,
+    required VoidCallback? onTap,
+  }) {
+    final effectiveOpacity = enabled ? 1.0 : 0.40;
+    final bgColor = filled
+        ? accentColor.withValues(alpha: isDark ? 0.85 : 0.90)
+        : accentColor.withValues(alpha: isDark ? 0.16 : 0.11);
+    final fgColor = filled
+        ? (accentColor.computeLuminance() > 0.45
+            ? const Color(0xFF1B1E26)
+            : Colors.white)
+        : (isDark ? Colors.white : const Color(0xFF1E222B));
+
+    return Opacity(
+      opacity: effectiveOpacity,
+      child: Material(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            height: 44,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              border: filled
+                  ? null
+                  : Border.all(
+                      color: accentColor.withValues(
+                        alpha: enabled ? 0.35 : 0.14,
+                      ),
+                    ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  icon,
+                  size: 16,
+                  color: filled ? fgColor : accentColor,
+                ),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: fgColor,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 时段分组卡片（仅展示纯静态高对比导视行，点击弹出轻量编辑弹窗）
+  Widget _buildPeriodScheduleCard({
+    required String title,
+    required Color badgeColor,
+    required int startSection,
+    required int endSection,
+    required bool isDark,
+    required Color textColor,
+    required Color secondaryColor,
+  }) {
+    final dividerColor = isDark
+        ? Colors.white.withValues(alpha: 0.06)
+        : Colors.black.withValues(alpha: 0.05);
+
+    return liquid.HyperOSCard(
+      cornerRadius: 24,
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: badgeColor,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 14.5,
+                  fontWeight: FontWeight.w800,
+                  color: textColor,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                '点击节次微调',
+                style: TextStyle(fontSize: 11.5, color: secondaryColor),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          for (int sec = startSection; sec <= endSection; sec++) ...[
+            if (sec > startSection)
+              Divider(
+                height: 1,
+                thickness: 0.5,
+                indent: 42,
+                color: dividerColor,
+              ),
+            _SectionScheduleTile(
+              section: sec,
+              startMin: _workingConfig.sectionStartTimes[sec] ??
+                  (480 + (sec - 1) * 55),
+              durationMin: _workingConfig.isEqualDuration
+                  ? _workingConfig.defaultDuration
+                  : (_workingConfig.sectionDurations[sec] ??
+                      _workingConfig.defaultDuration),
+              badgeColor: badgeColor,
+              isDark: isDark,
+              textColor: textColor,
+              secondaryColor: secondaryColor,
+              formatMinutes: _formatMinutes,
+              onTap: () => _showSectionEditDialog(sec),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _SectionScheduleTile extends StatelessWidget {
+  final int section;
+  final int startMin;
+  final int durationMin;
+  final Color badgeColor;
+  final bool isDark;
+  final Color textColor;
+  final Color secondaryColor;
+  final String Function(int) formatMinutes;
+  final VoidCallback onTap;
+
+  const _SectionScheduleTile({
+    required this.section,
+    required this.startMin,
+    required this.durationMin,
+    required this.badgeColor,
+    required this.isDark,
+    required this.textColor,
+    required this.secondaryColor,
+    required this.formatMinutes,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final endMin = startMin + durationMin;
+    final rangeStr = '${formatMinutes(startMin)} – ${formatMinutes(endMin)}';
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 2),
+        child: Row(
+          children: [
+            Container(
+              width: 30,
+              height: 24,
+              alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: isDark
-                    ? Colors.white.withValues(alpha: 0.05)
-                    : Colors.black.withValues(alpha: 0.03),
+                color: badgeColor.withValues(alpha: isDark ? 0.22 : 0.14),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: TextField(
-                controller: _startControllers[index],
+              child: Text(
+                section.toString().padLeft(2, '0'),
                 style: TextStyle(
-                  color: textColor,
-                  fontSize: 13,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                  color: badgeColor,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              '第 $section 节',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: textColor,
+              ),
+            ),
+            const Spacer(),
+            Text(
+              rangeStr,
+              style: TextStyle(
+                fontSize: 14.5,
+                fontWeight: FontWeight.w700,
+                color: textColor,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+            const SizedBox(width: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.06)
+                    : Colors.black.withValues(alpha: 0.045),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                '${durationMin}m',
+                style: TextStyle(
+                  fontSize: 11.5,
                   fontWeight: FontWeight.w600,
-                ),
-                decoration: InputDecoration.collapsed(
-                  hintText: index == 0 ? '8:30' : '',
-                  hintStyle: TextStyle(
-                    color: isDark ? Colors.white24 : Colors.black26,
-                  ),
-                ),
-                textAlign: TextAlign.center,
-                keyboardType: TextInputType.datetime,
-                onSubmitted: index == 0
-                    ? (_) => _smartCascadeSectionTimes()
-                    : (_) => _saveConfigQuietly(),
-                onEditingComplete: () => _saveConfigQuietly(),
-              ),
-            ),
-          ),
-
-          // 时长
-          if (!_config.isEqualDuration || index == 0)
-            Expanded(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? Colors.white.withValues(alpha: 0.05)
-                      : Colors.black.withValues(alpha: 0.03),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: TextField(
-                  controller: _durationControllers[index],
-                  style: TextStyle(
-                    color: textColor,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  decoration: InputDecoration.collapsed(
-                    hintText: _config.isEqualDuration && index == 0
-                        ? '统一时长(分)'
-                        : '',
-                  ),
-                  textAlign: TextAlign.center,
-                  keyboardType: TextInputType.number,
+                  color: secondaryColor,
+                  fontFeatures: const [FontFeature.tabularFigures()],
                 ),
               ),
             ),
-        ],
+          ],
+        ),
       ),
     );
   }

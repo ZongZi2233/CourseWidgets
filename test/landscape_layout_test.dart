@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
-import 'package:coursewidgets/providers/schedule_provider.dart';
 import 'package:coursewidgets/services/theme_service.dart';
 import 'package:coursewidgets/ui/screens/settings_main_screen.dart';
 
@@ -28,8 +27,8 @@ void main() {
     await tester.pumpAndSettle();
 
     // Verify both section headers are visible simultaneously
-    expect(find.text('核心功能设置'), findsOneWidget);
-    expect(find.text('数据与关于'), findsOneWidget);
+    expect(find.text('课表与体验'), findsOneWidget);
+    expect(find.text('数据与系统'), findsOneWidget);
 
     // Verify items in both columns are present
     expect(find.text('课程设置'), findsOneWidget);

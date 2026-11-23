@@ -2,6 +2,25 @@
 
 本文档记录 CourseWidgets 各版本更新的动态活动演进，重点关注架构改进、渲染优化、故障诊断与教务抓取能力提升。
 
+## [v3.2.0] - 2026-11-24 (Build 3200 正式版)
+
+### 1. 智能教务系统导入全面加固与表述优化 (`EduScheduleExtractor` & `WebviewImportScreen`)
+- **9 大主流教务系统指纹识别与全双工提取**：新增独立模块 `EduScheduleExtractor`，依据网址路径/域名后缀、页面 DOM、关键 JS 全局变量与全量 XHR/Fetch 响应嗅探，自动识别并提取 **新正方 (`jwglxt` / `kbList` / `#kbgrid_table_0` / `.timetable_con`)、老正方 (`xskbcx.aspx` / `#Table1`)、强智 (`jsxsd` / `kbcontent` / `kbcontent1` / `<font title=...>`)、树维 EAMS (`TaskActivity` / 沙箱执行)、树维微服务 V8 (`for-std/course-table` / `studentTableVms`)、新 URP (`thisSemesterCurriculum` / `timeAndPlaceList`)、老 URP (`xkAction.do`)、青果 (`Pri_StuSel` / `frmRpt`) 与 金智/今日校园 (`jwapp/sys/wdkb` / `xskcb` / `KCM`/`SKZC`)**，并修复 0-based（新 URP/金智）与 1-based（树维 EAMS）周次位串解码差异；
+- **全端对等修复与误轮询清理**：修复 Windows WebView2 端脚本注入与异步 `webMessage` 桥接缺失、`_navigateTo` 转义字符缺陷以及 `_shouldShowPortalShortcut` 桌面端兼容性问题；严格门控树维 EAMS 自动修复脚本仅在 EAMS 站点激活，消除在正方/强智等网站上的无效轮询；
+- **教务入口与引导文案准确性升级**：修正设置页、引导页及通用教务模板列表中不准确的教务系统表述，在 WebView 顶部新增实时系统识别胶囊与全系统一键直达课表快捷按钮。
+
+### 2. Android 16 实况通知重构：JR / 重庆轨道交通导视系统风格 (`LiveUpdateNotificationManager.kt` & `live_notification_service_v2.dart`)
+- **零重复 4 区层级导视排版**：全面消除以往通知中“今日周X”及课程名/时间在标题与正文中多处重复的问题；主视区使用高饱和度线路色块徽章（`[ 1-2节 ]` / `[ NEXT ]` / `[ 明日周三 ]`）配合明显字号阶梯对比（大号粗体主课程名 + 高亮站台教室号），副栏精炼呈现下课时间与 `▸ 下节/候课` 指引；
+- **深浅模式高对比与 100% 原生 Promotable 兼容性**：保持零 `RemoteViews` 原生 `Notification.ProgressStyle`，主课程名自动适配系统深浅前景色，并与 Dart 端降级/桌面端通知、设置页实时模拟导视预览保持一致。
+
+### 3. 课时配置页 120Hz 帧率重构、智慧推算升级与撤回功能 (`AndroidScheduleConfigScreen` & `ScheduleConfigIntelligence` & `ScheduleProvider`)
+- **120Hz 高帧重塑**：以 `CustomScrollView` + `SliverList.builder` + 按时段（上午/下午/晚间）拆分 `RepaintBoundary` 卡片与等宽数字静态节次行，替代原先单大卡片内常驻 28 个 `TextField` 的高开销结构，消除滚动与页面退出动画时的冗余 SQLite 重复重算掉帧；
+- **“智慧推算”与“对齐课表”升级 + 专属工具栏 UI**：新增 `ScheduleConfigIntelligence`，支持“从已导入课表真实现有节次反推作息”、“保留自定义时长/课间与午晚起课锚点智能顺推”及高校作息预设，并优化工具栏按钮层级（对齐课表在当前页原位校准不再意外退回）；
+- **持久化“撤回到上次编辑”**：在 `ScheduleProvider` 与 `StorageService` 中持久化保存修改前配置快照，配合会话内多步撤回栈，任意修改、误点推算或对齐后均可一键无损还原并同步重算全表时间戳。
+
+### 4. 设置项信息表述与导视流畅度全面优化
+- 为主设置页与课程设置页接入轻量级实时摘要副标题（已录入课程数、当前周次与起课时间、实况导视模式、玻璃画质与深浅外观状态）；润色通用设置、通知设置与数据管理文案，移除冗余阻断弹窗并修复历史记录弹窗浅色模式下副文本对比度缺陷。
+
 ## [v3.1.9] - 2026-11-22 (Build 3190 正式版)
 
 ### 1. Windows 冷启动全链路提速

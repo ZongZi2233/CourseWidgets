@@ -323,13 +323,6 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
     if (mounted) liquid.showLiquidToast(context, msg);
   }
 
-  void _showAlert(String title, String content) {
-    liquid.showLiquidDialog(
-      context: context,
-      builder: liquid.LiquidGlassDialog(title: title, content: Text(content)),
-    );
-  }
-
   Future<void> _toggleSolidColorBackground(bool useSolid) async {
     HapticFeedback.selectionClick();
     if (useSolid) {
@@ -419,23 +412,23 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
                             return _buildCardGroup([
                               _buildActionRow(
                                 '更换背景图片',
-                                '从本地相册选择自定义壁纸',
+                                '从本地相册选择自定义壁纸并支持莫奈取色',
                                 CupertinoIcons.photo,
                                 _pickBackgroundImage,
                               ),
                               _buildActionRow(
                                 '恢复默认壁纸',
-                                '重置为内置质感渐变壁纸',
+                                '重置为内置低噪点渐变壁纸',
                                 CupertinoIcons.arrow_counterclockwise,
                                 () async {
                                   globalBackgroundPath.value = null;
                                   await _storage.remove(StorageService.keyBackgroundPath);
-                                  _showAlert('已恢复', '背景已恢复默认质感渐变壁纸');
+                                  _showToast('已恢复默认渐变壁纸');
                                 },
                               ),
                               _buildSwitchRow(
-                                '去除默认壁纸（纯色背景）',
-                                '浅色为纯白，夜间为深灰近黑（类微信深色）',
+                                '纯色极简背景',
+                                '关闭背景壁纸（浅色纯白 / 夜间深灰护眼）',
                                 CupertinoIcons.paintbrush_fill,
                                 isSolidColor,
                                 _toggleSolidColorBackground,
@@ -454,10 +447,10 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
                             builder: (context, _) {
                               final isPremium = theme.ThemeService.globalGlassQualityNotifier.value == GlassQuality.premium;
                               return _buildActionRow(
-                                '全局玻璃渲染模式',
+                                '玻璃渲染画质',
                                 isPremium
-                                    ? '当前：旗舰画质 (Premium) · 完整折射光影'
-                                    : '当前：流畅高帧 (Standard) · 适合老旧机型',
+                                    ? '旗舰折射 (Premium) · 光学折射质感优先'
+                                    : '流畅高帧 (Standard) · 120Hz 省电高帧优先',
                                 CupertinoIcons.speedometer,
                                 _toggleGlassQuality,
                                 trailing: liquid.LiquidSwitch(
@@ -623,22 +616,24 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
         ? Colors.white.withValues(alpha: 0.06)
         : Colors.black.withValues(alpha: 0.05);
 
-    return liquid.HyperOSCard(
-      cornerRadius: 24,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: Column(
-        children: [
-          for (int i = 0; i < children.length; i++) ...[
-            if (i > 0)
-              Divider(
-                height: 1,
-                thickness: 0.6,
-                indent: 48,
-                color: dividerColor,
-              ),
-            children[i],
+    return RepaintBoundary(
+      child: liquid.HyperOSCard(
+        cornerRadius: 24,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        child: Column(
+          children: [
+            for (int i = 0; i < children.length; i++) ...[
+              if (i > 0)
+                Divider(
+                  height: 1,
+                  thickness: 0.6,
+                  indent: 48,
+                  color: dividerColor,
+                ),
+              children[i],
+            ],
           ],
-        ],
+        ),
       ),
     );
   }

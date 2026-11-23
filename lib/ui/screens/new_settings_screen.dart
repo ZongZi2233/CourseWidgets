@@ -60,61 +60,74 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _buildSectionTitle('课程管理'),
-                        _buildCardGroup([
-                    _buildSettingRow(
-                      title: '添加课程',
-                      subtitle: '手动添加新课程',
-                      icon: CupertinoIcons.add_circled,
-                      onTap: () {
-                        final provider = context.read<ScheduleProvider>();
-                        Navigator.push(
-                          context,
-                          TransparentMaterialPageRoute(
-                            builder: (_) => CourseEditScreen(
-                              week: provider.currentWeek,
-                              day: provider.currentDay,
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                    _buildSettingRow(
-                      title: '课时配置',
-                      subtitle: '调整每节课的时间',
-                      icon: CupertinoIcons.time,
-                      onTap: () => Navigator.push(
-                        context,
-                        TransparentMaterialPageRoute(
-                          builder: (_) => const AndroidScheduleConfigScreen(),
-                        ),
-                      ),
-                    ),
-                  ]),
+                        _buildSectionTitle('课程与作息'),
+                        Consumer<ScheduleProvider>(
+                          builder: (context, provider, _) {
+                            final cfg = provider.currentConfig;
+                            final s1 = cfg.sectionStartTimes[1] ?? 480;
+                            final s1Text =
+                                '${(s1 ~/ 60).toString().padLeft(2, '0')}:${(s1 % 60).toString().padLeft(2, '0')}';
+                            final courseCountSub = provider.courses.isEmpty
+                                ? '手动新建单节或跨周课程'
+                                : '当前共 ${provider.courses.length} 条课程记录 · 点击新增';
 
-                  const SizedBox(height: 24),
-                  _buildSectionTitle('学期设置'),
-                  Consumer<ScheduleProvider>(
-                    builder: (context, provider, _) {
-                      final now = DateTime.now();
-                      final weeksSinceStart =
-                          now.difference(provider.semesterStartDate).inDays ~/
-                              7 +
-                          1;
-                      final weekDisplay = weeksSinceStart < 1
-                          ? '尚未开学'
-                          : '当前第 $weeksSinceStart 周';
-                      return _buildCardGroup([
-                        _buildSettingRow(
-                          title: '开学日期',
-                          subtitle:
-                              '${provider.semesterStartDate.year}-${provider.semesterStartDate.month.toString().padLeft(2, '0')}-${provider.semesterStartDate.day.toString().padLeft(2, '0')}  ·  $weekDisplay',
-                          icon: CupertinoIcons.time_solid,
-                          onTap: _pickSemesterStartDate,
+                            return _buildCardGroup([
+                              _buildSettingRow(
+                                title: '添加课程',
+                                subtitle: courseCountSub,
+                                icon: CupertinoIcons.add_circled,
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    TransparentMaterialPageRoute(
+                                      builder: (_) => CourseEditScreen(
+                                        week: provider.currentWeek,
+                                        day: provider.currentDay,
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                              _buildSettingRow(
+                                title: '课时配置',
+                                subtitle:
+                                    '首节 $s1Text · ${cfg.defaultDuration} 分钟/节 · 课间 ${cfg.breakTime} 分钟',
+                                icon: CupertinoIcons.time,
+                                onTap: () => Navigator.push(
+                                  context,
+                                  TransparentMaterialPageRoute(
+                                    builder: (_) =>
+                                        const AndroidScheduleConfigScreen(),
+                                  ),
+                                ),
+                              ),
+                            ]);
+                          },
                         ),
-                      ]);
-                    },
-                  ),
+
+                        const SizedBox(height: 24),
+                        _buildSectionTitle('学期时间线'),
+                        Consumer<ScheduleProvider>(
+                          builder: (context, provider, _) {
+                            final now = DateTime.now();
+                            final weeksSinceStart =
+                                now.difference(provider.semesterStartDate).inDays ~/
+                                    7 +
+                                1;
+                            final weekDisplay = weeksSinceStart < 1
+                                ? '尚未开学'
+                                : '当前第 $weeksSinceStart 周';
+                            return _buildCardGroup([
+                              _buildSettingRow(
+                                title: '开学日期校准',
+                                subtitle:
+                                    '${provider.semesterStartDate.year}-${provider.semesterStartDate.month.toString().padLeft(2, '0')}-${provider.semesterStartDate.day.toString().padLeft(2, '0')} (第1周周一) · $weekDisplay',
+                                icon: CupertinoIcons.time_solid,
+                                onTap: _pickSemesterStartDate,
+                              ),
+                            ]);
+                          },
+                        ),
                 ],
               ),
             ),
@@ -174,22 +187,24 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
         ? Colors.white.withValues(alpha: 0.06)
         : Colors.black.withValues(alpha: 0.05);
 
-    return liquid.HyperOSCard(
-      cornerRadius: 24,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: Column(
-        children: [
-          for (int i = 0; i < children.length; i++) ...[
-            if (i > 0)
-              Divider(
-                height: 1,
-                thickness: 0.6,
-                indent: 48,
-                color: dividerColor,
-              ),
-            children[i],
+    return RepaintBoundary(
+      child: liquid.HyperOSCard(
+        cornerRadius: 24,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        child: Column(
+          children: [
+            for (int i = 0; i < children.length; i++) ...[
+              if (i > 0)
+                Divider(
+                  height: 1,
+                  thickness: 0.6,
+                  indent: 48,
+                  color: dividerColor,
+                ),
+              children[i],
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -269,7 +284,10 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
     );
 
     if (selectedDate != null) {
-      provider.setSemesterStartDate(selectedDate);
+      await provider.setSemesterStartDate(selectedDate);
+      if (mounted) {
+        liquid.showLiquidToast(context, '开学日期已校准并自动同步全学期周次');
+      }
     }
   }
 }

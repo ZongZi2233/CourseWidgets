@@ -219,3 +219,289 @@ class TimeAlignmentEngine {
     return (startDt.millisecondsSinceEpoch, endDt.millisecondsSinceEpoch);
   }
 }
+
+/// 高校标准作息预设模板
+class SchedulePreset {
+  final String id;
+  final String title;
+  final String subtitle;
+  final int section1StartMin;
+  final int afternoonStartMin;
+  final int eveningStartMin;
+  final int durationMin;
+  final int smallBreakMin;
+
+  const SchedulePreset({
+    required this.id,
+    required this.title,
+    required this.subtitle,
+    required this.section1StartMin,
+    required this.afternoonStartMin,
+    required this.eveningStartMin,
+    required this.durationMin,
+    required this.smallBreakMin,
+  });
+}
+
+/// [v3.2.0] 智慧推算与实际课表反推作息引擎
+class ScheduleConfigIntelligence {
+  ScheduleConfigIntelligence._();
+
+  static const List<SchedulePreset> kPresets = [
+    SchedulePreset(
+      id: 'std_0800_45',
+      title: '常规早八 · 45分钟',
+      subtitle: '08:00 起课 · 午休 14:00 · 晚课 18:30 · 课间 5分/15分',
+      section1StartMin: 8 * 60,
+      afternoonStartMin: 14 * 60,
+      eveningStartMin: 18 * 60 + 30,
+      durationMin: 45,
+      smallBreakMin: 5,
+    ),
+    SchedulePreset(
+      id: 'shift_0830_45',
+      title: '错峰作息 · 08:30 起课',
+      subtitle: '08:30 起课 · 午休 14:00 · 晚课 18:30 · 45分钟/节',
+      section1StartMin: 8 * 60 + 30,
+      afternoonStartMin: 14 * 60,
+      eveningStartMin: 18 * 60 + 30,
+      durationMin: 45,
+      smallBreakMin: 5,
+    ),
+    SchedulePreset(
+      id: 'long_0800_50',
+      title: '长课时模式 · 50分钟',
+      subtitle: '08:00 起课 · 50分钟/节 · 10分钟小课间 · 14:00 下午',
+      section1StartMin: 8 * 60,
+      afternoonStartMin: 14 * 60,
+      eveningStartMin: 19 * 60,
+      durationMin: 50,
+      smallBreakMin: 10,
+    ),
+  ];
+
+  /// 智能顺推 1–13 节课时表：
+  /// 1. 严格尊重传入的 [section1Start]、[defaultDuration]、[smallBreak]；
+  /// 2. 当处于非等长模式时保留各节独立时长；
+  /// 3. 智能识别并保留用户合理的下午第5节/晚间第9节自定义起课锚点；
+  /// 4. 严格保证全部 1–13 节单调递增不重叠。
+  static ScheduleConfigModel smartCascade({
+    required ScheduleConfigModel base,
+    int? section1Start,
+    int? defaultDuration,
+    int? smallBreak,
+    int? customAfternoonStart,
+    int? customEveningStart,
+    bool forceEqualDuration = false,
+  }) {
+    final s1 = (section1Start ?? base.sectionStartTimes[1] ?? 480).clamp(6 * 60, 11 * 60);
+    final defDur = (defaultDuration ?? base.defaultDuration).clamp(30, 90);
+    final sBreak = (smallBreak ?? base.breakTime).clamp(1, 30);
+    final bigBreak = sBreak <= 5 ? 15 : (sBreak + 10).clamp(12, 25);
+    final equalDur = forceEqualDuration || base.isEqualDuration;
+
+    final Map<int, int> starts = {};
+    final Map<int, int> durations = {};
+
+    int durOf(int sec) {
+      if (equalDur) return defDur;
+      return (base.sectionDurations[sec] ?? defDur).clamp(30, 90);
+    }
+
+    int snapToFiveMin(int m) => ((m + 2) ~/ 5) * 5;
+
+    starts[1] = s1;
+    durations[1] = durOf(1);
+
+    for (int sec = 2; sec <= 13; sec++) {
+      final prevEnd = starts[sec - 1]! + durations[sec - 1]!;
+      durations[sec] = durOf(sec);
+
+      if (sec == 5) {
+        final earliest = prevEnd + 50;
+        final candidate = customAfternoonStart ?? (base.sectionStartTimes[5] ?? 840);
+        // 若用户自定义第5节合理且不早于上午下课+50分钟，则尊重其锚点，否则顺延至 14:00 或就近 5 分钟整点
+        if (candidate >= earliest && candidate <= 16 * 60) {
+          starts[sec] = candidate;
+        } else {
+          starts[sec] = math.max(14 * 60, snapToFiveMin(earliest));
+        }
+      } else if (sec == 9) {
+        final earliest = prevEnd + 45;
+        final candidate = customEveningStart ?? (base.sectionStartTimes[9] ?? 1110);
+        if (candidate >= earliest && candidate <= 20 * 60) {
+          starts[sec] = candidate;
+        } else {
+          starts[sec] = math.max(18 * 60 + 30, snapToFiveMin(earliest));
+        }
+      } else if (sec == 3 || sec == 7 || sec == 11) {
+        starts[sec] = prevEnd + bigBreak;
+      } else {
+        starts[sec] = prevEnd + sBreak;
+      }
+    }
+
+    return base.copyWith(
+      sectionStartTimes: starts,
+      sectionDurations: durations,
+      breakTime: sBreak,
+      defaultDuration: defDur,
+      isEqualDuration: equalDur,
+      useCustomConfig: true,
+    );
+  }
+
+  /// 从已有课程列表智能反推真实学校作息配置（优先利用已落盘的 startSection/endSection 精确众数聚类）
+  static ScheduleConfigModel? deduceFromCourses(
+    List<CourseEvent> courses, {
+    ScheduleConfigModel? fallback,
+  }) {
+    if (courses.isEmpty) return null;
+    final base = fallback ?? ScheduleConfigModel.defaultConfig();
+
+    // 统计每节次实测的 (startMin) 与观测时长
+    final Map<int, List<int>> secStarts = {};
+    final Map<int, List<int>> secDurations = {};
+    final List<int> observedBreaks = [];
+
+    for (final c in courses) {
+      final sDt = DateTime.fromMillisecondsSinceEpoch(c.startTime).toLocal();
+      final eDt = DateTime.fromMillisecondsSinceEpoch(c.endTime).toLocal();
+      final sMin = sDt.hour * 60 + sDt.minute;
+      final eMin = eDt.hour * 60 + eDt.minute;
+      final spanDur = eMin - sMin;
+      if (spanDur < 25 || spanDur > 300) continue;
+
+      final sSec = c.startSection;
+      final eSec = c.endSection ?? sSec;
+      if (sSec != null && sSec >= 1 && sSec <= 13 && eSec != null && eSec >= sSec && eSec <= 13) {
+        final count = eSec - sSec + 1;
+        if (count == 1) {
+          secStarts.putIfAbsent(sSec, () => []).add(sMin);
+          secDurations.putIfAbsent(sSec, () => []).add(spanDur.clamp(30, 90));
+        } else {
+          // 大课整体跨度反推单节时长与小课间（优先探测常见 5 / 10 分钟课间）
+          int estBreak = base.breakTime.clamp(5, 10);
+          final rem5 = (spanDur - (count - 1) * 5) % count;
+          final rem10 = (spanDur - (count - 1) * 10) % count;
+          if (rem10 == 0 && rem5 != 0) estBreak = 10;
+          if (rem5 == 0 && rem10 != 0) estBreak = 5;
+          final single = ((spanDur - (count - 1) * estBreak) / count)
+              .round()
+              .clamp(35, 65);
+          observedBreaks.add(estBreak);
+          secStarts.putIfAbsent(sSec, () => []).add(sMin);
+          secDurations.putIfAbsent(sSec, () => []).add(single);
+          for (int k = 1; k < count; k++) {
+            final sec = sSec + k;
+            if (sec <= 13) {
+              secStarts.putIfAbsent(sec, () => []).add(sMin + k * (single + estBreak));
+              secDurations.putIfAbsent(sec, () => []).add(single);
+            }
+          }
+        }
+      }
+    }
+
+    int modeOrMedian(List<int> list) {
+      final freq = <int, int>{};
+      for (final v in list) {
+        freq[v] = (freq[v] ?? 0) + 1;
+      }
+      int bestVal = list.first;
+      int bestCount = -1;
+      freq.forEach((k, count) {
+        if (count > bestCount || (count == bestCount && k < bestVal)) {
+          bestCount = count;
+          bestVal = k;
+        }
+      });
+      return bestVal;
+    }
+
+    final Map<int, int> resolvedStarts = {};
+    final Map<int, int> resolvedDurs = {};
+    for (int sec = 1; sec <= 13; sec++) {
+      if (secStarts[sec]?.isNotEmpty == true) {
+        resolvedStarts[sec] = modeOrMedian(secStarts[sec]!);
+      }
+      if (secDurations[sec]?.isNotEmpty == true) {
+        resolvedDurs[sec] = modeOrMedian(secDurations[sec]!);
+      }
+    }
+
+    if (resolvedStarts.isEmpty) {
+      return null;
+    }
+
+    // 反推标准单节时长与小课间
+    final allDurs = resolvedDurs.values.toList();
+    final inferredDefDur = allDurs.isNotEmpty ? modeOrMedian(allDurs) : base.defaultDuration;
+    for (final pair in [(1, 2), (3, 4), (5, 6), (7, 8), (9, 10)]) {
+      final a = pair.$1;
+      final b = pair.$2;
+      if (resolvedStarts.containsKey(a) &&
+          resolvedStarts.containsKey(b) &&
+          resolvedDurs.containsKey(a)) {
+        final gap = resolvedStarts[b]! - (resolvedStarts[a]! + resolvedDurs[a]!);
+        if (gap >= 1 && gap <= 20) {
+          observedBreaks.add(gap);
+        }
+      }
+    }
+    final inferredBreak = observedBreaks.isNotEmpty
+        ? modeOrMedian(observedBreaks).clamp(3, 20)
+        : base.breakTime;
+
+    // 基于实测第 1 节（或由第 3/5 节逆推）、第 5 节、第 9 节锚点顺推补齐未观测节次
+    int? inferredS1 = resolvedStarts[1];
+    if (inferredS1 == null && resolvedStarts.containsKey(3)) {
+      inferredS1 = (resolvedStarts[3]! - 2 * inferredDefDur - inferredBreak - 15).clamp(7 * 60, 9 * 60 + 30);
+    }
+
+    final cascaded = smartCascade(
+      base: base.copyWith(
+        sectionDurations: {
+          for (int i = 1; i <= 13; i++) i: resolvedDurs[i] ?? inferredDefDur,
+        },
+      ),
+      section1Start: inferredS1 ?? (base.sectionStartTimes[1] ?? 480),
+      defaultDuration: inferredDefDur,
+      smallBreak: inferredBreak,
+      customAfternoonStart: resolvedStarts[5],
+      customEveningStart: resolvedStarts[9],
+    );
+
+    // 保留高置信度实测节次起止时间，同时确保严格递增
+    final finalStarts = Map<int, int>.from(cascaded.sectionStartTimes);
+    final finalDurs = Map<int, int>.from(cascaded.sectionDurations);
+    for (int sec = 1; sec <= 13; sec++) {
+      if (resolvedStarts.containsKey(sec)) {
+        final obs = resolvedStarts[sec]!;
+        if (sec == 1 || obs > (finalStarts[sec - 1]! + finalDurs[sec - 1]!)) {
+          finalStarts[sec] = obs;
+        }
+      }
+      if (resolvedDurs.containsKey(sec)) {
+        finalDurs[sec] = resolvedDurs[sec]!;
+      }
+    }
+
+    final earliestMonday = TimeAlignmentEngine.getEarliestCourseMonday(courses);
+    final bool hasWeekend = courses.any((c) {
+      final wd = DateTime.fromMillisecondsSinceEpoch(c.startTime).toLocal().weekday;
+      return wd == 6 || wd == 7;
+    });
+
+    return base.copyWith(
+      semesterStartDate: earliestMonday ?? base.semesterStartDate,
+      sectionStartTimes: finalStarts,
+      sectionDurations: finalDurs,
+      breakTime: inferredBreak,
+      defaultDuration: inferredDefDur,
+      isEqualDuration: resolvedDurs.values.toSet().length <= 1,
+      showWeekends: hasWeekend || base.showWeekends,
+      useCustomConfig: true,
+    );
+  }
+}

@@ -1,8 +1,12 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
+import 'package:provider/provider.dart';
 import '../../constants/theme_constants.dart';
 import '../../constants/version.dart';
+import '../../providers/schedule_provider.dart';
+import '../../services/notification_manager.dart';
 import '../../services/theme_service.dart';
 import '../../utils/responsive_utils.dart';
 import 'new_settings_screen.dart';
@@ -25,6 +29,45 @@ class SettingsMainScreen extends StatefulWidget {
 class _SettingsMainScreenState extends State<SettingsMainScreen> {
   bool _isCheckingUpdate = false;
 
+  ScheduleProvider? _watchScheduleSafe(BuildContext context) {
+    try {
+      return Provider.of<ScheduleProvider>(context);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String _courseSummarySubtitle(ScheduleProvider? schedule) {
+    if (schedule == null || schedule.courses.isEmpty) {
+      return '添加课程、作息时间与开学校准';
+    }
+    final firstStart = schedule.currentConfig.sectionStartTimes[1] ?? 480;
+    final h = (firstStart ~/ 60).toString().padLeft(2, '0');
+    final m = (firstStart % 60).toString().padLeft(2, '0');
+    return '已录入 ${schedule.courses.length} 条记录 · 第 ${schedule.currentWeek} 周 · $h:$m 起课';
+  }
+
+  String _notificationSummarySubtitle() {
+    final nm = NotificationManager();
+    if (!nm.isNotificationEnabled && !nm.isLiveActivitiesEnabled) {
+      return '课程提醒与实况导视均已关闭';
+    }
+    if (nm.isLiveActivitiesEnabled) {
+      final mode = nm.liveProgressStyle == NotificationManager.styleDurationSegments
+          ? '时长分段'
+          : '居中圆点';
+      return '实况导视已开启 · $mode · ${nm.isDoubleReminderEnabled ? "双次提醒" : "单次提醒"}';
+    }
+    return nm.isDoubleReminderEnabled ? '课前常规 + 5分钟二次提醒' : '课前单次通知提醒';
+  }
+
+  String _generalSummarySubtitle() {
+    final ts = ThemeService();
+    final darkLabel = ts.isDarkMode ? '夜间深色' : '日间浅色';
+    final glassLabel = ts.glassQuality == GlassQuality.premium ? '旗舰折射' : '流畅高帧';
+    return '$darkLabel · $glassLabel · 个性壁纸';
+  }
+
   void _triggerUpdateCheck() {
     if (_isCheckingUpdate) return;
     AppUpdateDialog.checkAndShow(
@@ -42,7 +85,6 @@ class _SettingsMainScreenState extends State<SettingsMainScreen> {
   Widget build(BuildContext context) {
     final isDark = ThemeService().isDarkMode;
 
-    final isLandscapePhone = ResponsiveUtils.isLandscapePhone(context);
     final isDesktopOrTablet = ResponsiveUtils.isTabletMode(context) ||
         ResponsiveUtils.isDesktopOrLandscape(context);
     final isLandscape = ResponsiveUtils.isLandscape(context) || isDesktopOrTablet;
@@ -62,6 +104,11 @@ class _SettingsMainScreenState extends State<SettingsMainScreen> {
       bottomPadding = 120.0;
     }
 
+    final schedule = _watchScheduleSafe(context);
+    final courseSub = _courseSummarySubtitle(schedule);
+    final notifySub = _notificationSummarySubtitle();
+    final generalSub = _generalSummarySubtitle();
+
     return Scaffold(
       backgroundColor: Colors.transparent,
       extendBody: true,
@@ -69,14 +116,35 @@ class _SettingsMainScreenState extends State<SettingsMainScreen> {
         top: false,
         bottom: false,
         child: isLandscape
-            ? _buildLandscapeLayout(isDark, topPadding, bottomPadding)
-            : _buildPortraitLayout(isDark, topPadding, bottomPadding),
+            ? _buildLandscapeLayout(
+                isDark,
+                topPadding,
+                bottomPadding,
+                courseSub: courseSub,
+                notifySub: notifySub,
+                generalSub: generalSub,
+              )
+            : _buildPortraitLayout(
+                isDark,
+                topPadding,
+                bottomPadding,
+                courseSub: courseSub,
+                notifySub: notifySub,
+                generalSub: generalSub,
+              ),
       ),
     );
   }
 
-  /// [v3.0.0 正式版] 横屏与桌面端左右双栏自适应布局（左栏核心功能，右栏数据与关于，安全避让状态栏与边距）
-  Widget _buildLandscapeLayout(bool isDark, double topPadding, double bottomPadding) {
+  /// [v3.0.0 正式版] 横屏与桌面端左右双栏自适应布局（左栏课表与体验，右栏数据与系统，安全避让状态栏与边距）
+  Widget _buildLandscapeLayout(
+    bool isDark,
+    double topPadding,
+    double bottomPadding, {
+    required String courseSub,
+    required String notifySub,
+    required String generalSub,
+  }) {
     final leftPadding = 20.0 + MediaQuery.paddingOf(context).left;
     final rightPadding = 20.0 + MediaQuery.paddingOf(context).right;
 
@@ -88,31 +156,31 @@ class _SettingsMainScreenState extends State<SettingsMainScreen> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 左栏：核心功能设置 (50%)
+          // 左栏：课表与体验 (50%)
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                _buildSectionHeader('核心功能设置', isDark),
+                _buildSectionHeader('课表与体验', isDark),
                 _buildCardGroup([
                   _buildSettingsRow(
                     title: '课程设置',
-                    subtitle: '添加课程、学期配置、课时配置',
+                    subtitle: courseSub,
                     icon: Icons.school_rounded,
                     onTap: () => _navigateTo(const NewSettingsScreen()),
                     isDark: isDark,
                   ),
                   _buildSettingsRow(
                     title: '课程通知',
-                    subtitle: '提醒时间、双次提醒、Live Activities',
+                    subtitle: notifySub,
                     icon: Icons.notifications_rounded,
                     onTap: () => _navigateTo(const SettingsNotificationScreen()),
                     isDark: isDark,
                   ),
                   _buildSettingsRow(
                     title: '通用设置',
-                    subtitle: '外观、全局玻璃画质、个性化',
+                    subtitle: generalSub,
                     icon: Icons.tune_rounded,
                     onTap: () => _navigateTo(const SettingsGeneralScreen()),
                     isDark: isDark,
@@ -122,17 +190,17 @@ class _SettingsMainScreenState extends State<SettingsMainScreen> {
             ),
           ),
           const SizedBox(width: 16),
-          // 右栏：数据与关于 (50%)
+          // 右栏：数据与系统 (50%)
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                _buildSectionHeader('数据与关于', isDark),
+                _buildSectionHeader('数据与系统', isDark),
                 _buildCardGroup([
                   _buildSettingsRow(
                     title: '数据管理',
-                    subtitle: '导入导出、历史备份、清理数据',
+                    subtitle: '智能教务导入、多格式导出与历史备份',
                     icon: Icons.cloud_sync_rounded,
                     onTap: () => _navigateTo(const SettingsDataScreen()),
                     isDark: isDark,
@@ -140,8 +208,8 @@ class _SettingsMainScreenState extends State<SettingsMainScreen> {
                   _buildSettingsRow(
                     title: '检查更新',
                     subtitle: Platform.isWindows
-                        ? '当前 v$appVersion · 编译文件差异增量热更新'
-                        : '当前 v$appVersion · 自动比对 GitHub Release 最新版本',
+                        ? '当前 v$appVersion · 文件级差异增量热更新'
+                        : '当前 v$appVersion · 自动检测 GitHub 新版发布',
                     icon: Icons.system_update_alt_rounded,
                     onTap: _triggerUpdateCheck,
                     isDark: isDark,
@@ -159,7 +227,7 @@ class _SettingsMainScreenState extends State<SettingsMainScreen> {
                   ),
                   _buildSettingsRow(
                     title: '关于软件',
-                    subtitle: '版本信息、开源协议、检查更新',
+                    subtitle: '版本信息、开源协议与项目主页',
                     icon: Icons.info_outline_rounded,
                     onTap: () => _navigateTo(const SettingsAboutScreen()),
                     isDark: isDark,
@@ -174,7 +242,14 @@ class _SettingsMainScreenState extends State<SettingsMainScreen> {
   }
 
   /// 手机竖屏经典单列滚动布局
-  Widget _buildPortraitLayout(bool isDark, double topPadding, double bottomPadding) {
+  Widget _buildPortraitLayout(
+    bool isDark,
+    double topPadding,
+    double bottomPadding, {
+    required String courseSub,
+    required String notifySub,
+    required String generalSub,
+  }) {
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(
         parent: AlwaysScrollableScrollPhysics(),
@@ -183,36 +258,36 @@ class _SettingsMainScreenState extends State<SettingsMainScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildSectionHeader('核心功能设置', isDark),
+          _buildSectionHeader('课表与体验', isDark),
           _buildCardGroup([
             _buildSettingsRow(
               title: '课程设置',
-              subtitle: '添加课程、学期配置、课时配置',
+              subtitle: courseSub,
               icon: Icons.school_rounded,
               onTap: () => _navigateTo(const NewSettingsScreen()),
               isDark: isDark,
             ),
             _buildSettingsRow(
               title: '课程通知',
-              subtitle: '提醒时间、双次提醒、Live Activities',
+              subtitle: notifySub,
               icon: Icons.notifications_rounded,
               onTap: () => _navigateTo(const SettingsNotificationScreen()),
               isDark: isDark,
             ),
             _buildSettingsRow(
               title: '通用设置',
-              subtitle: '外观、全局玻璃画质、个性化',
+              subtitle: generalSub,
               icon: Icons.tune_rounded,
               onTap: () => _navigateTo(const SettingsGeneralScreen()),
               isDark: isDark,
             ),
           ]),
           const SizedBox(height: 20),
-          _buildSectionHeader('数据与关于', isDark),
+          _buildSectionHeader('数据与系统', isDark),
           _buildCardGroup([
             _buildSettingsRow(
               title: '数据管理',
-              subtitle: '导入导出、历史备份、清理数据',
+              subtitle: '智能教务导入、多格式导出与历史备份',
               icon: Icons.cloud_sync_rounded,
               onTap: () => _navigateTo(const SettingsDataScreen()),
               isDark: isDark,
@@ -220,8 +295,8 @@ class _SettingsMainScreenState extends State<SettingsMainScreen> {
             _buildSettingsRow(
               title: '检查更新',
               subtitle: Platform.isWindows
-                  ? '当前 v$appVersion · 编译文件差异增量热更新'
-                  : '当前 v$appVersion · 自动比对 GitHub Release 最新版本',
+                  ? '当前 v$appVersion · 文件级差异增量热更新'
+                  : '当前 v$appVersion · 自动检测 GitHub 新版发布',
               icon: Icons.system_update_alt_rounded,
               onTap: _triggerUpdateCheck,
               isDark: isDark,
@@ -239,7 +314,7 @@ class _SettingsMainScreenState extends State<SettingsMainScreen> {
             ),
             _buildSettingsRow(
               title: '关于软件',
-              subtitle: '版本信息、开源协议、检查更新',
+              subtitle: '版本信息、开源协议与项目主页',
               icon: Icons.info_outline_rounded,
               onTap: () => _navigateTo(const SettingsAboutScreen()),
               isDark: isDark,
@@ -273,22 +348,24 @@ class _SettingsMainScreenState extends State<SettingsMainScreen> {
         ? Colors.white.withValues(alpha: 0.06)
         : Colors.black.withValues(alpha: 0.05);
 
-    return liquid.HyperOSCard(
-      cornerRadius: 24,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: Column(
-        children: [
-          for (int i = 0; i < children.length; i++) ...[
-            if (i > 0)
-              Divider(
-                height: 1,
-                thickness: 0.6,
-                indent: 48,
-                color: dividerColor,
-              ),
-            children[i],
+    return RepaintBoundary(
+      child: liquid.HyperOSCard(
+        cornerRadius: 24,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        child: Column(
+          children: [
+            for (int i = 0; i < children.length; i++) ...[
+              if (i > 0)
+                Divider(
+                  height: 1,
+                  thickness: 0.6,
+                  indent: 48,
+                  color: dividerColor,
+                ),
+              children[i],
+            ],
           ],
-        ],
+        ),
       ),
     );
   }

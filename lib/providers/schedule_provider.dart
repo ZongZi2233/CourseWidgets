@@ -27,6 +27,7 @@ class ScheduleProvider with ChangeNotifier {
 
   // [v2.7.0] 唯一配置来源 (Single Source of Truth)
   ScheduleConfigModel _currentConfig = ScheduleConfigModel.defaultConfig();
+  ScheduleConfigModel? _previousConfig;
 
   List<CourseEvent> get courses => _courses;
   bool get isLoading => _isLoading;
@@ -37,6 +38,8 @@ class ScheduleProvider with ChangeNotifier {
   int get currentDay => _currentDay;
   DateTime get semesterStartDate => _currentConfig.semesterStartDate;
   ScheduleConfigModel get currentConfig => _currentConfig;
+  ScheduleConfigModel? get previousConfig => _previousConfig;
+  bool get canUndoConfig => _previousConfig != null;
 
   // 缓存有效周次（学期默认提供 1~25 周，确保任何周次均可正常浏览与滑动）
   List<int> _availableWeeks = List.generate(25, (i) => i + 1);
@@ -255,6 +258,14 @@ class ScheduleProvider with ChangeNotifier {
 
     try {
       final storage = StorageService();
+      final savedPrevConfig = storage.getString(StorageService.keyPreviousScheduleConfig);
+      if (savedPrevConfig != null) {
+        try {
+          _previousConfig = ScheduleConfigModel.fromJson(
+            jsonDecode(savedPrevConfig) as Map<String, dynamic>,
+          );
+        } catch (_) {}
+      }
       final savedConfig = storage.getString('schedule_config');
       if (savedConfig != null) {
         try {
@@ -386,6 +397,7 @@ class ScheduleProvider with ChangeNotifier {
     _currentWeek = 1;
     _currentDay = 1;
     _currentConfig = ScheduleConfigModel.defaultConfig();
+    _previousConfig = null;
 
     _syncNativeWidgetAndNotification();
     notifyListeners();
@@ -584,11 +596,61 @@ class ScheduleProvider with ChangeNotifier {
     debugPrint('✅ 开学日期已更新为 $targetMonday，并自动对齐首周课表');
   }
 
-  Future<void> updateConfig(ScheduleConfigModel newConfig) async {
+  /// 手动记录一条持久化撤回快照（供课时设置页面在修改/推算/对齐前保存基准）
+  Future<void> savePreviousConfigSnapshot(ScheduleConfigModel snapshot) async {
+    _previousConfig = snapshot;
+    final storage = StorageService();
+    await storage.setString(
+      StorageService.keyPreviousScheduleConfig,
+      jsonEncode(snapshot.toJson()),
+    );
+    notifyListeners();
+  }
+
+  /// 一键撤回到上一次持久化的课时时间配置，并无损重算全部课程时间戳
+  Future<bool> undoLastConfigUpdate() async {
+    final target = _previousConfig;
+    if (target == null) return false;
+
+    _previousConfig = null;
+    final storage = StorageService();
+    await storage.remove(StorageService.keyPreviousScheduleConfig);
+
+    await updateConfig(target, recordUndoSnapshot: false);
+
+    if (_courses.isNotEmpty) {
+      final earliestMonday = getEarliestCourseMonday();
+      final targetMonday = DateTime(
+        target.semesterStartDate.year,
+        target.semesterStartDate.month,
+        target.semesterStartDate.day,
+      ).subtract(Duration(days: target.semesterStartDate.weekday - 1));
+      if (earliestMonday != null && earliestMonday != targetMonday) {
+        await alignScheduleToStartDate(targetMonday);
+      }
+    }
+    return true;
+  }
+
+  Future<void> updateConfig(
+    ScheduleConfigModel newConfig, {
+    bool recordUndoSnapshot = true,
+  }) async {
     final oldConfig = _currentConfig;
-    _currentConfig = newConfig;
+    if (oldConfig.sameAs(newConfig)) {
+      return;
+    }
 
     final storage = StorageService();
+    if (recordUndoSnapshot) {
+      _previousConfig = oldConfig;
+      await storage.setString(
+        StorageService.keyPreviousScheduleConfig,
+        jsonEncode(oldConfig.toJson()),
+      );
+    }
+
+    _currentConfig = newConfig;
     await storage.setString('schedule_config', jsonEncode(newConfig.toJson()));
 
     final configChanged =
@@ -601,7 +663,11 @@ class ScheduleProvider with ChangeNotifier {
       await _jumpToCurrentDate();
     }
 
-    await _refreshAvailableWeeks();
+    if (_courses.isNotEmpty) {
+      await _refreshAvailableWeeks();
+    } else {
+      _recomputeAvailableWeeksFromMemory();
+    }
 
     _syncNativeWidgetAndNotification();
 

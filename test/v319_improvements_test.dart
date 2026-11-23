@@ -87,7 +87,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('v3.1.9 · Build 3190'), findsOneWidget);
+    expect(find.text('v$appVersion · Build $buildNumber'), findsOneWidget);
     expect(find.text('Copyright © ZongZi'), findsOneWidget);
     expect(find.textContaining('2025-2026'), findsNothing);
     expect(find.text('github.com/ZongZi2233/CourseWidgets'), findsOneWidget);

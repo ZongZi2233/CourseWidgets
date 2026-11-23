@@ -176,4 +176,5 @@ class StorageService {
   static const String keyThemeMode = 'theme_mode'; // 'default', 'system', 'monet'
   static const String keyCustomThemeColor = 'custom_theme_color';
   static const String keyEnableAcrylicBackdrop = 'enable_acrylic_backdrop';
+  static const String keyPreviousScheduleConfig = 'schedule_config_previous';
 }

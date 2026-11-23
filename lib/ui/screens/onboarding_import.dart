@@ -51,8 +51,8 @@ class OnboardingImport extends StatelessWidget {
                     _buildImportOption(
                       context,
                       icon: Icons.language_rounded,
-                      title: '从教务系统导入',
-                      subtitle: '通过内置浏览器登录并自动抓取',
+                      title: '智能教务系统导入',
+                      subtitle: '自动识别正方/树维/强智/URP/青果/金智等教务并提取课表',
                       color: Colors.blueAccent,
                       onTap: () => _importFromWebview(context),
                     ),

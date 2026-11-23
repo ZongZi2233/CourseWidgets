@@ -6,6 +6,7 @@ import 'package:timezone/data/latest.dart' as tz;
 import '../models/course_event.dart';
 import '../models/schedule_config.dart';
 import 'storage_service.dart';
+import 'time_alignment_engine.dart';
 
 /// ICS解析器 - 核心逻辑
 class IcsParser {
@@ -399,7 +400,15 @@ class IcsParser {
       }
     }
 
-    // 4. 若正则未能提取或未完全覆盖，通过实际课程的时间戳智能聚类
+    // 4. [v3.2.0] 若课程自带显式节次元数据 (SQLite Schema v4)，优先精准聚类；否则再按时间戳聚类
+    if (sectionStartTimes.isEmpty) {
+      final smartDeduced = ScheduleConfigIntelligence.deduceFromCourses(courses);
+      if (smartDeduced != null &&
+          courses.any((c) => c.startSection != null && c.startSection! > 0)) {
+        return smartDeduced;
+      }
+    }
+
     final Map<int, List<int>> startToDurations = {};
     for (final c in courses) {
       final sDt = DateTime.fromMillisecondsSinceEpoch(c.startTime).toLocal();

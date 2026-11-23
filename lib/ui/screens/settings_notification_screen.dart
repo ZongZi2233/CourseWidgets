@@ -90,7 +90,7 @@ class _SettingsNotificationScreenState
                           _buildCardGroup([
                             _buildSwitchRow(
                               title: '启用课程通知',
-                              subtitle: '在课程开始前提醒你',
+                              subtitle: '课前准时弹出上课提醒横幅与声音提示',
                               icon: CupertinoIcons.bell_fill,
                               value: _notificationEnabled,
                               onChanged: (value) async {
@@ -102,7 +102,7 @@ class _SettingsNotificationScreenState
                             ),
                             _buildSwitchRow(
                               title: '双次提醒',
-                              subtitle: '在上课前 5 分钟再次提醒',
+                              subtitle: '课前 5 分钟二次强提醒，防匆忙遗漏',
                               icon: CupertinoIcons.bell_circle_fill,
                               value: _doubleReminder,
                               onChanged: (value) async {
@@ -115,7 +115,7 @@ class _SettingsNotificationScreenState
                             ),
                             _buildSwitchRow(
                               title: '开启实况通知 (Live Activities)',
-                              subtitle: 'Android 16 实时活动与 iOS 灵动岛常驻支持',
+                              subtitle: 'Android 16 状态栏胶囊与轨道导视常驻看板',
                               icon: CupertinoIcons.sparkles,
                               value: _liveActivitiesEnabled,
                               onChanged: (value) async {
@@ -136,7 +136,7 @@ class _SettingsNotificationScreenState
 
                           const SizedBox(height: 20),
 
-                          _buildSectionHeader('实况时间轴样式', isDark),
+                          _buildSectionHeader('实况导视样式预览', isDark),
                           _buildProgressStyleCard(isDark),
 
                           const SizedBox(height: 20),
@@ -235,7 +235,7 @@ class _SettingsNotificationScreenState
     );
   }
 
-  /// [v3.1.0] 实况通知进度条双模式可视化选择卡片
+  /// [v3.2.0] JR / 轨道导视风格实况卡片实时预览 + 进度条双模式选择器
   Widget _buildProgressStyleCard(bool isDark) {
     final accent = ThemeService().primaryColor;
     return liquid.HyperOSCard(
@@ -244,6 +244,132 @@ class _SettingsNotificationScreenState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // 顶部实时模拟导视看板（对标 JR / 轨道交通导视字号阶梯与高对比配色）
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0E1117),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.08),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.circle,
+                      color: Color(0xFF10B981),
+                      size: 8,
+                    ),
+                    const SizedBox(width: 6),
+                    const Text(
+                      '进行中 · 08:00–09:40',
+                      style: TextStyle(
+                        color: Color(0xFF9CA3AF),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const Spacer(),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF059669),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Text(
+                        '24:18',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF059669),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: const Text(
+                        '1-2节',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    const Text(
+                      '高等数学',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'A101',
+                      style: TextStyle(
+                        color: Color(0xFF10B981),
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                const Row(
+                  children: [
+                    Text(
+                      '09:40',
+                      style: TextStyle(
+                        color: Color(0xFF10B981),
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    Text(
+                      ' 下课   ▸ 下节 ',
+                      style: TextStyle(
+                        color: Color(0xFF8E95A3),
+                        fontSize: 11,
+                      ),
+                    ),
+                    Text(
+                      '数据结构 · C302',
+                      style: TextStyle(
+                        color: Color(0xFFE5E7EB),
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
           _buildStyleOptionTile(
             styleKey: NotificationManager.styleCenteredDots,
             title: '居中样式（推荐）',
@@ -653,9 +779,10 @@ class _SettingsNotificationScreenState
           ),
           const SizedBox(height: 12),
           Text(
-            '支持 Android 16 (Live Updates) 状态栏胶囊与展开态高对比实况卡片，可在锁屏及通知栏实时显示课程倒计时与多节点时间轴。\n\n'
+            '采用轨道导视信息分级排版（线路色块徽章 + 大字号主课程与教室号 + 简洁下站指引），零冗余重复字段。\n\n'
             '• 秒级实时倒计时：由系统底层 Chronometer 驱动跳秒，零额外功耗\n'
-            '• 高清矢量级节点进度条：支持「居中圆点样式」与「按时长分段样式」一键切换。',
+            '• 双模节点时间轴：支持「居中圆点样式」与「按时长分段样式」实时切换\n'
+            '• 跨天防歧义：午夜零点自动刷新今日/明日归属与状态栏胶囊摘要',
             style: TextStyle(
               fontSize: 13,
               color: GlassSettingsHelper.getSecondaryTextColor(context),
