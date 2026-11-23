@@ -158,6 +158,47 @@ class MainActivity : FlutterActivity() {
                         result.error("INVALID_PATH", "filePath is null", null)
                     }
                 }
+                "getInstalledApkInfo" -> {
+                    Thread {
+                        try {
+                            val apkPath = applicationInfo.sourceDir
+                            val apkFile = File(apkPath)
+                            val pkgInfo = packageManager.getPackageInfo(packageName, 0)
+                            val versionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                                pkgInfo.longVersionCode
+                            } else {
+                                @Suppress("DEPRECATION")
+                                pkgInfo.versionCode.toLong()
+                            }
+                            val versionName = pkgInfo.versionName ?: ""
+                            val digest = java.security.MessageDigest.getInstance("SHA-256")
+                            val buf = ByteArray(65536)
+                            apkFile.inputStream().use { input ->
+                                while (true) {
+                                    val n = input.read(buf)
+                                    if (n <= 0) break
+                                    digest.update(buf, 0, n)
+                                }
+                            }
+                            val hexSha = digest.digest().joinToString("") { "%02x".format(it) }
+                            runOnUiThread {
+                                result.success(
+                                    mapOf(
+                                        "apkPath" to apkPath,
+                                        "apkSize" to apkFile.length(),
+                                        "versionCode" to versionCode,
+                                        "versionName" to versionName,
+                                        "sha256" to hexSha
+                                    )
+                                )
+                            }
+                        } catch (e: Exception) {
+                            runOnUiThread {
+                                result.error("APK_INFO_ERROR", e.message, null)
+                            }
+                        }
+                    }.start()
+                }
                 "openExternalUrl" -> {
                     val url = call.argument<String>("url")
                     if (!url.isNullOrEmpty()) {

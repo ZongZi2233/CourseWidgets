@@ -456,17 +456,19 @@ class LiveNotificationServiceV2 {
             '${nextDt.hour.toString().padLeft(2, '0')}:${nextDt.minute.toString().padLeft(2, '0')}';
         final endStr =
             '${nextEndDt.hour.toString().padLeft(2, '0')}:${nextEndDt.minute.toString().padLeft(2, '0')}';
-        final loc = nextFirst.location.trim().isNotEmpty &&
-                !nextFirst.location.contains('未知')
-            ? '  ${nextFirst.location}'
-            : '';
-        title = '<b>[$relDay] ${nextFirst.name}</b>$loc';
+        final loc = nextFirst.location.trim();
+        final hasLoc = loc.isNotEmpty && !loc.contains('未知');
+        title = hasLoc
+            ? '<b><font color="#3B82F6">$loc</font> · ${nextFirst.name}</b>'
+            : '<b>${nextFirst.name}</b>';
         subLocation = '$relDay·$startStr';
-        body = '$startStr–$endStr  ▸ 后续共${count}门';
+        body = '$relDay · $startStr–$endStr · 后续共${count}门';
+        showProgress = false;
       } else {
-        title = '<b>[休] 近期暂无排课</b>';
+        title = '<b>近期暂无排课</b>';
         body = '今日无课 · 点击查看完整课表';
         subLocation = '今日无课';
+        showProgress = false;
       }
     } else {
       final start = DateTime.fromMillisecondsSinceEpoch(
@@ -494,13 +496,9 @@ class LiveNotificationServiceV2 {
               ? '剩${remainingMin ~/ 60}时${remainingMin % 60}分'
               : (remainingMin > 0 ? '剩${remainingMin}分' : '即将下课');
 
-          final secBadge = _currentCourse!.startSection != null &&
-                  _currentCourse!.endSection != null
-              ? '${_currentCourse!.startSection}-${_currentCourse!.endSection}节'
-              : '进行中';
-          final locBadge =
-              hasLoc ? '  <font color="#10B981">$courseLoc</font>' : '';
-          title = '<b>[$secBadge] ${_currentCourse!.name}</b>$locBadge';
+          title = hasLoc
+              ? '<b><font color="#10B981">$courseLoc</font> · ${_currentCourse!.name}</b>'
+              : '<b>${_currentCourse!.name}</b>';
 
           if (totalMs > 0) {
             progressPercent =
@@ -521,18 +519,20 @@ class LiveNotificationServiceV2 {
             );
             final nextStartStr =
                 '${nextStart.hour.toString().padLeft(2, '0')}:${nextStart.minute.toString().padLeft(2, '0')}';
-            final nextLoc = nextCourseToday.location.trim().isNotEmpty &&
-                    !nextCourseToday.location.contains('未知')
-                ? ' · ${nextCourseToday.location}'
-                : '';
-            body += '  ▸ 下节 ${nextCourseToday.name}$nextLoc ($nextStartStr)';
+            final nextLocRaw = nextCourseToday.location.trim();
+            final hasNextLoc =
+                nextLocRaw.isNotEmpty && !nextLocRaw.contains('未知');
+            body += hasNextLoc
+                ? '  ·  下节 $nextLocRaw ${nextCourseToday.name}'
+                : '  ·  下节 $nextStartStr ${nextCourseToday.name}';
           } else {
-            body += '  ▸ 今日终班';
+            body += '  ·  今日最后一节';
           }
         } else {
-          title = '<b>[下课] ${_currentCourse!.name}</b>';
-          body = '本节已结束 · 课间休息';
+          title = '<b>课间休息 · ${_currentCourse!.name}</b>';
+          body = '本节已结束 · 点击查看后续课程';
           subLocation = '课间休息';
+          showProgress = false;
         }
       } else {
         final diffSec = ((start.millisecondsSinceEpoch - nowMs) / 1000).ceil();
@@ -546,28 +546,34 @@ class LiveNotificationServiceV2 {
             start.day == now.day;
         final courseLoc = _currentCourse!.location.trim();
         final hasLoc = courseLoc.isNotEmpty && !courseLoc.contains('未知');
-        final locBadge =
-            hasLoc ? '  <font color="#F43F5E">$courseLoc</font>' : '';
         final secBadge = _currentCourse!.startSection != null &&
                 _currentCourse!.endSection != null
-            ? '${_currentCourse!.startSection}-${_currentCourse!.endSection}节'
+            ? '第 ${_currentCourse!.startSection}-${_currentCourse!.endSection} 节'
             : '下节';
 
         if (isToday) {
-          title = '<b>[$secBadge] ${_currentCourse!.name}</b>$locBadge';
-          if (m <= 90) {
+          title = hasLoc
+              ? '<b><font color="#F43F5E">$courseLoc</font> · ${_currentCourse!.name}</b>'
+              : '<b>${_currentCourse!.name}</b>';
+          if (m <= 45) {
             subLocation = m > 0 ? '${m}分后' : '即将开课';
             progressPercent =
-                (((90 - m).clamp(0, 90) / 90) * 100).clamp(0, 100).toInt();
+                (((45 - m).clamp(0, 45) / 45) * 100).clamp(0, 100).toInt();
             showProgress = true;
             eventTime = start;
             isCountingDown = true;
 
             body =
-                '<b>$startStr 开课</b> ($startStr–$endStr)  ▸ ${m <= 15 ? "提前入座" : "课间候课"}';
+                '<b>$startStr 开课</b> ($startStr–$endStr)  ·  ${m <= 15 ? "提前入座" : "课间候课"}';
+          } else if (m <= 90) {
+            subLocation = '${m}分后';
+            showProgress = false;
+            eventTime = start;
+            isCountingDown = true;
+            body = '<b>$startStr 开课</b> ($startStr–$endStr)  ·  课间候课';
           } else {
             final waitStr = m >= 60 ? '${m ~/ 60}小时${m % 60}分' : '${m}分钟';
-            body = '<b>$startStr 开课</b>  ▸ 距开课 $waitStr';
+            body = '<b>$startStr 开课</b>  ·  距开课 $waitStr';
             subLocation = hasLoc ? courseLoc : startStr;
             showProgress = false;
             eventTime = start;
@@ -578,9 +584,11 @@ class LiveNotificationServiceV2 {
           final targetCourses = _getCoursesForDate(startDate);
           final count = targetCourses.isNotEmpty ? targetCourses.length : 1;
           final relDay = _formatRelativeDate(start, now);
-          title = '<b>[$relDay] ${_currentCourse!.name}</b>$locBadge';
+          title = hasLoc
+              ? '<b><font color="#3B82F6">$courseLoc</font> · ${_currentCourse!.name}</b>'
+              : '<b>${_currentCourse!.name}</b>';
           subLocation = '$relDay·$startStr';
-          body = '$startStr–$endStr  ▸ $secBadge · 后续共${count}门';
+          body = '$relDay · $startStr–$endStr · $secBadge · 共${count}门';
           showProgress = false;
           eventTime = null;
           isCountingDown = false;
@@ -615,7 +623,9 @@ class LiveNotificationServiceV2 {
         maxProgress: 100,
         progress: progressPercent,
         indeterminate: false,
-        category: AndroidNotificationCategory.progress,
+        category: showProgress
+            ? AndroidNotificationCategory.progress
+            : AndroidNotificationCategory.event,
         usesChronometer: eventTime != null,
         chronometerCountDown: isCountingDown,
         when: eventTime?.millisecondsSinceEpoch,

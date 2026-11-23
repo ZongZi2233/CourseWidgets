@@ -97,6 +97,72 @@ def get_apk_badging(apk_path, aapt_exe):
         print(f"[警告] 读取 APK badging 失败: {e}")
         return None, None
 
+MIN_ANDROID_REUSABLE_ENTRY_BYTES = 16384
+
+
+def generate_android_manifest(apk_path, apk_size, apk_sha256, version, build):
+    """生成 Android 安装包 ZIP 条目级 SHA-256 与字节偏移清单 (android-manifest.json)，供同签名下 HTTP Range 字节级无损增量重组"""
+    reusable_entries = []
+    with zipfile.ZipFile(apk_path, 'r') as zf, open(apk_path, 'rb') as fp:
+        for info in zf.infolist():
+            if info.is_dir():
+                continue
+            if info.compress_size < MIN_ANDROID_REUSABLE_ENTRY_BYTES:
+                continue
+            fp.seek(info.header_offset)
+            hdr = fp.read(30)
+            if len(hdr) != 30:
+                continue
+            sig, _ver, _flags, _comp, _mtime, _mdate, _crc, _csize, _usize, flen, elen = struct.unpack('<4s5HL2L2H', hdr)
+            if sig != b'PK\x03\x04':
+                continue
+            data_offset = info.header_offset + 30 + flen + elen
+            length = info.compress_size
+            if data_offset < 0 or data_offset + length > apk_size:
+                continue
+            fp.seek(data_offset)
+            h = hashlib.sha256()
+            remaining = length
+            while remaining > 0:
+                chunk = fp.read(min(65536, remaining))
+                if not chunk:
+                    break
+                h.update(chunk)
+                remaining -= len(chunk)
+            if remaining != 0:
+                continue
+            reusable_entries.append({
+                'path': info.filename.replace('\\', '/'),
+                'offset': data_offset,
+                'length': length,
+                'sha256': h.hexdigest(),
+            })
+
+    reusable_entries.sort(key=lambda item: item['offset'])
+    prev_end = 0
+    for item in reusable_entries:
+        if item['offset'] < prev_end:
+            raise RuntimeError(f"Overlapping APK entry detected at {item['path']}: {item['offset']} < {prev_end}")
+        prev_end = item['offset'] + item['length']
+
+    reusable_total = sum(item['length'] for item in reusable_entries)
+    manifest_data = {
+        'version': version,
+        'buildNumber': int(build),
+        'generatedAt': datetime.now().isoformat(),
+        'apkFilename': os.path.basename(apk_path),
+        'apkSize': apk_size,
+        'apkSha256': apk_sha256,
+        'minReusableSize': MIN_ANDROID_REUSABLE_ENTRY_BYTES,
+        'reusableCount': len(reusable_entries),
+        'reusableEntries': reusable_entries,
+    }
+    manifest_path = os.path.join(RELEASE_DIR, 'android-manifest.json')
+    with open(manifest_path, 'w', encoding='utf-8') as f:
+        json.dump(manifest_data, f, ensure_ascii=False, indent=2)
+    print(f"[OK] 已生成 Android 字节级增量索引清单: android-manifest.json ({len(reusable_entries)} 项, 可复用上限 {format_size(reusable_total)})")
+
+
 def collect_android_apks(version, build):
     apk_dir = os.path.join(ROOT_DIR, 'build', 'app', 'outputs', 'flutter-apk')
     if not os.path.exists(apk_dir):
@@ -162,6 +228,7 @@ def collect_android_apks(version, build):
             'updated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         })
         print(f"[OK] 已收集并校验 Android APK: {target_name} ({format_size(size)})")
+        generate_android_manifest(dst_path, size, sha, version, build)
 
     return collected
 

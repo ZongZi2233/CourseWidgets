@@ -115,7 +115,7 @@ class _SettingsNotificationScreenState
                             ),
                             _buildSwitchRow(
                               title: '开启实况通知 (Live Activities)',
-                              subtitle: 'Android 16 状态栏胶囊与轨道导视常驻看板',
+                              subtitle: 'Android 16 状态栏胶囊与实况导视常驻看板',
                               icon: CupertinoIcons.sparkles,
                               value: _liveActivitiesEnabled,
                               onChanged: (value) async {
@@ -235,16 +235,19 @@ class _SettingsNotificationScreenState
     );
   }
 
-  /// [v3.2.0] JR / 轨道导视风格实况卡片实时预览 + 进度条双模式选择器
+  /// [v3.2.0] 全新实况导视风格卡片实时预览 + 进度条双模式选择器
   Widget _buildProgressStyleCard(bool isDark) {
     final accent = ThemeService().primaryColor;
+    final isCentered =
+        _liveProgressStyle == NotificationManager.styleCenteredDots;
+
     return liquid.HyperOSCard(
       cornerRadius: 24,
       padding: const EdgeInsets.all(14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 顶部实时模拟导视看板（对标 JR / 轨道交通导视字号阶梯与高对比配色）
+          // 顶部 1:1 实况通知导视预览卡片（完全对齐 Android 16 原生通知层级与真圆角徽章）
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             decoration: BoxDecoration(
@@ -265,15 +268,19 @@ class _SettingsNotificationScreenState
                       size: 8,
                     ),
                     const SizedBox(width: 6),
-                    const Text(
-                      '进行中 · 08:00–09:40',
-                      style: TextStyle(
-                        color: Color(0xFF9CA3AF),
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
+                    const Expanded(
+                      child: Text(
+                        '课表 · 进行中 · 08:00–09:40',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Color(0xFF9CA3AF),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                     ),
-                    const Spacer(),
+                    const SizedBox(width: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 7,
@@ -281,7 +288,7 @@ class _SettingsNotificationScreenState
                       ),
                       decoration: BoxDecoration(
                         color: const Color(0xFF059669),
-                        borderRadius: BorderRadius.circular(6),
+                        borderRadius: BorderRadius.circular(99),
                       ),
                       child: const Text(
                         '24:18',
@@ -294,77 +301,226 @@ class _SettingsNotificationScreenState
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 10),
                 Row(
-                  crossAxisAlignment: CrossAxisAlignment.baseline,
-                  textBaseline: TextBaseline.alphabetic,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text.rich(
+                            TextSpan(
+                              children: const [
+                                TextSpan(
+                                  text: 'A101',
+                                  style: TextStyle(
+                                    color: Color(0xFF10B981),
+                                    fontSize: 16.5,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                TextSpan(
+                                  text: ' · ',
+                                  style: TextStyle(
+                                    color: Color(0xFF8E95A3),
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                TextSpan(
+                                  text: '高等数学（教室置前防截断）',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 15.5,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 4),
+                          Text.rich(
+                            TextSpan(
+                              children: const [
+                                TextSpan(
+                                  text: '09:40',
+                                  style: TextStyle(
+                                    color: Color(0xFF10B981),
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                TextSpan(
+                                  text: ' 下课  ·  下节 ',
+                                  style: TextStyle(
+                                    color: Color(0xFF8E95A3),
+                                    fontSize: 11.5,
+                                  ),
+                                ),
+                                TextSpan(
+                                  text: 'C302',
+                                  style: TextStyle(
+                                    color: Color(0xFF10B981),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                TextSpan(
+                                  text: ' 数据结构',
+                                  style: TextStyle(
+                                    color: Color(0xFFE5E7EB),
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
                       ),
+                    ),
+                    const SizedBox(width: 12),
+                    Container(
+                      width: 44,
+                      height: 44,
                       decoration: BoxDecoration(
                         color: const Color(0xFF059669),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: const Text(
-                        '1-2节',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w800,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.16),
+                          width: 1,
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    const Text(
-                      '高等数学',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.2,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    const Text(
-                      'A101',
-                      style: TextStyle(
-                        color: Color(0xFF10B981),
-                        fontSize: 14.5,
-                        fontWeight: FontWeight.w800,
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Text(
+                            '1-2',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w800,
+                              height: 1.05,
+                            ),
+                          ),
+                          Text(
+                            '节',
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.88),
+                              fontSize: 9.8,
+                              fontWeight: FontWeight.w600,
+                              height: 1.15,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 4),
-                const Row(
-                  children: [
-                    Text(
-                      '09:40',
-                      style: TextStyle(
-                        color: Color(0xFF10B981),
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w700,
+                const SizedBox(height: 11),
+                if (isCentered)
+                  Row(
+                    children: [
+                      _buildPreviewDot(const Color(0xFF6B7280)),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Container(
+                          height: 7,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1F4235),
+                            borderRadius: BorderRadius.circular(99),
+                          ),
+                          alignment: Alignment.centerLeft,
+                          child: FractionallySizedBox(
+                            widthFactor: 0.60,
+                            child: Container(
+                              height: 7,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF10B981),
+                                borderRadius: BorderRadius.circular(99),
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
-                    Text(
-                      ' 下课   ▸ 下节 ',
-                      style: TextStyle(
-                        color: Color(0xFF8E95A3),
-                        fontSize: 11,
+                      const SizedBox(width: 6),
+                      _buildPreviewDot(const Color(0xFF323743)),
+                      const SizedBox(width: 5),
+                      _buildPreviewDot(const Color(0xFF323743)),
+                    ],
+                  )
+                else
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 20,
+                        child: Container(
+                          height: 7,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF6B7280),
+                            borderRadius: BorderRadius.circular(99),
+                          ),
+                        ),
                       ),
-                    ),
-                    Text(
-                      '数据结构 · C302',
-                      style: TextStyle(
-                        color: Color(0xFFE5E7EB),
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w600,
+                      const SizedBox(width: 5),
+                      Expanded(
+                        flex: 32,
+                        child: Container(
+                          height: 7,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1F4235),
+                            borderRadius: BorderRadius.circular(99),
+                          ),
+                          alignment: Alignment.centerLeft,
+                          child: FractionallySizedBox(
+                            widthFactor: 0.62,
+                            child: Container(
+                              height: 7,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF10B981),
+                                borderRadius: BorderRadius.circular(99),
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 5),
+                      Expanded(
+                        flex: 24,
+                        child: Container(
+                          height: 7,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF323743),
+                            borderRadius: BorderRadius.circular(99),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 5),
+                      Expanded(
+                        flex: 24,
+                        child: Container(
+                          height: 7,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF323743),
+                            borderRadius: BorderRadius.circular(99),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                const SizedBox(height: 6),
+                const Text(
+                  '无课或今日已结课时自动隐藏进度条',
+                  style: TextStyle(
+                    color: Color(0xFF6B7280),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ],
             ),
@@ -779,7 +935,7 @@ class _SettingsNotificationScreenState
           ),
           const SizedBox(height: 12),
           Text(
-            '采用轨道导视信息分级排版（线路色块徽章 + 大字号主课程与教室号 + 简洁下站指引），零冗余重复字段。\n\n'
+            '采用全新实况导视信息分级排版（教室号置前高对比高亮 + 右侧真圆角节次徽章 + 简洁下节指引），长课程名不遮挡教室，当日无课或已结课时自动隐藏进度条。\n\n'
             '• 秒级实时倒计时：由系统底层 Chronometer 驱动跳秒，零额外功耗\n'
             '• 双模节点时间轴：支持「居中圆点样式」与「按时长分段样式」实时切换\n'
             '• 跨天防歧义：午夜零点自动刷新今日/明日归属与状态栏胶囊摘要',

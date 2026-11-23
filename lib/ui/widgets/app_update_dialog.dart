@@ -21,11 +21,13 @@ import 'liquid_toast.dart';
 class AppUpdateDialog extends StatefulWidget {
   final AppUpdateInfo updateInfo;
   final bool autoAnalyzeWindowsDiff;
+  final bool autoAnalyzeAndroidDiff;
 
   const AppUpdateDialog({
     super.key,
     required this.updateInfo,
     this.autoAnalyzeWindowsDiff = true,
+    this.autoAnalyzeAndroidDiff = true,
   });
 
   /// 统一以真实液态玻璃与轻度全屏背景模糊展示更新弹窗
@@ -33,6 +35,7 @@ class AppUpdateDialog extends StatefulWidget {
     BuildContext context,
     AppUpdateInfo info, {
     bool autoAnalyzeWindowsDiff = true,
+    bool autoAnalyzeAndroidDiff = true,
   }) {
     final isDark = GlassSettingsHelper.isDark(context);
     return showGeneralDialog<void>(
@@ -44,6 +47,7 @@ class AppUpdateDialog extends StatefulWidget {
       pageBuilder: (dialogCtx, anim1, anim2) => AppUpdateDialog(
         updateInfo: info,
         autoAnalyzeWindowsDiff: autoAnalyzeWindowsDiff,
+        autoAnalyzeAndroidDiff: autoAnalyzeAndroidDiff,
       ),
       transitionBuilder: (dialogCtx, anim1, anim2, child) {
         final isReversing = anim1.status == AnimationStatus.reverse;
@@ -128,6 +132,7 @@ class AppUpdateDialog extends StatefulWidget {
 class _AppUpdateDialogState extends State<AppUpdateDialog> {
   final ScrollController _notesScrollController = ScrollController();
   WindowsIncrementalPlan? _winPlan;
+  AndroidIncrementalPlan? _androidPlan;
   bool _isAnalyzingDiff = false;
   String? _diffError;
 
@@ -140,6 +145,8 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
     super.initState();
     if (Platform.isWindows && widget.autoAnalyzeWindowsDiff) {
       _analyzeWindowsIncrementalDiff();
+    } else if (Platform.isAndroid && widget.autoAnalyzeAndroidDiff) {
+      _analyzeAndroidIncrementalDiff();
     }
   }
 
@@ -166,6 +173,28 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
       if (!mounted) return;
       setState(() {
         _diffError = '$e';
+        _isAnalyzingDiff = false;
+      });
+    }
+  }
+
+  Future<void> _analyzeAndroidIncrementalDiff() async {
+    setState(() {
+      _isAnalyzingDiff = true;
+      _diffError = null;
+    });
+    try {
+      final plan = await AppUpdateService.instance
+          .prepareAndroidIncrementalPlan(widget.updateInfo);
+      if (!mounted) return;
+      setState(() {
+        _androidPlan = plan;
+        _isAnalyzingDiff = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _androidPlan = null;
         _isAnalyzingDiff = false;
       });
     }
@@ -202,14 +231,27 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
           },
         );
       } else if (Platform.isAndroid) {
-        await AppUpdateService.instance.downloadAndInstallAndroidApk(
-          widget.updateInfo,
-          onProgress: (p) {
-            if (mounted) {
-              setState(() => _progress = p);
-            }
-          },
-        );
+        final plan = _androidPlan;
+        if (plan != null && plan.canIncremental) {
+          await AppUpdateService.instance.executeAndroidIncrementalUpdate(
+            widget.updateInfo,
+            plan,
+            onProgress: (p) {
+              if (mounted) {
+                setState(() => _progress = p);
+              }
+            },
+          );
+        } else {
+          await AppUpdateService.instance.downloadAndInstallAndroidApk(
+            widget.updateInfo,
+            onProgress: (p) {
+              if (mounted) {
+                setState(() => _progress = p);
+              }
+            },
+          );
+        }
         if (mounted) {
           Navigator.of(context).pop();
         }
@@ -314,7 +356,9 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    '发现新版本 ${info.latestTag}',
+                                    info.isSameVersionRebuild
+                                        ? '发现同版本更新构建 ${info.latestTag}'
+                                        : '发现新版本 ${info.latestTag}',
                                     style: TextStyle(
                                       color: titleColor,
                                       fontSize: 18.5,
@@ -336,7 +380,9 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
                                               BorderRadius.circular(8),
                                         ),
                                         child: Text(
-                                          'v$appVersion  →  v${info.latestVersion}',
+                                          info.isSameVersionRebuild
+                                              ? 'v$appVersion · 同版本 SHA-256 校验更新'
+                                              : 'v$appVersion  →  v${info.latestVersion}',
                                           style: TextStyle(
                                             color: subColor,
                                             fontSize: 11.5,
@@ -475,7 +521,10 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
                                             ? '正在更新...'
                                             : (Platform.isWindows
                                                 ? '增量更新并重启'
-                                                : '立即下载并安装'),
+                                                : (_androidPlan?.canIncremental ==
+                                                        true
+                                                    ? '增量更新并安装'
+                                                    : '立即下载并安装')),
                                         style: const TextStyle(
                                           color: Colors.white,
                                           fontSize: 14.5,
@@ -681,6 +730,91 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
 
   Widget _buildAndroidPackageBadge(bool isDark) {
     final info = widget.updateInfo;
+    final cardBg =
+        AppThemeColors.babyPink.withValues(alpha: isDark ? 0.12 : 0.10);
+    final textColor = isDark ? Colors.white : const Color(0xFF1E2128);
+    final subColor = isDark ? Colors.white70 : const Color(0xFF4A5060);
+
+    if (_isAnalyzingDiff) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+        decoration: BoxDecoration(
+          color: cardBg,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 15,
+              height: 15,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.0,
+                color: AppThemeColors.babyPink,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                '正在比对本地安装包区块与远端增量差异...',
+                style: TextStyle(
+                  color: textColor,
+                  fontSize: 12.2,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final plan = _androidPlan;
+    if (plan != null && plan.canIncremental) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+        decoration: BoxDecoration(
+          color: cardBg,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  CupertinoIcons.sparkles,
+                  color: AppThemeColors.babyPink,
+                  size: 16,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    '智能增量更新 · 复用本地 ${AppUpdateService.formatBytes(plan.reusedBytes)} (SHA-256)',
+                    style: TextStyle(
+                      color: textColor,
+                      fontSize: 12.2,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '仅需增量下载 ${AppUpdateService.formatBytes(plan.incrementalDownloadBytes)}（完整包 ${AppUpdateService.formatBytes(plan.targetApkSize)}，节省 ${plan.savedPercent.toStringAsFixed(1)}%）',
+              style: TextStyle(
+                color: subColor,
+                fontSize: 11.6,
+                height: 1.35,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     final sizeStr = info.apkSize > 0
         ? AppUpdateService.formatBytes(info.apkSize)
         : 'arm64-v8a 正式版';
@@ -690,7 +824,7 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: AppThemeColors.babyPink.withValues(alpha: isDark ? 0.12 : 0.10),
+        color: cardBg,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
@@ -705,7 +839,7 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
             child: Text(
               'Android arm64-v8a 安装包 ($sizeStr)${hasSha ? " · 附带 SHA-256 校验" : ""}',
               style: TextStyle(
-                color: isDark ? Colors.white : const Color(0xFF1E2128),
+                color: textColor,
                 fontSize: 12.2,
                 fontWeight: FontWeight.w600,
               ),

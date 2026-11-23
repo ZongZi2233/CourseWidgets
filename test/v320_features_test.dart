@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'dart:typed_data';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
@@ -6,12 +8,14 @@ import 'package:provider/provider.dart';
 import 'package:coursewidgets/models/course_event.dart';
 import 'package:coursewidgets/models/schedule_config.dart';
 import 'package:coursewidgets/providers/schedule_provider.dart';
+import 'package:coursewidgets/services/app_update_service.dart';
 import 'package:coursewidgets/services/edu_schedule_extractor.dart';
 import 'package:coursewidgets/services/storage_service.dart';
 import 'package:coursewidgets/services/time_alignment_engine.dart';
 import 'package:coursewidgets/ui/screens/android_schedule_config_screen.dart';
 import 'package:coursewidgets/ui/screens/settings_data_screen.dart';
 import 'package:coursewidgets/ui/screens/settings_notification_screen.dart';
+import 'package:coursewidgets/ui/widgets/app_update_dialog.dart';
 
 void main() {
   group('EduScheduleExtractor multi-system detection & parsing', () {
@@ -413,9 +417,194 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('实况导视样式预览'), findsOneWidget);
-      expect(find.text('1-2节'), findsOneWidget);
-      expect(find.text('A101'), findsOneWidget);
+      expect(find.text('1-2'), findsOneWidget);
+      expect(find.text('节'), findsOneWidget);
+      expect(find.textContaining('A101', findRichText: true), findsOneWidget);
+      expect(find.textContaining('轨道', findRichText: true), findsNothing);
+      expect(find.textContaining('JR', findRichText: true), findsNothing);
+      expect(find.textContaining('重庆', findRichText: true), findsNothing);
       expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('AppUpdateDialog highlights same-version SHA-256 rebuilds',
+        (WidgetTester tester) async {
+      const rebuildInfo = AppUpdateInfo(
+        latestTag: 'v3.2.0',
+        latestVersion: '3.2.0',
+        releaseName: 'CourseWidgets v3.2.0',
+        releaseNotes: '### 更新说明\n* 优化实况通知导视排版与教室置前展示',
+        publishedAt: '2026-11-24T00:00:00Z',
+        htmlUrl: 'https://github.com/ZongZi2233/CourseWidgets/releases/tag/v3.2.0',
+        apkDownloadUrl: 'https://example.com/app.apk',
+        apkSize: 63940000,
+        apkSha256: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+        winZipDownloadUrl: 'https://example.com/win.zip',
+        winZipSize: 56811513,
+        hasUpdate: true,
+        isSameVersionRebuild: true,
+        installedApkSha256:
+            'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      );
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: AppUpdateDialog(
+              updateInfo: rebuildInfo,
+              autoAnalyzeWindowsDiff: false,
+              autoAnalyzeAndroidDiff: false,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('发现同版本更新构建 v3.2.0'), findsOneWidget);
+      expect(find.textContaining('同版本 SHA-256 校验更新'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('Android SHA-256 rebuild detection & bit-exact delta updates', () {
+    test('evaluateUpdateAvailability detects semver bumps and Android same-version rebuilds', () {
+      expect(
+        AppUpdateService.evaluateUpdateAvailability(
+          remoteTag: 'v3.2.1',
+          localVersion: '3.2.0',
+          isAndroid: true,
+        ),
+        (hasUpdate: true, isSameVersionRebuild: false),
+      );
+
+      expect(
+        AppUpdateService.evaluateUpdateAvailability(
+          remoteTag: 'v3.2.0',
+          localVersion: '3.2.0',
+          remoteApkSha256: 'abcd1234',
+          localApkSha256: 'efgh5678',
+          isAndroid: true,
+        ),
+        (hasUpdate: true, isSameVersionRebuild: true),
+      );
+
+      expect(
+        AppUpdateService.evaluateUpdateAvailability(
+          remoteTag: 'v3.2.0',
+          localVersion: '3.2.0',
+          remoteApkSha256: 'ABCD1234',
+          localApkSha256: 'abcd1234',
+          isAndroid: true,
+        ),
+        (hasUpdate: false, isSameVersionRebuild: false),
+      );
+
+      expect(
+        AppUpdateService.evaluateUpdateAvailability(
+          remoteTag: 'v3.2.0',
+          localVersion: '3.2.0',
+          remoteApkSha256: 'abcd1234',
+          localApkSha256: 'efgh5678',
+          isAndroid: false,
+        ),
+        (hasUpdate: false, isSameVersionRebuild: false),
+      );
+    });
+
+    test('computeAndroidDeltaPlan reassembles bit-exact target bytes from local + remote slices', () {
+      Uint8List makePattern(int len, int seed) {
+        final out = Uint8List(len);
+        for (int i = 0; i < len; i++) {
+          out[i] = (i * 31 + seed) & 0xFF;
+        }
+        return out;
+      }
+
+      final chunkA = makePattern(400000, 11);
+      final chunkB = makePattern(350000, 77);
+      final oldBytes = Uint8List.fromList([
+        ...makePattern(1024, 1),
+        ...chunkA,
+        ...makePattern(10000, 2),
+        ...chunkB,
+        ...makePattern(2048, 3),
+      ]);
+      final newBytes = Uint8List.fromList([
+        ...makePattern(1536, 9),
+        ...chunkA,
+        ...makePattern(12000, 8),
+        ...chunkB,
+        ...makePattern(3072, 7),
+      ]);
+
+      final newSha = sha256.convert(newBytes).toString();
+      final shaA = sha256.convert(chunkA).toString();
+      final shaB = sha256.convert(chunkB).toString();
+
+      final plan = AppUpdateService.computeAndroidDeltaPlan(
+        targetApkSize: newBytes.length,
+        targetApkSha256: newSha,
+        localApkPath: '/data/app/base.apk',
+        remoteEntries: [
+          AndroidReusableEntry(
+            path: 'lib/arm64-v8a/libflutter.so',
+            offset: 1536,
+            length: chunkA.length,
+            sha256: shaA,
+          ),
+          AndroidReusableEntry(
+            path: 'assets/flutter_assets/wallpaper.png',
+            offset: 1536 + chunkA.length + 12000,
+            length: chunkB.length,
+            sha256: shaB,
+          ),
+        ],
+        localEntriesByPath: {
+          'lib/arm64-v8a/libflutter.so': (
+            offset: 1024,
+            length: chunkA.length,
+            sha256: shaA,
+          ),
+          'assets/flutter_assets/wallpaper.png': (
+            offset: 1024 + chunkA.length + 10000,
+            length: chunkB.length,
+            sha256: shaB,
+          ),
+        },
+      );
+
+      expect(plan.canIncremental, isTrue);
+      expect(plan.reusedBytes, chunkA.length + chunkB.length);
+      expect(plan.incrementalDownloadBytes, 1536 + 12000 + 3072);
+      expect(plan.savedPercent, greaterThan(70.0));
+
+      final assembled = BytesBuilder(copy: false);
+      for (final op in plan.ops) {
+        if (op.isLocalCopy) {
+          assembled.add(oldBytes.sublist(op.localOffset, op.localOffset + op.length));
+        } else {
+          assembled.add(newBytes.sublist(op.targetOffset, op.targetOffset + op.length));
+        }
+      }
+      final resultBytes = assembled.takeBytes();
+      expect(resultBytes.length, newBytes.length);
+      expect(sha256.convert(resultBytes).toString(), newSha);
+      expect(resultBytes, equals(newBytes));
+    });
+
+    test('filterReleaseNotes strips android-manifest.json and checksum lines', () {
+      const sample = '''
+### 更新日志
+* 修复实况通知进度条显示
+
+* android-manifest.json
+* windows-manifest.json
+d628fb2ad3cbf3c54f302a2c20cbcc9520463de31e286f4a46b0518ab9a15fa3  CourseWidgets-v3.2.0-android-arm64-v8a.apk
+''';
+      final cleaned = AppUpdateService.filterReleaseNotes(sample);
+      expect(cleaned, contains('修复实况通知进度条显示'));
+      expect(cleaned, isNot(contains('android-manifest.json')));
+      expect(cleaned, isNot(contains('windows-manifest.json')));
+      expect(cleaned, isNot(contains('d628fb2ad3cbf')));
     });
   });
 }

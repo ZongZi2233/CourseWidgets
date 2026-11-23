@@ -25,8 +25,11 @@ class AppUpdateInfo {
   final int winZipSize;
   final String winZipSha256;
   final String? winManifestUrl;
+  final String? androidManifestUrl;
   final String? sha256SumsUrl;
   final bool hasUpdate;
+  final bool isSameVersionRebuild;
+  final String installedApkSha256;
 
   const AppUpdateInfo({
     required this.latestTag,
@@ -42,8 +45,11 @@ class AppUpdateInfo {
     required this.winZipSize,
     this.winZipSha256 = '',
     this.winManifestUrl,
+    this.androidManifestUrl,
     this.sha256SumsUrl,
     required this.hasUpdate,
+    this.isSameVersionRebuild = false,
+    this.installedApkSha256 = '',
   });
 }
 
@@ -109,6 +115,110 @@ class WindowsIncrementalPlan {
       : 0.0;
 }
 
+/// 本地已安装 Android APK 元数据与 SHA-256 摘要
+class InstalledApkInfo {
+  final String apkPath;
+  final int apkSize;
+  final int versionCode;
+  final String versionName;
+  final String sha256;
+
+  const InstalledApkInfo({
+    required this.apkPath,
+    required this.apkSize,
+    required this.versionCode,
+    required this.versionName,
+    required this.sha256,
+  });
+}
+
+/// Android APK 内可复用 ZIP 条目字节区间索引 (来自 android-manifest.json)
+class AndroidReusableEntry {
+  final String path;
+  final int offset;
+  final int length;
+  final String sha256;
+
+  const AndroidReusableEntry({
+    required this.path,
+    required this.offset,
+    required this.length,
+    required this.sha256,
+  });
+
+  factory AndroidReusableEntry.fromJson(Map<String, dynamic> json) {
+    return AndroidReusableEntry(
+      path: (json['path'] as String).replaceAll('\\', '/'),
+      offset: (json['offset'] as num).toInt(),
+      length: (json['length'] as num).toInt(),
+      sha256: (json['sha256'] as String?)?.toLowerCase() ?? '',
+    );
+  }
+}
+
+/// Android 无损重组指令（从本地 base.apk 复制，或从远端 HTTP Range 拉取差异片段）
+class AndroidAssemblyOp {
+  final bool isLocalCopy;
+  final int targetOffset;
+  final int length;
+  final int localOffset;
+  final String entryPath;
+
+  const AndroidAssemblyOp({
+    required this.isLocalCopy,
+    required this.targetOffset,
+    required this.length,
+    this.localOffset = 0,
+    this.entryPath = '',
+  });
+}
+
+/// Android 字节级无损增量更新方案
+class AndroidIncrementalPlan {
+  final int targetApkSize;
+  final String targetApkSha256;
+  final String localApkPath;
+  final int reusedBytes;
+  final int incrementalDownloadBytes;
+  final int reusedEntriesCount;
+  final int totalManifestEntriesCount;
+  final List<AndroidAssemblyOp> ops;
+
+  const AndroidIncrementalPlan({
+    required this.targetApkSize,
+    required this.targetApkSha256,
+    required this.localApkPath,
+    required this.reusedBytes,
+    required this.incrementalDownloadBytes,
+    required this.reusedEntriesCount,
+    required this.totalManifestEntriesCount,
+    required this.ops,
+  });
+
+  int get savedBytes => reusedBytes.clamp(0, targetApkSize);
+
+  double get savedPercent => targetApkSize > 0
+      ? (savedBytes / targetApkSize * 100.0).clamp(0.0, 99.9)
+      : 0.0;
+
+  bool get canIncremental =>
+      ops.isNotEmpty &&
+      targetApkSize > 0 &&
+      targetApkSha256.isNotEmpty &&
+      reusedBytes >= 512 * 1024 &&
+      incrementalDownloadBytes < targetApkSize;
+}
+
+class _SingleDigestSink implements Sink<Digest> {
+  Digest? value;
+
+  @override
+  void add(Digest data) => value = data;
+
+  @override
+  void close() {}
+}
+
 /// 更新下载与校验实时进度状态
 class UpdateProgress {
   final String stage;
@@ -170,6 +280,39 @@ class AppUpdateService {
     return false;
   }
 
+  /// 统一评估是否存在可用更新（支持语义化版本号递增 + Android 同版本构建 SHA-256 差异检测）
+  @visibleForTesting
+  static ({bool hasUpdate, bool isSameVersionRebuild})
+      evaluateUpdateAvailability({
+    required String remoteTag,
+    required String localVersion,
+    String remoteApkSha256 = '',
+    String localApkSha256 = '',
+    bool isAndroid = false,
+  }) {
+    if (isNewerVersion(remoteTag, localVersion)) {
+      return (hasUpdate: true, isSameVersionRebuild: false);
+    }
+
+    final normRemote =
+        remoteTag.trim().replaceFirst(RegExp(r'^[vV]'), '').split('+').first.trim();
+    final normLocal =
+        localVersion.trim().replaceFirst(RegExp(r'^[vV]'), '').split('+').first.trim();
+    final rSha = remoteApkSha256.trim().toLowerCase();
+    final lSha = localApkSha256.trim().toLowerCase();
+
+    if (isAndroid &&
+        normRemote.isNotEmpty &&
+        normRemote == normLocal &&
+        rSha.isNotEmpty &&
+        lSha.isNotEmpty &&
+        rSha != lSha) {
+      return (hasUpdate: true, isSameVersionRebuild: true);
+    }
+
+    return (hasUpdate: false, isSameVersionRebuild: false);
+  }
+
   /// 格式化字节大小
   static String formatBytes(int bytes) {
     if (bytes <= 0) return '0 B';
@@ -206,7 +349,7 @@ class AppUpdateService {
     final dividerPattern = RegExp(r'^\s*([-*_])\s*\1\s*\1[\s\-*_]*$');
     final hexLinePattern = RegExp(r'^\s*[0-9a-fA-F]{12,}(?:\s+.*)?$');
     final artifactLinePattern = RegExp(
-      r'(CourseWidgets-v[\d.]+-|\.(apk|zip)\b|windows-manifest\.json|SHA256SUMS\.txt)',
+      r'(CourseWidgets-v[\d.]+-|\.(apk|zip)\b|windows-manifest\.json|android-manifest\.json|SHA256SUMS\.txt)',
       caseSensitive: false,
     );
 
@@ -333,6 +476,7 @@ class AppUpdateService {
           'https://github.com/$repoOwner/$repoName/releases/download/$normalizedTag/CourseWidgets-$normalizedTag-windows-x64.zip';
       int winZipSize = 0;
       String? winManifestUrl;
+      String? androidManifestUrl;
       String? sha256SumsUrl;
 
       final assets = releaseData['assets'];
@@ -353,6 +497,8 @@ class AppUpdateService {
             winZipSize = size;
           } else if (name == 'windows-manifest.json') {
             winManifestUrl = url;
+          } else if (name == 'android-manifest.json') {
+            androidManifestUrl = url;
           } else if (name == 'SHA256SUMS.txt') {
             sha256SumsUrl = url;
           }
@@ -382,7 +528,14 @@ class AppUpdateService {
         } catch (_) {}
       }
 
-      final newer = isNewerVersion(normalizedTag, appVersion);
+      final localApk = Platform.isAndroid ? await getInstalledApkInfo() : null;
+      final availability = evaluateUpdateAvailability(
+        remoteTag: normalizedTag,
+        localVersion: appVersion,
+        remoteApkSha256: apkSha256,
+        localApkSha256: localApk?.sha256 ?? '',
+        isAndroid: Platform.isAndroid,
+      );
 
       return AppUpdateInfo(
         latestTag: normalizedTag,
@@ -398,8 +551,11 @@ class AppUpdateService {
         winZipSize: winZipSize,
         winZipSha256: winZipSha256,
         winManifestUrl: winManifestUrl,
+        androidManifestUrl: androidManifestUrl,
         sha256SumsUrl: sha256SumsUrl,
-        hasUpdate: newer,
+        hasUpdate: availability.hasUpdate,
+        isSameVersionRebuild: availability.isSameVersionRebuild,
+        installedApkSha256: localApk?.sha256 ?? '',
       );
     } finally {
       client.close();
@@ -660,6 +816,592 @@ class AppUpdateService {
     }
   }
 
+  /// 获取当前已安装 Android APK 的路径、版本号与实时 SHA-256 摘要
+  Future<InstalledApkInfo?> getInstalledApkInfo() async {
+    if (!Platform.isAndroid) return null;
+    try {
+      final map = await _nativeChannel
+          .invokeMapMethod<String, dynamic>('getInstalledApkInfo');
+      if (map == null) return null;
+      final apkPath = (map['apkPath'] as String?) ?? '';
+      final sha = (map['sha256'] as String?)?.toLowerCase() ?? '';
+      if (apkPath.isEmpty || sha.isEmpty) return null;
+      return InstalledApkInfo(
+        apkPath: apkPath,
+        apkSize: (map['apkSize'] as num?)?.toInt() ?? 0,
+        versionCode: (map['versionCode'] as num?)?.toInt() ?? 0,
+        versionName: (map['versionName'] as String?) ?? '',
+        sha256: sha,
+      );
+    } catch (e) {
+      debugPrint('[AppUpdateService] 获取本地安装包信息失败: $e');
+      return null;
+    }
+  }
+
+  /// 基于 android-manifest.json 与本地已安装 APK 的索引构建比特级无损重组计划
+  @visibleForTesting
+  static AndroidIncrementalPlan computeAndroidDeltaPlan({
+    required int targetApkSize,
+    required String targetApkSha256,
+    required String localApkPath,
+    required List<AndroidReusableEntry> remoteEntries,
+    required Map<String, ({int offset, int length, String sha256})>
+        localEntriesByPath,
+    int coalesceGapBytes = 4096,
+  }) {
+    if (targetApkSize <= 0 || targetApkSha256.trim().isEmpty) {
+      return AndroidIncrementalPlan(
+        targetApkSize: targetApkSize,
+        targetApkSha256: targetApkSha256.toLowerCase(),
+        localApkPath: localApkPath,
+        reusedBytes: 0,
+        incrementalDownloadBytes: targetApkSize > 0 ? targetApkSize : 0,
+        reusedEntriesCount: 0,
+        totalManifestEntriesCount: remoteEntries.length,
+        ops: const [],
+      );
+    }
+
+    final Map<String, ({int offset, int length, String sha256})>
+        localByHashLen = {};
+    for (final item in localEntriesByPath.values) {
+      if (item.sha256.isEmpty || item.length <= 0) continue;
+      localByHashLen['${item.sha256.toLowerCase()}:${item.length}'] ??= item;
+    }
+
+    final List<({AndroidReusableEntry remote, int localOffset})> matched = [];
+    for (final remote in remoteEntries) {
+      if (remote.offset < 0 ||
+          remote.length <= 0 ||
+          remote.offset + remote.length > targetApkSize ||
+          remote.sha256.isEmpty) {
+        continue;
+      }
+      final rSha = remote.sha256.toLowerCase();
+      final direct = localEntriesByPath[remote.path];
+      ({int offset, int length, String sha256})? localMatch;
+      if (direct != null &&
+          direct.length == remote.length &&
+          direct.sha256.toLowerCase() == rSha) {
+        localMatch = direct;
+      } else {
+        localMatch = localByHashLen['$rSha:${remote.length}'];
+      }
+      if (localMatch != null && localMatch.offset >= 0) {
+        matched.add((remote: remote, localOffset: localMatch.offset));
+      }
+    }
+
+    matched.sort((a, b) => a.remote.offset.compareTo(b.remote.offset));
+
+    final List<({AndroidReusableEntry remote, int localOffset})> accepted = [];
+    int lastEnd = 0;
+    for (final candidate in matched) {
+      if (candidate.remote.offset < lastEnd) continue;
+      if (candidate.remote.length < coalesceGapBytes) continue;
+      accepted.add(candidate);
+      lastEnd = candidate.remote.offset + candidate.remote.length;
+    }
+
+    final List<AndroidAssemblyOp> ops = [];
+    int cursor = 0;
+    int reusedBytes = 0;
+    int remoteBytes = 0;
+
+    void appendRemoteGap(int start, int end) {
+      final len = end - start;
+      if (len <= 0) return;
+      if (ops.isNotEmpty &&
+          !ops.last.isLocalCopy &&
+          ops.last.targetOffset + ops.last.length == start) {
+        final prev = ops.removeLast();
+        ops.add(
+          AndroidAssemblyOp(
+            isLocalCopy: false,
+            targetOffset: prev.targetOffset,
+            length: prev.length + len,
+          ),
+        );
+      } else {
+        ops.add(
+          AndroidAssemblyOp(
+            isLocalCopy: false,
+            targetOffset: start,
+            length: len,
+          ),
+        );
+      }
+      remoteBytes += len;
+    }
+
+    void appendLocalCopy(
+      int targetOffset,
+      int localOffset,
+      int len,
+      String path,
+    ) {
+      if (len <= 0) return;
+      if (ops.isNotEmpty &&
+          ops.last.isLocalCopy &&
+          ops.last.targetOffset + ops.last.length == targetOffset &&
+          ops.last.localOffset + ops.last.length == localOffset) {
+        final prev = ops.removeLast();
+        ops.add(
+          AndroidAssemblyOp(
+            isLocalCopy: true,
+            targetOffset: prev.targetOffset,
+            localOffset: prev.localOffset,
+            length: prev.length + len,
+            entryPath: '${prev.entryPath},$path',
+          ),
+        );
+      } else {
+        ops.add(
+          AndroidAssemblyOp(
+            isLocalCopy: true,
+            targetOffset: targetOffset,
+            localOffset: localOffset,
+            length: len,
+            entryPath: path,
+          ),
+        );
+      }
+      reusedBytes += len;
+    }
+
+    for (final item in accepted) {
+      if (item.remote.offset > cursor) {
+        appendRemoteGap(cursor, item.remote.offset);
+      }
+      appendLocalCopy(
+        item.remote.offset,
+        item.localOffset,
+        item.remote.length,
+        item.remote.path,
+      );
+      cursor = item.remote.offset + item.remote.length;
+    }
+    if (cursor < targetApkSize) {
+      appendRemoteGap(cursor, targetApkSize);
+    }
+
+    return AndroidIncrementalPlan(
+      targetApkSize: targetApkSize,
+      targetApkSha256: targetApkSha256.toLowerCase(),
+      localApkPath: localApkPath,
+      reusedBytes: reusedBytes,
+      incrementalDownloadBytes: remoteBytes,
+      reusedEntriesCount: accepted.length,
+      totalManifestEntriesCount: remoteEntries.length,
+      ops: ops,
+    );
+  }
+
+  /// [Android 专用] 读取本地运行中 base.apk 与远端 android-manifest.json 生成无损增量重组方案
+  Future<AndroidIncrementalPlan?> prepareAndroidIncrementalPlan(
+    AppUpdateInfo info,
+  ) async {
+    if (!Platform.isAndroid ||
+        info.androidManifestUrl == null ||
+        info.androidManifestUrl!.isEmpty) {
+      return null;
+    }
+
+    final localApk = await getInstalledApkInfo();
+    if (localApk == null) return null;
+    final localFile = File(localApk.apkPath);
+    if (!await localFile.exists()) return null;
+
+    final client = HttpClient()
+      ..connectionTimeout = const Duration(seconds: 20);
+    try {
+      final manifestText =
+          await _downloadString(client, info.androidManifestUrl!);
+      final decoded = jsonDecode(manifestText);
+      if (decoded is! Map<String, dynamic>) return null;
+
+      final targetApkSize =
+          (decoded['apkSize'] as num?)?.toInt() ?? info.apkSize;
+      final targetApkSha256 =
+          ((decoded['apkSha256'] as String?) ?? info.apkSha256)
+              .trim()
+              .toLowerCase();
+      final minReusableSize =
+          (decoded['minReusableSize'] as num?)?.toInt() ?? 16384;
+      final rawEntries = decoded['reusableEntries'];
+      if (targetApkSize <= 0 ||
+          targetApkSha256.isEmpty ||
+          rawEntries is! List ||
+          rawEntries.isEmpty) {
+        return null;
+      }
+
+      final remoteEntries = rawEntries
+          .whereType<Map<String, dynamic>>()
+          .map(AndroidReusableEntry.fromJson)
+          .toList();
+      if (remoteEntries.isEmpty) return null;
+
+      final localEntriesByPath = await _parseLocalApkReusableEntries(
+        localApk.apkPath,
+        remoteEntries,
+        minReusableSize,
+      );
+      if (localEntriesByPath.isEmpty) return null;
+
+      final plan = computeAndroidDeltaPlan(
+        targetApkSize: targetApkSize,
+        targetApkSha256: targetApkSha256,
+        localApkPath: localApk.apkPath,
+        remoteEntries: remoteEntries,
+        localEntriesByPath: localEntriesByPath,
+      );
+      return plan.canIncremental ? plan : null;
+    } catch (e) {
+      debugPrint('[AppUpdateService] 分析 Android 增量方案失败: $e');
+      return null;
+    } finally {
+      client.close();
+    }
+  }
+
+  /// [Android 专用] 执行字节级无损 APK 增量更新（自动全包 SHA-256 签名验证 + 异常回退全量下载）
+  Future<void> executeAndroidIncrementalUpdate(
+    AppUpdateInfo info,
+    AndroidIncrementalPlan plan, {
+    required void Function(UpdateProgress progress) onProgress,
+  }) async {
+    if (!plan.canIncremental) {
+      await downloadAndInstallAndroidApk(info, onProgress: onProgress);
+      return;
+    }
+
+    final tempDir = await getTemporaryDirectory();
+    final apkFileName = 'CourseWidgets-${info.latestTag}-android-arm64-v8a.apk';
+    final apkFile = File(p.join(tempDir.path, apkFileName));
+
+    if (await apkFile.exists()) {
+      await apkFile.delete();
+    }
+
+    final remoteOps = plan.ops.where((op) => !op.isLocalCopy).toList();
+    final totalRemoteOps = remoteOps.length.clamp(1, 9999);
+    final totalBytesToDownload = plan.incrementalDownloadBytes > 0
+        ? plan.incrementalDownloadBytes
+        : remoteOps.fold<int>(0, (sum, op) => sum + op.length);
+    int downloadedBytes = 0;
+    int completedRemoteOps = 0;
+
+    final client = HttpClient()
+      ..connectionTimeout = const Duration(seconds: 30);
+    RandomAccessFile? localRaf;
+    IOSink? sink;
+    bool readyToInstall = false;
+
+    try {
+      localRaf = await File(plan.localApkPath).open(mode: FileMode.read);
+      sink = apkFile.openWrite();
+      final copyBuf = Uint8List(65536);
+
+      for (final op in plan.ops) {
+        if (op.isLocalCopy) {
+          onProgress(
+            UpdateProgress(
+              stage: '正在复用本地未变更区块 (${plan.savedPercent.toStringAsFixed(0)}%)...',
+              currentFile: op.entryPath.split(',').first,
+              completedFiles: completedRemoteOps,
+              totalFiles: totalRemoteOps,
+              downloadedBytes: downloadedBytes,
+              totalBytes: totalBytesToDownload,
+              progress: totalBytesToDownload > 0
+                  ? (downloadedBytes / totalBytesToDownload * 0.94)
+                      .clamp(0.01, 0.94)
+                  : 0.3,
+            ),
+          );
+          await localRaf.setPosition(op.localOffset);
+          int remaining = op.length;
+          while (remaining > 0) {
+            final toRead = remaining < copyBuf.length ? remaining : copyBuf.length;
+            final read = await localRaf.readInto(copyBuf, 0, toRead);
+            if (read <= 0) {
+              throw Exception('读取本地 APK 区块提前结束');
+            }
+            sink.add(
+              read == copyBuf.length
+                  ? copyBuf.sublist(0)
+                  : copyBuf.sublist(0, read),
+            );
+            remaining -= read;
+          }
+        } else {
+          final currentRemoteIdx = completedRemoteOps + 1;
+          onProgress(
+            UpdateProgress(
+              stage: '正在增量下载差异片段 ($currentRemoteIdx/$totalRemoteOps)...',
+              currentFile: apkFileName,
+              completedFiles: completedRemoteOps,
+              totalFiles: totalRemoteOps,
+              downloadedBytes: downloadedBytes,
+              totalBytes: totalBytesToDownload,
+              progress: totalBytesToDownload > 0
+                  ? (downloadedBytes / totalBytesToDownload * 0.94)
+                      .clamp(0.01, 0.94)
+                  : 0.4,
+            ),
+          );
+          final rangeBytes = await _downloadByteRange(
+            client,
+            info.apkDownloadUrl,
+            startByte: op.targetOffset,
+            endByte: op.targetOffset + op.length - 1,
+            requirePartialContent: true,
+            onChunk: (chunkLen) {
+              downloadedBytes += chunkLen;
+              onProgress(
+                UpdateProgress(
+                  stage: '正在增量下载差异片段 ($currentRemoteIdx/$totalRemoteOps)...',
+                  currentFile: apkFileName,
+                  completedFiles: completedRemoteOps,
+                  totalFiles: totalRemoteOps,
+                  downloadedBytes: downloadedBytes,
+                  totalBytes: totalBytesToDownload,
+                  progress: totalBytesToDownload > 0
+                      ? (downloadedBytes / totalBytesToDownload * 0.94)
+                          .clamp(0.01, 0.94)
+                      : 0.5,
+                ),
+              );
+            },
+          );
+          sink.add(rangeBytes);
+          completedRemoteOps++;
+        }
+      }
+
+      await sink.flush();
+      await sink.close();
+      sink = null;
+      await localRaf.close();
+      localRaf = null;
+
+      onProgress(
+        UpdateProgress(
+          stage: '正在校验重组 APK SHA-256 签名完整性...',
+          currentFile: apkFileName,
+          completedFiles: totalRemoteOps,
+          totalFiles: totalRemoteOps,
+          downloadedBytes: totalBytesToDownload,
+          totalBytes: totalBytesToDownload,
+          progress: 0.97,
+        ),
+      );
+
+      final assembledSize = await apkFile.length();
+      if (assembledSize != plan.targetApkSize) {
+        throw Exception(
+          '增量重组安装包体积不一致: 预期 ${plan.targetApkSize} B, 实际 $assembledSize B',
+        );
+      }
+
+      final actualSha = await computeFileSha256(apkFile);
+      if (actualSha != plan.targetApkSha256.toLowerCase()) {
+        throw Exception('增量重组安装包 SHA-256 校验未通过');
+      }
+
+      readyToInstall = true;
+    } catch (e) {
+      debugPrint('[AppUpdateService] Android 增量更新异常，自动回退全量下载: $e');
+      try {
+        await sink?.close();
+      } catch (_) {}
+      try {
+        await localRaf?.close();
+      } catch (_) {}
+      try {
+        if (await apkFile.exists()) {
+          await apkFile.delete();
+        }
+      } catch (_) {}
+    } finally {
+      client.close();
+    }
+
+    if (!readyToInstall) {
+      onProgress(
+        const UpdateProgress(
+          stage: '增量通道异常，正在自动切换完整安装包下载...',
+          progress: 0.02,
+        ),
+      );
+      await downloadAndInstallAndroidApk(info, onProgress: onProgress);
+      return;
+    }
+
+    onProgress(
+      UpdateProgress(
+        stage: '校验通过，正在调起系统安装程序...',
+        currentFile: apkFileName,
+        completedFiles: totalRemoteOps,
+        totalFiles: totalRemoteOps,
+        downloadedBytes: totalBytesToDownload,
+        totalBytes: totalBytesToDownload,
+        progress: 1.0,
+      ),
+    );
+
+    final installed = await _nativeChannel.invokeMethod<bool>(
+      'installApk',
+      {'filePath': apkFile.path},
+    );
+    if (installed != true) {
+      throw Exception('无法调起系统安装器，请检查安装未知应用权限');
+    }
+  }
+
+  /// 流式计算大文件 SHA-256（固定内存开销）
+  static Future<String> computeFileSha256(File file) async {
+    final output = _SingleDigestSink();
+    final input = sha256.startChunkedConversion(output);
+    await for (final chunk in file.openRead()) {
+      input.add(chunk);
+    }
+    input.close();
+    final digest = output.value;
+    if (digest == null) {
+      throw Exception('计算文件 SHA-256 失败: ${file.path}');
+    }
+    return digest.toString().toLowerCase();
+  }
+
+  static Future<String> _computeRafRangeSha256(
+    RandomAccessFile raf,
+    int offset,
+    int length,
+  ) async {
+    final output = _SingleDigestSink();
+    final input = sha256.startChunkedConversion(output);
+    await raf.setPosition(offset);
+    int remaining = length;
+    final buf = Uint8List(65536);
+    while (remaining > 0) {
+      final toRead = remaining < buf.length ? remaining : buf.length;
+      final read = await raf.readInto(buf, 0, toRead);
+      if (read <= 0) {
+        throw Exception('读取本地安装包区块提前到达文件尾');
+      }
+      input.add(
+        read == buf.length ? buf : Uint8List.sublistView(buf, 0, read),
+      );
+      remaining -= read;
+    }
+    input.close();
+    final digest = output.value;
+    if (digest == null) {
+      throw Exception('计算本地安装包区块 SHA-256 失败');
+    }
+    return digest.toString().toLowerCase();
+  }
+
+  Future<Map<String, ({int offset, int length, String sha256})>>
+      _parseLocalApkReusableEntries(
+    String apkPath,
+    List<AndroidReusableEntry> remoteEntries,
+    int minReusableSize,
+  ) async {
+    final file = File(apkPath);
+    final fileLen = await file.length();
+    if (fileLen < 22) return const {};
+
+    final neededPaths = remoteEntries.map((e) => e.path).toSet();
+    final neededLengths = remoteEntries.map((e) => e.length).toSet();
+
+    final raf = await file.open(mode: FileMode.read);
+    try {
+      final tailLen = fileLen < 65557 ? fileLen : 65557;
+      final tailStart = fileLen - tailLen;
+      await raf.setPosition(tailStart);
+      final tailBytes = await raf.read(tailLen);
+      final bd = ByteData.sublistView(tailBytes);
+
+      int eocdPos = -1;
+      for (int i = tailBytes.length - 22; i >= 0; i--) {
+        if (bd.getUint32(i, Endian.little) == 0x06054b50) {
+          eocdPos = i;
+          break;
+        }
+      }
+      if (eocdPos < 0) return const {};
+
+      final cdEntriesCount = bd.getUint16(eocdPos + 10, Endian.little);
+      final cdSize = bd.getUint32(eocdPos + 12, Endian.little);
+      final cdOffset = bd.getUint32(eocdPos + 16, Endian.little);
+      if (cdSize <= 0 || cdOffset < 0 || cdOffset + cdSize > fileLen) {
+        return const {};
+      }
+
+      await raf.setPosition(cdOffset);
+      final cdBytes = await raf.read(cdSize);
+      final cdData = ByteData.sublistView(cdBytes);
+      int ptr = 0;
+
+      final Map<String, ({int offset, int length, String sha256})> localMap =
+          {};
+
+      for (int idx = 0;
+          idx < cdEntriesCount && ptr + 46 <= cdBytes.length;
+          idx++) {
+        if (cdData.getUint32(ptr, Endian.little) != 0x02014b50) break;
+
+        final compSize = cdData.getUint32(ptr + 20, Endian.little);
+        final fnameLen = cdData.getUint16(ptr + 28, Endian.little);
+        final extraLen = cdData.getUint16(ptr + 30, Endian.little);
+        final commentLen = cdData.getUint16(ptr + 32, Endian.little);
+        final localHdrOffset = cdData.getUint32(ptr + 42, Endian.little);
+
+        if (ptr + 46 + fnameLen > cdBytes.length) break;
+        final filename = utf8
+            .decode(
+              Uint8List.sublistView(cdBytes, ptr + 46, ptr + 46 + fnameLen),
+              allowMalformed: true,
+            )
+            .replaceAll('\\', '/');
+
+        ptr += 46 + fnameLen + extraLen + commentLen;
+
+        if (filename.endsWith('/')) continue;
+        if (compSize < minReusableSize) continue;
+        if (!neededPaths.contains(filename) &&
+            !neededLengths.contains(compSize)) {
+          continue;
+        }
+
+        if (localHdrOffset + 30 > fileLen) continue;
+        await raf.setPosition(localHdrOffset);
+        final hdr = await raf.read(30);
+        if (hdr.length != 30) continue;
+        final hBd = ByteData.sublistView(hdr);
+        if (hBd.getUint32(0, Endian.little) != 0x04034b50) continue;
+        final lfhFnameLen = hBd.getUint16(26, Endian.little);
+        final lfhExtraLen = hBd.getUint16(28, Endian.little);
+        final dataOffset = localHdrOffset + 30 + lfhFnameLen + lfhExtraLen;
+        if (dataOffset < 0 || dataOffset + compSize > fileLen) continue;
+
+        final entrySha = await _computeRafRangeSha256(raf, dataOffset, compSize);
+        localMap[filename] = (
+          offset: dataOffset,
+          length: compSize,
+          sha256: entrySha,
+        );
+      }
+
+      return localMap;
+    } finally {
+      await raf.close();
+    }
+  }
+
   /// 4. [Android 专用] 应用内流式下载新版 APK、校验 SHA-256 并调起系统原生安装器
   Future<void> downloadAndInstallAndroidApk(
     AppUpdateInfo info, {
@@ -725,8 +1467,7 @@ class AppUpdateService {
             progress: 0.99,
           ),
         );
-        final fileBytes = await apkFile.readAsBytes();
-        final actualSha = sha256.convert(fileBytes).toString().toLowerCase();
+        final actualSha = await computeFileSha256(apkFile);
         if (actualSha != info.apkSha256.toLowerCase()) {
           await apkFile.delete();
           throw Exception('安装包 SHA-256 校验不一致，已取消安装');
@@ -829,6 +1570,7 @@ class AppUpdateService {
     String url, {
     required int startByte,
     required int endByte,
+    bool requirePartialContent = false,
     void Function(int chunkLength)? onChunk,
   }) async {
     final expectedLen = endByte - startByte + 1;
@@ -850,7 +1592,7 @@ class AppUpdateService {
         );
       }
       return bytes;
-    } else if (resp.statusCode == 200) {
+    } else if (resp.statusCode == 200 && !requirePartialContent) {
       // 兼容不支持 Range 的透明代理：从全流中截取 [startByte..endByte]
       final builder = BytesBuilder(copy: false);
       int offset = 0;
@@ -872,6 +1614,9 @@ class AppUpdateService {
       }
       return builder.takeBytes();
     } else {
+      try {
+        await resp.drain<void>();
+      } catch (_) {}
       throw Exception('HTTP ${resp.statusCode} when requesting byte range');
     }
   }
