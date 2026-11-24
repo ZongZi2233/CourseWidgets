@@ -3,6 +3,7 @@ package com.zongzi.schedule
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.Bundle
 import android.provider.MediaStore
 import androidx.annotation.RequiresApi
 import io.flutter.embedding.android.FlutterActivity
@@ -18,6 +19,15 @@ class MainActivity : FlutterActivity() {
 
     private var pendingResult: MethodChannel.Result? = null
     private val PICK_IMAGE_REQUEST = 1001
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            splashScreen.setOnExitAnimationListener { splashScreenView ->
+                splashScreenView.remove()
+            }
+        }
+    }
 
     override fun getFlutterShellArgs(): io.flutter.embedding.engine.FlutterShellArgs {
         val args = super.getFlutterShellArgs()

@@ -625,8 +625,6 @@ class DirectionalMotionBlurSwitcher extends StatefulWidget {
 class _DirectionalMotionBlurSwitcherState
     extends State<DirectionalMotionBlurSwitcher>
     with SingleTickerProviderStateMixin {
-  static final ImageFilter _zeroFilter = ImageFilter.blur(sigmaX: 0.0, sigmaY: 0.0);
-
   late int _currentIndex;
   late int _previousIndex;
   late bool _isForward;
@@ -634,8 +632,6 @@ class _DirectionalMotionBlurSwitcherState
   late Animation<double> _animation;
 
   final Set<int> _activatedIndices = <int>{};
-  double _lastQuantizedSigma = 0.0;
-  ImageFilter _cachedFilter = _zeroFilter;
   Timer? _prewarmTimer;
 
   @override
@@ -694,20 +690,6 @@ class _DirectionalMotionBlurSwitcherState
     }
   }
 
-  ImageFilter _resolveFilter(double quantizedSigma) {
-    if (quantizedSigma <= 0.28) return _zeroFilter;
-    if ((quantizedSigma - _lastQuantizedSigma).abs() < 0.01) {
-      return _cachedFilter;
-    }
-    _lastQuantizedSigma = quantizedSigma;
-    _cachedFilter = ImageFilter.blur(
-      sigmaX: quantizedSigma,
-      sigmaY: 0.0,
-      tileMode: TileMode.clamp,
-    );
-    return _cachedFilter;
-  }
-
   @override
   void dispose() {
     _prewarmTimer?.cancel();
@@ -738,21 +720,8 @@ class _DirectionalMotionBlurSwitcherState
       animation: _controller,
       builder: (context, _) {
         final bool isAnimating = _controller.isAnimating;
-        final double rawT = _controller.value.clamp(0.0, 1.0);
         final double curvedT = _animation.value;
         final double sign = _isForward ? 1.0 : -1.0;
-
-        // 计算物理速度导数包络驱动的 1D 水平运动模糊强度 (0.25px 步进量化)
-        final double envelope =
-            isAnimating ? AppCurves.velocityBlurEnvelope(rawT) : 0.0;
-        final double rawSigma = envelope * widget.maxBlur;
-        final double quantizedSigma =
-            (rawSigma * 4.0).roundToDouble() * 0.25;
-        final bool hasBlur = isAnimating && quantizedSigma > 0.28;
-        final ImageFilter activeFilter =
-            hasBlur ? _resolveFilter(quantizedSigma) : _zeroFilter;
-        final Offset stationaryOrigin =
-            hasBlur ? _resolveStationaryGlobalOrigin(context) : Offset.zero;
 
         return Stack(
           fit: StackFit.expand,
@@ -765,9 +734,6 @@ class _DirectionalMotionBlurSwitcherState
                   isAnimating: isAnimating,
                   curvedT: curvedT,
                   sign: sign,
-                  hasBlur: hasBlur,
-                  activeFilter: activeFilter,
-                  stationaryOrigin: stationaryOrigin,
                 ),
           ],
         );
@@ -781,9 +747,6 @@ class _DirectionalMotionBlurSwitcherState
     required bool isAnimating,
     required double curvedT,
     required double sign,
-    required bool hasBlur,
-    required ImageFilter activeFilter,
-    required Offset stationaryOrigin,
   }) {
     final bool isCurrent = index == _currentIndex;
     final bool isExiting = isAnimating && index == _previousIndex;
@@ -798,8 +761,8 @@ class _DirectionalMotionBlurSwitcherState
       }
     }
 
-    final bool enableSlotBlur = isVisible && hasBlur;
-
+    // [v3.2.2] 主导航切换移除动态开关 ImageFiltered 离屏层与瞬时背景替换，
+    // 纯硬件 FractionalTranslation + ClipRect 保持 0 SaveLayer，彻底消除顶部 GlassContainer 切页圆角抽动变方。
     return Offstage(
       key: ValueKey<int>(index),
       offstage: !isVisible,
@@ -810,27 +773,7 @@ class _DirectionalMotionBlurSwitcherState
           child: FractionalTranslation(
             translation: translation,
             child: ClipRect(
-              child: ImageFiltered(
-                enabled: enableSlotBlur,
-                imageFilter: activeFilter,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    if (enableSlotBlur)
-                      FractionalTranslation(
-                        translation: Offset(-translation.dx, -translation.dy),
-                        child: IgnorePointer(
-                          child: AppBackgroundLayer(
-                            blur: 0.0,
-                            tintColor: Colors.transparent,
-                            viewportOffset: stationaryOrigin,
-                          ),
-                        ),
-                      ),
-                    pageNode,
-                  ],
-                ),
-              ),
+              child: pageNode,
             ),
           ),
         ),

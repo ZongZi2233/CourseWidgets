@@ -33,6 +33,8 @@ class ThemeService extends ChangeNotifier {
   Color _primaryColor = defaultPrimaryColor;
   Color _secondaryColor = defaultSecondaryColor;
   ThemeMode _themeMode = ThemeMode.monet; // [v2.9.0] 莫奈取色设为默认色彩模式
+  int _extractGeneration = 0;
+  bool _hasValidThemeColor = false;
 
   // Getters
   Color get primaryColor => _primaryColor;
@@ -107,21 +109,22 @@ class ThemeService extends ChangeNotifier {
       _themeMode = ThemeMode.monet;
     }
 
-    // [v2.9.5] 恢复颜色或从壁纸提取默认莫奈色调
-    if (_themeMode == ThemeMode.monet) {
-      final savedColor = _storage.getInt(StorageService.keyCustomThemeColor);
+    // [v3.2.2] 统一恢复莫奈 / 自定义 / 系统模式缓存色彩，避免重启或热更新后误回落为默认粉色
+    final savedColor = _storage.getInt(StorageService.keyCustomThemeColor);
+    if (_themeMode == ThemeMode.defaultMode) {
+      _primaryColor = defaultPrimaryColor;
+      _secondaryColor = defaultSecondaryColor;
+      _hasValidThemeColor = true;
+    } else {
       if (savedColor != null) {
         _primaryColor = Color(savedColor);
         _secondaryColor = _generateSecondaryColor(_primaryColor);
-        debugPrint('✅ 恢复莫奈取色: $_primaryColor');
+        _hasValidThemeColor = true;
+        debugPrint('✅ 恢复缓存主题色 ($_themeMode): $_primaryColor');
       }
-      // 桌面端冷启动先使用缓存莫奈色，待开屏动画上屏后再并行校准提取，避免阻塞首帧
-      if (!deferMonetRefresh) {
-        refreshMonetColors();
+      if (_themeMode == ThemeMode.monet && !deferMonetRefresh) {
+        await refreshMonetColors();
       }
-    } else if (_themeMode == ThemeMode.defaultMode) {
-      _primaryColor = defaultPrimaryColor;
-      _secondaryColor = defaultSecondaryColor;
     }
 
     // 恢复全局玻璃渲染质量
@@ -168,10 +171,24 @@ class ThemeService extends ChangeNotifier {
     debugPrint('✅ 主题模式已切换: $mode, 颜色: $_primaryColor');
   }
 
+  /// 发生异常时保留已持久化的主题色；仅当从未持久化有效色彩时才回退默认粉色
+  void _restoreCachedOrDefaultColor() {
+    final cachedColor = _storage.getInt(StorageService.keyCustomThemeColor);
+    if (cachedColor != null) {
+      _primaryColor = Color(cachedColor);
+      _secondaryColor = _generateSecondaryColor(_primaryColor);
+      _hasValidThemeColor = true;
+    } else if (!_hasValidThemeColor) {
+      _primaryColor = defaultPrimaryColor;
+      _secondaryColor = defaultSecondaryColor;
+    }
+  }
+
   /// [v2.3.0] 设置自定义主题色
   Future<void> setCustomColor(Color color) async {
     _primaryColor = color;
     _secondaryColor = _generateSecondaryColor(color);
+    _hasValidThemeColor = true;
     await _storage.setInt(
       StorageService.keyCustomThemeColor,
       _primaryColor.toARGB32(),
@@ -184,9 +201,10 @@ class ThemeService extends ChangeNotifier {
   Future<void> applySystemTheme(BuildContext context) async {
     if (Platform.isWindows) {
       try {
-        await SystemTheme.fallbackColor;
+        await SystemTheme.accentColor.load();
         _primaryColor = SystemTheme.accentColor.accent;
         _secondaryColor = _generateSecondaryColor(_primaryColor);
+        _hasValidThemeColor = true;
 
         await _storage.setInt(
           StorageService.keyCustomThemeColor,
@@ -196,8 +214,7 @@ class ThemeService extends ChangeNotifier {
         debugPrint('✅ Windows 系统主题色已应用: $_primaryColor');
       } catch (e) {
         debugPrint('获取 Windows 系统主题色失败: $e');
-        _primaryColor = defaultPrimaryColor;
-        _secondaryColor = defaultSecondaryColor;
+        _restoreCachedOrDefaultColor();
         notifyListeners();
       }
       return;
@@ -218,6 +235,7 @@ class ThemeService extends ChangeNotifier {
         final corePalette = CorePalette.of(systemColor);
         _primaryColor = Color(corePalette.primary.get(40));
         _secondaryColor = Color(corePalette.secondary.get(40));
+        _hasValidThemeColor = true;
 
         await _storage.setInt(
           StorageService.keyCustomThemeColor,
@@ -226,45 +244,63 @@ class ThemeService extends ChangeNotifier {
         notifyListeners();
         debugPrint('系统主题色已应用: $_primaryColor');
       } else {
-        debugPrint('无法获取系统主题色，使用默认主题');
-        _primaryColor = defaultPrimaryColor;
-        _secondaryColor = defaultSecondaryColor;
+        debugPrint('无法获取系统主题色，保留缓存或回退默认主题');
+        _restoreCachedOrDefaultColor();
         notifyListeners();
       }
     } catch (e) {
-      debugPrint('获取系统主题色失败: $e，使用默认主题');
-      _primaryColor = defaultPrimaryColor;
-      _secondaryColor = defaultSecondaryColor;
+      debugPrint('获取系统主题色失败: $e，保留缓存或回退默认主题');
+      _restoreCachedOrDefaultColor();
       notifyListeners();
     }
   }
 
   /// 从图片提取莫奈颜色（背景图片取色，自适应深浅色模式）
-  Future<void> extractColorsFromImage(String imagePath, {Brightness? brightness}) async {
+  Future<void> extractColorsFromImage(
+    String imagePath, {
+    Brightness? brightness,
+    bool retryOnFrame = true,
+  }) async {
+    final int gen = ++_extractGeneration;
     try {
-      final effectiveBrightness = brightness ?? (isDarkMode ? Brightness.dark : Brightness.light);
-      final effectivePath = (imagePath.isEmpty || imagePath == kSolidColorBackground)
-          ? (effectiveBrightness == Brightness.dark ? 'asset:assets/Dark.png' : 'asset:assets/Light.png')
-          : imagePath;
-      ImageProvider provider;
+      final effectiveBrightness =
+          brightness ?? (isDarkMode ? Brightness.dark : Brightness.light);
+      final effectivePath =
+          (imagePath.isEmpty || imagePath == kSolidColorBackground)
+              ? (effectiveBrightness == Brightness.dark
+                  ? 'asset:assets/Dark.png'
+                  : 'asset:assets/Light.png')
+              : imagePath;
+      ImageProvider baseProvider;
       if (effectivePath.startsWith('asset:')) {
-        provider = AssetImage(effectivePath.substring(6));
+        baseProvider = AssetImage(effectivePath.substring(6));
       } else {
         final imageFile = File(effectivePath);
         if (!await imageFile.exists()) {
-          debugPrint('图片文件不存在: $effectivePath');
+          debugPrint('图片文件不存在，保留已缓存主题色: $effectivePath');
           return;
         }
-        provider = FileImage(imageFile);
+        baseProvider = FileImage(imageFile);
       }
 
+      // 缩放采样至 128px 加速取色，防止桌面端 4K 壁纸全量解码超时或异常引发退回默认粉色
+      final resizedProvider = ResizeImage(
+        baseProvider,
+        width: 128,
+        height: 128,
+        policy: ResizeImagePolicy.fit,
+      );
+
       final colorScheme = await ColorScheme.fromImageProvider(
-        provider: provider,
+        provider: resizedProvider,
         brightness: effectiveBrightness,
       );
 
+      if (gen != _extractGeneration) return;
+
       _primaryColor = colorScheme.primary;
       _secondaryColor = colorScheme.secondary;
+      _hasValidThemeColor = true;
 
       await _storage.setInt(
         StorageService.keyCustomThemeColor,
@@ -274,9 +310,20 @@ class ThemeService extends ChangeNotifier {
       debugPrint('✅ 莫奈取色原生提取完成: $_primaryColor (亮度: $effectiveBrightness)');
     } catch (e) {
       debugPrint('莫奈取色失败: $e');
-      _primaryColor = defaultPrimaryColor;
-      _secondaryColor = defaultSecondaryColor;
+      if (gen != _extractGeneration) return;
+      _restoreCachedOrDefaultColor();
       notifyListeners();
+      if (retryOnFrame) {
+        WidgetsBinding.instance.endOfFrame.then((_) {
+          if (_themeMode == ThemeMode.monet && gen == _extractGeneration) {
+            extractColorsFromImage(
+              imagePath,
+              brightness: brightness,
+              retryOnFrame: false,
+            );
+          }
+        });
+      }
     }
   }
 

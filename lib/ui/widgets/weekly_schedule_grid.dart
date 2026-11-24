@@ -17,10 +17,140 @@ import 'glass_context_menu.dart';
 import '../theme/squircle_geometry.dart';
 import '../transitions/smooth_slide_transitions.dart';
 import 'adaptive_smooth_scroll.dart';
-import '../../utils/glass_settings_helper.dart';
 import '../animations/app_motion.dart';
 import '../../utils/responsive_utils.dart';
 import '../../services/theme_service.dart' as theme;
+
+/// [v3.2.2] 统一 SharedElement (ShareTransit) FlClash 磨砂玻璃周次选择弹窗
+Future<void> showWeekPickerGlassDialog(
+  BuildContext context,
+  ScheduleProvider provider, {
+  Rect? sourceRect,
+  double sourceCornerRadius = 14.0,
+  ValueChanged<int>? onSelectWeek,
+}) async {
+  final weeks = provider.availableWeeks.isNotEmpty
+      ? provider.availableWeeks
+      : List.generate(25, (i) => i + 1);
+  if (!context.mounted) return;
+
+  final primaryColor = Theme.of(context).primaryColor;
+  final rows = (weeks.length / 5).ceil();
+  final double computedHeight = (rows * 54.0 + 96.0).clamp(240.0, 380.0);
+
+  await liquid.showSharedElementGlassDialog<void>(
+    context: context,
+    sourceRect: sourceRect,
+    sourceCornerRadius: sourceCornerRadius,
+    targetCornerRadius: 28.0,
+    maxWidth: 420.0,
+    maxHeight: computedHeight,
+    builder: (dialogCtx) {
+      final dialogDark = Theme.of(dialogCtx).brightness == Brightness.dark;
+      return Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  '选择周次',
+                  style: TextStyle(
+                    color: dialogDark ? Colors.white : const Color(0xFF1E2128),
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                SpringTouchFeedback(
+                  onTap: () => Navigator.pop(dialogCtx),
+                  child: Icon(
+                    CupertinoIcons.xmark_circle_fill,
+                    color: dialogDark ? Colors.white38 : Colors.black26,
+                    size: 22,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: GridView.builder(
+                padding: EdgeInsets.zero,
+                primary: false,
+                physics: const BouncingScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 5,
+                  mainAxisSpacing: 10,
+                  crossAxisSpacing: 10,
+                  childAspectRatio: 1.45,
+                ),
+                itemCount: weeks.length,
+                itemBuilder: (context, index) {
+                  final w = weeks[index];
+                  final isCur = w == provider.currentWeek;
+                  return SpringTouchFeedback(
+                    onTap: () {
+                      if (onSelectWeek != null) {
+                        onSelectWeek(w);
+                      } else {
+                        provider.setCurrentWeek(w);
+                      }
+                      Navigator.pop(dialogCtx);
+                    },
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: isCur
+                            ? primaryColor.withValues(
+                                alpha: dialogDark ? 0.85 : 0.90,
+                              )
+                            : (dialogDark
+                                ? Colors.white.withValues(alpha: 0.08)
+                                : Colors.black.withValues(alpha: 0.05)),
+                        borderRadius: SquircleGeometry.smoothRadius(12),
+                        border: Border.all(
+                          color: isCur
+                              ? primaryColor.withValues(alpha: 0.3)
+                              : (dialogDark
+                                  ? Colors.white.withValues(alpha: 0.10)
+                                  : Colors.black.withValues(alpha: 0.06)),
+                          width: 0.8,
+                        ),
+                        boxShadow: isCur
+                            ? [
+                                BoxShadow(
+                                  color: primaryColor.withValues(alpha: 0.35),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ]
+                            : null,
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        '第$w周',
+                        style: TextStyle(
+                          color: isCur
+                              ? Colors.white
+                              : (dialogDark
+                                  ? Colors.white.withValues(alpha: 0.85)
+                                  : const Color(0xFF2D3139)),
+                          fontWeight:
+                              isCur ? FontWeight.bold : FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      );
+    },
+  );
+}
 
 /// [v3.1.0] 本周课程网格视图（支持平板与手机竖屏全看板，防溢出自适应与单周 RepaintBoundary 缓存）
 class WeeklyScheduleGrid extends StatefulWidget {
@@ -163,153 +293,18 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
     }
   }
 
-  void _showWeekPicker(BuildContext context, ScheduleProvider provider) async {
-    final weeks = provider.availableWeeks.isNotEmpty
-        ? provider.availableWeeks
-        : List.generate(25, (i) => i + 1);
-    if (!context.mounted) return;
-
-    final primaryColor = Theme.of(context).primaryColor;
-
-    await liquid.showLiquidDialog(
-      context: context,
-      builder: Builder(
-        builder: (dialogCtx) {
-          final dialogDark = Theme.of(dialogCtx).brightness == Brightness.dark;
-          final pickerGlassSettings =
-              GlassSettingsHelper.getDialogSettings().copyWith(
-            glassColor: dialogDark
-                ? const Color(0x9E151822)
-                : const Color(0x9DF7F9FE),
-            blur: 10.0,
-            thickness: 22.0,
-            refractiveIndex: 1.48,
-            chromaticAberration: 0.08,
-            lightIntensity: 0.72,
-            ambientStrength: 0.34,
-            ambientRim: 0.0,
-            fresnelStrength: 0.0,
-            edgeAbsorption: 0.0,
-            saturation: 1.40,
-            specularSharpness: GlassSpecularSharpness.sharp,
-          );
-          return Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
-              child: Material(
-                type: MaterialType.transparency,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      borderRadius: SquircleGeometry.smoothRadius(28),
-                      boxShadow: liquid.HyperOSShadows.modal(dialogDark),
-                    ),
-                    child: GlassContainer(
-                      useOwnLayer: true,
-                      quality: theme.ThemeService().glassQuality,
-                      clipBehavior: Clip.antiAlias,
-                      shape: const LiquidRoundedSuperellipse(borderRadius: 28),
-                      padding: const EdgeInsets.all(20),
-                      settings: pickerGlassSettings,
-                      child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  '选择周次',
-                                  style: TextStyle(
-                                    color: dialogDark ? Colors.white : const Color(0xFF1E2128),
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                SpringTouchFeedback(
-                                  onTap: () => Navigator.pop(dialogCtx),
-                                  child: Icon(
-                                    CupertinoIcons.xmark_circle_fill,
-                                    color: dialogDark ? Colors.white38 : Colors.black26,
-                                    size: 22,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 16),
-                            ConstrainedBox(
-                              constraints: const BoxConstraints(maxHeight: 280),
-                              child: GridView.builder(
-                                shrinkWrap: true,
-                                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                                  crossAxisCount: 5,
-                                  mainAxisSpacing: 10,
-                                  crossAxisSpacing: 10,
-                                  childAspectRatio: 1.3,
-                                ),
-                                itemCount: weeks.length,
-                                itemBuilder: (context, index) {
-                                  final w = weeks[index];
-                                  final isCur = w == provider.currentWeek;
-                                  return SpringTouchFeedback(
-                                    onTap: () {
-                                      _changeWeek(provider, w);
-                                      Navigator.pop(dialogCtx);
-                                    },
-                                    child: Container(
-                                      decoration: BoxDecoration(
-                                        color: isCur
-                                            ? primaryColor.withValues(alpha: dialogDark ? 0.85 : 0.90)
-                                            : (dialogDark
-                                                ? Colors.white.withValues(alpha: 0.08)
-                                                : Colors.black.withValues(alpha: 0.05)),
-                                        borderRadius: SquircleGeometry.smoothRadius(12),
-                                        border: Border.all(
-                                          color: isCur
-                                              ? primaryColor.withValues(alpha: 0.3)
-                                              : (dialogDark
-                                                  ? Colors.white.withValues(alpha: 0.10)
-                                                  : Colors.black.withValues(alpha: 0.06)),
-                                          width: 0.8,
-                                        ),
-                                        boxShadow: isCur
-                                            ? [
-                                                BoxShadow(
-                                                  color: primaryColor.withValues(alpha: 0.35),
-                                                  blurRadius: 8,
-                                                  offset: const Offset(0, 2),
-                                                ),
-                                              ]
-                                            : null,
-                                      ),
-                                      alignment: Alignment.center,
-                                      child: Text(
-                                        '第$w周',
-                                        style: TextStyle(
-                                          color: isCur
-                                              ? Colors.white
-                                              : (dialogDark
-                                                  ? Colors.white.withValues(alpha: 0.85)
-                                                  : const Color(0xFF2D3139)),
-                                          fontWeight: isCur ? FontWeight.bold : FontWeight.w600,
-                                          fontSize: 13,
-                                        ),
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            );
-          },
-      ),
+  void _showWeekPicker(
+    BuildContext context,
+    ScheduleProvider provider, {
+    Rect? sourceRect,
+    double sourceCornerRadius = 14.0,
+  }) async {
+    await showWeekPickerGlassDialog(
+      context,
+      provider,
+      sourceRect: sourceRect,
+      sourceCornerRadius: sourceCornerRadius,
+      onSelectWeek: (w) => _changeWeek(provider, w),
     );
   }
 
@@ -318,110 +313,118 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          SpringTouchFeedback(
-            onTap: () => _changeWeek(provider, week - 1),
-            child: GlassButton.custom(
+      child: GlassBackdropGroup(
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            SpringTouchFeedback(
               onTap: () => _changeWeek(provider, week - 1),
-              width: 88,
-              height: 38,
-              style: GlassButtonStyle.filled,
-              settings: LiquidGlassSettings(
-                glassColor: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.white.withValues(alpha: 0.35),
-                blur: 0.5,
-                thickness: 14,
-                lightIntensity: 0.35,
-                ambientStrength: 0.20,
-                ambientRim: 0.0,
-                fresnelStrength: 0.0,
-                edgeAbsorption: 0.06,
-              ),
-              shape: const LiquidRoundedSuperellipse(borderRadius: 12),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(CupertinoIcons.left_chevron, color: isDark ? Colors.white70 : const Color(0xFF1E2128), size: 14),
-                  const SizedBox(width: 4),
-                  Text('上一周', style: TextStyle(color: isDark ? Colors.white70 : const Color(0xFF1E2128), fontSize: 12)),
-                ],
-              ),
-            ),
-          ),
-          SpringTouchFeedback(
-            onTap: () => _showWeekPicker(context, provider),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(14),
-                boxShadow: liquid.HyperOSShadows.pill(isDark),
-              ),
-              child: GlassContainer(
-                useOwnLayer: true,
-                shape: const LiquidRoundedSuperellipse(borderRadius: 14),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: GlassButton.custom(
+                onTap: () => _changeWeek(provider, week - 1),
+                width: 88,
+                height: 38,
+                style: GlassButtonStyle.filled,
                 settings: LiquidGlassSettings(
-                  glassColor: isDark ? Colors.white.withValues(alpha: 0.12) : Colors.white.withValues(alpha: 0.35),
+                  glassColor: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.white.withValues(alpha: 0.35),
                   blur: 0.5,
-                  thickness: 16,
-                  refractiveIndex: 1.40,
+                  thickness: 14,
                   lightIntensity: 0.35,
                   ambientStrength: 0.20,
                   ambientRim: 0.0,
                   fresnelStrength: 0.0,
                   edgeAbsorption: 0.06,
                 ),
+                shape: const LiquidRoundedSuperellipse(borderRadius: 12),
                 child: Row(
-                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(
-                      '第 $week 周',
-                      style: TextStyle(
-                        color: isDark ? Colors.white : const Color(0xFF1E2128),
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                    Icon(CupertinoIcons.left_chevron, color: isDark ? Colors.white70 : const Color(0xFF1E2128), size: 14),
                     const SizedBox(width: 4),
-                    Icon(
-                      CupertinoIcons.chevron_down,
-                      color: isDark ? Colors.white.withValues(alpha: 0.7) : const Color(0xFF555B68),
-                      size: 13,
-                    ),
+                    Text('上一周', style: TextStyle(color: isDark ? Colors.white70 : const Color(0xFF1E2128), fontSize: 12)),
                   ],
                 ),
               ),
             ),
-          ),
-          SpringTouchFeedback(
-            onTap: () => _changeWeek(provider, week + 1),
-            child: GlassButton.custom(
-              onTap: () => _changeWeek(provider, week + 1),
-              width: 88,
-              height: 38,
-              style: GlassButtonStyle.filled,
-              settings: LiquidGlassSettings(
-                glassColor: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.white.withValues(alpha: 0.35),
-                blur: 0.5,
-                thickness: 14,
-                lightIntensity: 0.35,
-                ambientStrength: 0.20,
-                ambientRim: 0.0,
-                fresnelStrength: 0.0,
-                edgeAbsorption: 0.06,
-              ),
-              shape: const LiquidRoundedSuperellipse(borderRadius: 12),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text('下一周', style: TextStyle(color: isDark ? Colors.white70 : const Color(0xFF1E2128), fontSize: 12)),
-                  const SizedBox(width: 4),
-                  Icon(CupertinoIcons.right_chevron, color: isDark ? Colors.white70 : const Color(0xFF1E2128), size: 14),
-                ],
+            Builder(
+              builder: (pillCtx) => SpringTouchFeedback(
+                onTap: () {
+                  final pillRect = liquid.resolveOverlayLocalRect(pillCtx);
+                  _showWeekPicker(pillCtx, provider, sourceRect: pillRect);
+                },
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: SquircleGeometry.smoothRadius(14),
+                    boxShadow: liquid.HyperOSShadows.pill(isDark),
+                  ),
+                  child: GlassContainer(
+                    useOwnLayer: true,
+                    clipBehavior: Clip.antiAlias,
+                    shape: const LiquidRoundedSuperellipse(borderRadius: 14),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    settings: LiquidGlassSettings(
+                      glassColor: isDark ? Colors.white.withValues(alpha: 0.12) : Colors.white.withValues(alpha: 0.35),
+                      blur: 0.5,
+                      thickness: 16,
+                      refractiveIndex: 1.40,
+                      lightIntensity: 0.35,
+                      ambientStrength: 0.20,
+                      ambientRim: 0.0,
+                      fresnelStrength: 0.0,
+                      edgeAbsorption: 0.06,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '第 $week 周',
+                          style: TextStyle(
+                            color: isDark ? Colors.white : const Color(0xFF1E2128),
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(
+                          CupertinoIcons.chevron_down,
+                          color: isDark ? Colors.white.withValues(alpha: 0.7) : const Color(0xFF555B68),
+                          size: 13,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
             ),
-          ),
-        ],
+            SpringTouchFeedback(
+              onTap: () => _changeWeek(provider, week + 1),
+              child: GlassButton.custom(
+                onTap: () => _changeWeek(provider, week + 1),
+                width: 88,
+                height: 38,
+                style: GlassButtonStyle.filled,
+                settings: LiquidGlassSettings(
+                  glassColor: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.white.withValues(alpha: 0.35),
+                  blur: 0.5,
+                  thickness: 14,
+                  lightIntensity: 0.35,
+                  ambientStrength: 0.20,
+                  ambientRim: 0.0,
+                  fresnelStrength: 0.0,
+                  edgeAbsorption: 0.06,
+                ),
+                shape: const LiquidRoundedSuperellipse(borderRadius: 12),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text('下一周', style: TextStyle(color: isDark ? Colors.white70 : const Color(0xFF1E2128), fontSize: 12)),
+                    const SizedBox(width: 4),
+                    Icon(CupertinoIcons.right_chevron, color: isDark ? Colors.white70 : const Color(0xFF1E2128), size: 14),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -911,13 +914,90 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
         onTap: null,
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final maxAvailW = constraints.maxWidth.isFinite ? constraints.maxWidth : 44.0;
+            final maxAvailW =
+                constraints.maxWidth.isFinite ? constraints.maxWidth : 44.0;
+            final maxAvailH =
+                constraints.maxHeight.isFinite ? constraints.maxHeight : 100.0;
+            final double titleFontSize =
+                widget.isPhone ? (isSevenColPhone ? 11.0 : 11.8) : 13.5;
+            final double subFontSize =
+                widget.isPhone ? (isSevenColPhone ? 9.8 : 10.5) : 11.8;
+            const double textHeight = 1.15;
+            final double titleLinePx = titleFontSize * textHeight;
+            final double subLinePx = subFontSize * textHeight;
+
             final pillWidth = math.min(
               widget.isPhone ? 38.0 : 46.0,
               math.max(20.0, maxAvailW * 0.80),
             );
-            final pillHeight = isSingleSection ? 12.0 : (widget.isPhone ? 14.5 : 16.5);
-            final iconSize = isSingleSection ? 12.0 : (widget.isPhone ? 14.5 : 16.5);
+            final pillHeight =
+                isSingleSection ? 12.0 : (widget.isPhone ? 14.5 : 16.5);
+            final double pillTopMargin = isSingleSection ? 1.5 : 3.0;
+            final double pillTotalH = pillHeight + pillTopMargin + 1.0;
+            final iconSize =
+                isSingleSection ? 12.0 : (widget.isPhone ? 14.5 : 16.5);
+
+            // 宽卡面（桌面端/平板或宽度 >= 84dp）直接使用系统原生自动换行，彻底避免机械 4 字折行挤压高度；
+            // 仅窄列手机网格按真实列宽动态计算字数断点。
+            final bool isWideCard = !widget.isPhone || maxAvailW >= 84.0;
+            final int dynamicChars =
+                (maxAvailW / titleFontSize).floor().clamp(4, 8);
+            final String displayCourseName = isWideCard
+                ? course.name.trim()
+                : CourseNameFormatter.format(
+                    course.name,
+                    isPhone: true,
+                    maxCharsPerLine: dynamicChars,
+                  );
+
+            final subTextStyle = TextStyle(
+              color: subTextColor,
+              fontSize: subFontSize,
+              fontWeight: FontWeight.w600,
+              height: textHeight,
+            );
+            final titleStyle = TextStyle(
+              color: titleColor,
+              fontSize: titleFontSize,
+              fontWeight: FontWeight.bold,
+              height: textHeight,
+            );
+
+            // 预测地点真实所需行数与高度，并确保至少预留 1 行完整标题后再截断次要行，绝不将文字纵向腰斩
+            int effectiveLocLines = 0;
+            if (hasLocation) {
+              final locPainter = TextPainter(
+                text: TextSpan(text: course.location, style: subTextStyle),
+                textDirection: TextDirection.ltr,
+                maxLines: maxLocationLines,
+              )..layout(maxWidth: maxAvailW);
+              final int measuredLocLines =
+                  locPainter.computeLineMetrics().length.clamp(1, maxLocationLines);
+              locPainter.dispose();
+
+              final double maxMetaBudget =
+                  math.max(0.0, maxAvailH - pillTotalH - titleLinePx - 1.5);
+              effectiveLocLines = math.min(
+                measuredLocLines,
+                (maxMetaBudget / subLinePx).floor().clamp(0, maxLocationLines),
+              );
+            }
+
+            final bool effectiveShowTeacher = showTeacher &&
+                (maxAvailH -
+                        pillTotalH -
+                        titleLinePx -
+                        effectiveLocLines * subLinePx -
+                        1.5) >=
+                    subLinePx;
+
+            final double reservedBottomH = pillTotalH +
+                (effectiveShowTeacher ? subLinePx : 0.0) +
+                effectiveLocLines * subLinePx;
+            final double availTitleH =
+                (maxAvailH - reservedBottomH).clamp(titleLinePx, maxAvailH);
+            final int fittingTitleLines =
+                ((availTitleH - 1.0) / titleLinePx).floor().clamp(1, maxTitleLines);
 
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -925,41 +1005,27 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
                 Flexible(
                   fit: FlexFit.tight,
                   child: Text(
-                    CourseNameFormatter.format(course.name, isPhone: widget.isPhone),
-                    style: TextStyle(
-                      color: titleColor,
-                      fontSize: widget.isPhone ? (isSevenColPhone ? 11.0 : 11.8) : 13.5,
-                      fontWeight: FontWeight.bold,
-                      height: 1.15,
-                    ),
-                    maxLines: maxTitleLines,
+                    displayCourseName,
+                    style: titleStyle,
+                    softWrap: true,
+                    maxLines: fittingTitleLines,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
 
-                if (showTeacher || hasLocation) ...[
-                  if (showTeacher)
+                if (effectiveShowTeacher || effectiveLocLines > 0) ...[
+                  if (effectiveShowTeacher)
                     Text(
                       course.teacher,
-                      style: TextStyle(
-                        color: subTextColor,
-                        fontSize: widget.isPhone ? (isSevenColPhone ? 9.8 : 10.5) : 11.8,
-                        fontWeight: FontWeight.w600,
-                        height: 1.15,
-                      ),
+                      style: subTextStyle,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                  if (hasLocation)
+                  if (effectiveLocLines > 0)
                     Text(
                       course.location,
-                      style: TextStyle(
-                        color: subTextColor,
-                        fontSize: widget.isPhone ? (isSevenColPhone ? 9.8 : 10.5) : 11.8,
-                        fontWeight: FontWeight.w600,
-                        height: 1.15,
-                      ),
-                      maxLines: maxLocationLines,
+                      style: subTextStyle,
+                      maxLines: effectiveLocLines,
                       overflow: TextOverflow.ellipsis,
                     ),
                 ],

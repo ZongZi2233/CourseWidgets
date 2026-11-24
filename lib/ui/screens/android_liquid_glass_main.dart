@@ -20,6 +20,7 @@ import '../transitions/smooth_slide_transitions.dart';
 import '../widgets/tablet_sidebar.dart';
 import '../widgets/weekly_schedule_grid.dart';
 import '../widgets/immersive_status_bar_backdrop.dart';
+import '../theme/squircle_geometry.dart';
 import '../animations/app_motion.dart';
 import '../../services/theme_service.dart' as theme;
 class AndroidLiquidGlassMain extends StatefulWidget {
@@ -222,36 +223,31 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
           // [v3.0.0] 物理状态栏 (0..48dp) 顶级沉浸式微模糊避让 (非横屏时生效)
           if (!isLandscape) const ImmersiveStatusBarBackdrop(),
 
-          // [v3.0.0-alpha23] 横屏模式：左下角官方 GlassTabBar 双标签 touch bar + 右下角圆形官方液态玻璃设置按钮，上下左右零挤占
-          if (isLandscape) ...[
-            // 左下角：官方 GlassTabBar 双按钮玻璃导航栏（课程、日历）
+          // [v3.0.0-alpha23 / v3.2.2] 横屏模式：左下角双标签 touch bar + 右下角设置按钮共享 GlassBackdropGroup，降低采样通道开销
+          if (isLandscape)
             Positioned(
               left: 16 + MediaQuery.of(context).padding.left,
-              bottom: 14 + MediaQuery.of(context).padding.bottom,
-              child: AnimatedSlide(
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeOutCubic,
-                offset: _isBottomNavVisible ? Offset.zero : const Offset(0, 1.4),
-                child: RepaintBoundary(
-                  child: _buildLandscapeLeftNav(context),
-                ),
-              ),
-            ),
-
-            // 右下角：官方圆形液态玻璃设置按钮，高度 52x52，与左下角严格水平对齐
-            Positioned(
               right: 16 + MediaQuery.of(context).padding.right,
               bottom: 14 + MediaQuery.of(context).padding.bottom,
               child: AnimatedSlide(
                 duration: const Duration(milliseconds: 300),
                 curve: Curves.easeOutCubic,
                 offset: _isBottomNavVisible ? Offset.zero : const Offset(0, 1.4),
-                child: RepaintBoundary(
-                  child: _buildLandscapeSettingsButton(context),
+                child: GlassBackdropGroup(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      RepaintBoundary(
+                        child: _buildLandscapeLeftNav(context),
+                      ),
+                      RepaintBoundary(
+                        child: _buildLandscapeSettingsButton(context),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ],
         ],
       ),
       // 竖屏时使用官方原生旗舰 GlassTabBar.bottom；横屏模式使用完全浮动双角布局，彻底释放高度
@@ -620,12 +616,13 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
 
     return DecoratedBox(
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: SquircleGeometry.smoothRadius(20),
         boxShadow: liquid.HyperOSShadows.dock(isDark),
       ),
       child: GlassContainer(
         useOwnLayer: true,
-        shape: const LiquidRoundedSuperellipse(borderRadius: 18),
+        clipBehavior: Clip.antiAlias,
+        shape: const LiquidRoundedSuperellipse(borderRadius: 20),
         quality: theme.ThemeService().glassQuality,
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
         settings: LiquidGlassSettings(

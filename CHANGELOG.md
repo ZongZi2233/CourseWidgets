@@ -2,6 +2,25 @@
 
 本文档记录 CourseWidgets 各版本更新的动态活动演进，重点关注架构改进、渲染优化、故障诊断与教务抓取能力提升。
 
+## [v3.2.2] - 2026-11-24 (Build 3220 正式版)
+
+### 1. Android 16 实况通知零重复信息对齐与教室填充色块升级 (`LiveUpdateNotificationManager.kt` & `AndroidManifest.xml`)
+- **全面消除通知多处重复与固定标识**：将 `AndroidManifest.xml` 中 `<application android:label>` 设为零宽空白字符（同时保留桌面启动器图标与 Activity 名称为 `CourseWidgets`），消除通知顶栏冗长应用名；移除 `BigTextStyle.setSummaryText` 与副标题之间的重复拼接，保证日期、周次、星期与当日课程数均只在单一对应区域出现；
+- **第三行高亮填充色块教室胶囊 + 右侧独立节次/日历徽章**：使用跨 Binder 透传的 `BackgroundColorSpan` + 白色加粗高亮排版，在课程名称下方直接以课程主题色填充底块突出展示教室编号（如 `中1203`、`A101`）；右侧 `52dp` 真圆角大图标徽章专注承担节次与日程汇总（如 `1-2 / 节`、`3-4 / 节`、`周一 / 1门`、`无课 / 休息日`），与左侧教室信息彻底分离；
+- **嵌套括号教室解析与设置页 1:1 完全对齐**：升级 `ClassroomDisplayInfo.parse` 与 `parseClassroomInfo`，支持嵌套括号教室字符串（如 `中1203室（信工学院基础实验室（4））`），同步更新设置页三场景实时预览与通知实体一一对应。
+
+### 2. Android 高清紧凑开屏与 Tab 切换玻璃顶栏防抽动优化
+- **高清紧凑 Android 启动页与 GPU 零掉帧揭晓**：基于高分辨率原始图标生成 `512×512` 超椭圆透明底资源 `splash_logo_hd.png`（配合 `34%` 安全区内缩消除系统拉伸模糊）；在 `MainActivity` 接入 Android 12+ `SplashScreen` 即时退出交接，并新增纯 GPU 合成的 `AndroidSplashRevealOverlay`，呈现柔和缩放与优雅浮出动效；
+- **消除“课程 ↔ 日历”切页顶栏抽动与圆角变方**：移除 `DirectionalMotionBlurSwitcher` 主标签切页期间动态开关的 `ImageFiltered` 离屏层与瞬时背景替换，改用零 `SaveLayer` 的纯硬件平移裁剪；统一课程页顶栏与日历页顶栏的超椭圆圆角 (`SquircleGeometry(20)`)、`Clip.antiAlias` 与顶部间距，并接入 `GlassBackdropGroup` 合并浮动控件采样通道。
+
+### 3. Windows 桌面端莫奈取色、SharedElement 周次玻璃弹窗与课程卡片排版修复
+- **根除 Windows 重启/热更新后莫奈取色意外重置为默认粉色 (`theme_service.dart` & `main.dart`)**：将 `loadGlobalBackground()` 提前至 `ThemeService().initialize()` 之前消除未就绪竞争，为自定义/系统/莫奈三模式统一恢复 MMKV 持久化色彩，加入 `128×128` 缩略图量化、并发代际校验与异常保留缓存保护（异常或重试失败时绝不再覆盖已保存莫奈色）；
+- **Windows 周次选择器 SharedElement 液态玻璃弹窗 (`liquid_components.dart` & `weekly_schedule_grid.dart`)**：新增基于根 Overlay 坐标映射与 `ClipRSuperellipse + BackdropFilter + OverflowBox` 的 `showSharedElementGlassDialog`，从点击的「第 X 周」胶囊位置直接丝滑展开为 FlClash 磨砂玻璃弹窗（同步接入标题栏周次胶囊点击），彻底解决 `Transform.scale` 包裹 `GlassContainer` 引发的桌面端偏移与闪烁；
+- **桌面端长课程名自适应换行与防纵向半行裁切 (`course_name_formatter.dart` & `weekly_schedule_grid.dart`)**：宽屏课程卡不再强制 4 字机械折行（如 `人工智能—AI绘画从入门到精通` 充分利用列宽自然两行呈现，并改进破折号分词），同时依据 `TextPainter` 与剩余高度动态锁死可见整数行数，杜绝最后一行文字被纵向腰斩。
+
+### 4. Gradle 构建缓存瘦身与构建速度优化
+- 清理长期积累的无用 `.tmp` 下载报告、已淘汰的旧版本 Wrapper（保留现役 `gradle-9.8.1-bin`）与冗余历史 Transform / Daemon 缓存，启用 `android.enableJetifier=false`、关闭未使用的 `aidl`/`renderscript`/`shaders` 构建特性并配置本地 Build Cache，在大幅压低磁盘占用的同时保持快速增量构建。
+
 ## [v3.2.1] - 2026-11-24 (Build 3210 正式版)
 
 ### 1. Android 16 实况通知导视视觉重构与按课程智能分色 (`LiveUpdateNotificationManager.kt` & `live_notification_service_v2.dart`)

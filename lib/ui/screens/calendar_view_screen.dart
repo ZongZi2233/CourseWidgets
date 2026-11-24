@@ -11,6 +11,7 @@ import '../../utils/responsive_utils.dart';
 import '../widgets/liquid_components.dart' as liquid;
 import '../widgets/glass_context_menu.dart';
 import '../transitions/smooth_slide_transitions.dart';
+import '../theme/squircle_geometry.dart';
 import '../animations/app_motion.dart';
 import 'course_edit_screen.dart';
 
@@ -142,13 +143,13 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
     );
   }
 
-  /// 手机竖屏模式：上下垂直结构，内置 SafeArea 与顶部独立间距
+  /// 手机竖屏模式：上下垂直结构，内置 SafeArea 与顶部独立间距（与课表顶栏 Y 轴严格对齐）
   Widget _buildPhoneLayout(ScheduleProvider provider) {
     return SafeArea(
       bottom: false,
       child: Column(
         children: [
-          const SizedBox(height: 12),
+          const SizedBox(height: 6),
           _buildHeader(horizontalPadding: 16),
           const SizedBox(height: 12),
           Padding(
@@ -178,12 +179,13 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
       padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
       child: DecoratedBox(
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(22),
+          borderRadius: SquircleGeometry.smoothRadius(20),
           boxShadow: liquid.HyperOSShadows.dock(isDark),
         ),
         child: GlassContainer(
           useOwnLayer: true,
-          shape: const LiquidRoundedSuperellipse(borderRadius: 22),
+          clipBehavior: Clip.antiAlias,
+          shape: const LiquidRoundedSuperellipse(borderRadius: 20),
           quality: theme.ThemeService().glassQuality,
           padding: compact
               ? const EdgeInsets.symmetric(horizontal: 10, vertical: 6)

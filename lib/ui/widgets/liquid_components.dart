@@ -1,4 +1,5 @@
-import 'dart:ui' show ImageFilter;
+import 'dart:math' as math;
+import 'dart:ui' show ImageFilter, lerpDouble;
 import 'dart:ui' as ui show Image;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -658,6 +659,217 @@ Future<T?> showLiquidDialog<T>({
               scale: scale,
               child: child,
             ),
+          ),
+        ],
+      );
+    },
+  );
+}
+
+/// [v3.2.2] 解析触发组件在根 Overlay 坐标系下的精准局部边界（消除桌面顶栏 40px 偏移引起的弹窗位移误差）
+Rect? resolveOverlayLocalRect(
+  BuildContext sourceContext, {
+  NavigatorState? navigator,
+}) {
+  try {
+    final ro = sourceContext.findRenderObject();
+    if (ro is! RenderBox || !ro.hasSize || !ro.attached) return null;
+    final nav = navigator ??
+        Navigator.maybeOf(sourceContext, rootNavigator: true);
+    final overlayRo = nav?.overlay?.context.findRenderObject();
+    final overlayOrigin = (overlayRo is RenderBox && overlayRo.attached)
+        ? overlayRo.localToGlobal(Offset.zero)
+        : Offset.zero;
+    final topLeft = ro.localToGlobal(Offset.zero) - overlayOrigin;
+    final rect = topLeft & ro.size;
+    if (!rect.left.isFinite ||
+        !rect.top.isFinite ||
+        !rect.width.isFinite ||
+        !rect.height.isFinite ||
+        rect.isEmpty) {
+      return null;
+    }
+    return rect;
+  } catch (_) {
+    return null;
+  }
+}
+
+/// [v3.2.2] SharedElement (ShareTransit) FlClash 风格磨砂液态玻璃模态弹窗
+///
+/// 采用 Positioned.fromRect + ClipRSuperellipse + BackdropFilter + OverflowBox 形态插值，
+/// 彻底规避 Transform.scale 套用 GlassContainer 引起的桌面端坐标错位与裁切闪烁，
+/// 实现从点击胶囊/卡片真实几何位置丝滑物理形变展开的弹窗体验。
+Future<T?> showSharedElementGlassDialog<T>({
+  required BuildContext context,
+  Rect? sourceRect,
+  double sourceCornerRadius = 14.0,
+  double targetCornerRadius = 28.0,
+  double maxWidth = 420.0,
+  double maxHeight = 360.0,
+  WidgetBuilder? sourcePreviewBuilder,
+  required WidgetBuilder builder,
+}) {
+  final isDark = GlassSettingsHelper.isDark(context);
+  return showGeneralDialog<T>(
+    context: context,
+    barrierDismissible: true,
+    barrierLabel: 'Dismiss',
+    barrierColor: Colors.transparent,
+    transitionDuration: const Duration(milliseconds: 340),
+    pageBuilder: (ctx, anim1, anim2) => Builder(builder: builder),
+    transitionBuilder: (ctx, anim1, anim2, child) {
+      final rawT = anim1.value.clamp(0.0, 1.0);
+      final isReversing = anim1.status == AnimationStatus.reverse;
+      final double t = isReversing
+          ? (1.0 - AppCurves.sharedElementClose.transform(1.0 - rawT))
+              .clamp(0.0, 1.0)
+          : AppCurves.sharedElementOpen.transform(rawT).clamp(0.0, 1.03);
+      final fade = CurvedAnimation(
+        parent: anim1,
+        curve: AppCurves.easeDecel,
+        reverseCurve: AppCurves.easeAccel,
+      ).value.clamp(0.0, 1.0);
+
+      final screenSize = MediaQuery.sizeOf(ctx);
+      final double targetW =
+          math.min(maxWidth, math.max(220.0, screenSize.width - 48.0));
+      final double targetH =
+          math.min(maxHeight, math.max(180.0, screenSize.height - 96.0));
+      final Rect targetRect = Rect.fromCenter(
+        center: Offset(screenSize.width * 0.5, screenSize.height * 0.5),
+        width: targetW,
+        height: targetH,
+      );
+
+      final bool hasValidSource = sourceRect != null &&
+          sourceRect.left.isFinite &&
+          sourceRect.top.isFinite &&
+          sourceRect.width > 4.0 &&
+          sourceRect.height > 4.0 &&
+          sourceRect.width < screenSize.width * 0.96 &&
+          sourceRect.height < screenSize.height * 0.85;
+
+      final Rect fallbackStart = Rect.fromCenter(
+        center: targetRect.center,
+        width: targetW * 0.92,
+        height: targetH * 0.92,
+      );
+      final Rect fromRect = hasValidSource ? sourceRect : fallbackStart;
+      final Rect currentRect = Rect.lerp(fromRect, targetRect, t)!;
+      final double currentRadius = lerpDouble(
+        hasValidSource ? sourceCornerRadius : targetCornerRadius * 0.85,
+        targetCornerRadius,
+        t.clamp(0.0, 1.0),
+      )!
+          .clamp(4.0, 32.0);
+
+      final blurSigma = (6.5 * fade).clamp(0.0, 6.5);
+      final scrimColor = Colors.black.withValues(
+        alpha: (isDark ? 0.24 : 0.12) * fade,
+      );
+      final double dialogOpacity = hasValidSource
+          ? fade
+          : fade;
+      final double contentOpacity = hasValidSource
+          ? ((t - 0.12) / 0.52).clamp(0.0, 1.0)
+          : fade;
+      final double previewOpacity =
+          hasValidSource && sourcePreviewBuilder != null && t < 0.28
+              ? (1.0 - t / 0.28).clamp(0.0, 1.0)
+              : 0.0;
+
+      final BorderRadius borderRadius = BorderRadius.circular(currentRadius);
+
+      Widget glassDialogShell = DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: SquircleGeometry.smoothRadius(currentRadius),
+          boxShadow: HyperOSShadows.modal(isDark),
+        ),
+        child: ClipRSuperellipse(
+          borderRadius: borderRadius,
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 22.0, sigmaY: 22.0),
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: isDark
+                      ? const [Color(0xAD1F2432), Color(0x9E141822)]
+                      : const [Color(0xD9FFFFFF), Color(0xBDF2F5FC)],
+                ),
+                borderRadius: borderRadius,
+                border: Border.all(
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.16)
+                      : Colors.white.withValues(alpha: 0.85),
+                  width: 1.0,
+                ),
+              ),
+              child: OverflowBox(
+                alignment: Alignment.center,
+                minWidth: targetW,
+                maxWidth: targetW,
+                minHeight: targetH,
+                maxHeight: targetH,
+                child: Material(
+                  type: MaterialType.transparency,
+                  child: SizedBox(
+                    width: targetW,
+                    height: targetH,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        if (previewOpacity > 0.01 &&
+                            sourcePreviewBuilder != null)
+                          IgnorePointer(
+                            child: Opacity(
+                              opacity: previewOpacity,
+                              child: sourcePreviewBuilder(ctx),
+                            ),
+                          ),
+                        Opacity(
+                          opacity: contentOpacity,
+                          child: child,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      if (dialogOpacity < 0.995) {
+        glassDialogShell = Opacity(
+          opacity: dialogOpacity,
+          child: glassDialogShell,
+        );
+      }
+
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => Navigator.of(ctx).maybePop(),
+              child: blurSigma > 0.05
+                  ? BackdropFilter(
+                      filter: ImageFilter.blur(
+                        sigmaX: blurSigma,
+                        sigmaY: blurSigma,
+                      ),
+                      child: ColoredBox(color: scrimColor),
+                    )
+                  : ColoredBox(color: scrimColor),
+            ),
+          ),
+          Positioned.fromRect(
+            rect: currentRect,
+            child: glassDialogShell,
           ),
         ],
       );

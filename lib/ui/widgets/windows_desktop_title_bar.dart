@@ -8,6 +8,8 @@ import '../../providers/schedule_provider.dart';
 import '../../services/desktop_window_service.dart';
 import '../../services/windows_tray_service.dart';
 import 'macos_traffic_lights.dart';
+import 'liquid_components.dart' show resolveOverlayLocalRect;
+import 'weekly_schedule_grid.dart' show showWeekPickerGlassDialog;
 import '../screens/windows_custom_window.dart' show windowsGlobalIsMaximized;
 
 /// Windows 桌面端持久化顶部标题栏固定高度（逻辑像素）
@@ -269,22 +271,49 @@ class WindowsDesktopTitleBar extends StatelessWidget {
                   ),
                   if (weekText.isNotEmpty) ...[
                     const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: primaryColor.withValues(alpha: isDark ? 0.25 : 0.15),
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(
-                          color: primaryColor.withValues(alpha: 0.35),
-                          width: 0.5,
-                        ),
-                      ),
-                      child: Text(
-                        weekText,
-                        style: TextStyle(
-                          color: primaryColor,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
+                    MouseRegion(
+                      cursor: SystemMouseCursors.click,
+                      child: Builder(
+                        builder: (pillCtx) => GestureDetector(
+                          onTap: () {
+                            final nav = rootNavigatorKey.currentState;
+                            final navCtx =
+                                rootNavigatorKey.currentContext ?? context;
+                            final rect = resolveOverlayLocalRect(
+                              pillCtx,
+                              navigator: nav,
+                            );
+                            showWeekPickerGlassDialog(
+                              navCtx,
+                              provider,
+                              sourceRect: rect,
+                              sourceCornerRadius: 6.0,
+                            );
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: primaryColor.withValues(
+                                alpha: isDark ? 0.25 : 0.15,
+                              ),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(
+                                color: primaryColor.withValues(alpha: 0.35),
+                                width: 0.5,
+                              ),
+                            ),
+                            child: Text(
+                              weekText,
+                              style: TextStyle(
+                                color: primaryColor,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                     ),

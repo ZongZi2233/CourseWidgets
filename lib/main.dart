@@ -193,14 +193,16 @@ void main() async {
   globalUseDarkMode = initialDark;
   globalDarkModeNotifier.value = initialDark;
 
-  // [v2.1.10] 初始化主题服务（桌面端跳过启动阻塞式莫奈全图像素量化，延后至开屏上屏后并行）
+  // [v3.2.2] 先从 MMKV 恢复壁纸路径再初始化 ThemeService，避免 loadGlobalBackground 提前触发未就绪的莫奈取色竞态
+  await loadGlobalBackground();
+
+  // [v2.1.10] 初始化主题服务（桌面端先瞬时恢复 MMKV 缓存配色，延后至开屏上屏后校准提取）
   await ThemeService().initialize(deferMonetRefresh: isDesktop);
   AppLogger.ui('ThemeService 初始化完成');
 
   // [v3.0.0-alpha18 / v3.2.1] 全开旗舰高质量 (Premium) 3D 折射渲染管线
   AppLogger.render('🎨 着色器模式: 旗舰高质量 (Premium)');
 
-  await loadGlobalBackground();
   if (!isDesktop) {
     // 移动端在原生单层开屏期间同步就绪静态壁纸模糊纹理与莫奈色彩
     StaticBlurredWallpaperService.instance.initialize();
@@ -381,7 +383,9 @@ void main() async {
           AppLogger.error('FONT', 'Failed to load custom fonts: $e', e, st);
         }
       }
-      unawaited(ThemeService().refreshMonetColors());
+      WidgetsBinding.instance.endOfFrame.then((_) {
+        unawaited(ThemeService().refreshMonetColors());
+      });
     }());
   }
 
@@ -784,6 +788,12 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                         deferChildUntilFirstFrame: true,
                         onSplashShown: widget.onDesktopSplashFirstFrame,
                         child: desktopRoot,
+                      );
+                    }
+
+                    if (Platform.isAndroid || Platform.isIOS) {
+                      return AndroidSplashRevealOverlay(
+                        child: coreStack,
                       );
                     }
 

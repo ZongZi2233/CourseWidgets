@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 /// 课程名称智能语义断句与中英文排版工具
 /// [v2.9.5] 遵循自然语言语义规则，杜绝生硬机械切字，保持中文词汇完整性
 class CourseNameFormatter {
@@ -24,7 +26,11 @@ class CourseNameFormatter {
   ///
   /// [isPhone]: 是否为手机窄屏模式（手机 7 天网格单列较窄）
   /// [maxCharsPerLine]: 每行建议最大汉字字数（默认 4）
-  static String format(String rawName, {bool isPhone = true, int maxCharsPerLine = 4}) {
+  static String format(
+    String rawName, {
+    bool isPhone = true,
+    int maxCharsPerLine = 4,
+  }) {
     if (rawName.isEmpty) return rawName;
 
     // 如果原文本已有显式换行符，优先保留
@@ -32,18 +38,23 @@ class CourseNameFormatter {
 
     final trimmed = rawName.trim();
 
-    // 如果总字数很短（视觉权重 <= 5.2，例如 "数学"、"大学英语"、"BS企业战略"），不需要强行换行
+    // 宽屏桌面端/平板或单行可容纳时，交由系统原生 Text 自动换行以充分利用水平宽度
     final totalWeight = _calculateWeight(trimmed);
-    if (totalWeight <= (isPhone ? 5.2 : 8.0)) {
+    if (!isPhone ||
+        maxCharsPerLine >= 7 ||
+        totalWeight <= math.max(5.2, maxCharsPerLine * 1.25)) {
       return trimmed;
     }
 
-    // 中英文前缀分离匹配（例如 "BPT税务筹划" -> "BPT" 与 "税务筹划"）
-    final m = RegExp(r'^([A-Za-z0-9+#]+)([\u4e00-\u9fa5].*)$').firstMatch(trimmed);
+    // 仅在窄列下对纯字母+纯汉字无标点前缀分离匹配（例如 "BPT税务筹划" -> "BPT" 与 "税务筹划"）
+    final m =
+        RegExp(r'^([A-Za-z0-9+#]+)([\u4e00-\u9fa5].*)$').firstMatch(trimmed);
     if (m != null) {
       final eng = m.group(1)!;
       final chn = m.group(2)!;
-      final chnFormatted = chn.length > maxCharsPerLine ? format(chn, isPhone: isPhone, maxCharsPerLine: maxCharsPerLine) : chn;
+      final chnFormatted = _calculateWeight(chn) > maxCharsPerLine
+          ? format(chn, isPhone: isPhone, maxCharsPerLine: maxCharsPerLine)
+          : chn;
       return '$eng\n$chnFormatted';
     }
     final tokens = _tokenize(trimmed);
@@ -60,8 +71,12 @@ class CourseNameFormatter {
         final combinedWeight = _calculateWeight(combined);
         final tokenWeight = _calculateWeight(token);
 
-        // 如果加上当前词语超出建议行宽，则当前词独立起一行
-        if (combinedWeight > maxCharsPerLine && tokenWeight > 1) {
+        // 标点连接符优先粘连前一行或与后续完整词同行，避免出现孤立标点碎片行
+        final isPunctuation =
+            RegExp(r'^[—–\-:：·（）()、，,]$').hasMatch(token);
+        if (isPunctuation && combinedWeight <= maxCharsPerLine + 0.8) {
+          currentLine = combined;
+        } else if (combinedWeight > maxCharsPerLine && tokenWeight > 1) {
           lines.add(currentLine);
           currentLine = token;
         } else {
@@ -83,15 +98,26 @@ class CourseNameFormatter {
     int index = 0;
 
     while (index < text.length) {
-      // 1. 匹配连续英文、数字及特殊符号（如 C++, AI, BPT, 3D）
-      final engMatch = RegExp(r'^[A-Za-z0-9+#._-]+').firstMatch(text.substring(index));
+      // 1. 保留连接符/标点为独立边界，防止把 '—' 与后续英文首字母粘连切碎（如 '—A' / 'I'）
+      final char = text[index];
+      if ('—–-:：·（）()、，, '.contains(char)) {
+        if (char != ' ') {
+          tokens.add(char);
+        }
+        index += 1;
+        continue;
+      }
+
+      // 2. 匹配连续英文、数字及技术符号（如 C++, AI, BPT, 3D）
+      final engMatch =
+          RegExp(r'^[A-Za-z0-9+#._]+').firstMatch(text.substring(index));
       if (engMatch != null) {
         tokens.add(engMatch.group(0)!);
         index += engMatch.group(0)!.length;
         continue;
       }
 
-      // 2. 尝试最长词典匹配（4字 -> 3字 -> 2字）
+      // 3. 尝试最长词典匹配（4字 -> 3字 -> 2字）
       bool matched = false;
       for (int len = 4; len >= 2; len--) {
         if (index + len <= text.length) {
@@ -107,26 +133,28 @@ class CourseNameFormatter {
 
       if (matched) continue;
 
-      // 3. 常见连接词与单字词规则
-      final char = text[index];
-      if (char == '与' || char == '及' || char == '和' || char == '或') {
-        // 如果后面还有词语（如 "与技巧"），优先看是否能和后面的 2 字拼成 3 字语义组
-        if (index + 3 <= text.length) {
-          final nextSub = text.substring(index, index + 3);
+      // 4. 常见连接词规则（不吞并标点或英文字符）
+      if ((char == '与' || char == '及' || char == '和' || char == '或') &&
+          index + 3 <= text.length) {
+        final nextSub = text.substring(index, index + 3);
+        if (!RegExp(r'[A-Za-z0-9—–\-:：·（）() ]').hasMatch(nextSub)) {
           tokens.add(nextSub);
           index += 3;
           continue;
         }
       }
 
-      // 4. 默认 2 字成词，若只剩 1 字则单字收尾
+      // 5. 默认 2 字纯中文成词，若下一字为标点或英文则仅取当前单字，避免切断词边界
       if (index + 2 <= text.length) {
-        tokens.add(text.substring(index, index + 2));
-        index += 2;
-      } else {
-        tokens.add(char);
-        index += 1;
+        final pair = text.substring(index, index + 2);
+        if (!RegExp(r'[A-Za-z0-9—–\-:：·（）() ]').hasMatch(pair[1])) {
+          tokens.add(pair);
+          index += 2;
+          continue;
+        }
       }
+      tokens.add(char);
+      index += 1;
     }
 
     return tokens;

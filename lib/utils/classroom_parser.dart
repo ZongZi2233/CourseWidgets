@@ -22,12 +22,11 @@ class ClassroomDisplayInfo {
       return const ClassroomDisplayInfo(code: '', venue: '', raw: '');
     }
 
-    // 1. 优先识别括号形式：`中1203室（信工学院基础实验室）` 或 `信工学院基础实验室(中1203室)`
-    final parenMatch =
-        RegExp(r'^(.+?)\s*[（(]([^()（）]+)[)）]\s*$').firstMatch(trimmed);
-    if (parenMatch != null) {
-      final outer = parenMatch.group(1)!.trim();
-      final inner = parenMatch.group(2)!.trim();
+    // 1. 优先识别成对尾部括号形式（兼容嵌套括号如 `中1203室（信工学院基础实验室（4））`）
+    final parenPair = _splitTrailingBalancedParens(trimmed);
+    if (parenPair != null) {
+      final outer = parenPair.$1;
+      final inner = parenPair.$2;
       final outerHasDigits = RegExp(r'\d').hasMatch(outer);
       final innerHasDigits = RegExp(r'\d').hasMatch(inner);
 
@@ -57,6 +56,32 @@ class ClassroomDisplayInfo {
     }
 
     return _parseLinear(trimmed, rawOriginal: trimmed);
+  }
+
+  static (String, String)? _splitTrailingBalancedParens(String input) {
+    if (input.isEmpty) return null;
+    final lastChar = input[input.length - 1];
+    if (lastChar != ')' && lastChar != '）') return null;
+
+    int depth = 0;
+    int openIndex = -1;
+    for (int i = input.length - 1; i >= 0; i--) {
+      final ch = input[i];
+      if (ch == ')' || ch == '）') {
+        depth++;
+      } else if (ch == '(' || ch == '（') {
+        depth--;
+        if (depth == 0) {
+          openIndex = i;
+          break;
+        }
+      }
+    }
+    if (openIndex <= 0 || openIndex >= input.length - 2) return null;
+    final outer = input.substring(0, openIndex).trim();
+    final inner = input.substring(openIndex + 1, input.length - 1).trim();
+    if (outer.isEmpty || inner.isEmpty) return null;
+    return (outer, inner);
   }
 
   static bool _looksLikeRoomToken(String token) {

@@ -358,6 +358,7 @@ class _SettingsNotificationScreenState
     final String timerChip;
     final String courseTitle;
     final String rawRoom;
+    final String badgePrimary;
     final String badgeSecondary;
     final String primaryTimeLabel;
     final String secondaryStatus;
@@ -365,21 +366,23 @@ class _SettingsNotificationScreenState
     final int barActiveIdx;
 
     if (isEmptyDay) {
-      headerText = '第 12 周 · 今日无课';
-      timerChip = '休息日';
-      courseTitle = '今日暂无课程安排';
-      rawRoom = 'B204信息中心';
-      badgeSecondary = '第12周';
-      primaryTimeLabel = '明日 08:00–09:40';
-      secondaryStatus = '高等数学 · 点击通知查看完整周课表与自动排课预告';
+      headerText = '11月30日 · 第 12 周';
+      timerChip = '预告';
+      courseTitle = '人工智能—AI绘画从入门到精通';
+      rawRoom = '中1203室（信工学院基础实验室（4））';
+      badgePrimary = '周一';
+      badgeSecondary = '1门';
+      primaryTimeLabel = '10:00–11:40 · 第 3-4 节 · 龚鸣敏';
+      secondaryStatus = '今日无课 · 下一节课程预告';
       barCourses = const [];
       barActiveIdx = 0;
     } else if (isLongRoom) {
       headerText = '进行中 · 10:00–11:40';
       timerChip = '41:12';
       courseTitle = '嵌入式系统原理与应用';
-      rawRoom = '中1203室（信工学院基础实验室）';
-      badgeSecondary = '3-4节';
+      rawRoom = '中1203室（信工学院基础实验室（4））';
+      badgePrimary = '3-4';
+      badgeSecondary = '节';
       primaryTimeLabel = '11:40 下课';
       secondaryStatus = '下节 C302 数据结构';
       barCourses = const ['高等数学', '嵌入式系统原理与应用', '大学英语', '体育'];
@@ -389,7 +392,8 @@ class _SettingsNotificationScreenState
       timerChip = '24:18';
       courseTitle = '高等数学';
       rawRoom = 'A101逸夫楼';
-      badgeSecondary = '1-2节';
+      badgePrimary = '1-2';
+      badgeSecondary = '节';
       primaryTimeLabel = '09:40 下课';
       secondaryStatus = '下节 C302 数据结构';
       barCourses = const ['早读', '高等数学', '嵌入式系统原理与应用', '数据结构'];
@@ -397,9 +401,8 @@ class _SettingsNotificationScreenState
     }
 
     final roomInfo = ClassroomDisplayInfo.parse(rawRoom);
-    final Color themeColor = isEmptyDay
-        ? const Color(0xFF475569)
-        : CourseColorPalette.getNotificationAccentColor(courseTitle);
+    final Color themeColor =
+        CourseColorPalette.getNotificationAccentColor(courseTitle);
     final Color badgeBg = Color.lerp(
       themeColor,
       const Color(0xFF0A0E16),
@@ -421,12 +424,12 @@ class _SettingsNotificationScreenState
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // 1. 顶部精简状态行（无应用名冗余前缀）
+          // 1. 顶部精简状态行（无应用名冗余前缀，与真实实况通知 1:1 对齐）
           Row(
             children: [
               Icon(
                 Icons.circle,
-                color: isEmptyDay ? const Color(0xFF64748B) : themeColor,
+                color: themeColor,
                 size: 8,
               ),
               const SizedBox(width: 6),
@@ -466,7 +469,7 @@ class _SettingsNotificationScreenState
           ),
           const SizedBox(height: 10),
 
-          // 2. 独立无染色课程标题行 + 教室色块胶囊与附属场地说明 + 右侧 52dp 大圆角徽章
+          // 2. 独立无染色课程标题行 + 高亮教室底块与附属场地 + 右侧独立节次/星期徽章（零字段重复）
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
@@ -476,7 +479,7 @@ class _SettingsNotificationScreenState
                   children: [
                     Text(
                       courseTitle,
-                      maxLines: isEmptyDay ? 1 : 2,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         color: Colors.white,
@@ -486,7 +489,7 @@ class _SettingsNotificationScreenState
                       ),
                     ),
                     const SizedBox(height: 6),
-                    if (!roomInfo.isEmpty && !isEmptyDay) ...[
+                    if (!roomInfo.isEmpty) ...[
                       Row(
                         children: [
                           Container(
@@ -495,7 +498,7 @@ class _SettingsNotificationScreenState
                               vertical: 2.5,
                             ),
                             decoration: BoxDecoration(
-                              color: themeColor,
+                              color: badgeBg,
                               borderRadius: SquircleGeometry.smoothRadius(8),
                             ),
                             child: Text(
@@ -526,48 +529,21 @@ class _SettingsNotificationScreenState
                       const SizedBox(height: 5),
                     ],
                     if (isEmptyDay) ...[
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 7,
-                              vertical: 2.5,
-                            ),
-                            decoration: BoxDecoration(
-                              color: CourseColorPalette.getNotificationAccentColor(
-                                '高等数学',
-                              ),
-                              borderRadius: SquircleGeometry.smoothRadius(8),
-                            ),
-                            child: Text(
-                              roomInfo.code,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w800,
-                                height: 1.1,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              '${roomInfo.venue} · $primaryTimeLabel',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: Color(0xFFCBD5E1),
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ),
-                        ],
+                      Text(
+                        primaryTimeLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: themeColor,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
-                      const SizedBox(height: 5),
+                      const SizedBox(height: 3),
                       Text(
                         secondaryStatus,
-                        maxLines: 2,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           color: Color(0xFF9CA3AF),
                           fontSize: 11.5,
@@ -628,7 +604,7 @@ class _SettingsNotificationScreenState
                     FittedBox(
                       fit: BoxFit.scaleDown,
                       child: Text(
-                        isEmptyDay ? '无课' : roomInfo.code,
+                        badgePrimary,
                         maxLines: 1,
                         style: const TextStyle(
                           color: Colors.white,

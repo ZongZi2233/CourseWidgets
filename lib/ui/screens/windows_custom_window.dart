@@ -167,21 +167,23 @@ class _WindowsCustomWindowState extends State<WindowsCustomWindow> {
             ),
           ),
 
-          // 2. 左下角：官方 GlassTabBar 双标签触控栏（课程、日历）
+          // 2. 底部双角液态玻璃导航与设置控件：通过 GlassBackdropGroup 合并单帧背景采样通道
           Positioned(
             left: 20.0,
-            bottom: 18.0,
-            child: RepaintBoundary(
-              child: _buildLandscapeLeftNav(context),
-            ),
-          ),
-
-          // 3. 右下角：官方圆形液态玻璃设置按钮（52x52）
-          Positioned(
             right: 20.0,
             bottom: 18.0,
-            child: RepaintBoundary(
-              child: _buildLandscapeSettingsButton(context),
+            child: GlassBackdropGroup(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  RepaintBoundary(
+                    child: _buildLandscapeLeftNav(context),
+                  ),
+                  RepaintBoundary(
+                    child: _buildLandscapeSettingsButton(context),
+                  ),
+                ],
+              ),
             ),
           ),
         ],

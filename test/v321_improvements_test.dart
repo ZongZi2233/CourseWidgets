@@ -85,9 +85,11 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 250));
 
+      expect(find.text('嵌入'), findsNothing);
       expect(find.text('嵌入式系统原理与应用'), findsOneWidget);
       expect(find.text('中1203'), findsAtLeastNWidgets(1));
-      expect(find.text('信工学院基础实验室'), findsOneWidget);
+      expect(find.text('信工学院基础实验室（4）'), findsOneWidget);
+      expect(find.text('3-4'), findsOneWidget);
 
       await tester.tap(find.text('今日无课'));
       await tester.pump();
@@ -97,8 +99,10 @@ void main() {
           tester.getSize(find.byKey(const ValueKey('live_preview_card')));
       expect(emptyDaySize.height, greaterThanOrEqualTo(ongoingSize.height));
       expect(emptyDaySize.height, greaterThanOrEqualTo(156));
-      expect(find.text('今日暂无课程安排'), findsOneWidget);
-      expect(find.textContaining('第 12 周 · 今日无课'), findsOneWidget);
+      expect(find.text('人工智能—AI绘画从入门到精通'), findsOneWidget);
+      expect(find.text('11月30日 · 第 12 周'), findsOneWidget);
+      expect(find.text('周一'), findsOneWidget);
+      expect(find.text('1门'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 

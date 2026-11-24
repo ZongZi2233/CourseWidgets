@@ -6,15 +6,16 @@ import 'package:flutter/services.dart';
 import '../../main.dart' show globalDarkModeNotifier;
 import '../theme/squircle_geometry.dart';
 
-/// 开屏 Logo 图片提供者：使用已在 pubspec 中声明的 assets/icon.png，并按展示尺寸降采样解码。
+/// 开屏 Logo 图片提供者：使用已在 pubspec 中声明的 assets/icon.png，高分辨率降采样解码保障高分屏锐利清晰。
 const ImageProvider kSplashIconProvider = ResizeImage(
   AssetImage('assets/icon.png'),
-  width: 264,
-  height: 264,
+  width: 360,
+  height: 360,
 );
 
 /// 预解码完成的 GPU/内存常驻开屏图标纹理，彻底杜绝 ImageCache 异步首帧空窗与驱逐黑块
 ui.Image? _preloadedSplashUiImage;
+ui.Image? get preloadedSplashUiImage => _preloadedSplashUiImage;
 
 /// 在 runApp 之前直接从 rootBundle 同步解码开屏 Logo 为 [ui.Image]，保证开屏第 0 帧 100% 同步直绘。
 Future<void> preloadSplashIcon() async {
@@ -23,8 +24,8 @@ Future<void> preloadSplashIcon() async {
     final ByteData data = await rootBundle.load('assets/icon.png');
     final ui.Codec codec = await ui.instantiateImageCodec(
       data.buffer.asUint8List(),
-      targetWidth: 264,
-      targetHeight: 264,
+      targetWidth: 360,
+      targetHeight: 360,
     );
     final ui.FrameInfo frameInfo = await codec.getNextFrame();
     _preloadedSplashUiImage = frameInfo.image;

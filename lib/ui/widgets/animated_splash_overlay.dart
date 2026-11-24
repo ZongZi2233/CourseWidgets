@@ -1,10 +1,14 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui' show lerpDouble;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
+import '../../main.dart' show globalDarkModeNotifier;
 import '../../providers/schedule_provider.dart';
 import '../../services/static_blur_service.dart';
+import '../animations/app_motion.dart';
+import '../theme/squircle_geometry.dart';
 import 'zero_flicker_splash_preloader.dart';
 
 /// [v3.1.8] 秒开开屏加载动画与主界面并行渲染就绪门 (AnimatedSplashOverlay)
@@ -238,6 +242,186 @@ class _AnimatedSplashOverlayState extends State<AnimatedSplashOverlay>
             ),
           ),
       ],
+    );
+  }
+}
+
+/// [v3.2.2] 移动端 GPU 零掉帧优雅开屏揭晓过渡层
+///
+/// 无缝承接原生单层开屏画面（零拉伸模糊、精确色彩 #F6F8FC / #0D0F14 对齐），
+/// 仅采用纯硬件合成的 Transform + Opacity 完成紧凑高清 Logo 轻柔上浮消隐与主界面沉稳入场，
+/// 彻底规避 BackdropFilter 渲染峰值与任何跳帧问题。
+class AndroidSplashRevealOverlay extends StatefulWidget {
+  final Widget child;
+  final VoidCallback? onCompleted;
+
+  const AndroidSplashRevealOverlay({
+    super.key,
+    required this.child,
+    this.onCompleted,
+  });
+
+  @override
+  State<AndroidSplashRevealOverlay> createState() =>
+      _AndroidSplashRevealOverlayState();
+}
+
+class _AndroidSplashRevealOverlayState extends State<AndroidSplashRevealOverlay>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _revealController;
+  bool _isDismissed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _revealController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 440),
+    )..addStatusListener((status) {
+        if (status == AnimationStatus.completed && mounted) {
+          setState(() {
+            _isDismissed = true;
+          });
+          widget.onCompleted?.call();
+        }
+      });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && !_revealController.isAnimating && !_isDismissed) {
+        _revealController.forward();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _revealController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = globalDarkModeNotifier.value;
+    final bgColor = isDark ? const Color(0xFF0D0F14) : const Color(0xFFF6F8FC);
+    final preloaded = preloadedSplashUiImage;
+
+    final Widget logoCore = ClipRSuperellipse(
+      borderRadius: BorderRadius.circular(20),
+      child: preloaded != null
+          ? RawImage(
+              image: preloaded,
+              width: 80,
+              height: 80,
+              fit: BoxFit.cover,
+              filterQuality: FilterQuality.high,
+            )
+          : Image(
+              image: kSplashIconProvider,
+              width: 80,
+              height: 80,
+              fit: BoxFit.cover,
+              gaplessPlayback: true,
+              filterQuality: FilterQuality.high,
+            ),
+    );
+
+    final Widget splashArtwork = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 80,
+          height: 80,
+          decoration: BoxDecoration(
+            borderRadius: SquircleGeometry.smoothRadius(20),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.34 : 0.10),
+                blurRadius: 24,
+                spreadRadius: -3,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: logoCore,
+        ),
+        const SizedBox(height: 18),
+        Text(
+          'CourseWidgets',
+          style: TextStyle(
+            color: isDark ? Colors.white : const Color(0xFF14171F),
+            fontSize: 19,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.4,
+            decoration: TextDecoration.none,
+          ),
+        ),
+      ],
+    );
+
+    return AnimatedBuilder(
+      animation: _revealController,
+      child: widget.child,
+      builder: (context, cachedChild) {
+        final rawT = _revealController.value.clamp(0.0, 1.0);
+        final double childScale = _isDismissed
+            ? 1.0
+            : lerpDouble(
+                0.978,
+                1.0,
+                AppCurves.easeDecel.transform(((rawT - 0.12) / 0.88).clamp(0.0, 1.0)),
+              )!;
+        final Widget stabilizedChild = _isDismissed
+            ? cachedChild!
+            : Transform.scale(
+                scale: childScale,
+                alignment: Alignment.center,
+                child: cachedChild,
+              );
+
+        if (_isDismissed) {
+          return stabilizedChild;
+        }
+
+        final double veilFadeOut = 1.0 -
+            AppCurves.easeDecel
+                .transform(((rawT - 0.18) / 0.82).clamp(0.0, 1.0));
+        final double wordmarkIn =
+            Curves.easeOutCubic.transform((rawT / 0.32).clamp(0.0, 1.0));
+        final double exitT =
+            AppCurves.easeDecel.transform(((rawT - 0.18) / 0.82).clamp(0.0, 1.0));
+        final double logoScale = lerpDouble(1.0, 1.07, exitT)!;
+        final double logoLiftY = lerpDouble(0.0, -10.0, exitT)!;
+
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            stabilizedChild,
+            Positioned.fill(
+              child: IgnorePointer(
+                ignoring: rawT > 0.18,
+                child: Opacity(
+                  opacity: veilFadeOut.clamp(0.0, 1.0),
+                  child: ColoredBox(
+                    color: bgColor,
+                    child: Center(
+                      child: Transform.translate(
+                        offset: Offset(0, logoLiftY),
+                        child: Transform.scale(
+                          scale: logoScale,
+                          child: Opacity(
+                            opacity: wordmarkIn.clamp(0.65, 1.0),
+                            child: splashArtwork,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

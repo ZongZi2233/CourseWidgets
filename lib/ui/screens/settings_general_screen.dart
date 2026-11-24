@@ -251,7 +251,9 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
         setState(() => _currentThemeMode = mode);
         await _themeService.setThemeMode(mode);
 
-        if (mode == theme.ThemeMode.system && Platform.isAndroid && mounted) {
+        if (mode == theme.ThemeMode.system &&
+            (Platform.isAndroid || Platform.isWindows) &&
+            mounted) {
           await _themeService.applySystemTheme(context);
         }
 
