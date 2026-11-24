@@ -69,11 +69,11 @@ class _SettingsNotificationScreenState
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: BackdropGroup(
-        child: Stack(
-          children: [
-            // 1. 全出血自由滑动内容区：穿透顶栏与状态栏，消除截断，满帧 120 FPS
-            Positioned.fill(
+      body: Stack(
+        children: [
+          // 1. 全出血自由滑动内容区：独立 RepaintBoundary 隔离重绘，满帧 120 FPS
+          Positioned.fill(
+            child: RepaintBoundary(
               child: AdaptiveSmoothScroll(
                 durationMS: 250,
                 scrollSpeed: 1.2,
@@ -192,6 +192,7 @@ class _SettingsNotificationScreenState
                 ],
               ),
             ),
+            ),
           ),
 
           // 2. 状态栏微模糊避让 (0..48dp)
@@ -222,7 +223,6 @@ class _SettingsNotificationScreenState
           // 4. 悬浮右下角返回按钮（仅移动端展示）
           if (!isDesktop) const liquid.FloatingLiquidBackButton(),
         ],
-      ),
       ),
     );
   }

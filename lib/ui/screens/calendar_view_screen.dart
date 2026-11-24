@@ -6,6 +6,7 @@ import '../../providers/schedule_provider.dart';
 import '../../models/course_event.dart';
 import '../../constants/theme_constants.dart';
 import '../../services/data_import_service.dart';
+import '../../services/glass_appearance_service.dart';
 import '../../services/theme_service.dart' as theme;
 import '../../utils/responsive_utils.dart';
 import '../widgets/liquid_components.dart' as liquid;
@@ -175,6 +176,121 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
     final isCurrentMonthToday = _currentMonth.year == DateTime.now().year &&
         _currentMonth.month == DateTime.now().month;
 
+    final baseHeaderSettings = LiquidGlassSettings(
+      glassColor: isDark ? const Color(0x2212151B) : const Color(0x35FFFFFF),
+      blur: 1.5,
+      thickness: 20.0,
+      refractiveIndex: 1.45,
+      lightIntensity: 0.75,
+      ambientStrength: 0.45,
+      ambientRim: 0.0,
+      fresnelStrength: 0.0,
+      saturation: 1.15,
+    );
+    final headerPadding = compact
+        ? const EdgeInsets.symmetric(horizontal: 10, vertical: 6)
+        : const EdgeInsets.symmetric(horizontal: 14, vertical: 8);
+    final headerRow = Row(
+      children: [
+        // 上个月
+        _buildNavButton(
+          icon: CupertinoIcons.chevron_left,
+          onTap: () => _changeMonth(-1),
+        ),
+        const SizedBox(width: 8),
+
+        // 年月显示
+        Text(
+          '${_currentMonth.year}年${_currentMonth.month}月',
+          style: TextStyle(
+            fontSize: 17,
+            fontWeight: FontWeight.w800,
+            color: textColor,
+            letterSpacing: 0.3,
+          ),
+        ),
+
+        const SizedBox(width: 8),
+        // 下个月
+        _buildNavButton(
+          icon: CupertinoIcons.chevron_right,
+          onTap: () => _changeMonth(1),
+        ),
+
+        const Spacer(),
+
+        // "今天" 快速回跳胶囊
+        if (!isCurrentMonthToday || _selectedDate?.day != DateTime.now().day)
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: GestureDetector(
+              onTap: _jumpToToday,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: AppThemeColors.babyPink.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '今天',
+                  style: TextStyle(
+                    color: AppThemeColors.babyPink,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+        // 月/周切换胶囊
+        GestureDetector(
+          onTap: _toggleViewMode,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  AppThemeColors.babyPink,
+                  AppThemeColors.softCoral,
+                ],
+              ),
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: [
+                BoxShadow(
+                  color: AppThemeColors.babyPink.withValues(alpha: 0.25),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  _isMonthView
+                      ? CupertinoIcons.rectangle_grid_1x2
+                      : CupertinoIcons.calendar,
+                  size: 13,
+                  color: Colors.white,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  _isMonthView ? '收起' : '展开',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
       child: DecoratedBox(
@@ -182,127 +298,36 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
           borderRadius: SquircleGeometry.smoothRadius(20),
           boxShadow: liquid.HyperOSShadows.dock(isDark),
         ),
-        child: GlassContainer(
-          useOwnLayer: true,
-          clipBehavior: Clip.antiAlias,
-          shape: const LiquidRoundedSuperellipse(borderRadius: 20),
-          quality: theme.ThemeService().glassQuality,
-          padding: compact
-              ? const EdgeInsets.symmetric(horizontal: 10, vertical: 6)
-              : const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          settings: LiquidGlassSettings(
-            glassColor: isDark
-                ? const Color(0x2212151B)
-                : const Color(0x35FFFFFF),
-            blur: 1.5,
-            thickness: 20.0,
-            refractiveIndex: 1.45,
-            lightIntensity: 0.75,
-            ambientStrength: 0.45,
-            ambientRim: 0.0,
-            fresnelStrength: 0.0,
-            saturation: 1.15,
-          ),
-          child: Row(
-            children: [
-            // 上个月
-            _buildNavButton(
-              icon: CupertinoIcons.chevron_left,
-              onTap: () => _changeMonth(-1),
-            ),
-            const SizedBox(width: 8),
-
-            // 年月显示
-            Text(
-              '${_currentMonth.year}年${_currentMonth.month}月',
-              style: TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w800,
-                color: textColor,
-                letterSpacing: 0.3,
-              ),
-            ),
-
-            const SizedBox(width: 8),
-            // 下个月
-            _buildNavButton(
-              icon: CupertinoIcons.chevron_right,
-              onTap: () => _changeMonth(1),
-            ),
-
-            const Spacer(),
-
-            // "今天" 快速回跳胶囊
-            if (!isCurrentMonthToday || _selectedDate?.day != DateTime.now().day)
-              Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: GestureDetector(
-                  onTap: _jumpToToday,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: AppThemeColors.babyPink.withValues(alpha: 0.18),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      '今天',
-                      style: TextStyle(
-                        color: AppThemeColors.babyPink,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
+        child: ListenableBuilder(
+          listenable: GlassAppearanceService.instance,
+          builder: (context, rowChild) {
+            final glass = GlassAppearanceService.instance;
+            final effectiveSettings = glass.applyToSettings(
+              baseHeaderSettings,
+              isDark: isDark,
+            );
+            if (glass.isGlassOpaque) {
+              return ClipRSuperellipse(
+                borderRadius: SquircleGeometry.smoothRadius(20),
+                child: Container(
+                  padding: headerPadding,
+                  color: effectiveSettings.glassColor,
+                  child: rowChild,
                 ),
-              ),
-
-            // 月/周切换胶囊
-            GestureDetector(
-              onTap: _toggleViewMode,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      AppThemeColors.babyPink,
-                      AppThemeColors.softCoral,
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(14),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppThemeColors.babyPink.withValues(alpha: 0.25),
-                      blurRadius: 6,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      _isMonthView
-                          ? CupertinoIcons.rectangle_grid_1x2
-                          : CupertinoIcons.calendar,
-                      size: 13,
-                      color: Colors.white,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      _isMonthView ? '收起' : '展开',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
+              );
+            }
+            return GlassContainer(
+              useOwnLayer: true,
+              clipBehavior: Clip.antiAlias,
+              shape: const LiquidRoundedSuperellipse(borderRadius: 20),
+              quality: theme.ThemeService().glassQuality,
+              padding: headerPadding,
+              settings: effectiveSettings,
+              child: rowChild!,
+            );
+          },
+          child: headerRow,
         ),
-      ),
       ),
     );
   }

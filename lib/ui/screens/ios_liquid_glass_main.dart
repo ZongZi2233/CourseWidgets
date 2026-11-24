@@ -8,6 +8,8 @@ import '../../constants/theme_constants.dart';
 import 'dart:ui';
 
 import '../../utils/responsive_utils.dart';
+import '../../services/glass_appearance_service.dart';
+import '../../services/theme_service.dart' as theme;
 import 'course_edit_screen.dart';
 import 'calendar_view_screen.dart';
 import 'settings_main_screen.dart';
@@ -142,33 +144,44 @@ class _IosLiquidGlassMainState extends State<IosLiquidGlassMain> {
         ],
       ),
       bottomNavigationBar: RepaintBoundary(
-        child: GlassTabBar.bottom(
-          selectedIndex: _currentIndex,
-          onTabSelected: (index) {
-            HapticFeedback.selectionClick();
-            setState(() => _currentIndex = index);
+        child: ListenableBuilder(
+          listenable: GlassAppearanceService.instance,
+          builder: (context, _) {
+            final isDark = Theme.of(context).brightness == Brightness.dark;
+            final barSettings = GlassAppearanceService.instance.applyToSettings(
+              const LiquidGlassSettings(
+                blur: 3.0,
+                thickness: 30.0,
+                refractiveIndex: 1.59,
+                glassColor: Color(0x18FFFFFF),
+              ),
+              isDark: isDark,
+            );
+            return GlassTabBar.bottom(
+              selectedIndex: _currentIndex,
+              onTabSelected: (index) {
+                HapticFeedback.selectionClick();
+                setState(() => _currentIndex = index);
+              },
+              quality: theme.ThemeService().glassQuality,
+              settings: barSettings,
+              indicatorColor: AppThemeColors.babyPink.withValues(alpha: 0.3),
+              tabs: const [
+                GlassTab(
+                  icon: Icon(CupertinoIcons.square_grid_2x2_fill),
+                  label: '课程',
+                ),
+                GlassTab(
+                  icon: Icon(CupertinoIcons.calendar),
+                  label: '日历',
+                ),
+                GlassTab(
+                  icon: Icon(CupertinoIcons.settings_solid),
+                  label: '设置',
+                ),
+              ],
+            );
           },
-          quality: GlassQuality.premium,
-          settings: const LiquidGlassSettings(
-            blur: 3.0,
-            thickness: 30.0,
-            refractiveIndex: 1.59,
-          ),
-          indicatorColor: AppThemeColors.babyPink.withValues(alpha: 0.3),
-          tabs: const [
-            GlassTab(
-              icon: Icon(CupertinoIcons.square_grid_2x2_fill),
-              label: '课程',
-            ),
-            GlassTab(
-              icon: Icon(CupertinoIcons.calendar),
-              label: '日历',
-            ),
-            GlassTab(
-              icon: Icon(CupertinoIcons.settings_solid),
-              label: '设置',
-            ),
-          ],
         ),
       ),
     );
@@ -181,6 +194,7 @@ class _IosLiquidGlassMainState extends State<IosLiquidGlassMain> {
   }
 
   Widget _buildWeekAndDaySelectorWrapper() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Consumer<ScheduleProvider>(
       builder: (context, provider, _) => Container(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
@@ -188,74 +202,88 @@ class _IosLiquidGlassMainState extends State<IosLiquidGlassMain> {
           mainAxisSize: MainAxisSize.min,
           children: [
             RepaintBoundary(
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(24),
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-                  child: Container(
+              child: ListenableBuilder(
+                listenable: GlassAppearanceService.instance,
+                builder: (context, weekListChild) {
+                  final glass = GlassAppearanceService.instance;
+                  final sigma = glass.resolveGlassBlur(8.0);
+                  final bg = glass.resolveGlassColor(
+                    baseColor: isDark
+                        ? Colors.black.withValues(alpha: 0.25)
+                        : Colors.white.withValues(alpha: 0.28),
+                    isDark: isDark,
+                  );
+                  final box = Container(
                     padding: const EdgeInsets.symmetric(
                       vertical: 8,
                       horizontal: 4,
                     ),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.15),
-                    ),
-                    child: SizedBox(
-                      height: 44,
-                      child: ListView.builder(
-                        scrollDirection: Axis.horizontal,
-                        itemCount: provider.availableWeeks.length,
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        itemBuilder: (context, index) {
-                          final week = provider.availableWeeks[index];
-                          final isSelected = week == provider.currentWeek;
-                          final isCurrent =
-                              week ==
-                              provider.currentWeek; // simplified for now
+                    decoration: BoxDecoration(color: bg),
+                    child: weekListChild,
+                  );
+                  return ClipRRect(
+                    borderRadius: BorderRadius.circular(24),
+                    child: (!glass.isGlassOpaque && sigma > 0.05)
+                        ? BackdropFilter(
+                            filter: ImageFilter.blur(
+                              sigmaX: sigma,
+                              sigmaY: sigma,
+                            ),
+                            child: box,
+                          )
+                        : box,
+                  );
+                },
+                child: SizedBox(
+                  height: 44,
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: provider.availableWeeks.length,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    itemBuilder: (context, index) {
+                      final week = provider.availableWeeks[index];
+                      final isSelected = week == provider.currentWeek;
+                      final isCurrent = week == provider.currentWeek;
 
-                          return GestureDetector(
-                            onTap: () {
-                              HapticFeedback.selectionClick();
-                              provider.setCurrentWeek(week);
-                            },
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 200),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                              ),
-                              margin: const EdgeInsets.only(right: 8),
-                              decoration: BoxDecoration(
+                      return GestureDetector(
+                        onTap: () {
+                          HapticFeedback.selectionClick();
+                          provider.setCurrentWeek(week);
+                        },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          margin: const EdgeInsets.only(right: 8),
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? AppThemeColors.babyPink
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(16),
+                            border: isCurrent && !isSelected
+                                ? Border.all(
+                                    color: AppThemeColors.babyPink
+                                        .withValues(alpha: 0.5),
+                                    width: 1,
+                                  )
+                                : null,
+                          ),
+                          child: Center(
+                            child: Text(
+                              '第$week周',
+                              style: TextStyle(
                                 color: isSelected
-                                    ? AppThemeColors.babyPink
-                                    : Colors.transparent,
-                                borderRadius: BorderRadius.circular(16),
-                                border: isCurrent && !isSelected
-                                    ? Border.all(
-                                        color: AppThemeColors.babyPink
-                                            .withValues(alpha: 0.5),
-                                        width: 1,
-                                      )
-                                    : null,
-                              ),
-                              child: Center(
-                                child: Text(
-                                  '第$week周',
-                                  style: TextStyle(
-                                    color: isSelected
-                                        ? Colors.white
-                                        : Colors.white70,
-                                    fontWeight: isSelected
-                                        ? FontWeight.bold
-                                        : FontWeight.normal,
-                                    fontSize: 14,
-                                  ),
-                                ),
+                                    ? Colors.white
+                                    : (isDark ? Colors.white70 : Colors.black87),
+                                fontWeight: isSelected
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
+                                fontSize: 14,
                               ),
                             ),
-                          );
-                        },
-                      ),
-                    ),
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ),
               ),
@@ -346,10 +374,56 @@ class _IosLiquidGlassMainState extends State<IosLiquidGlassMain> {
 
   Widget _buildDynamicHeader(String title, int index) {
     final topPadding = MediaQuery.of(context).padding.top;
-    return ClipRect(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-        child: Container(
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final headerContent = Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          title,
+          style: TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
+            color: (GlassAppearanceService.instance.isGlassOpaque && !isDark)
+                ? const Color(0xFF1E2129)
+                : Colors.white,
+            letterSpacing: 0.5,
+          ),
+        ),
+        if (index == 0)
+          GestureDetector(
+            onTap: () {
+              HapticFeedback.lightImpact();
+              _showAddCourseMenu(context);
+            },
+            child: Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: AppThemeColors.babyPink.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                CupertinoIcons.add,
+                color: Colors.white,
+                size: 20,
+              ),
+            ),
+          ),
+      ],
+    );
+
+    return ListenableBuilder(
+      listenable: GlassAppearanceService.instance,
+      builder: (context, rowChild) {
+        final glass = GlassAppearanceService.instance;
+        final sigma = glass.resolveGlassBlur(20.0);
+        final bg = glass.resolveGlassColor(
+          baseColor: isDark
+              ? Colors.black.withValues(alpha: 0.18)
+              : Colors.white.withValues(alpha: 0.25),
+          isDark: isDark,
+        );
+        final container = Container(
           padding: EdgeInsets.only(
             top: topPadding + 10,
             bottom: 10,
@@ -357,7 +431,7 @@ class _IosLiquidGlassMainState extends State<IosLiquidGlassMain> {
             right: 20,
           ),
           decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.1),
+            color: bg,
             border: Border(
               bottom: BorderSide(
                 color: Colors.white.withValues(alpha: 0.05),
@@ -365,42 +439,19 @@ class _IosLiquidGlassMainState extends State<IosLiquidGlassMain> {
               ),
             ),
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                  letterSpacing: 0.5,
-                ),
-              ),
-              if (index == 0)
-                GestureDetector(
-                  onTap: () {
-                    HapticFeedback.lightImpact();
-                    _showAddCourseMenu(context);
-                  },
-                  child: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: AppThemeColors.babyPink.withValues(alpha: 0.5),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(
-                      CupertinoIcons.add,
-                      color: Colors.white,
-                      size: 20,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
+          child: rowChild,
+        );
+
+        return ClipRect(
+          child: (!glass.isGlassOpaque && sigma > 0.05)
+              ? BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
+                  child: container,
+                )
+              : container,
+        );
+      },
+      child: headerContent,
     );
   }
 
@@ -535,87 +586,32 @@ class _IosLiquidGlassMainState extends State<IosLiquidGlassMain> {
   }
 
   void _showImportDialog(BuildContext context) {
-    showDialog(
+    liquid.LiquidGlassDialog.show(
       context: context,
-      builder: (context) => liquid.LiquidCard(
-        borderRadius: 24,
-        padding: 0,
-        child: Container(
-          width: 300,
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: const Color(0xFF2C2C2C),
-            borderRadius: BorderRadius.circular(24),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                CupertinoIcons.doc_text_search,
-                size: 48,
-                color: AppThemeColors.babyPink,
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                '导入提示',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                '教务系统导入功能需要特定适配，请选择对应的学校模板进行导入。',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white70, fontSize: 14),
-              ),
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextButton(
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text(
-                        '取消',
-                        style: TextStyle(color: Colors.white54),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppThemeColors.babyPink,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      onPressed: () {
-                        Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('敬请期待：正在适配各大高校...'),
-                            backgroundColor: Color(0xFF333333),
-                          ),
-                        );
-                      },
-                      child: const Text('确定'),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
+      title: '导入提示',
+      content: const Text(
+        '教务系统导入功能需要特定适配，请选择对应的学校模板进行导入。',
+        textAlign: TextAlign.center,
       ),
+      actions: [
+        GlassDialogAction(
+          label: '取消',
+          onPressed: () => Navigator.of(context, rootNavigator: true).pop(),
+        ),
+        GlassDialogAction(
+          label: '确定',
+          isPrimary: true,
+          onPressed: () {
+            Navigator.of(context, rootNavigator: true).pop();
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('敬请期待：正在适配各大高校...'),
+                backgroundColor: Color(0xFF333333),
+              ),
+            );
+          },
+        ),
+      ],
     );
   }
 }

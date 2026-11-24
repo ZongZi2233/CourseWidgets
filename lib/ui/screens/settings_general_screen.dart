@@ -156,6 +156,67 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
   }
 
   void _showThemeModeBottomSheet() {
+    final isDark = _isDarkMode;
+    final sheetContent = SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Text(
+              '主题色设置',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: _textColor,
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Column(
+              children: [
+                _buildThemeModeOption(
+                  theme.ThemeMode.defaultMode,
+                  '默认主题',
+                  '使用应用默认的嫩粉色主题',
+                  CupertinoIcons.paintbrush,
+                ),
+                const SizedBox(height: 12),
+                if (Platform.isAndroid || Platform.isWindows) ...[
+                  _buildThemeModeOption(
+                    theme.ThemeMode.system,
+                    '系统主题',
+                    Platform.isWindows
+                        ? '跟随 Windows 系统强调色'
+                        : 'Android 12+ Material You 动态颜色',
+                    Platform.isWindows
+                        ? CupertinoIcons.desktopcomputer
+                        : CupertinoIcons.device_phone_portrait,
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                _buildThemeModeOption(
+                  theme.ThemeMode.monet,
+                  '莫奈取色',
+                  '从背景图片提取主题色',
+                  CupertinoIcons.photo,
+                ),
+                const SizedBox(height: 12),
+                _buildThemeModeOption(
+                  theme.ThemeMode.custom,
+                  '自定义主题色',
+                  '选择你喜欢的任意颜色',
+                  CupertinoIcons.color_filter,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+        ],
+      ),
+    );
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -163,68 +224,28 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
       enableDrag: true,
       showDragHandle: false,
       isScrollControlled: true,
-      builder: (BuildContext context) => RepaintBoundary(
-        child: GlassSheet(
-          settings: GlassSettingsHelper.getDialogSettings(),
-          child: SafeArea(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Text(
-                    '主题色设置',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: _textColor,
-                    ),
-                  ),
+      builder: (BuildContext sheetContext) => RepaintBoundary(
+        child: ListenableBuilder(
+          listenable: GlassAppearanceService.instance,
+          builder: (context, child) {
+            final glass = GlassAppearanceService.instance;
+            if (glass.isGlassOpaque) {
+              return ClipRSuperellipse(
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(28),
                 ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Column(
-                    children: [
-                      _buildThemeModeOption(
-                        theme.ThemeMode.defaultMode,
-                        '默认主题',
-                        '使用应用默认的嫩粉色主题',
-                        CupertinoIcons.paintbrush,
-                      ),
-                      const SizedBox(height: 12),
-                      if (Platform.isAndroid || Platform.isWindows) ...[
-                        _buildThemeModeOption(
-                          theme.ThemeMode.system,
-                          '系统主题',
-                          Platform.isWindows
-                              ? '跟随 Windows 系统强调色'
-                              : 'Android 12+ Material You 动态颜色',
-                          Platform.isWindows
-                              ? CupertinoIcons.desktopcomputer
-                              : CupertinoIcons.device_phone_portrait,
-                        ),
-                        const SizedBox(height: 12),
-                      ],
-                      _buildThemeModeOption(
-                        theme.ThemeMode.monet,
-                        '莫奈取色',
-                        '从背景图片提取主题色',
-                        CupertinoIcons.photo,
-                      ),
-                      const SizedBox(height: 12),
-                      _buildThemeModeOption(
-                        theme.ThemeMode.custom,
-                        '自定义主题色',
-                        '选择你喜欢的任意颜色',
-                        CupertinoIcons.color_filter,
-                      ),
-                    ],
-                  ),
+                child: Container(
+                  color: glass.defaultOpaqueSurfaceColor(isDark),
+                  child: child,
                 ),
-                const SizedBox(height: 20),
-              ],
-            ),
-          ),
+              );
+            }
+            return GlassSheet(
+              settings: GlassSettingsHelper.getDialogSettings(),
+              child: child!,
+            );
+          },
+          child: sheetContent,
         ),
       ),
     );
@@ -369,9 +390,10 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
       backgroundColor: Colors.transparent,
       body: Stack(
         children: [
-          // 1. 全出血自由滑动内容区：穿透顶栏与状态栏，消除截断，满帧 120 FPS
+          // 1. 全出血自由滑动内容区：独立 RepaintBoundary 隔离重绘，满帧 120 FPS
           Positioned.fill(
-            child: AdaptiveSmoothScroll(
+            child: RepaintBoundary(
+              child: AdaptiveSmoothScroll(
               durationMS: 250,
               scrollSpeed: 1.2,
               builder: (context, controller, physics) => SingleChildScrollView(
@@ -614,6 +636,7 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
                   ),
                 ),
               ),
+            ),
             ),
           ),
 

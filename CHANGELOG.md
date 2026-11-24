@@ -2,6 +2,19 @@
 
 本文档记录 CourseWidgets 各版本更新的动态活动演进，重点关注架构改进、渲染优化、故障诊断与教务抓取能力提升。
 
+## [v3.2.5] - 2026-11-25 (Build 3250 · Phase 2 全量收官与课时配置 120Hz 根治提交版，暂未构建发行包)
+
+### 1. 根治课时配置页与通知设置页 120Hz 滚动掉帧，并恢复顶部液态玻璃「保存」按钮
+- **定位并清除全屏离屏模糊拷贝元凶 (`android_schedule_config_screen.dart`、`settings_notification_screen.dart` & `liquid_components.dart`)**：此前上述两页是全库唯一将整块可滚动 `Scaffold.body` 包裹在 `BackdropGroup(...)` 内的页面，导致顶部使用 `BackdropFilter.grouped` 的胶囊在每次 120Hz 滚动帧都强制 Impeller 执行整屏尺寸（`1200×2600px`）背景回读与全屏高斯模糊，引发剧烈掉帧（与主页大量玻璃控件无任何掉帧的原因完全一致）：
+  - 移除 `AndroidScheduleConfigScreen` 与 `SettingsNotificationScreen` 的全屏 `BackdropGroup` 包裹，`FloatingGlassHeaderButton` 改用局部尺寸 `BackdropFilter`；
+  - 将 `AndroidScheduleConfigScreen` 主内容区重构为独立 `RepaintBoundary` 隔离的 `SingleChildScrollView`，在固定 5 张 `HyperOSCard` 场景下彻底避免滚动甩动时 `SliverList` 重建与整页重绘扩散；同步为 `SettingsGeneralScreen` 补充滚动层 `RepaintBoundary` 隔离；
+  - **恢复真实液态玻璃「保存」按钮**：`AndroidScheduleConfigScreen` 顶部右上角「保存」按钮回归 `GlassButton.custom` 实时液态玻璃质感并完整绑定 `GlassAppearanceService`（玻璃全不透明时自动直出实体超椭圆容器）；
+  - **优化 `HyperOSCard` / `_RenderSharedBlurStencil` 绘制路径**：为 `HyperOSShadows.card` 引入常量阴影列表消除无意义重建标识变更，预缓存阴影 `Paint` 与 `_sheenColor` 亮度计算以实现 `paint()` 零分配，并将采样防抖阈值提升至 `3.0dp`。
+
+### 2. 全应用玻璃白值与模糊统一控制体系（Phase 2 全量收官）
+- **核心活跃界面与弹窗抽屉**：完成日历视图顶部玻璃栏（`CalendarViewScreen`）、课表网格周次控制条 / 日期角标 / 课程详情弹窗（`WeeklyScheduleGrid`）、日期/星期/日历三大选择器弹窗（`liquid_glass_pickers.dart`，弹窗壳体联动 `glassOpacity` + `glassBlur` 且全屏幕布模糊严格独立绑定 `globalUiBlur`）、课时「智慧推算」底部抽屉（`AndroidScheduleConfigScreen`）、通用设置主题模式抽屉（`SettingsGeneralScreen`）以及 WebView 教务导入弹窗与检索抽屉（`WebviewImportScreen`）的全面迁移与不透明直出优化；
+- **全平台、引导页与管线基础设施收口**：完成平板侧边栏（`TabletSideBar`）、iOS 主窗体（`IosLiquidGlassMain`）、macOS 主窗体（`MacosCustomWindow`）、4 个引导页（`onboarding_welcome`/`theme`/`import`/`config`）、旧版桌面课时设置页（`ScheduleConfigScreen`）及运行期离屏 PSO 预热器（`RenderPipelinePrewarmer`）迁移；并删除 `acrylic_backdrop_plate.dart`、`unified_backdrop_panel.dart` 与 `page_blur_controller.dart` 三份零引用遗留文件，更新全量建档清单（[`docs/GLASS_COMPONENTS_INVENTORY.md`](./docs/GLASS_COMPONENTS_INVENTORY.md)）至 Phase 2 100% 完成态。
+
 ## [v3.2.4] - 2026-11-25 (Build 3240 · Phase 1 代码与建档提交版，暂未构建发行包)
 
 ### 1. 全应用玻璃白值与全局界面高斯模糊统一控制体系（Phase 1）

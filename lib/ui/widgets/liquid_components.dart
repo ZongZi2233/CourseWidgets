@@ -1367,7 +1367,7 @@ class FloatingGlassHeaderButton extends StatelessWidget {
             return ClipRSuperellipse(
               borderRadius: SquircleGeometry.smoothRadius(22),
               child: useBlur
-                  ? BackdropFilter.grouped(
+                  ? BackdropFilter(
                       filter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
                       child: container,
                     )
@@ -1485,39 +1485,48 @@ class HyperOSShadows {
     return isDark ? _navDarkSolid : _navLightSolid;
   }
 
+  static const List<BoxShadow> _cardLight = [
+    BoxShadow(
+      color: Color(0x0F000000),
+      blurRadius: 14.0,
+      spreadRadius: -1.0,
+      offset: Offset(0, 3.5),
+    ),
+  ];
+
+  static const List<BoxShadow> _cardDark = [
+    BoxShadow(
+      color: Color(0x52000000),
+      blurRadius: 18.0,
+      spreadRadius: -2.0,
+      offset: Offset(0, 5.0),
+    ),
+  ];
+
   static List<BoxShadow> card(bool isDark, {Color? glowColor}) {
+    if (glowColor == null) {
+      return isDark ? _cardDark : _cardLight;
+    }
     if (!isDark) {
       return [
+        ..._cardLight,
         BoxShadow(
-          color: Colors.black.withValues(alpha: 0.06),
-          blurRadius: 14.0,
+          color: glowColor.withValues(alpha: 0.14),
+          blurRadius: 12.0,
           spreadRadius: -1.0,
-          offset: const Offset(0, 3.5),
+          offset: const Offset(0, 2),
         ),
-        if (glowColor != null)
-          BoxShadow(
-            color: glowColor.withValues(alpha: 0.14),
-            blurRadius: 12.0,
-            spreadRadius: -1.0,
-            offset: const Offset(0, 2),
-          ),
       ];
     }
 
     return [
+      ..._cardDark,
       BoxShadow(
-        color: Colors.black.withValues(alpha: 0.32),
-        blurRadius: 18.0,
-        spreadRadius: -2.0,
-        offset: const Offset(0, 5),
+        color: glowColor.withValues(alpha: 0.22),
+        blurRadius: 12.0,
+        spreadRadius: -1.0,
+        offset: const Offset(0, 2.5),
       ),
-      if (glowColor != null)
-        BoxShadow(
-          color: glowColor.withValues(alpha: 0.22),
-          blurRadius: 12.0,
-          spreadRadius: -1.0,
-          offset: const Offset(0, 2.5),
-        ),
     ];
   }
 
@@ -1807,6 +1816,8 @@ class _RenderSharedBlurStencil extends RenderProxyBox {
     ..isAntiAlias = true
     ..style = PaintingStyle.stroke
     ..strokeWidth = 0.6;
+  List<Paint> _shadowPaints = const [];
+  Color _sheenColor = const Color(0x28FFFFFF);
   double _lastScrollPixels = double.nan;
 
   _RenderSharedBlurStencil({
@@ -1819,6 +1830,17 @@ class _RenderSharedBlurStencil extends RenderProxyBox {
     this.scrollPosition,
   }) {
     _bgPaint.color = backgroundColor;
+    _rebuildCachedPaints();
+  }
+
+  void _rebuildCachedPaints() {
+    _shadowPaints = shadows.isEmpty
+        ? const []
+        : List<Paint>.unmodifiable(shadows.map((s) => s.toPaint()));
+    _sheenColor = backgroundColor.computeLuminance() < 0.5
+        ? const Color(0x18FFFFFF)
+        : const Color(0x28FFFFFF);
+    _sheenPaint.color = _sheenColor;
   }
 
   @override
@@ -1836,7 +1858,7 @@ class _RenderSharedBlurStencil extends RenderProxyBox {
   void _onScroll() {
     if (blurredImage == null || !attached) return;
     final currentPixels = scrollPosition?.pixels ?? 0.0;
-    if ((currentPixels - _lastScrollPixels).abs() < 1.5) return;
+    if ((currentPixels - _lastScrollPixels).abs() < 3.0) return;
     _lastScrollPixels = currentPixels;
     markNeedsPaint();
   }
@@ -1851,12 +1873,14 @@ class _RenderSharedBlurStencil extends RenderProxyBox {
     ScrollPosition? scrollPosition,
   }) {
     bool needsRepaint = false;
+    final colorChanged = this.backgroundColor != backgroundColor;
+    final shadowsChanged = this.shadows != shadows;
     if (this.blurredImage != blurredImage ||
         this.screenSize != screenSize ||
-        this.backgroundColor != backgroundColor ||
+        colorChanged ||
         this.cornerRadius != cornerRadius ||
         this.shape != shape ||
-        this.shadows != shadows) {
+        shadowsChanged) {
       this.blurredImage = blurredImage;
       this.screenSize = screenSize;
       this.backgroundColor = backgroundColor;
@@ -1864,6 +1888,9 @@ class _RenderSharedBlurStencil extends RenderProxyBox {
       this.shape = shape;
       this.shadows = shadows;
       _bgPaint.color = backgroundColor;
+      if (colorChanged || shadowsChanged) {
+        _rebuildCachedPaints();
+      }
       needsRepaint = true;
     }
 
@@ -1936,7 +1963,7 @@ class _RenderSharedBlurStencil extends RenderProxyBox {
     //    比 PathFillType.evenOdd + clipPath 快 10 倍以上！
     //    当存在静态模糊壁纸采样 (blurredImage != null) 时，卡片内部紧接着会被 100% 不透明的
     //    壁纸模糊纹理完全覆盖，因此根本不需要昂贵的逆向 Path 裁剪；仅在无壁纸纯色半透模式下保留逆向裁剪。
-    if (shadows.isNotEmpty) {
+    if (_shadowPaints.isNotEmpty) {
       final bool needsInverseClip =
           blurredImage == null && backgroundColor.a < 0.99;
       if (needsInverseClip) {
@@ -1947,20 +1974,22 @@ class _RenderSharedBlurStencil extends RenderProxyBox {
           ..addPath(path, Offset.zero);
         canvas.save();
         canvas.clipPath(invPath);
-        for (final s in shadows) {
+        for (int i = 0; i < shadows.length; i++) {
+          final s = shadows[i];
           final shadowRect = rect.shift(s.offset).inflate(s.spreadRadius);
           canvas.drawRSuperellipse(
             RSuperellipse.fromRectAndRadius(shadowRect, radius),
-            s.toPaint(),
+            _shadowPaints[i],
           );
         }
         canvas.restore();
       } else {
-        for (final s in shadows) {
+        for (int i = 0; i < shadows.length; i++) {
+          final s = shadows[i];
           final shadowRect = rect.shift(s.offset).inflate(s.spreadRadius);
           canvas.drawRSuperellipse(
             RSuperellipse.fromRectAndRadius(shadowRect, radius),
-            s.toPaint(),
+            _shadowPaints[i],
           );
         }
       }
@@ -2050,9 +2079,6 @@ class _RenderSharedBlurStencil extends RenderProxyBox {
     if (shape is OutlinedBorder && (shape as OutlinedBorder).side != BorderSide.none) {
       shape.paint(canvas, rect);
     } else {
-      _sheenPaint.color = backgroundColor.computeLuminance() < 0.5
-          ? const Color(0x18FFFFFF)
-          : const Color(0x28FFFFFF);
       canvas.drawRSuperellipse(rsuperellipse, _sheenPaint);
     }
 

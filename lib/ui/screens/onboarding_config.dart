@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
+import '../../services/glass_appearance_service.dart';
 import '../../services/theme_service.dart';
 import '../../utils/glass_settings_helper.dart';
 import '../widgets/liquid_components.dart' as liquid;
@@ -105,19 +106,30 @@ class _OnboardingConfigState extends State<OnboardingConfig> {
                 top: false,
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
-                  child: AdaptiveLiquidGlassLayer(
-                    quality: GlassQuality.premium,
-                    settings: const LiquidGlassSettings(
-                      blur: 3.0,
-                      thickness: 16.0,
-                      glassColor: Color(0x18FFFFFF),
-                      lightIntensity: 0.70,
-                      ambientStrength: 0.45,
-                      ambientRim: 0.0,
-                      fresnelStrength: 0.05,
-                      saturation: 1.20,
-                      refractiveIndex: 1.40,
-                    ),
+                  child: ListenableBuilder(
+                    listenable: GlassAppearanceService.instance,
+                    builder: (context, navRow) {
+                      final layerSettings =
+                          GlassAppearanceService.instance.applyToSettings(
+                        const LiquidGlassSettings(
+                          blur: 3.0,
+                          thickness: 16.0,
+                          glassColor: Color(0x18FFFFFF),
+                          lightIntensity: 0.70,
+                          ambientStrength: 0.45,
+                          ambientRim: 0.0,
+                          fresnelStrength: 0.05,
+                          saturation: 1.20,
+                          refractiveIndex: 1.40,
+                        ),
+                        isDark: isDark,
+                      );
+                      return AdaptiveLiquidGlassLayer(
+                        quality: ThemeService().glassQuality,
+                        settings: layerSettings,
+                        child: navRow!,
+                      );
+                    },
                     child: Row(
                       children: [
                         Expanded(

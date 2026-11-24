@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:ui' as ui;
 import 'package:flutter/widgets.dart';
+import 'glass_appearance_service.dart';
 
 /// [v3.2.3] 离屏 GPU 渲染管线与着色器 PSO 预热器
 ///
@@ -64,7 +65,13 @@ class RenderPipelinePrewarmer {
         canvas.drawRSuperellipse(rsuperellipse, shadowPaint);
       } catch (_) {}
 
-      // 2. 预热超椭圆裁切 + 弹窗背景遮罩模糊管线 (sigma 6.5) + 玻璃主体高模糊管线 (sigma 22.0)
+      final glass = GlassAppearanceService.instance;
+      final scrimSigma = glass.resolveGlobalUiBlur(6.5);
+      final glassSigma = glass.resolveGlassBlur(22.0);
+      final shouldWarmGlassBlur =
+          glass.shouldRenderGlassBlur && glassSigma > 0.05;
+
+      // 2. 预热超椭圆裁切 + 弹窗背景遮罩模糊管线 (scrimSigma) + 可选玻璃主体高模糊管线 (glassSigma)
       canvas.save();
       try {
         canvas.clipRSuperellipse(rsuperellipse);
@@ -74,7 +81,8 @@ class RenderPipelinePrewarmer {
         canvas.saveLayer(
           rect,
           ui.Paint()
-            ..imageFilter = ui.ImageFilter.blur(sigmaX: 6.5, sigmaY: 6.5),
+            ..imageFilter =
+                ui.ImageFilter.blur(sigmaX: scrimSigma, sigmaY: scrimSigma),
         );
         canvas.drawRect(
           rect,
@@ -83,23 +91,33 @@ class RenderPipelinePrewarmer {
         canvas.restore();
       } catch (_) {}
 
-      try {
-        canvas.saveLayer(
-          rect,
-          ui.Paint()
-            ..imageFilter = ui.ImageFilter.blur(sigmaX: 22.0, sigmaY: 22.0),
-        );
-        // 3. 预热渐变玻璃填色、高光细描边与混合模式管线
-        final gradientPaint = ui.Paint()
-          ..blendMode = ui.BlendMode.srcOver
-          ..shader = ui.Gradient.linear(
-            ui.Offset.zero,
-            const ui.Offset(64, 64),
-            const [ui.Color(0xB8FFFFFF), ui.Color(0x88E8EEF9)],
+      if (shouldWarmGlassBlur) {
+        try {
+          canvas.saveLayer(
+            rect,
+            ui.Paint()
+              ..imageFilter = ui.ImageFilter.blur(
+                sigmaX: glassSigma,
+                sigmaY: glassSigma,
+              ),
           );
-        canvas.drawRSuperellipse(rsuperellipse, gradientPaint);
-        canvas.restore();
-      } catch (_) {}
+          // 3. 预热渐变玻璃填色、高光细描边与混合模式管线
+          final gradientPaint = ui.Paint()
+            ..blendMode = ui.BlendMode.srcOver
+            ..shader = ui.Gradient.linear(
+              ui.Offset.zero,
+              const ui.Offset(64, 64),
+              const [ui.Color(0xB8FFFFFF), ui.Color(0x88E8EEF9)],
+            );
+          canvas.drawRSuperellipse(rsuperellipse, gradientPaint);
+          canvas.restore();
+        } catch (_) {}
+      } else {
+        try {
+          final opaquePaint = ui.Paint()..color = const ui.Color(0xFFF6F8FC);
+          canvas.drawRSuperellipse(rsuperellipse, opaquePaint);
+        } catch (_) {}
+      }
 
       // 4. 预热 ColorFilter + 超椭圆细描边高光管线
       try {

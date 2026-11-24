@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui' show ImageFilter;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -17,6 +18,7 @@ import '../../providers/schedule_provider.dart';
 import '../../services/app_logger.dart';
 import '../../services/edu_schedule_extractor.dart';
 import '../../services/educational_portal_registry.dart';
+import '../../services/glass_appearance_service.dart';
 import '../../utils/glass_settings_helper.dart';
 import '../widgets/liquid_components.dart' as liquid;
 import '../widgets/liquid_toast.dart';
@@ -793,13 +795,13 @@ class _WebviewImportScreenState extends State<WebviewImportScreen> {
     final shortcut = _resolveActiveShortcut();
     final sysName = _detectedSystem?.displayName ?? '教务系统';
 
-    showDialog(
+    liquid.LiquidGlassDialog.show(
       context: context,
-      builder: (ctx) => liquid.LiquidGlassDialog(
-        title: shortcut != null
-            ? '当前位于$sysName首页'
-            : (errorMsg != null ? '未检测到完整课表' : '已获取课表页面源码'),
-        content: Text(
+      title: shortcut != null
+          ? '当前位于$sysName首页'
+          : (errorMsg != null ? '未检测到完整课表' : '已获取课表页面源码'),
+      content: Builder(
+        builder: (ctx) => Text(
           shortcut != null
               ? '系统检测到您正在使用【$sysName】，但当前尚未进入学期课表页面。\n\n请点击下方【前往课表页】跳转，或手动打开个人课表后再点击右下角提取。'
               : (errorMsg != null
@@ -811,59 +813,59 @@ class _WebviewImportScreenState extends State<WebviewImportScreen> {
             height: 1.45,
           ),
         ),
-        actions: [
-          if (shortcut != null)
-            GlassDialogAction(
-              isPrimary: true,
-              onPressed: () {
-                Navigator.pop(ctx);
-                _navigateTo(shortcut.targetUrl);
-              },
-              label: '前往课表页',
-            ),
-          GlassDialogAction(
-            onPressed: () {
-              final fullReport = _generateDiagnosticText(
-                htmlData,
-                errorMsg: errorMsg,
-              );
-              Clipboard.setData(ClipboardData(text: fullReport));
-              LiquidToast.success(context, '诊断报告与源码已复制');
-            },
-            label: '复制源码与日志',
-          ),
-          GlassDialogAction(
-            onPressed: () => Navigator.pop(ctx),
-            label: '取消',
-          ),
-          if (shortcut == null)
-            GlassDialogAction(
-              isPrimary: true,
-              onPressed: () async {
-                Navigator.pop(ctx);
-                final provider = context.read<ScheduleProvider>();
-                final success = await provider.importHtmlDataFromString(htmlData);
-                if (success && mounted) {
-                  LiquidToast.success(context, '课表导入成功！');
-                  Navigator.pop(context);
-                } else if (mounted) {
-                  LiquidToast.error(context, '未能从当前源码识别出课程，请先进入学期课表页');
-                }
-              },
-              label: '尝试解析导入',
-            ),
-        ],
       ),
+      actions: [
+        if (shortcut != null)
+          GlassDialogAction(
+            isPrimary: true,
+            onPressed: () {
+              Navigator.of(context, rootNavigator: true).pop();
+              _navigateTo(shortcut.targetUrl);
+            },
+            label: '前往课表页',
+          ),
+        GlassDialogAction(
+          onPressed: () {
+            final fullReport = _generateDiagnosticText(
+              htmlData,
+              errorMsg: errorMsg,
+            );
+            Clipboard.setData(ClipboardData(text: fullReport));
+            LiquidToast.success(context, '诊断报告与源码已复制');
+          },
+          label: '复制源码与日志',
+        ),
+        GlassDialogAction(
+          onPressed: () => Navigator.of(context, rootNavigator: true).pop(),
+          label: '取消',
+        ),
+        if (shortcut == null)
+          GlassDialogAction(
+            isPrimary: true,
+            onPressed: () async {
+              Navigator.of(context, rootNavigator: true).pop();
+              final provider = context.read<ScheduleProvider>();
+              final success = await provider.importHtmlDataFromString(htmlData);
+              if (success && mounted) {
+                LiquidToast.success(context, '课表导入成功！');
+                Navigator.pop(context);
+              } else if (mounted) {
+                LiquidToast.error(context, '未能从当前源码识别出课程，请先进入学期课表页');
+              }
+            },
+            label: '尝试解析导入',
+          ),
+      ],
     );
   }
 
   void _showExtractionResult(int courseCount, String rawData) {
     final sysName = _detectedSystem?.displayName ?? '教务系统';
-    showDialog(
+    liquid.LiquidGlassDialog.show(
       context: context,
-      builder: (ctx) => liquid.LiquidGlassDialog(
-        title: '提取成功',
-        content: Text(
+      title: '提取成功',
+      content: Builder(
+        builder: (ctx) => Text(
           '已从【$sysName】识别并提取 $courseCount 条课程记录。\n确认导入并应用到当前课表吗？',
           style: TextStyle(
             color: GlassSettingsHelper.getSecondaryTextColor(ctx),
@@ -871,38 +873,38 @@ class _WebviewImportScreenState extends State<WebviewImportScreen> {
             height: 1.4,
           ),
         ),
-        actions: [
-          GlassDialogAction(
-            onPressed: () => Navigator.pop(ctx),
-            label: '取消',
-          ),
-          GlassDialogAction(
-            isPrimary: true,
-            onPressed: () async {
-              Navigator.pop(ctx);
-              try {
-                final Map<String, dynamic> extracted = jsonDecode(rawData);
-                final List coursesList = extracted['data'] as List;
-                final provider = context.read<ScheduleProvider>();
-                final bool success = await provider.importJsonData(coursesList);
-                if (success && mounted) {
-                  LiquidToast.success(context, '课表导入并保存成功！');
-                  Future.delayed(const Duration(milliseconds: 900), () {
-                    if (mounted) Navigator.pop(context);
-                  });
-                } else if (mounted) {
-                  LiquidToast.error(context, '导入课程失败，请重试');
-                }
-              } catch (e) {
-                if (mounted) {
-                  LiquidToast.error(context, '导入失败: $e');
-                }
-              }
-            },
-            label: '确认导入',
-          ),
-        ],
       ),
+      actions: [
+        GlassDialogAction(
+          onPressed: () => Navigator.of(context, rootNavigator: true).pop(),
+          label: '取消',
+        ),
+        GlassDialogAction(
+          isPrimary: true,
+          onPressed: () async {
+            Navigator.of(context, rootNavigator: true).pop();
+            try {
+              final Map<String, dynamic> extracted = jsonDecode(rawData);
+              final List coursesList = extracted['data'] as List;
+              final provider = context.read<ScheduleProvider>();
+              final bool success = await provider.importJsonData(coursesList);
+              if (success && mounted) {
+                LiquidToast.success(context, '课表导入并保存成功！');
+                Future.delayed(const Duration(milliseconds: 900), () {
+                  if (mounted) Navigator.pop(context);
+                });
+              } else if (mounted) {
+                LiquidToast.error(context, '导入课程失败，请重试');
+              }
+            } catch (e) {
+              if (mounted) {
+                LiquidToast.error(context, '导入失败: $e');
+              }
+            }
+          },
+          label: '确认导入',
+        ),
+      ],
     );
   }
 
@@ -1280,143 +1282,168 @@ class _PortalSearchSheetState extends State<_PortalSearchSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.75,
-      decoration: const BoxDecoration(
-        color: Color(0xFF1E1E1E),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      child: Column(
-        children: [
-          Container(
-            margin: const EdgeInsets.only(top: 12, bottom: 8),
-            width: 36,
-            height: 4,
-            decoration: BoxDecoration(
-              color: Colors.white24,
-              borderRadius: BorderRadius.circular(2),
-            ),
+    final sheetBody = Column(
+      children: [
+        Container(
+          margin: const EdgeInsets.only(top: 12, bottom: 8),
+          width: 36,
+          height: 4,
+          decoration: BoxDecoration(
+            color: Colors.white24,
+            borderRadius: BorderRadius.circular(2),
           ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
-              children: [
-                const Icon(
-                  CupertinoIcons.building_2_fill,
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            children: [
+              const Icon(
+                CupertinoIcons.building_2_fill,
+                color: Colors.white,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                '选择教务系统或高校',
+                style: TextStyle(
                   color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const Spacer(),
+              IconButton(
+                icon: const Icon(
+                  CupertinoIcons.xmark_circle_fill,
+                  color: Colors.white54,
                   size: 20,
                 ),
-                const SizedBox(width: 8),
-                const Text(
-                  '选择教务系统或高校',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const Spacer(),
-                IconButton(
-                  icon: const Icon(
-                    CupertinoIcons.xmark_circle_fill,
-                    color: Colors.white54,
-                    size: 20,
-                  ),
-                  onPressed: () => Navigator.pop(context),
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(14),
+                onPressed: () => Navigator.pop(context),
               ),
-              child: TextField(
-                controller: _searchCtrl,
-                style: const TextStyle(color: Colors.white, fontSize: 14),
-                decoration: const InputDecoration(
-                  icon: Icon(
-                    CupertinoIcons.search,
-                    color: Colors.white54,
-                    size: 16,
-                  ),
-                  hintText: '输入高校名称、系统或拼音 (如: pku, 清华, 强智, 正方)...',
-                  hintStyle: TextStyle(color: Colors.white38, fontSize: 13),
-                  border: InputBorder.none,
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: TextField(
+              controller: _searchCtrl,
+              style: const TextStyle(color: Colors.white, fontSize: 14),
+              decoration: const InputDecoration(
+                icon: Icon(
+                  CupertinoIcons.search,
+                  color: Colors.white54,
+                  size: 16,
                 ),
+                hintText: '输入高校名称、系统或拼音 (如: pku, 清华, 强智, 正方)...',
+                hintStyle: TextStyle(color: Colors.white38, fontSize: 13),
+                border: InputBorder.none,
               ),
             ),
           ),
-          const Divider(color: Colors.white12, height: 1),
-          Expanded(
-            child: _filtered.isEmpty
-                ? const Center(
-                    child: Text(
-                      '未找到匹配的高校或教务系统',
-                      style: TextStyle(color: Colors.white38),
-                    ),
-                  )
-                : ListView.builder(
-                    itemCount: _filtered.length,
-                    itemBuilder: (ctx, idx) {
-                      final item = _filtered[idx];
-                      return ListTile(
-                        title: Row(
-                          children: [
-                            Text(
-                              item.name,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w600,
-                              ),
+        ),
+        const Divider(color: Colors.white12, height: 1),
+        Expanded(
+          child: _filtered.isEmpty
+              ? const Center(
+                  child: Text(
+                    '未找到匹配的高校或教务系统',
+                    style: TextStyle(color: Colors.white38),
+                  ),
+                )
+              : ListView.builder(
+                  itemCount: _filtered.length,
+                  itemBuilder: (ctx, idx) {
+                    final item = _filtered[idx];
+                    return ListTile(
+                      title: Row(
+                        children: [
+                          Text(
+                            item.name,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
                             ),
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppThemeColors.babyPink.withValues(
-                                  alpha: 0.2,
-                                ),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text(
-                                item.systemType,
-                                style: TextStyle(
-                                  color: AppThemeColors.babyPink,
-                                  fontSize: 10,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        subtitle: Text(
-                          item.defaultUrl ?? item.hint,
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.5),
-                            fontSize: 11,
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppThemeColors.babyPink.withValues(
+                                alpha: 0.2,
+                              ),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              item.systemType,
+                              style: TextStyle(
+                                color: AppThemeColors.babyPink,
+                                fontSize: 10,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      subtitle: Text(
+                        item.defaultUrl ?? item.hint,
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.5),
+                          fontSize: 11,
                         ),
-                        trailing: const Icon(
-                          CupertinoIcons.chevron_right,
-                          color: Colors.white24,
-                          size: 14,
-                        ),
-                        onTap: () => widget.onSelect(item),
-                      );
-                    },
-                  ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      trailing: const Icon(
+                        CupertinoIcons.chevron_right,
+                        color: Colors.white24,
+                        size: 14,
+                      ),
+                      onTap: () => widget.onSelect(item),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+
+    return ListenableBuilder(
+      listenable: GlassAppearanceService.instance,
+      builder: (context, child) {
+        final glass = GlassAppearanceService.instance;
+        final sigma = glass.resolveGlassBlur(18.0);
+        final bgColor = glass.resolveGlassColor(
+          baseColor: const Color(0xCC181B24),
+          isDark: true,
+          opaqueColorOverride: const Color(0xFF181B24),
+        );
+        final sheetBox = Container(
+          height: MediaQuery.of(context).size.height * 0.75,
+          decoration: BoxDecoration(
+            color: bgColor,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
           ),
-        ],
-      ),
+          child: child,
+        );
+
+        return ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          child: (!glass.isGlassOpaque && sigma > 0.05)
+              ? BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
+                  child: sheetBox,
+                )
+              : sheetBox,
+        );
+      },
+      child: sheetBody,
     );
   }
 }

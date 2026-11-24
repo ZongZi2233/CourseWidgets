@@ -3,8 +3,8 @@ import '../main.dart' show globalDarkModeNotifier, globalBackgroundPath;
 export '../main.dart' show globalBackgroundPath;
 
 /// 当前版本：[v3.2.4 开发提交版] 统一玻璃白值/模糊控制 Phase 1、建档与增量/每日更新升级（Build 3240）
-const String appVersion = '3.2.4';
-const int buildNumber = 3240;
+const String appVersion = '3.2.5';
+const int buildNumber = 3250;
 const String copyright = 'Copyright © ZongZi';
 const String githubRepoUrl = 'https://github.com/ZongZi2233/CourseWidgets';
 

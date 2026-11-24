@@ -19,6 +19,7 @@ import '../transitions/smooth_slide_transitions.dart';
 import 'adaptive_smooth_scroll.dart';
 import '../animations/app_motion.dart';
 import '../../utils/responsive_utils.dart';
+import '../../services/glass_appearance_service.dart';
 import '../../services/theme_service.dart' as theme;
 
 /// [v3.2.3] 统一 SharedElement (ShareTransit) FlClash 磨砂玻璃周次选择弹窗
@@ -363,121 +364,204 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
 
   Widget _buildWeekControl(BuildContext context, ScheduleProvider provider, {required int week}) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final baseBtnSettings = LiquidGlassSettings(
+      glassColor: isDark
+          ? Colors.white.withValues(alpha: 0.08)
+          : Colors.white.withValues(alpha: 0.35),
+      blur: 0.5,
+      thickness: 14,
+      lightIntensity: 0.35,
+      ambientStrength: 0.20,
+      ambientRim: 0.0,
+      fresnelStrength: 0.0,
+      edgeAbsorption: 0.06,
+    );
+    final basePillSettings = LiquidGlassSettings(
+      glassColor: isDark
+          ? Colors.white.withValues(alpha: 0.12)
+          : Colors.white.withValues(alpha: 0.35),
+      blur: 0.5,
+      thickness: 16,
+      refractiveIndex: 1.40,
+      lightIntensity: 0.35,
+      ambientStrength: 0.20,
+      ambientRim: 0.0,
+      fresnelStrength: 0.0,
+      edgeAbsorption: 0.06,
+    );
+
+    final prevRow = Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(
+          CupertinoIcons.left_chevron,
+          color: isDark ? Colors.white70 : const Color(0xFF1E2128),
+          size: 14,
+        ),
+        const SizedBox(width: 4),
+        Text(
+          '上一周',
+          style: TextStyle(
+            color: isDark ? Colors.white70 : const Color(0xFF1E2128),
+            fontSize: 12,
+          ),
+        ),
+      ],
+    );
+    final weekPillRow = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          '第 $week 周',
+          style: TextStyle(
+            color: isDark ? Colors.white : const Color(0xFF1E2128),
+            fontSize: 15,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(width: 4),
+        Icon(
+          CupertinoIcons.chevron_down,
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.7)
+              : const Color(0xFF555B68),
+          size: 13,
+        ),
+      ],
+    );
+    final nextRow = Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Text(
+          '下一周',
+          style: TextStyle(
+            color: isDark ? Colors.white70 : const Color(0xFF1E2128),
+            fontSize: 12,
+          ),
+        ),
+        const SizedBox(width: 4),
+        Icon(
+          CupertinoIcons.right_chevron,
+          color: isDark ? Colors.white70 : const Color(0xFF1E2128),
+          size: 14,
+        ),
+      ],
+    );
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      child: GlassBackdropGroup(
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            SpringTouchFeedback(
-              onTap: () => _changeWeek(provider, week - 1),
-              child: GlassButton.custom(
-                onTap: () => _changeWeek(provider, week - 1),
-                width: 88,
-                height: 38,
-                style: GlassButtonStyle.filled,
-                settings: LiquidGlassSettings(
-                  glassColor: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.white.withValues(alpha: 0.35),
-                  blur: 0.5,
-                  thickness: 14,
-                  lightIntensity: 0.35,
-                  ambientStrength: 0.20,
-                  ambientRim: 0.0,
-                  fresnelStrength: 0.0,
-                  edgeAbsorption: 0.06,
-                ),
-                shape: const LiquidRoundedSuperellipse(borderRadius: 12),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(CupertinoIcons.left_chevron, color: isDark ? Colors.white70 : const Color(0xFF1E2128), size: 14),
-                    const SizedBox(width: 4),
-                    Text('上一周', style: TextStyle(color: isDark ? Colors.white70 : const Color(0xFF1E2128), fontSize: 12)),
-                  ],
-                ),
-              ),
-            ),
-            Builder(
-              builder: (pillCtx) => SpringTouchFeedback(
-                onTap: () {
-                  final pillRect = liquid.resolveOverlayLocalRect(pillCtx);
-                  _showWeekPicker(pillCtx, provider, sourceRect: pillRect);
-                },
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    borderRadius: SquircleGeometry.smoothRadius(14),
-                    boxShadow: liquid.HyperOSShadows.pill(isDark),
-                  ),
-                  child: GlassContainer(
-                    useOwnLayer: true,
-                    clipBehavior: Clip.antiAlias,
-                    shape: const LiquidRoundedSuperellipse(borderRadius: 14),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    settings: LiquidGlassSettings(
-                      glassColor: isDark ? Colors.white.withValues(alpha: 0.12) : Colors.white.withValues(alpha: 0.35),
-                      blur: 0.5,
-                      thickness: 16,
-                      refractiveIndex: 1.40,
-                      lightIntensity: 0.35,
-                      ambientStrength: 0.20,
-                      ambientRim: 0.0,
-                      fresnelStrength: 0.0,
-                      edgeAbsorption: 0.06,
+      child: ListenableBuilder(
+        listenable: GlassAppearanceService.instance,
+        builder: (context, _) {
+          final glass = GlassAppearanceService.instance;
+          final btnSettings = glass.applyToSettings(
+            baseBtnSettings,
+            isDark: isDark,
+          );
+          final pillSettings = glass.applyToSettings(
+            basePillSettings,
+            isDark: isDark,
+          );
+
+          final Widget prevButton = glass.isGlassOpaque
+              ? SpringTouchFeedback(
+                  onTap: () => _changeWeek(provider, week - 1),
+                  child: ClipRSuperellipse(
+                    borderRadius: SquircleGeometry.smoothRadius(12),
+                    child: Container(
+                      width: 88,
+                      height: 38,
+                      color: btnSettings.glassColor,
+                      child: prevRow,
                     ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          '第 $week 周',
-                          style: TextStyle(
-                            color: isDark ? Colors.white : const Color(0xFF1E2128),
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
+                  ),
+                )
+              : SpringTouchFeedback(
+                  onTap: () => _changeWeek(provider, week - 1),
+                  child: GlassButton.custom(
+                    onTap: () => _changeWeek(provider, week - 1),
+                    width: 88,
+                    height: 38,
+                    style: GlassButtonStyle.filled,
+                    settings: btnSettings,
+                    shape: const LiquidRoundedSuperellipse(borderRadius: 12),
+                    child: prevRow,
+                  ),
+                );
+
+          final Widget nextButton = glass.isGlassOpaque
+              ? SpringTouchFeedback(
+                  onTap: () => _changeWeek(provider, week + 1),
+                  child: ClipRSuperellipse(
+                    borderRadius: SquircleGeometry.smoothRadius(12),
+                    child: Container(
+                      width: 88,
+                      height: 38,
+                      color: btnSettings.glassColor,
+                      child: nextRow,
+                    ),
+                  ),
+                )
+              : SpringTouchFeedback(
+                  onTap: () => _changeWeek(provider, week + 1),
+                  child: GlassButton.custom(
+                    onTap: () => _changeWeek(provider, week + 1),
+                    width: 88,
+                    height: 38,
+                    style: GlassButtonStyle.filled,
+                    settings: btnSettings,
+                    shape: const LiquidRoundedSuperellipse(borderRadius: 12),
+                    child: nextRow,
+                  ),
+                );
+
+          final Widget weekPill = Builder(
+            builder: (pillCtx) => SpringTouchFeedback(
+              onTap: () {
+                final pillRect = liquid.resolveOverlayLocalRect(pillCtx);
+                _showWeekPicker(pillCtx, provider, sourceRect: pillRect);
+              },
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: SquircleGeometry.smoothRadius(14),
+                  boxShadow: liquid.HyperOSShadows.pill(isDark),
+                ),
+                child: glass.isGlassOpaque
+                    ? ClipRSuperellipse(
+                        borderRadius: SquircleGeometry.smoothRadius(14),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 8,
                           ),
+                          color: pillSettings.glassColor,
+                          child: weekPillRow,
                         ),
-                        const SizedBox(width: 4),
-                        Icon(
-                          CupertinoIcons.chevron_down,
-                          color: isDark ? Colors.white.withValues(alpha: 0.7) : const Color(0xFF555B68),
-                          size: 13,
+                      )
+                    : GlassContainer(
+                        useOwnLayer: true,
+                        clipBehavior: Clip.antiAlias,
+                        shape: const LiquidRoundedSuperellipse(
+                          borderRadius: 14,
                         ),
-                      ],
-                    ),
-                  ),
-                ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        settings: pillSettings,
+                        child: weekPillRow,
+                      ),
               ),
             ),
-            SpringTouchFeedback(
-              onTap: () => _changeWeek(provider, week + 1),
-              child: GlassButton.custom(
-                onTap: () => _changeWeek(provider, week + 1),
-                width: 88,
-                height: 38,
-                style: GlassButtonStyle.filled,
-                settings: LiquidGlassSettings(
-                  glassColor: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.white.withValues(alpha: 0.35),
-                  blur: 0.5,
-                  thickness: 14,
-                  lightIntensity: 0.35,
-                  ambientStrength: 0.20,
-                  ambientRim: 0.0,
-                  fresnelStrength: 0.0,
-                  edgeAbsorption: 0.06,
-                ),
-                shape: const LiquidRoundedSuperellipse(borderRadius: 12),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text('下一周', style: TextStyle(color: isDark ? Colors.white70 : const Color(0xFF1E2128), fontSize: 12)),
-                    const SizedBox(width: 4),
-                    Icon(CupertinoIcons.right_chevron, color: isDark ? Colors.white70 : const Color(0xFF1E2128), size: 14),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
+          );
+
+          final row = Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [prevButton, weekPill, nextButton],
+          );
+
+          return glass.isGlassOpaque ? row : GlassBackdropGroup(child: row);
+        },
       ),
     );
   }
@@ -695,6 +779,49 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
     const weekdays = ['', '周一', '周二', '周三', '周四', '周五', '周六', '周日'];
     final primaryColor = Theme.of(context).primaryColor;
 
+    final baseBadgeSettings = LiquidGlassSettings(
+      glassColor:
+          isDark ? const Color(0x2812151B) : const Color(0x35FFFFFF),
+      blur: 0.5,
+      thickness: 16,
+      refractiveIndex: 1.44,
+      lightIntensity: 0.70,
+      ambientStrength: 0.35,
+      ambientRim: 0.0,
+      fresnelStrength: 0.0,
+      edgeAbsorption: 0.10,
+      saturation: 1.15,
+    );
+    final badgeContent = Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            '${now.month}月${now.day}日',
+            style: TextStyle(
+              fontSize: 10.0,
+              fontWeight: FontWeight.w600,
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.85)
+                  : const Color(0xFF2D3139),
+              height: 1.1,
+              letterSpacing: -0.2,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            weekdays[now.weekday],
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.bold,
+              color: primaryColor,
+              height: 1.1,
+            ),
+          ),
+        ],
+      ),
+    );
+
     return Container(
       width: width,
       height: 44,
@@ -703,52 +830,33 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
         borderRadius: BorderRadius.circular(13),
         boxShadow: liquid.HyperOSShadows.pill(isDark),
       ),
-      child: GlassContainer(
-        useOwnLayer: true,
-        shape: const LiquidRoundedSuperellipse(borderRadius: 13),
-        quality: theme.ThemeService().glassQuality,
-        padding: EdgeInsets.zero,
-        settings: LiquidGlassSettings(
-          glassColor: isDark
-              ? const Color(0x2812151B)
-              : const Color(0x35FFFFFF),
-          blur: 0.5,
-          thickness: 16,
-          refractiveIndex: 1.44,
-          lightIntensity: 0.70,
-          ambientStrength: 0.35,
-          ambientRim: 0.0,
-          fresnelStrength: 0.0,
-          edgeAbsorption: 0.10,
-          saturation: 1.15,
-        ),
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                '${now.month}月${now.day}日',
-                style: TextStyle(
-                  fontSize: 10.0,
-                  fontWeight: FontWeight.w600,
-                  color: isDark ? Colors.white.withValues(alpha: 0.85) : const Color(0xFF2D3139),
-                  height: 1.1,
-                  letterSpacing: -0.2,
-                ),
+      child: ListenableBuilder(
+        listenable: GlassAppearanceService.instance,
+        builder: (context, inner) {
+          final glass = GlassAppearanceService.instance;
+          final effectiveSettings = glass.applyToSettings(
+            baseBadgeSettings,
+            isDark: isDark,
+          );
+          if (glass.isGlassOpaque) {
+            return ClipRSuperellipse(
+              borderRadius: SquircleGeometry.smoothRadius(13),
+              child: Container(
+                color: effectiveSettings.glassColor,
+                child: inner,
               ),
-              const SizedBox(height: 2),
-              Text(
-                weekdays[now.weekday],
-                style: TextStyle(
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.bold,
-                  color: primaryColor,
-                  height: 1.1,
-                ),
-              ),
-            ],
-          ),
-        ),
+            );
+          }
+          return GlassContainer(
+            useOwnLayer: true,
+            shape: const LiquidRoundedSuperellipse(borderRadius: 13),
+            quality: theme.ThemeService().glassQuality,
+            padding: EdgeInsets.zero,
+            settings: effectiveSettings,
+            child: inner!,
+          );
+        },
+        child: badgeContent,
       ),
     );
   }
@@ -1175,16 +1283,22 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
       backgroundColor: Colors.transparent,
       barrierColor: Colors.black.withValues(alpha: 0.35),
       useRootNavigator: true,
-      builder: (sheetContext) => ClipRRect(
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 24.0, sigmaY: 24.0),
-          child: Container(
+      builder: (sheetContext) => ListenableBuilder(
+        listenable: GlassAppearanceService.instance,
+        builder: (context, sheetChild) {
+          final glass = GlassAppearanceService.instance;
+          final sigma = glass.resolveGlassBlur(24.0);
+          final bgColor = glass.resolveGlassColor(
+            baseColor: isDark
+                ? const Color(0xD9161922)
+                : const Color(0xE6FFFFFF),
+            isDark: isDark,
+          );
+          final container = Container(
             decoration: BoxDecoration(
-              color: isDark
-                  ? const Color(0xD9161922)
-                  : const Color(0xE6FFFFFF),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+              color: bgColor,
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(28)),
               border: Border(
                 top: BorderSide(
                   color: isDark
@@ -1194,45 +1308,60 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
                 ),
               ),
             ),
-            child: SafeArea(
-              top: false,
-              child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Center(
-                      child: Container(
-                        width: 38,
-                        height: 4.5,
-                        decoration: BoxDecoration(
-                          color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(3),
-                        ),
-                      ),
+            child: sheetChild,
+          );
+
+          return ClipRSuperellipse(
+            borderRadius:
+                const BorderRadius.vertical(top: Radius.circular(28)),
+            child: (!glass.isGlassOpaque && sigma > 0.05)
+                ? BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
+                    child: container,
+                  )
+                : container,
+          );
+        },
+        child: SafeArea(
+          top: false,
+          child: SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 38,
+                    height: 4.5,
+                    decoration: BoxDecoration(
+                      color:
+                          (isDark ? Colors.white : Colors.black).withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(3),
                     ),
-                    const SizedBox(height: 18),
-                    Text(
-                      course.name,
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: primaryTextColor,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    _buildDetailRow(sheetContext, '时间', course.timeStr),
-                    const SizedBox(height: 10),
-                    _buildDetailRow(
-                      sheetContext,
-                      '地点',
-                      (course.location.isEmpty || course.location.contains('未知'))
-                          ? '未指定地点'
-                          : course.location,
-                    ),
-                    const SizedBox(height: 10),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Text(
+                  course.name,
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: primaryTextColor,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _buildDetailRow(sheetContext, '时间', course.timeStr),
+                const SizedBox(height: 10),
+                _buildDetailRow(
+                  sheetContext,
+                  '地点',
+                  (course.location.isEmpty || course.location.contains('未知'))
+                      ? '未指定地点'
+                      : course.location,
+                ),
+                const SizedBox(height: 10),
                     _buildDetailRow(
                       sheetContext,
                       '教师',
@@ -1309,8 +1438,6 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
                 ),
               ),
             ),
-          ),
-        ),
       ),
     );
   }

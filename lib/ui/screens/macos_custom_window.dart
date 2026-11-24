@@ -6,6 +6,8 @@ import 'package:figma_squircle/figma_squircle.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import '../../constants/theme_constants.dart';
 import '../../services/desktop_window_service.dart';
+import '../../services/glass_appearance_service.dart';
+import '../../services/theme_service.dart';
 import 'windows_schedule_screen.dart';
 import 'settings_main_screen.dart';
 import 'calendar_view_screen.dart';
@@ -112,33 +114,44 @@ class _MacosCustomWindowState extends State<MacosCustomWindow> {
         bottomNavigationBar: RepaintBoundary(
           child: Padding(
             padding: const EdgeInsets.only(bottom: 12.0),
-            child: GlassTabBar.bottom(
-              selectedIndex: _selectedIndex,
-              onTabSelected: (index) {
-                HapticFeedback.selectionClick();
-                setState(() => _selectedIndex = index);
+            child: ListenableBuilder(
+              listenable: GlassAppearanceService.instance,
+              builder: (context, _) {
+                final isDark = Theme.of(context).brightness == Brightness.dark;
+                final barSettings = GlassAppearanceService.instance.applyToSettings(
+                  const LiquidGlassSettings(
+                    blur: 3.0,
+                    thickness: 30.0,
+                    refractiveIndex: 1.59,
+                    glassColor: Color(0x18FFFFFF),
+                  ),
+                  isDark: isDark,
+                );
+                return GlassTabBar.bottom(
+                  selectedIndex: _selectedIndex,
+                  onTabSelected: (index) {
+                    HapticFeedback.selectionClick();
+                    setState(() => _selectedIndex = index);
+                  },
+                  quality: ThemeService().glassQuality,
+                  settings: barSettings,
+                  indicatorColor: AppThemeColors.babyPink.withValues(alpha: 0.3),
+                  tabs: const [
+                    GlassTab(
+                      icon: Icon(CupertinoIcons.square_grid_2x2_fill),
+                      label: '课程',
+                    ),
+                    GlassTab(
+                      icon: Icon(CupertinoIcons.calendar),
+                      label: '日历',
+                    ),
+                    GlassTab(
+                      icon: Icon(CupertinoIcons.settings_solid),
+                      label: '设置',
+                    ),
+                  ],
+                );
               },
-              quality: GlassQuality.premium,
-              settings: const LiquidGlassSettings(
-                blur: 3.0,
-                thickness: 30.0,
-                refractiveIndex: 1.59,
-              ),
-              indicatorColor: AppThemeColors.babyPink.withValues(alpha: 0.3),
-              tabs: const [
-                GlassTab(
-                  icon: Icon(CupertinoIcons.square_grid_2x2_fill),
-                  label: '课程',
-                ),
-                GlassTab(
-                  icon: Icon(CupertinoIcons.calendar),
-                  label: '日历',
-                ),
-                GlassTab(
-                  icon: Icon(CupertinoIcons.settings_solid),
-                  label: '设置',
-                ),
-              ],
             ),
           ),
         ),
@@ -148,31 +161,45 @@ class _MacosCustomWindowState extends State<MacosCustomWindow> {
 
   /// 标题栏：供用户拖拽使用，红黄绿按钮通过系统自带 TitleBarStyle 呈现
   Widget _buildTitleBar() {
-    return DragToMoveArea(
-      child: Container(
-        height: 38,
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.05),
-          border: Border(
-            bottom: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
-          ),
-        ),
-        child: Row(
-          children: [
-            // 给红黄绿按钮留出空间
-            const SizedBox(width: 80),
-            Icon(Icons.school, color: AppThemeColors.babyPink, size: 16),
-            const SizedBox(width: 8),
-            const Text(
-              "CourseWidgets",
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return ListenableBuilder(
+      listenable: GlassAppearanceService.instance,
+      builder: (context, rowChild) {
+        final glass = GlassAppearanceService.instance;
+        final bg = glass.resolveGlassColor(
+          baseColor: Colors.white.withValues(alpha: 0.05),
+          isDark: isDark,
+        );
+        return DragToMoveArea(
+          child: Container(
+            height: 38,
+            decoration: BoxDecoration(
+              color: bg,
+              border: Border(
+                bottom: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
               ),
             ),
-          ],
-        ),
+            child: rowChild,
+          ),
+        );
+      },
+      child: Row(
+        children: [
+          // 给红黄绿按钮留出空间
+          const SizedBox(width: 80),
+          Icon(Icons.school, color: AppThemeColors.babyPink, size: 16),
+          const SizedBox(width: 8),
+          Text(
+            'CourseWidgets',
+            style: TextStyle(
+              color: (GlassAppearanceService.instance.isGlassOpaque && !isDark)
+                  ? const Color(0xFF1E2128)
+                  : Colors.white,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
       ),
     );
   }

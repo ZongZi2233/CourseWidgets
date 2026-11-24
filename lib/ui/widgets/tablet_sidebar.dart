@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../constants/version.dart';
+import '../../services/glass_appearance_service.dart';
 import '../../services/theme_service.dart';
 import '../theme/squircle_geometry.dart';
 
@@ -22,81 +23,97 @@ class TabletSideBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return SafeArea(
-      child: Container(
-        width: 76,
-        margin: const EdgeInsets.fromLTRB(14, 10, 6, 14),
-        decoration: BoxDecoration(
-          color: isDark
-              ? const Color(0x33101216)
-              : const Color(0x44FFFFFF),
-          borderRadius: SquircleGeometry.smoothRadius(24),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: isDark ? 0.30 : 0.08),
-              blurRadius: 18,
-              offset: const Offset(0, 6),
-            ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: SquircleGeometry.smoothRadius(24),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 2.0, sigmaY: 2.0),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              child: Column(
-                children: [
-                  // 顶部官方高清 Logo（彻底移除日历图标与外圈色框）
-                  ClipRRect(
-                    borderRadius: SquircleGeometry.smoothRadius(14),
-                    child: Image.asset(
-                      'assets/icon.png',
-                      width: 44,
-                      height: 44,
-                      filterQuality: FilterQuality.high,
-                    ),
-                  ),
-                  const SizedBox(height: 28),
-
-                  // 导航项
-                  ...List.generate(items.length, (index) {
-                    final item = items[index];
-                    final isSelected = index == selectedIndex;
-
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 16),
-                      child: _buildNavItem(
-                        context: context,
-                        icon: item.icon,
-                        selectedIcon: item.selectedIcon,
-                        label: item.label,
-                        isSelected: isSelected,
-                        onTap: () {
-                          HapticFeedback.selectionClick();
-                          onTabSelected(index);
-                        },
-                      ),
-                    );
-                  }),
-
-                  const Spacer(),
-
-                  // 版本信息
-                  Text(
-                    'v$appVersion',
-                    style: TextStyle(
-                      color: isDark ? Colors.white38 : Colors.black38,
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
+    final columnContent = Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: Column(
+        children: [
+          // 顶部官方高清 Logo（彻底移除日历图标与外圈色框）
+          ClipRRect(
+            borderRadius: SquircleGeometry.smoothRadius(14),
+            child: Image.asset(
+              'assets/icon.png',
+              width: 44,
+              height: 44,
+              filterQuality: FilterQuality.high,
             ),
           ),
-        ),
+          const SizedBox(height: 28),
+
+          // 导航项
+          ...List.generate(items.length, (index) {
+            final item = items[index];
+            final isSelected = index == selectedIndex;
+
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: _buildNavItem(
+                context: context,
+                icon: item.icon,
+                selectedIcon: item.selectedIcon,
+                label: item.label,
+                isSelected: isSelected,
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  onTabSelected(index);
+                },
+              ),
+            );
+          }),
+
+          const Spacer(),
+
+          // 版本信息
+          Text(
+            'v$appVersion',
+            style: TextStyle(
+              color: isDark ? Colors.white38 : Colors.black38,
+              fontSize: 9.5,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+
+    return SafeArea(
+      child: ListenableBuilder(
+        listenable: GlassAppearanceService.instance,
+        builder: (context, child) {
+          final glass = GlassAppearanceService.instance;
+          final sigma = glass.resolveGlassBlur(2.0);
+          final bgColor = glass.resolveGlassColor(
+            baseColor:
+                isDark ? const Color(0x33101216) : const Color(0x44FFFFFF),
+            isDark: isDark,
+          );
+          final bool useBlur = !glass.isGlassOpaque && sigma > 0.05;
+
+          return Container(
+            width: 76,
+            margin: const EdgeInsets.fromLTRB(14, 10, 6, 14),
+            decoration: BoxDecoration(
+              color: bgColor,
+              borderRadius: SquircleGeometry.smoothRadius(24),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.30 : 0.08),
+                  blurRadius: 18,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: ClipRSuperellipse(
+              borderRadius: SquircleGeometry.smoothRadius(24),
+              child: useBlur
+                  ? BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
+                      child: child,
+                    )
+                  : child,
+            ),
+          );
+        },
+        child: columnContent,
       ),
     );
   }

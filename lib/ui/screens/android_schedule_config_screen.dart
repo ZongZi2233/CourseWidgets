@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:ui' show ImageFilter;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -9,6 +8,7 @@ import 'package:provider/provider.dart';
 import '../../constants/theme_constants.dart';
 import '../../models/schedule_config.dart';
 import '../../providers/schedule_provider.dart';
+import '../../services/glass_appearance_service.dart';
 import '../../services/theme_service.dart';
 import '../../services/time_alignment_engine.dart';
 import '../../utils/glass_settings_helper.dart';
@@ -269,7 +269,7 @@ class AndroidScheduleConfigScreenState
       barrierColor: Colors.black.withValues(alpha: isDark ? 0.28 : 0.14),
       isScrollControlled: true,
       builder: (sheetCtx) {
-        final sheetSettings = GlassSettingsHelper.getDialogSettings().copyWith(
+        final baseSheetSettings = GlassSettingsHelper.getDialogSettings().copyWith(
           glassColor: isDark
               ? const Color(0xAD151822)
               : const Color(0xACF7F9FE),
@@ -282,31 +282,10 @@ class AndroidScheduleConfigScreenState
           edgeAbsorption: 0.0,
           specularSharpness: GlassSpecularSharpness.sharp,
         );
-        return SafeArea(
-          top: false,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                borderRadius: SquircleGeometry.smoothRadius(28),
-                boxShadow: liquid.HyperOSShadows.modal(isDark),
-              ),
-              child: GlassContainer(
-                useOwnLayer: true,
-                quality: ThemeService().glassQuality,
-                clipBehavior: Clip.antiAlias,
-                shape: const LiquidRoundedSuperellipse(borderRadius: 28),
-                padding: EdgeInsets.fromLTRB(
-                  20,
-                  14,
-                  20,
-                  MediaQuery.of(sheetCtx).padding.bottom + 20,
-                ),
-                settings: sheetSettings,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+        final sheetBody = Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
             Center(
               child: Container(
                 width: 38,
@@ -431,7 +410,53 @@ class AndroidScheduleConfigScreenState
               ),
             ),
           ],
-                ),
+        );
+
+        final sheetPadding = EdgeInsets.fromLTRB(
+          20,
+          14,
+          20,
+          MediaQuery.of(sheetCtx).padding.bottom + 20,
+        );
+
+        return SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: SquircleGeometry.smoothRadius(28),
+                boxShadow: liquid.HyperOSShadows.modal(isDark),
+              ),
+              child: ListenableBuilder(
+                listenable: GlassAppearanceService.instance,
+                builder: (context, child) {
+                  final glass = GlassAppearanceService.instance;
+                  final effectiveSettings = glass.applyToSettings(
+                    baseSheetSettings,
+                    isDark: isDark,
+                  );
+                  if (glass.isGlassOpaque) {
+                    return ClipRSuperellipse(
+                      borderRadius: SquircleGeometry.smoothRadius(28),
+                      child: Container(
+                        padding: sheetPadding,
+                        color: effectiveSettings.glassColor,
+                        child: child,
+                      ),
+                    );
+                  }
+                  return GlassContainer(
+                    useOwnLayer: true,
+                    quality: ThemeService().glassQuality,
+                    clipBehavior: Clip.antiAlias,
+                    shape: const LiquidRoundedSuperellipse(borderRadius: 28),
+                    padding: sheetPadding,
+                    settings: effectiveSettings,
+                    child: child!,
+                  );
+                },
+                child: sheetBody,
               ),
             ),
           ),
@@ -794,111 +819,144 @@ class AndroidScheduleConfigScreenState
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: BackdropGroup(
-        child: Stack(
-          children: [
-            Positioned.fill(
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: RepaintBoundary(
               child: AdaptiveSmoothScroll(
                 durationMS: 250,
                 scrollSpeed: 1.2,
-                builder: (context, controller, physics) => CustomScrollView(
+                builder: (context, controller, physics) =>
+                    SingleChildScrollView(
                   controller: controller,
                   physics: physics,
-                  slivers: [
-                    SliverPadding(
-                      padding: resolvedPadding,
-                      sliver: SliverList(
-                        delegate: SliverChildBuilderDelegate(
-                          (context, idx) => Center(
-                            child: ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 860),
-                              child: scrollBlocks[idx],
-                            ),
-                          ),
-                          childCount: scrollBlocks.length,
-                          addRepaintBoundaries: false,
-                        ),
+                  padding: resolvedPadding,
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 860),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: scrollBlocks,
                       ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            if (widget.showNavigation && !isDesktop)
-              const ImmersiveStatusBarBackdrop(),
-
-            if (widget.showNavigation)
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                child: SafeArea(
-                  bottom: false,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    child: Row(
-                      children: [
-                        if (!isDesktop)
-                          const liquid.FloatingGlassHeaderButton(
-                            title: '课时配置',
-                          ),
-                        const Spacer(),
-                        SpringTouchFeedback(
-                          onTap: _saveAndPop,
-                          child: RepaintBoundary(
-                            child: DecoratedBox(
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(18),
-                                boxShadow: liquid.HyperOSShadows.pill(
-                                  isDark,
-                                  accentColor: saveBg,
-                                ),
-                              ),
-                              child: ClipRSuperellipse(
-                                borderRadius: BorderRadius.circular(18),
-                                child: BackdropFilter.grouped(
-                                  filter: ImageFilter.blur(
-                                    sigmaX: 16,
-                                    sigmaY: 16,
-                                  ),
-                                  child: Container(
-                                    width: 76,
-                                    height: 38,
-                                    alignment: Alignment.center,
-                                    decoration: BoxDecoration(
-                                      color: saveBg.withValues(
-                                        alpha: isDark ? 0.78 : 0.86,
-                                      ),
-                                      borderRadius: BorderRadius.circular(18),
-                                    ),
-                                    child: Text(
-                                      '保存',
-                                      style: TextStyle(
-                                        color: saveTextColor,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 15,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
                     ),
                   ),
                 ),
               ),
+            ),
+          ),
 
-            if (widget.showNavigation && !isDesktop)
-              const liquid.FloatingLiquidBackButton(),
-          ],
-        ),
+          if (widget.showNavigation && !isDesktop)
+            const ImmersiveStatusBarBackdrop(),
+
+          if (widget.showNavigation)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  child: Row(
+                    children: [
+                      if (!isDesktop)
+                        const liquid.FloatingGlassHeaderButton(
+                          title: '课时配置',
+                        ),
+                      const Spacer(),
+                      RepaintBoundary(
+                        child: ListenableBuilder(
+                          listenable: GlassAppearanceService.instance,
+                          builder: (context, labelChild) {
+                            final glass = GlassAppearanceService.instance;
+                            final settings = glass.applyToSettings(
+                              LiquidGlassSettings(
+                                glassColor: saveBg.withValues(
+                                  alpha: isDark ? 0.68 : 0.76,
+                                ),
+                                blur: 0.6,
+                                thickness: 16.0,
+                                refractiveIndex: 1.46,
+                                chromaticAberration: 0.08,
+                                lightIntensity: 0.75,
+                                ambientStrength: 0.35,
+                                ambientRim: 0.0,
+                                fresnelStrength: 0.0,
+                                edgeAbsorption: 0.0,
+                                specularSharpness: GlassSpecularSharpness.sharp,
+                              ),
+                              isDark: isDark,
+                              opaqueColorOverride: saveBg,
+                            );
+
+                            if (glass.isGlassOpaque) {
+                              return SpringTouchFeedback(
+                                onTap: _saveAndPop,
+                                child: DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    borderRadius:
+                                        SquircleGeometry.smoothRadius(18),
+                                    boxShadow: liquid.HyperOSShadows.pill(
+                                      isDark,
+                                      accentColor: saveBg,
+                                    ),
+                                  ),
+                                  child: ClipRSuperellipse(
+                                    borderRadius:
+                                        SquircleGeometry.smoothRadius(18),
+                                    child: Container(
+                                      width: 76,
+                                      height: 38,
+                                      alignment: Alignment.center,
+                                      color: settings.glassColor,
+                                      child: labelChild,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }
+
+                            return GlassButton.custom(
+                              width: 76,
+                              height: 38,
+                              useOwnLayer: true,
+                              quality: ThemeService().glassQuality,
+                              style: GlassButtonStyle.filled,
+                              shape: const LiquidRoundedSuperellipse(
+                                borderRadius: 18,
+                              ),
+                              interactionScale: 1.08,
+                              glowColor: saveBg.withValues(alpha: 0.35),
+                              glowRadius: 20,
+                              onTap: _saveAndPop,
+                              settings: settings,
+                              child: labelChild!,
+                            );
+                          },
+                          child: Center(
+                            child: Text(
+                              '保存',
+                              style: TextStyle(
+                                color: saveTextColor,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+          if (widget.showNavigation && !isDesktop)
+            const liquid.FloatingLiquidBackButton(),
+        ],
       ),
     );
   }

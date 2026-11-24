@@ -5,6 +5,9 @@ import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import '../../models/schedule_config.dart';
 import '../../providers/schedule_provider.dart';
 import '../../constants/theme_constants.dart';
+import '../../services/glass_appearance_service.dart';
+import '../../services/theme_service.dart';
+import '../theme/squircle_geometry.dart';
 import '../widgets/liquid_glass_pickers.dart';
 import '../widgets/liquid_components.dart' as liquid;
 import '../widgets/adaptive_smooth_scroll.dart';
@@ -127,109 +130,168 @@ class _ScheduleConfigScreenState extends State<ScheduleConfigScreen> {
     super.dispose();
   }
 
+  Widget _buildLegacyGlassCard({required Widget child}) {
+    final isDark = _isDarkMode;
+    final box = Container(
+      decoration: BoxDecoration(
+        color: _glassOverlayColor,
+        borderRadius: BorderRadius.circular(LiquidGlassTheme.largeRadius),
+      ),
+      padding: const EdgeInsets.all(LiquidGlassTheme.mediumPadding),
+      child: child,
+    );
+
+    return ListenableBuilder(
+      listenable: GlassAppearanceService.instance,
+      builder: (context, contentChild) {
+        final glass = GlassAppearanceService.instance;
+        final baseColor = isDark
+            ? const Color(0x28141720)
+            : Colors.black.withValues(alpha: 0.05);
+        final effectiveSettings = glass.applyToSettings(
+          LiquidGlassSettings(blur: 4, glassColor: baseColor),
+          isDark: isDark,
+        );
+        if (glass.isGlassOpaque) {
+          return ClipRSuperellipse(
+            borderRadius:
+                SquircleGeometry.smoothRadius(LiquidGlassTheme.largeRadius),
+            child: Container(
+              color: effectiveSettings.glassColor,
+              padding: const EdgeInsets.all(LiquidGlassTheme.mediumPadding),
+              child: child,
+            ),
+          );
+        }
+        return AdaptiveGlass(
+          quality: ThemeService().glassQuality,
+          shape: LiquidRoundedSuperellipse(
+            borderRadius: LiquidGlassTheme.largeRadius,
+          ),
+          settings: effectiveSettings,
+          child: contentChild!,
+        );
+      },
+      child: box,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: Container(
-        color: Colors.transparent,
-        child: LiquidGlassLayer(
-          settings: LiquidGlassSettings(
-            thickness: 20,
-            blur: 4,
-            glassColor: _glassOverlayColor,
-            lightIntensity: 1.5,
-            ambientStrength: 0.8,
-            saturation: 1.2,
-          ),
-          child: SafeArea(
-            child: Form(
-              key: _formKey,
-              child: Column(
+    final isDark = _isDarkMode;
+    final bodySafeArea = SafeArea(
+      child: Form(
+        key: _formKey,
+        child: Column(
+          children: [
+            // 顶部标题栏
+            Container(
+              margin: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 12,
+              ),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 12,
+              ),
+              decoration: BoxDecoration(
+                color: _glassOverlayColor,
+                borderRadius: BorderRadius.circular(
+                  LiquidGlassTheme.largeRadius,
+                ),
+              ),
+              child: Row(
                 children: [
-                  // 顶部标题栏
-                  Container(
-                    margin: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
-                    ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
-                    ),
-                    decoration: BoxDecoration(
-                      color: _glassOverlayColor,
-                      borderRadius: BorderRadius.circular(
-                        LiquidGlassTheme.largeRadius,
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        const liquid.LiquidBackButton(),
-                        const SizedBox(width: 8),
-                        Text(
-                          '课时配置',
-                          style: TextStyle(
-                            color: _textColor,
-                            fontSize: LiquidGlassTheme.titleFontSize,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        const Spacer(),
-                        CupertinoButton(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 6,
-                          ),
-                          onPressed: _saveConfig,
-                          child: Text(
-                            '保存',
-                            style: TextStyle(
-                              color: AppThemeColors.babyPink,
-                              fontWeight: FontWeight.w700,
-                              fontSize: LiquidGlassTheme.buttonFontSize,
-                            ),
-                          ),
-                        ),
-                      ],
+                  const liquid.LiquidBackButton(),
+                  const SizedBox(width: 8),
+                  Text(
+                    '课时配置',
+                    style: TextStyle(
+                      color: _textColor,
+                      fontSize: LiquidGlassTheme.titleFontSize,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
-
-                  // 内容区域
-                  Expanded(
-                    child: AdaptiveSmoothScroll(
-                      durationMS: 250,
-                      scrollSpeed: 1.2,
-                      builder: (context, controller, physics) =>
-                          SingleChildScrollView(
-                            controller: controller,
-                            padding: const EdgeInsets.all(16),
-                            physics: physics,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                _buildSectionTitle('基础设置'),
-                                const SizedBox(height: 8),
-                                _buildGeneralSettings(),
-
-                                const SizedBox(height: 20),
-                                _buildSectionTitle('课时设置'),
-                                const SizedBox(height: 8),
-                                _buildSectionSettings(),
-
-                                const SizedBox(height: 20),
-                                _buildSectionTitle('快速配置'),
-                                const SizedBox(height: 8),
-                                _buildPresetButtons(),
-                              ],
-                            ),
-                          ),
+                  const Spacer(),
+                  CupertinoButton(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    onPressed: _saveConfig,
+                    child: Text(
+                      '保存',
+                      style: TextStyle(
+                        color: AppThemeColors.babyPink,
+                        fontWeight: FontWeight.w700,
+                        fontSize: LiquidGlassTheme.buttonFontSize,
+                      ),
                     ),
                   ),
                 ],
               ),
             ),
-          ),
+
+            // 内容区域
+            Expanded(
+              child: AdaptiveSmoothScroll(
+                durationMS: 250,
+                scrollSpeed: 1.2,
+                builder: (context, controller, physics) =>
+                    SingleChildScrollView(
+                  controller: controller,
+                  padding: const EdgeInsets.all(16),
+                  physics: physics,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildSectionTitle('基础设置'),
+                      const SizedBox(height: 8),
+                      _buildGeneralSettings(),
+
+                      const SizedBox(height: 20),
+                      _buildSectionTitle('课时设置'),
+                      const SizedBox(height: 8),
+                      _buildSectionSettings(),
+
+                      const SizedBox(height: 20),
+                      _buildSectionTitle('快速配置'),
+                      const SizedBox(height: 8),
+                      _buildPresetButtons(),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: Container(
+        color: Colors.transparent,
+        child: ListenableBuilder(
+          listenable: GlassAppearanceService.instance,
+          builder: (context, safeChild) {
+            final layerSettings = GlassAppearanceService.instance.applyToSettings(
+              LiquidGlassSettings(
+                thickness: 20,
+                blur: 4,
+                glassColor: _glassOverlayColor,
+                lightIntensity: 1.5,
+                ambientStrength: 0.8,
+                saturation: 1.2,
+              ),
+              isDark: isDark,
+            );
+            return LiquidGlassLayer(
+              settings: layerSettings,
+              child: safeChild!,
+            );
+          },
+          child: bodySafeArea,
         ),
       ),
     );
@@ -254,20 +316,9 @@ class _ScheduleConfigScreenState extends State<ScheduleConfigScreen> {
   }
 
   Widget _buildGeneralSettings() {
-    return AdaptiveGlass(
-      quality: GlassQuality.minimal,
-      shape: LiquidRoundedSuperellipse(
-        borderRadius: LiquidGlassTheme.largeRadius,
-      ),
-      settings: LiquidGlassSettings(blur: 4, glassColor: _glassOverlayColor),
-      child: Container(
-        decoration: BoxDecoration(
-          color: _glassOverlayColor,
-          borderRadius: BorderRadius.circular(LiquidGlassTheme.largeRadius),
-        ),
-        padding: const EdgeInsets.all(LiquidGlassTheme.mediumPadding),
-        child: Column(
-          children: [
+    return _buildLegacyGlassCard(
+      child: Column(
+        children: [
             // 学期日期
             _buildTextField(
               controller: _semesterDateController,
@@ -323,7 +374,6 @@ class _ScheduleConfigScreenState extends State<ScheduleConfigScreen> {
             ),
           ],
         ),
-      ),
     );
   }
 
@@ -387,33 +437,21 @@ class _ScheduleConfigScreenState extends State<ScheduleConfigScreen> {
   }
 
   Widget _buildSectionSettings() {
-    return AdaptiveGlass(
-      quality: GlassQuality.minimal,
-      shape: LiquidRoundedSuperellipse(
-        borderRadius: LiquidGlassTheme.largeRadius,
-      ),
-      settings: LiquidGlassSettings(blur: 4, glassColor: _glassOverlayColor),
-      child: Container(
-        decoration: BoxDecoration(
-          color: _glassOverlayColor,
-          borderRadius: BorderRadius.circular(LiquidGlassTheme.largeRadius),
-        ),
-        padding: const EdgeInsets.all(LiquidGlassTheme.mediumPadding),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '设置每节课的开始时间和时长',
-              style: TextStyle(
-                fontSize: LiquidGlassTheme.bodyFontSize,
-                color: _textSecondaryColor,
-                fontWeight: FontWeight.w500,
-              ),
+    return _buildLegacyGlassCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '设置每节课的开始时间和时长',
+            style: TextStyle(
+              fontSize: LiquidGlassTheme.bodyFontSize,
+              color: _textSecondaryColor,
+              fontWeight: FontWeight.w500,
             ),
-            const SizedBox(height: 12),
-            ...List.generate(13, (index) => _buildSectionRow(index + 1)),
-          ],
-        ),
+          ),
+          const SizedBox(height: 12),
+          ...List.generate(13, (index) => _buildSectionRow(index + 1)),
+        ],
       ),
     );
   }
@@ -528,69 +566,83 @@ class _ScheduleConfigScreenState extends State<ScheduleConfigScreen> {
   }
 
   Widget _buildPresetButtons() {
-    return AdaptiveGlass(
-      quality: GlassQuality.minimal,
-      shape: LiquidRoundedSuperellipse(
-        borderRadius: LiquidGlassTheme.largeRadius,
-      ),
-      settings: LiquidGlassSettings(blur: 4, glassColor: _glassOverlayColor),
-      child: Container(
-        decoration: BoxDecoration(
-          color: _glassOverlayColor,
-          borderRadius: BorderRadius.circular(LiquidGlassTheme.largeRadius),
-        ),
-        padding: const EdgeInsets.all(LiquidGlassTheme.mediumPadding),
-        child: Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            _buildPresetButton(
-              '默认配置',
-              _loadDefaultConfig,
-              AppThemeColors.babyPink,
-            ),
-            _buildPresetButton(
-              '早课配置',
-              _loadEarlyConfig,
-              AppThemeColors.softCoral,
-            ),
-            _buildPresetButton(
-              '长课时配置',
-              _loadLongConfig,
-              AppThemeColors.paleApricot,
-            ),
-            _buildPresetButton(
-              '短课时配置',
-              _loadShortConfig,
-              AppThemeColors.babyPink,
-            ),
-          ],
-        ),
+    return _buildLegacyGlassCard(
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          _buildPresetButton(
+            '默认配置',
+            _loadDefaultConfig,
+            AppThemeColors.babyPink,
+          ),
+          _buildPresetButton(
+            '早课配置',
+            _loadEarlyConfig,
+            AppThemeColors.softCoral,
+          ),
+          _buildPresetButton(
+            '长课时配置',
+            _loadLongConfig,
+            AppThemeColors.paleApricot,
+          ),
+          _buildPresetButton(
+            '短课时配置',
+            _loadShortConfig,
+            AppThemeColors.babyPink,
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildPresetButton(String label, VoidCallback onPressed, Color color) {
-    return GlassContainer(
-      useOwnLayer: true,
-      quality: GlassQuality.standard,
-      shape: LiquidRoundedSuperellipse(
-        borderRadius: LiquidGlassTheme.mediumRadius,
-      ),
-      child: CupertinoButton(
-        onPressed: onPressed,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        color: color.withOpacity(0.3),
-        borderRadius: BorderRadius.circular(LiquidGlassTheme.mediumRadius),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: _textColor,
-            fontSize: LiquidGlassTheme.bodyFontSize,
-            fontWeight: FontWeight.w600,
-          ),
+    final isDark = _isDarkMode;
+    final buttonChild = CupertinoButton(
+      onPressed: onPressed,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      color: color.withValues(alpha: 0.3),
+      borderRadius: BorderRadius.circular(LiquidGlassTheme.mediumRadius),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: _textColor,
+          fontSize: LiquidGlassTheme.bodyFontSize,
+          fontWeight: FontWeight.w600,
         ),
       ),
+    );
+
+    return ListenableBuilder(
+      listenable: GlassAppearanceService.instance,
+      builder: (context, child) {
+        final glass = GlassAppearanceService.instance;
+        final settings = glass.applyToSettings(
+          LiquidGlassSettings(
+            glassColor: color.withValues(alpha: 0.25),
+            blur: 3.0,
+          ),
+          isDark: isDark,
+          opaqueColorOverride: color.withValues(alpha: 1.0),
+        );
+        if (glass.isGlassOpaque) {
+          return ClipRSuperellipse(
+            borderRadius:
+                SquircleGeometry.smoothRadius(LiquidGlassTheme.mediumRadius),
+            child: ColoredBox(color: settings.glassColor, child: child),
+          );
+        }
+        return GlassContainer(
+          useOwnLayer: true,
+          quality: ThemeService().glassQuality,
+          settings: settings,
+          shape: LiquidRoundedSuperellipse(
+            borderRadius: LiquidGlassTheme.mediumRadius,
+          ),
+          child: child!,
+        );
+      },
+      child: buttonChild,
     );
   }
 
