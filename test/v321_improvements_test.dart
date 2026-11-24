@@ -7,7 +7,6 @@ import 'package:coursewidgets/services/storage_service.dart';
 import 'package:coursewidgets/ui/screens/android_schedule_config_screen.dart';
 import 'package:coursewidgets/ui/screens/settings_notification_screen.dart';
 import 'package:coursewidgets/ui/widgets/course_color_helper.dart';
-import 'package:coursewidgets/ui/widgets/liquid_components.dart' as liquid;
 import 'package:coursewidgets/utils/classroom_parser.dart';
 
 void main() {
@@ -81,7 +80,7 @@ void main() {
       final ongoingSize =
           tester.getSize(find.byKey(const ValueKey('live_preview_card')));
 
-      await tester.tap(find.text('长教室名'));
+      await tester.tap(find.text('课间候课'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 250));
 
@@ -102,7 +101,7 @@ void main() {
       expect(find.text('人工智能—AI绘画从入门到精通'), findsOneWidget);
       expect(find.text('11月30日 · 第 12 周'), findsOneWidget);
       expect(find.text('周一'), findsOneWidget);
-      expect(find.text('1门'), findsOneWidget);
+      expect(find.text('3门'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
@@ -132,8 +131,9 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('第 1 节作息时间'), findsOneWidget);
-      expect(find.byType(liquid.LiquidGlassDialog), findsOneWidget);
-      expect(find.byType(GlassContainer), findsAtLeastNWidgets(1));
+      expect(find.byType(BackdropFilter), findsAtLeastNWidgets(1));
+      expect(find.byType(ClipRSuperellipse), findsAtLeastNWidgets(1));
+      expect(find.text('应用'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   });

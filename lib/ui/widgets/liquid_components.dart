@@ -734,10 +734,12 @@ Future<T?> showSharedElementGlassDialog<T>({
       final screenSize = MediaQuery.sizeOf(ctx);
       final double targetW =
           math.min(maxWidth, math.max(220.0, screenSize.width - 48.0));
+      final viewInsetsBottom = MediaQuery.viewInsetsOf(ctx).bottom;
+      final availHeight = math.max(180.0, screenSize.height - viewInsetsBottom);
       final double targetH =
-          math.min(maxHeight, math.max(180.0, screenSize.height - 96.0));
+          math.min(maxHeight, math.max(180.0, availHeight - 72.0));
       final Rect targetRect = Rect.fromCenter(
-        center: Offset(screenSize.width * 0.5, screenSize.height * 0.5),
+        center: Offset(screenSize.width * 0.5, availHeight * 0.5),
         width: targetW,
         height: targetH,
       );
@@ -769,7 +771,9 @@ Future<T?> showSharedElementGlassDialog<T>({
         alpha: (isDark ? 0.24 : 0.12) * fade,
       );
       final double dialogOpacity = hasValidSource
-          ? fade
+          ? (isReversing
+              ? (rawT / 0.22).clamp(0.0, 1.0)
+              : (rawT / 0.16).clamp(0.0, 1.0))
           : fade;
       final double contentOpacity = hasValidSource
           ? ((t - 0.12) / 0.52).clamp(0.0, 1.0)
@@ -1623,7 +1627,7 @@ class _RenderSharedBlurStencil extends RenderProxyBox {
   void _onScroll() {
     if (blurredImage == null || !attached) return;
     final currentPixels = scrollPosition?.pixels ?? 0.0;
-    if ((currentPixels - _lastScrollPixels).abs() < 0.4) return;
+    if ((currentPixels - _lastScrollPixels).abs() < 1.5) return;
     _lastScrollPixels = currentPixels;
     markNeedsPaint();
   }

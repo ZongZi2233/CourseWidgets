@@ -18,6 +18,7 @@ import 'services/windows_tray_service.dart';
 import 'services/storage_service.dart';
 import 'services/background_task_service.dart'; // [v2.2.9] 后台任务服务
 import 'services/static_blur_service.dart'; // [v3.0.0] 全局静态壁纸模糊遮罩服务
+import 'services/render_pipeline_prewarmer.dart'; // [v3.2.3] 离屏 GPU 管线预热服务
 import 'utils/glass_opacity_manager.dart'; // [v2.3.0] 玻璃透明度管理器
 import 'constants/version.dart' show kSolidColorBackground;
 import 'ui/screens/schedule_screen.dart';
@@ -409,6 +410,9 @@ void main() async {
       ),
     ),
   );
+
+  // [v3.2.3] 首帧显现后延迟预热离屏玻璃模糊与超椭圆渲染管线，消除首次弹窗/变形动画卡顿
+  RenderPipelinePrewarmer.scheduleAfterFirstFrame();
 }
 
 class MyApp extends StatefulWidget {
@@ -791,7 +795,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                       );
                     }
 
-                    if (Platform.isAndroid || Platform.isIOS) {
+                    if (Platform.isIOS) {
                       return AndroidSplashRevealOverlay(
                         child: coreStack,
                       );
@@ -799,7 +803,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
                     return coreStack;
                   },
-                  // Android 端复用原生单层开屏；桌面端已在 CupertinoApp.builder 外层全幅覆盖 AnimatedSplashOverlay
+                  // Android 端由原生单层 120Hz RenderThread 开屏平滑退场揭晓，桌面端与 iOS 保持各自开屏过渡
                   home: AnimatedSwitcher(
                     duration: const Duration(milliseconds: 450),
                     switchInCurve: AppCurves.pageSlide,

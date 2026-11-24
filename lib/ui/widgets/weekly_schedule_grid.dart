@@ -21,13 +21,16 @@ import '../animations/app_motion.dart';
 import '../../utils/responsive_utils.dart';
 import '../../services/theme_service.dart' as theme;
 
-/// [v3.2.2] 统一 SharedElement (ShareTransit) FlClash 磨砂玻璃周次选择弹窗
+/// [v3.2.3] 统一 SharedElement (ShareTransit) FlClash 磨砂玻璃周次选择弹窗
 Future<void> showWeekPickerGlassDialog(
   BuildContext context,
   ScheduleProvider provider, {
   Rect? sourceRect,
   double sourceCornerRadius = 14.0,
   ValueChanged<int>? onSelectWeek,
+  WidgetBuilder? sourcePreviewBuilder,
+  VoidCallback? onJumpToCurrentWeek,
+  int? realCurrentWeek,
 }) async {
   final weeks = provider.availableWeeks.isNotEmpty
       ? provider.availableWeeks
@@ -45,6 +48,7 @@ Future<void> showWeekPickerGlassDialog(
     targetCornerRadius: 28.0,
     maxWidth: 420.0,
     maxHeight: computedHeight,
+    sourcePreviewBuilder: sourcePreviewBuilder,
     builder: (dialogCtx) {
       final dialogDark = Theme.of(dialogCtx).brightness == Brightness.dark;
       return Padding(
@@ -53,7 +57,6 @@ Future<void> showWeekPickerGlassDialog(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
                   '选择周次',
@@ -63,6 +66,36 @@ Future<void> showWeekPickerGlassDialog(
                     fontWeight: FontWeight.bold,
                   ),
                 ),
+                const Spacer(),
+                if (onJumpToCurrentWeek != null) ...[
+                  SpringTouchFeedback(
+                    onTap: () {
+                      Navigator.pop(dialogCtx);
+                      onJumpToCurrentWeek();
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: primaryColor.withValues(
+                          alpha: dialogDark ? 0.22 : 0.14,
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '回到本周',
+                        style: TextStyle(
+                          color: dialogDark ? Colors.white : primaryColor,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                ],
                 SpringTouchFeedback(
                   onTap: () => Navigator.pop(dialogCtx),
                   child: Icon(
@@ -89,6 +122,8 @@ Future<void> showWeekPickerGlassDialog(
                 itemBuilder: (context, index) {
                   final w = weeks[index];
                   final isCur = w == provider.currentWeek;
+                  final isRealCurrent =
+                      realCurrentWeek != null && w == realCurrentWeek;
                   return SpringTouchFeedback(
                     onTap: () {
                       if (onSelectWeek != null) {
@@ -98,48 +133,66 @@ Future<void> showWeekPickerGlassDialog(
                       }
                       Navigator.pop(dialogCtx);
                     },
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: isCur
-                            ? primaryColor.withValues(
-                                alpha: dialogDark ? 0.85 : 0.90,
-                              )
-                            : (dialogDark
-                                ? Colors.white.withValues(alpha: 0.08)
-                                : Colors.black.withValues(alpha: 0.05)),
-                        borderRadius: SquircleGeometry.smoothRadius(12),
-                        border: Border.all(
-                          color: isCur
-                              ? primaryColor.withValues(alpha: 0.3)
-                              : (dialogDark
-                                  ? Colors.white.withValues(alpha: 0.10)
-                                  : Colors.black.withValues(alpha: 0.06)),
-                          width: 0.8,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        Container(
+                          decoration: BoxDecoration(
+                            color: isCur
+                                ? primaryColor.withValues(
+                                    alpha: dialogDark ? 0.85 : 0.90,
+                                  )
+                                : (dialogDark
+                                    ? Colors.white.withValues(alpha: 0.08)
+                                    : Colors.black.withValues(alpha: 0.05)),
+                            borderRadius: SquircleGeometry.smoothRadius(12),
+                            border: Border.all(
+                              color: isCur
+                                  ? primaryColor.withValues(alpha: 0.3)
+                                  : (dialogDark
+                                      ? Colors.white.withValues(alpha: 0.10)
+                                      : Colors.black.withValues(alpha: 0.06)),
+                              width: 0.8,
+                            ),
+                            boxShadow: isCur
+                                ? [
+                                    BoxShadow(
+                                      color: primaryColor.withValues(alpha: 0.35),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ]
+                                : null,
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(
+                            '第$w周',
+                            style: TextStyle(
+                              color: isCur
+                                  ? Colors.white
+                                  : (dialogDark
+                                      ? Colors.white.withValues(alpha: 0.85)
+                                      : const Color(0xFF2D3139)),
+                              fontWeight:
+                                  isCur ? FontWeight.bold : FontWeight.w600,
+                              fontSize: 13,
+                            ),
+                          ),
                         ),
-                        boxShadow: isCur
-                            ? [
-                                BoxShadow(
-                                  color: primaryColor.withValues(alpha: 0.35),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ]
-                            : null,
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        '第$w周',
-                        style: TextStyle(
-                          color: isCur
-                              ? Colors.white
-                              : (dialogDark
-                                  ? Colors.white.withValues(alpha: 0.85)
-                                  : const Color(0xFF2D3139)),
-                          fontWeight:
-                              isCur ? FontWeight.bold : FontWeight.w600,
-                          fontSize: 13,
-                        ),
-                      ),
+                        if (isRealCurrent && !isCur)
+                          Positioned(
+                            top: 5,
+                            right: 5,
+                            child: Container(
+                              width: 5,
+                              height: 5,
+                              decoration: BoxDecoration(
+                                color: primaryColor,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   );
                 },

@@ -187,24 +187,22 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
         ? Colors.white.withValues(alpha: 0.06)
         : Colors.black.withValues(alpha: 0.05);
 
-    return RepaintBoundary(
-      child: liquid.HyperOSCard(
-        cornerRadius: 24,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        child: Column(
-          children: [
-            for (int i = 0; i < children.length; i++) ...[
-              if (i > 0)
-                Divider(
-                  height: 1,
-                  thickness: 0.6,
-                  indent: 48,
-                  color: dividerColor,
-                ),
-              children[i],
-            ],
+    return liquid.HyperOSCard(
+      cornerRadius: 24,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: Column(
+        children: [
+          for (int i = 0; i < children.length; i++) ...[
+            if (i > 0)
+              Divider(
+                height: 1,
+                thickness: 0.6,
+                indent: 48,
+                color: dividerColor,
+              ),
+            children[i],
           ],
-        ),
+        ],
       ),
     );
   }

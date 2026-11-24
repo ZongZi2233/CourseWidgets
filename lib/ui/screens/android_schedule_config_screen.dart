@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui' show ImageFilter;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -11,6 +12,7 @@ import '../../providers/schedule_provider.dart';
 import '../../services/theme_service.dart';
 import '../../services/time_alignment_engine.dart';
 import '../../utils/glass_settings_helper.dart';
+import '../animations/app_motion.dart';
 import '../theme/squircle_geometry.dart';
 import '../widgets/adaptive_smooth_scroll.dart';
 import '../widgets/immersive_status_bar_backdrop.dart';
@@ -530,8 +532,12 @@ class AndroidScheduleConfigScreenState
     );
   }
 
-  /// 点击单节课时弹窗快捷编辑（取代 26 个常驻 TextField，确保滑动满帧 120Hz）
-  Future<void> _showSectionEditDialog(int section) async {
+  /// 点击单节课时以 SharedElement (ShareTransit) 玻璃变形弹窗快捷编辑（从被点击行展开并原路收回）
+  Future<void> _showSectionEditDialog(
+    int section, {
+    Rect? sourceRect,
+    Color? badgeColor,
+  }) async {
     HapticFeedback.selectionClick();
     final curStart = _workingConfig.sectionStartTimes[section] ??
         (480 + (section - 1) * 55);
@@ -539,287 +545,146 @@ class AndroidScheduleConfigScreenState
         ? _workingConfig.defaultDuration
         : (_workingConfig.sectionDurations[section] ??
             _workingConfig.defaultDuration);
+    final accentColor = badgeColor ?? AppThemeColors.babyPink;
+    final double dialogMaxH =
+        (!_workingConfig.isEqualDuration || section == 1) ? 396.0 : 312.0;
 
-    int draftStart = curStart;
-    int draftDur = curDur;
-    bool cascadeFollowing = section == 1;
-
-    final startCtrl = TextEditingController(text: _formatMinutes(curStart));
-    final durCtrl = TextEditingController(text: curDur.toString());
-
-    await liquid.showLiquidDialog<void>(
+    await liquid.showSharedElementGlassDialog<void>(
       context: context,
-      builder: StatefulBuilder(
-        builder: (ctx, setDialogState) {
-            final textColor = GlassSettingsHelper.getTextColor(ctx);
-            final subColor = GlassSettingsHelper.getSecondaryTextColor(ctx);
-            final isDark = Theme.of(ctx).brightness == Brightness.dark;
-
-            void applyStart(int m) {
-              draftStart = m.clamp(6 * 60, 23 * 60 + 30);
-              startCtrl.text = _formatMinutes(draftStart);
-            }
-
-            void applyDur(int d) {
-              draftDur = d.clamp(20, 120);
-              durCtrl.text = draftDur.toString();
-            }
-
-            return liquid.LiquidGlassDialog(
-              maxWidth: 392,
-              title: '第 $section 节作息时间',
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
+      sourceRect: sourceRect,
+      sourceCornerRadius: 14.0,
+      targetCornerRadius: 28.0,
+      maxWidth: 396.0,
+      maxHeight: dialogMaxH,
+      sourcePreviewBuilder: (previewCtx) {
+        final previewDark = Theme.of(previewCtx).brightness == Brightness.dark;
+        final previewText = previewDark ? Colors.white : const Color(0xFF1A1A2E);
+        final previewSub = previewDark ? Colors.white60 : const Color(0xFF6B7280);
+        final rangeStr =
+            '${_formatMinutes(curStart)} – ${_formatMinutes(curStart + curDur)}';
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            child: Row(
               children: [
-                Text(
-                  '下课时间将自动算作 ${_formatMinutes(draftStart + draftDur)}',
-                  style: TextStyle(fontSize: 12.5, color: subColor),
-                ),
-                const SizedBox(height: 14),
-                Text(
-                  '上课时间',
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
-                    color: subColor,
+                Container(
+                  width: 30,
+                  height: 24,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: accentColor.withValues(alpha: previewDark ? 0.22 : 0.14),
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    _buildMiniStepButton(
-                      label: '-5分',
-                      isDark: isDark,
-                      onTap: () => setDialogState(() => applyStart(draftStart - 5)),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: CupertinoTextField(
-                        controller: startCtrl,
-                        textAlign: TextAlign.center,
-                        keyboardType: TextInputType.datetime,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 9,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? Colors.white.withValues(alpha: 0.08)
-                              : Colors.black.withValues(alpha: 0.05),
-                          borderRadius: SquircleGeometry.smoothRadius(12),
-                          border: Border.all(
-                            color: isDark
-                                ? Colors.white.withValues(alpha: 0.14)
-                                : Colors.black.withValues(alpha: 0.08),
-                          ),
-                        ),
-                        style: TextStyle(
-                          color: textColor,
-                          fontSize: 17,
-                          fontWeight: FontWeight.w700,
-                        ),
-                        onChanged: (v) {
-                          final parsed = _parseTimeInput(v);
-                          if (parsed != null) {
-                            setDialogState(() => draftStart = parsed);
-                          }
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    _buildMiniStepButton(
-                      label: '+5分',
-                      isDark: isDark,
-                      onTap: () => setDialogState(() => applyStart(draftStart + 5)),
-                    ),
-                  ],
-                ),
-                if (!_workingConfig.isEqualDuration || section == 1) ...[
-                  const SizedBox(height: 14),
-                  Text(
-                    _workingConfig.isEqualDuration
-                        ? '统一单节时长 (分钟)'
-                        : '本节时长 (分钟)',
+                  child: Text(
+                    section.toString().padLeft(2, '0'),
                     style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w600,
-                      color: subColor,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      color: accentColor,
+                      fontFeatures: const [FontFeature.tabularFigures()],
                     ),
                   ),
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      _buildMiniStepButton(
-                        label: '-5分',
-                        isDark: isDark,
-                        onTap: () => setDialogState(() => applyDur(draftDur - 5)),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: CupertinoTextField(
-                          controller: durCtrl,
-                          textAlign: TextAlign.center,
-                          keyboardType: TextInputType.number,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 9,
-                          ),
-                          decoration: BoxDecoration(
-                            color: isDark
-                                ? Colors.white.withValues(alpha: 0.08)
-                                : Colors.black.withValues(alpha: 0.05),
-                            borderRadius: SquircleGeometry.smoothRadius(12),
-                            border: Border.all(
-                              color: isDark
-                                  ? Colors.white.withValues(alpha: 0.14)
-                                  : Colors.black.withValues(alpha: 0.08),
-                            ),
-                          ),
-                          style: TextStyle(
-                            color: textColor,
-                            fontSize: 17,
-                            fontWeight: FontWeight.w700,
-                          ),
-                          onChanged: (v) {
-                            final parsed = int.tryParse(v.trim());
-                            if (parsed != null && parsed >= 20 && parsed <= 120) {
-                              setDialogState(() => draftDur = parsed);
-                            }
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      _buildMiniStepButton(
-                        label: '+5分',
-                        isDark: isDark,
-                        onTap: () => setDialogState(() => applyDur(draftDur + 5)),
-                      ),
-                    ],
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  '第 $section 节',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: previewText,
                   ),
-                ],
-                const SizedBox(height: 12),
-                GestureDetector(
-                  onTap: () => setDialogState(
-                    () => cascadeFollowing = !cascadeFollowing,
+                ),
+                const Spacer(),
+                Text(
+                  rangeStr,
+                  style: TextStyle(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w700,
+                    color: previewText,
+                    fontFeatures: const [FontFeature.tabularFigures()],
                   ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        cascadeFollowing
-                            ? CupertinoIcons.checkmark_square_fill
-                            : CupertinoIcons.square,
-                        size: 19,
-                        color: cascadeFollowing ? AppThemeColors.babyPink : subColor,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          section == 1
-                              ? '按当前参数同步顺推全部 1–13 节'
-                              : '同步顺推本时段后续节次',
-                          style: TextStyle(fontSize: 12.5, color: textColor),
-                        ),
-                      ),
-                    ],
+                ),
+                const SizedBox(width: 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: previewDark
+                        ? Colors.white.withValues(alpha: 0.06)
+                        : Colors.black.withValues(alpha: 0.045),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    '${curDur}m',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                      color: previewSub,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
                   ),
                 ),
               ],
             ),
-            actions: [
-              GlassDialogAction(
-                label: '取消',
-                onPressed: () => Navigator.pop(ctx),
-              ),
-              GlassDialogAction(
-                label: '应用',
-                isPrimary: true,
-                onPressed: () async {
-                  final finalStart = _parseTimeInput(startCtrl.text) ?? draftStart;
-                  final finalDur =
-                      (int.tryParse(durCtrl.text.trim()) ?? draftDur).clamp(20, 120);
-                  Navigator.pop(ctx);
-
-                  ScheduleConfigModel next;
-                  if (section == 1 && cascadeFollowing) {
-                    next = ScheduleConfigIntelligence.smartCascade(
-                      base: _workingConfig,
-                      section1Start: finalStart,
-                      defaultDuration: finalDur,
-                      smallBreak: _workingConfig.breakTime,
-                    );
-                  } else {
-                    final newStarts =
-                        Map<int, int>.from(_workingConfig.sectionStartTimes);
-                    final newDurs =
-                        Map<int, int>.from(_workingConfig.sectionDurations);
-                    newStarts[section] = finalStart;
-                    if (_workingConfig.isEqualDuration && section == 1) {
-                      for (int i = 1; i <= 13; i++) {
-                        newDurs[i] = finalDur;
-                      }
-                    } else {
-                      newDurs[section] = finalDur;
-                    }
-                    if (cascadeFollowing && section < 13) {
-                      final periodEnd =
-                          section <= 4 ? 4 : (section <= 8 ? 8 : 13);
-                      int prevEnd = finalStart + finalDur;
-                      for (int s = section + 1; s <= periodEnd; s++) {
-                        final gap = (s == 3 || s == 7 || s == 11)
-                            ? (_workingConfig.breakTime <= 5 ? 15 : _workingConfig.breakTime + 10)
-                            : _workingConfig.breakTime;
-                        newStarts[s] = prevEnd + gap;
-                        final d = _workingConfig.isEqualDuration
-                            ? (_workingConfig.defaultDuration)
-                            : (newDurs[s] ?? _workingConfig.defaultDuration);
-                        prevEnd = newStarts[s]! + d;
-                      }
-                    }
-                    next = _workingConfig.copyWith(
-                      sectionStartTimes: newStarts,
-                      sectionDurations: newDurs,
-                      defaultDuration: (_workingConfig.isEqualDuration && section == 1)
-                          ? finalDur
-                          : _workingConfig.defaultDuration,
-                      useCustomConfig: true,
-                    );
-                  }
-                    await _commitConfig(next);
-                  },
-                ),
-              ],
-            );
-          },
-        ),
-      );
-    startCtrl.dispose();
-    durCtrl.dispose();
-  }
-
-  Widget _buildMiniStepButton({
-    required String label,
-    required bool isDark,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-        decoration: BoxDecoration(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.08)
-              : Colors.black.withValues(alpha: 0.06),
-          borderRadius: SquircleGeometry.smoothRadius(12),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-            color: AppThemeColors.babyPink,
           ),
-        ),
+        );
+      },
+      builder: (dialogCtx) => _SectionEditDialogBody(
+        section: section,
+        initialStart: curStart,
+        initialDuration: curDur,
+        isEqualDuration: _workingConfig.isEqualDuration,
+        badgeColor: accentColor,
+        formatMinutes: _formatMinutes,
+        parseTimeInput: _parseTimeInput,
+        onApply: (finalStart, finalDur, cascadeFollowing) {
+          ScheduleConfigModel next;
+          if (section == 1 && cascadeFollowing) {
+            next = ScheduleConfigIntelligence.smartCascade(
+              base: _workingConfig,
+              section1Start: finalStart,
+              defaultDuration: finalDur,
+              smallBreak: _workingConfig.breakTime,
+            );
+          } else {
+            final newStarts =
+                Map<int, int>.from(_workingConfig.sectionStartTimes);
+            final newDurs =
+                Map<int, int>.from(_workingConfig.sectionDurations);
+            newStarts[section] = finalStart;
+            if (_workingConfig.isEqualDuration && section == 1) {
+              for (int i = 1; i <= 13; i++) {
+                newDurs[i] = finalDur;
+              }
+            } else {
+              newDurs[section] = finalDur;
+            }
+            if (cascadeFollowing && section < 13) {
+              final periodEnd = section <= 4 ? 4 : (section <= 8 ? 8 : 13);
+              int prevEnd = finalStart + finalDur;
+              for (int s = section + 1; s <= periodEnd; s++) {
+                final gap = (s == 3 || s == 7 || s == 11)
+                    ? (_workingConfig.breakTime <= 5
+                        ? 15
+                        : _workingConfig.breakTime + 10)
+                    : _workingConfig.breakTime;
+                newStarts[s] = prevEnd + gap;
+                final d = _workingConfig.isEqualDuration
+                    ? _workingConfig.defaultDuration
+                    : (newDurs[s] ?? _workingConfig.defaultDuration);
+                prevEnd = newStarts[s]! + d;
+              }
+            }
+            next = _workingConfig.copyWith(
+              sectionStartTimes: newStarts,
+              sectionDurations: newDurs,
+              defaultDuration: (_workingConfig.isEqualDuration && section == 1)
+                  ? finalDur
+                  : _workingConfig.defaultDuration,
+              useCustomConfig: true,
+            );
+          }
+          unawaited(_commitConfig(next));
+        },
       ),
     );
   }
@@ -876,60 +741,56 @@ class AndroidScheduleConfigScreenState
         );
 
     final List<Widget> scrollBlocks = [
-      // 1. 基础设置卡片
-      RepaintBoundary(
-        child: _buildBasicConfigCard(isDark, textColor, secondaryColor),
-      ),
+      // 1. 基础设置卡片（HyperOSCard 内部已自带静态子内容 RepaintBoundary，外层不叠包 RenderTarget 避免滚动重建）
+      _buildBasicConfigCard(isDark, textColor, secondaryColor),
       const SizedBox(height: 14),
 
       // 2. 智能作息操作工具栏（智慧推算 / 对齐课表 / 撤回上次）
-      RepaintBoundary(
-        child: _buildActionToolbarCard(
-          isDark,
-          textColor,
-          secondaryColor,
-          canUndo: canUndo,
-        ),
+      _buildActionToolbarCard(
+        isDark,
+        textColor,
+        secondaryColor,
+        canUndo: canUndo,
       ),
       const SizedBox(height: 16),
 
       // 3. 上午 / 下午 / 晚间 分组课时表
-      RepaintBoundary(
-        child: _buildPeriodScheduleCard(
-          title: '上午课程 (1–4 节)',
-          badgeColor: const Color(0xFF10B981),
-          startSection: 1,
-          endSection: 4,
-          isDark: isDark,
-          textColor: textColor,
-          secondaryColor: secondaryColor,
-        ),
+      _buildPeriodScheduleCard(
+        title: '上午课程 (1–4 节)',
+        badgeColor: const Color(0xFF10B981),
+        startSection: 1,
+        endSection: 4,
+        isDark: isDark,
+        textColor: textColor,
+        secondaryColor: secondaryColor,
       ),
       const SizedBox(height: 14),
-      RepaintBoundary(
-        child: _buildPeriodScheduleCard(
-          title: '下午课程 (5–8 节)',
-          badgeColor: AppThemeColors.babyPink,
-          startSection: 5,
-          endSection: 8,
-          isDark: isDark,
-          textColor: textColor,
-          secondaryColor: secondaryColor,
-        ),
+      _buildPeriodScheduleCard(
+        title: '下午课程 (5–8 节)',
+        badgeColor: AppThemeColors.babyPink,
+        startSection: 5,
+        endSection: 8,
+        isDark: isDark,
+        textColor: textColor,
+        secondaryColor: secondaryColor,
       ),
       const SizedBox(height: 14),
-      RepaintBoundary(
-        child: _buildPeriodScheduleCard(
-          title: '晚间课程 (9–13 节)',
-          badgeColor: const Color(0xFF6366F1),
-          startSection: 9,
-          endSection: 13,
-          isDark: isDark,
-          textColor: textColor,
-          secondaryColor: secondaryColor,
-        ),
+      _buildPeriodScheduleCard(
+        title: '晚间课程 (9–13 节)',
+        badgeColor: const Color(0xFF6366F1),
+        startSection: 9,
+        endSection: 13,
+        isDark: isDark,
+        textColor: textColor,
+        secondaryColor: secondaryColor,
       ),
     ];
+
+    final saveBg = AppThemeColors.babyPink;
+    final saveLum = saveBg.computeLuminance();
+    final Color saveTextColor = isDark
+        ? (saveLum > 0.65 ? const Color(0xFF1E2129) : Colors.white)
+        : (saveLum > 0.35 ? const Color(0xFF1E2129) : Colors.white);
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -946,13 +807,16 @@ class AndroidScheduleConfigScreenState
                   slivers: [
                     SliverPadding(
                       padding: resolvedPadding,
-                      sliver: SliverList.builder(
-                        itemCount: scrollBlocks.length,
-                        itemBuilder: (context, idx) => Center(
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 860),
-                            child: scrollBlocks[idx],
+                      sliver: SliverList(
+                        delegate: SliverChildBuilderDelegate(
+                          (context, idx) => Center(
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 860),
+                              child: scrollBlocks[idx],
+                            ),
                           ),
+                          childCount: scrollBlocks.length,
+                          addRepaintBoundaries: false,
                         ),
                       ),
                     ),
@@ -976,23 +840,56 @@ class AndroidScheduleConfigScreenState
                       horizontal: 16,
                       vertical: 8,
                     ),
-                    child: GlassBackdropGroup(
-                      child: Row(
-                        children: [
-                          if (!isDesktop)
-                            const liquid.FloatingGlassHeaderButton(
-                              title: '课时配置',
-                            ),
-                          const Spacer(),
-                          liquid.LiquidButton(
-                            text: '保存',
-                            width: 76,
-                            height: 38,
-                            onTap: _saveAndPop,
-                            color: AppThemeColors.babyPink,
+                    child: Row(
+                      children: [
+                        if (!isDesktop)
+                          const liquid.FloatingGlassHeaderButton(
+                            title: '课时配置',
                           ),
-                        ],
-                      ),
+                        const Spacer(),
+                        SpringTouchFeedback(
+                          onTap: _saveAndPop,
+                          child: RepaintBoundary(
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(18),
+                                boxShadow: liquid.HyperOSShadows.pill(
+                                  isDark,
+                                  accentColor: saveBg,
+                                ),
+                              ),
+                              child: ClipRSuperellipse(
+                                borderRadius: BorderRadius.circular(18),
+                                child: BackdropFilter.grouped(
+                                  filter: ImageFilter.blur(
+                                    sigmaX: 16,
+                                    sigmaY: 16,
+                                  ),
+                                  child: Container(
+                                    width: 76,
+                                    height: 38,
+                                    alignment: Alignment.center,
+                                    decoration: BoxDecoration(
+                                      color: saveBg.withValues(
+                                        alpha: isDark ? 0.78 : 0.86,
+                                      ),
+                                      borderRadius: BorderRadius.circular(18),
+                                    ),
+                                    child: Text(
+                                      '保存',
+                                      style: TextStyle(
+                                        color: saveTextColor,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 15,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -1402,66 +1299,67 @@ class AndroidScheduleConfigScreenState
     required Color textColor,
     required VoidCallback? onTap,
   }) {
-    final effectiveOpacity = enabled ? 1.0 : 0.40;
+    final alphaFactor = enabled ? 1.0 : 0.42;
     final bgColor = filled
-        ? accentColor.withValues(alpha: isDark ? 0.85 : 0.90)
-        : accentColor.withValues(alpha: isDark ? 0.16 : 0.11);
-    final fgColor = filled
+        ? accentColor.withValues(alpha: (isDark ? 0.85 : 0.90) * alphaFactor)
+        : accentColor.withValues(alpha: (isDark ? 0.16 : 0.11) * alphaFactor);
+    final rawFg = filled
         ? (accentColor.computeLuminance() > 0.45
             ? const Color(0xFF1B1E26)
             : Colors.white)
         : (isDark ? Colors.white : const Color(0xFF1E222B));
+    final fgColor = enabled ? rawFg : rawFg.withValues(alpha: 0.42);
+    final iconColor = enabled
+        ? (filled ? fgColor : accentColor)
+        : (filled ? fgColor : accentColor.withValues(alpha: 0.42));
 
-    return Opacity(
-      opacity: effectiveOpacity,
-      child: Material(
-        color: bgColor,
+    return Material(
+      color: bgColor,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(16),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(16),
-          child: Container(
-            height: 44,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
-              border: filled
-                  ? null
-                  : Border.all(
-                      color: accentColor.withValues(
-                        alpha: enabled ? 0.35 : 0.14,
-                      ),
-                    ),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  icon,
-                  size: 16,
-                  color: filled ? fgColor : accentColor,
-                ),
-                const SizedBox(width: 6),
-                Flexible(
-                  child: Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: fgColor,
+        child: Container(
+          height: 44,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: filled
+                ? null
+                : Border.all(
+                    color: accentColor.withValues(
+                      alpha: enabled ? 0.35 : 0.14,
                     ),
                   ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 16,
+                color: iconColor,
+              ),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: fgColor,
+                  ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
     );
   }
 
-  /// 时段分组卡片（仅展示纯静态高对比导视行，点击弹出轻量编辑弹窗）
+  /// 时段分组卡片（仅展示纯静态高对比导视行，点击从当前行平滑展开变形弹窗）
   Widget _buildPeriodScheduleCard({
     required String title,
     required Color badgeColor,
@@ -1529,7 +1427,11 @@ class AndroidScheduleConfigScreenState
               textColor: textColor,
               secondaryColor: secondaryColor,
               formatMinutes: _formatMinutes,
-              onTap: () => _showSectionEditDialog(sec),
+              onTap: (tileCtx) => _showSectionEditDialog(
+                sec,
+                sourceRect: liquid.resolveOverlayLocalRect(tileCtx),
+                badgeColor: badgeColor,
+              ),
             ),
           ],
         ],
@@ -1547,7 +1449,7 @@ class _SectionScheduleTile extends StatelessWidget {
   final Color textColor;
   final Color secondaryColor;
   final String Function(int) formatMinutes;
-  final VoidCallback onTap;
+  final void Function(BuildContext tileContext) onTap;
 
   const _SectionScheduleTile({
     required this.section,
@@ -1566,71 +1468,464 @@ class _SectionScheduleTile extends StatelessWidget {
     final endMin = startMin + durationMin;
     final rangeStr = '${formatMinutes(startMin)} – ${formatMinutes(endMin)}';
 
-    return InkWell(
-      onTap: onTap,
-      borderRadius: SquircleGeometry.smoothRadius(14),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 2),
-        child: Row(
-          children: [
-            Container(
-              width: 30,
-              height: 24,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: badgeColor.withValues(alpha: isDark ? 0.22 : 0.14),
-                borderRadius: SquircleGeometry.smoothRadius(10),
-              ),
-              child: Text(
-                section.toString().padLeft(2, '0'),
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                  color: badgeColor,
-                  fontFeatures: const [FontFeature.tabularFigures()],
+    return Builder(
+      builder: (tileCtx) => InkWell(
+        onTap: () => onTap(tileCtx),
+        borderRadius: BorderRadius.circular(14),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 2),
+          child: Row(
+            children: [
+              Container(
+                width: 30,
+                height: 24,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: badgeColor.withValues(alpha: isDark ? 0.22 : 0.14),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  section.toString().padLeft(2, '0'),
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    color: badgeColor,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(width: 12),
-            Text(
-              '第 $section 节',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: textColor,
-              ),
-            ),
-            const Spacer(),
-            Text(
-              rangeStr,
-              style: TextStyle(
-                fontSize: 14.5,
-                fontWeight: FontWeight.w700,
-                color: textColor,
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
-            ),
-            const SizedBox(width: 10),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: isDark
-                    ? Colors.white.withValues(alpha: 0.06)
-                    : Colors.black.withValues(alpha: 0.045),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                '${durationMin}m',
+              const SizedBox(width: 12),
+              Text(
+                '第 $section 节',
                 style: TextStyle(
-                  fontSize: 11.5,
+                  fontSize: 14,
                   fontWeight: FontWeight.w600,
-                  color: secondaryColor,
+                  color: textColor,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                rangeStr,
+                style: TextStyle(
+                  fontSize: 14.5,
+                  fontWeight: FontWeight.w700,
+                  color: textColor,
                   fontFeatures: const [FontFeature.tabularFigures()],
                 ),
               ),
-            ),
-          ],
+              const SizedBox(width: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.06)
+                      : Colors.black.withValues(alpha: 0.045),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  '${durationMin}m',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                    color: secondaryColor,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
+      ),
+    );
+  }
+}
+
+class _SectionEditDialogBody extends StatefulWidget {
+  final int section;
+  final int initialStart;
+  final int initialDuration;
+  final bool isEqualDuration;
+  final Color badgeColor;
+  final String Function(int) formatMinutes;
+  final int? Function(String) parseTimeInput;
+  final void Function(int finalStart, int finalDur, bool cascadeFollowing) onApply;
+
+  const _SectionEditDialogBody({
+    required this.section,
+    required this.initialStart,
+    required this.initialDuration,
+    required this.isEqualDuration,
+    required this.badgeColor,
+    required this.formatMinutes,
+    required this.parseTimeInput,
+    required this.onApply,
+  });
+
+  @override
+  State<_SectionEditDialogBody> createState() => _SectionEditDialogBodyState();
+}
+
+class _SectionEditDialogBodyState extends State<_SectionEditDialogBody> {
+  late int _draftStart;
+  late int _draftDur;
+  late bool _cascadeFollowing;
+  late final TextEditingController _startCtrl;
+  late final TextEditingController _durCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _draftStart = widget.initialStart;
+    _draftDur = widget.initialDuration;
+    _cascadeFollowing = widget.section == 1;
+    _startCtrl = TextEditingController(
+      text: widget.formatMinutes(widget.initialStart),
+    );
+    _durCtrl = TextEditingController(text: widget.initialDuration.toString());
+  }
+
+  @override
+  void dispose() {
+    _startCtrl.dispose();
+    _durCtrl.dispose();
+    super.dispose();
+  }
+
+  void _applyStart(int m) {
+    _draftStart = m.clamp(6 * 60, 23 * 60 + 30);
+    _startCtrl.text = widget.formatMinutes(_draftStart);
+  }
+
+  void _applyDur(int d) {
+    _draftDur = d.clamp(20, 120);
+    _durCtrl.text = _draftDur.toString();
+  }
+
+  Widget _buildMiniStepButton({
+    required String label,
+    required bool isDark,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        decoration: BoxDecoration(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.black.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: AppThemeColors.babyPink,
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final textColor = GlassSettingsHelper.getTextColor(context);
+    final subColor = GlassSettingsHelper.getSecondaryTextColor(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final showDurationField = !widget.isEqualDuration || widget.section == 1;
+
+    final primaryBtnBg = AppThemeColors.babyPink;
+    final primaryBtnFg = primaryBtnBg.computeLuminance() > 0.45
+        ? const Color(0xFF1B1E26)
+        : Colors.white;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 30,
+                height: 24,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: widget.badgeColor.withValues(
+                    alpha: isDark ? 0.22 : 0.14,
+                  ),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  widget.section.toString().padLeft(2, '0'),
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    color: widget.badgeColor,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  '第 ${widget.section} 节作息时间',
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                    color: textColor,
+                  ),
+                ),
+              ),
+              SpringTouchFeedback(
+                onTap: () => Navigator.pop(context),
+                child: Icon(
+                  CupertinoIcons.xmark_circle_fill,
+                  color: isDark ? Colors.white38 : Colors.black26,
+                  size: 22,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '下课时间将自动算作 ${widget.formatMinutes(_draftStart + _draftDur)}',
+            style: TextStyle(fontSize: 12.5, color: subColor),
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '上课时间',
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: subColor,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      _buildMiniStepButton(
+                        label: '-5分',
+                        isDark: isDark,
+                        onTap: () =>
+                            setState(() => _applyStart(_draftStart - 5)),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: CupertinoTextField(
+                          controller: _startCtrl,
+                          textAlign: TextAlign.center,
+                          keyboardType: TextInputType.datetime,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 9,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.08)
+                                : Colors.black.withValues(alpha: 0.05),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: isDark
+                                  ? Colors.white.withValues(alpha: 0.14)
+                                  : Colors.black.withValues(alpha: 0.08),
+                            ),
+                          ),
+                          style: TextStyle(
+                            color: textColor,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w700,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
+                          onChanged: (v) {
+                            final parsed = widget.parseTimeInput(v);
+                            if (parsed != null) {
+                              setState(() => _draftStart = parsed);
+                            }
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      _buildMiniStepButton(
+                        label: '+5分',
+                        isDark: isDark,
+                        onTap: () =>
+                            setState(() => _applyStart(_draftStart + 5)),
+                      ),
+                    ],
+                  ),
+                  if (showDurationField) ...[
+                    const SizedBox(height: 14),
+                    Text(
+                      widget.isEqualDuration
+                          ? '统一单节时长 (分钟)'
+                          : '本节时长 (分钟)',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: subColor,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        _buildMiniStepButton(
+                          label: '-5分',
+                          isDark: isDark,
+                          onTap: () => setState(() => _applyDur(_draftDur - 5)),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: CupertinoTextField(
+                            controller: _durCtrl,
+                            textAlign: TextAlign.center,
+                            keyboardType: TextInputType.number,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 9,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? Colors.white.withValues(alpha: 0.08)
+                                  : Colors.black.withValues(alpha: 0.05),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: isDark
+                                    ? Colors.white.withValues(alpha: 0.14)
+                                    : Colors.black.withValues(alpha: 0.08),
+                              ),
+                            ),
+                            style: TextStyle(
+                              color: textColor,
+                              fontSize: 17,
+                              fontWeight: FontWeight.w700,
+                              fontFeatures: const [FontFeature.tabularFigures()],
+                            ),
+                            onChanged: (v) {
+                              final parsed = int.tryParse(v.trim());
+                              if (parsed != null &&
+                                  parsed >= 20 &&
+                                  parsed <= 120) {
+                                setState(() => _draftDur = parsed);
+                              }
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        _buildMiniStepButton(
+                          label: '+5分',
+                          isDark: isDark,
+                          onTap: () => setState(() => _applyDur(_draftDur + 5)),
+                        ),
+                      ],
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => setState(
+                      () => _cascadeFollowing = !_cascadeFollowing,
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2),
+                      child: Row(
+                        children: [
+                          Icon(
+                            _cascadeFollowing
+                                ? CupertinoIcons.checkmark_square_fill
+                                : CupertinoIcons.square,
+                            size: 19,
+                            color: _cascadeFollowing
+                                ? AppThemeColors.babyPink
+                                : subColor,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              widget.section == 1
+                                  ? '按当前参数同步顺推全部 1–13 节'
+                                  : '同步顺推本时段后续节次',
+                              style: TextStyle(fontSize: 12.5, color: textColor),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: SpringTouchFeedback(
+                  onTap: () => Navigator.pop(context),
+                  child: Container(
+                    height: 42,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.08)
+                          : Colors.black.withValues(alpha: 0.06),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Text(
+                      '取消',
+                      style: TextStyle(
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w600,
+                        color: textColor,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: SpringTouchFeedback(
+                  onTap: () {
+                    final finalStart =
+                        widget.parseTimeInput(_startCtrl.text) ?? _draftStart;
+                    final finalDur =
+                        (int.tryParse(_durCtrl.text.trim()) ?? _draftDur)
+                            .clamp(20, 120);
+                    Navigator.pop(context);
+                    widget.onApply(finalStart, finalDur, _cascadeFollowing);
+                  },
+                  child: Container(
+                    height: 42,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: primaryBtnBg,
+                      borderRadius: BorderRadius.circular(14),
+                      boxShadow: liquid.HyperOSShadows.pill(
+                        isDark,
+                        accentColor: primaryBtnBg,
+                      ),
+                    ),
+                    child: Text(
+                      '应用',
+                      style: TextStyle(
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.bold,
+                        color: primaryBtnFg,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

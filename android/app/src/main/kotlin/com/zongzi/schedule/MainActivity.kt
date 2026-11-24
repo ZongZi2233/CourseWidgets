@@ -1,10 +1,16 @@
 package com.zongzi.schedule
 
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
+import android.animation.AnimatorSet
+import android.animation.ObjectAnimator
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
+import android.view.View
+import android.view.animation.PathInterpolator
 import androidx.annotation.RequiresApi
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -23,8 +29,64 @@ class MainActivity : FlutterActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            // [v3.2.3] 原生 120Hz RenderThread 单阶段丝滑揭晓退场，彻底摆脱两段式开屏或首帧卡顿吞动画问题
             splashScreen.setOnExitAnimationListener { splashScreenView ->
-                splashScreenView.remove()
+                try {
+                    val density = resources.displayMetrics.density
+                    val decelInterpolator = PathInterpolator(0.22f, 1.0f, 0.36f, 1.0f)
+                    val animators = mutableListOf<Animator>()
+
+                    val iconView: View? = try {
+                        splashScreenView.iconView
+                    } catch (_: Throwable) {
+                        null
+                    }
+                    if (iconView != null) {
+                        animators += ObjectAnimator.ofFloat(iconView, View.TRANSLATION_Y, 0f, -18f * density)
+                        animators += ObjectAnimator.ofFloat(iconView, View.SCALE_X, 1.0f, 1.07f)
+                        animators += ObjectAnimator.ofFloat(iconView, View.SCALE_Y, 1.0f, 1.07f)
+                        animators += ObjectAnimator.ofFloat(iconView, View.ALPHA, 1.0f, 0.0f)
+                    }
+
+                    val rootFade = ObjectAnimator.ofFloat(splashScreenView, View.ALPHA, 1.0f, 0.0f).apply {
+                        duration = 300L
+                        startDelay = 40L
+                        interpolator = decelInterpolator
+                    }
+
+                    val iconSet = AnimatorSet().apply {
+                        duration = 320L
+                        interpolator = decelInterpolator
+                        if (animators.isNotEmpty()) {
+                            playTogether(animators)
+                        }
+                    }
+
+                    var removed = false
+                    fun finishRemove() {
+                        if (!removed) {
+                            removed = true
+                            try {
+                                splashScreenView.remove()
+                            } catch (_: Throwable) {
+                            }
+                        }
+                    }
+
+                    AnimatorSet().apply {
+                        playTogether(iconSet, rootFade)
+                        addListener(object : AnimatorListenerAdapter() {
+                            override fun onAnimationEnd(animation: Animator) = finishRemove()
+                            override fun onAnimationCancel(animation: Animator) = finishRemove()
+                        })
+                        start()
+                    }
+                } catch (_: Throwable) {
+                    try {
+                        splashScreenView.remove()
+                    } catch (_: Throwable) {
+                    }
+                }
             }
         }
     }

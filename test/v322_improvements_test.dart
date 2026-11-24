@@ -200,7 +200,7 @@ void main() {
       expect(find.text('11月30日 · 第 12 周'), findsOneWidget);
       expect(find.text('中1203'), findsOneWidget);
       expect(find.text('周一'), findsOneWidget);
-      expect(find.text('1门'), findsOneWidget);
+      expect(find.text('3门'), findsOneWidget);
       expect(find.text('人工智能—AI绘画从入门到精通'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });

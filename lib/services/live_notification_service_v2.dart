@@ -378,6 +378,23 @@ class LiveNotificationServiceV2 {
     }
   }
 
+  String _formatShortRelDayBadge(DateTime target, DateTime now) {
+    final targetDate = DateTime(target.year, target.month, target.day);
+    final nowDate = DateTime(now.year, now.month, now.day);
+    final diffDays = targetDate.difference(nowDate).inDays;
+    const weekDays = ['', '周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+    switch (diffDays) {
+      case 0:
+        return '今日';
+      case 1:
+        return '明日';
+      case 2:
+        return '后天';
+      default:
+        return weekDays[target.weekday.clamp(1, 7)];
+    }
+  }
+
   List<CourseEvent> _getCoursesForDate(DateTime date) {
     final startOfDay = DateTime(
       date.year,
@@ -466,7 +483,7 @@ class LiveNotificationServiceV2 {
           CourseColorPalette.getNotificationAccentColor(nextFirst.name),
         );
         title = '<b>${nextFirst.name}</b>';
-        subLocation = '$relDay·$startStr';
+        subLocation = '${_formatShortRelDayBadge(nextDt, now)}·${count}节';
         final roomHtml = room.isEmpty
             ? ''
             : '<b><font color="$accentHex">${room.code}</font></b>${room.hasVenue ? " ${room.venue}" : ""} · ';
@@ -477,7 +494,7 @@ class LiveNotificationServiceV2 {
       } else {
         title = '<b>今日暂无课程安排</b>';
         body = '今日无课 · 第 $_currentWeek 周\n点击进入应用查看完整课表';
-        subLocation = '今日无课';
+        subLocation = '近期无课';
         showProgress = false;
       }
     } else {
@@ -565,7 +582,9 @@ class LiveNotificationServiceV2 {
         if (isToday) {
           title = '<b>${_currentCourse!.name}</b>';
           if (m <= 45) {
-            subLocation = m > 0 ? '${m}分后' : '即将开课';
+            subLocation = (!room.isEmpty && room.code.length <= 4)
+                ? '${room.code}·${m}分'
+                : (m > 0 ? '${m}分后' : '即将开课');
             progressPercent =
                 (((45 - m).clamp(0, 45) / 45) * 100).clamp(0, 100).toInt();
             showProgress = true;
@@ -574,18 +593,31 @@ class LiveNotificationServiceV2 {
 
             body =
                 '$roomHtml<b>$startStr 开课</b> ($startStr–$endStr) · ${m <= 15 ? "提前入座" : "课间候课"}';
-          } else if (m <= 90) {
-            subLocation = '${m}分后';
+          } else if (m <= 60) {
+            subLocation = (!room.isEmpty && room.code.length <= 4)
+                ? '${room.code}·${m}分'
+                : '${m}分后';
             showProgress = false;
             eventTime = start;
             isCountingDown = true;
             body =
-                '$roomHtml<b>$startStr 开课</b> ($startStr–$endStr)\n距上课不足 90 分钟 · 请留意开课时间';
-          } else {
-            final waitStr = m >= 60 ? '${m ~/ 60}小时${m % 60}分' : '${m}分钟';
+                '$roomHtml<b>$startStr–$endStr</b>\n距开课 ${m}分钟 · $secBadge';
+          } else if (m <= 180) {
+            subLocation = '今·$startStr';
+            showProgress = false;
+            eventTime = start;
+            isCountingDown = true;
             body =
-                '$roomHtml<b>$startStr 开课</b> ($startStr–$endStr)\n距开课 $waitStr · $secBadge';
-            subLocation = !room.isEmpty ? room.code : startStr;
+                '$roomHtml<b>$startStr–$endStr</b>\n距开课 ${m ~/ 60}小时${m % 60}分 · $secBadge';
+          } else {
+            final waitStr = '${m ~/ 60}小时${m % 60}分';
+            final remainingTodayCount = _getCoursesForDate(now)
+                .where((c) => c.startTime > nowMs)
+                .length;
+            body =
+                '$roomHtml<b>$startStr–$endStr</b>\n距开课 $waitStr · $secBadge';
+            subLocation =
+                '今日·${remainingTodayCount > 0 ? remainingTodayCount : 1}节';
             showProgress = false;
             eventTime = start;
             isCountingDown = true;
@@ -596,7 +628,7 @@ class LiveNotificationServiceV2 {
           final count = targetCourses.isNotEmpty ? targetCourses.length : 1;
           final relDay = _formatRelativeDate(start, now);
           title = '<b>${_currentCourse!.name}</b>';
-          subLocation = '$relDay·$startStr';
+          subLocation = '${_formatShortRelDayBadge(start, now)}·${count}节';
           body =
               '$roomHtml$relDay $startStr–$endStr\n$secBadge · 当日共 $count 门课程';
           showProgress = false;

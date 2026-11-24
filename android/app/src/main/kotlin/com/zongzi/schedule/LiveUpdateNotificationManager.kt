@@ -257,17 +257,18 @@ object LiveUpdateNotificationManager {
      */
     private fun SpannableStringBuilder.appendClassroomPill(
         code: String,
-        bgColor: Int
+        bgColor: Int,
+        relativeSize: Float = 1.42f
     ): SpannableStringBuilder {
         if (code.isEmpty()) return this
         val start = length
-        append("\u00A0$code\u00A0")
+        append("\u00A0\u2009$code\u2009\u00A0")
         val end = length
         val flags = Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
         setSpan(BackgroundColorSpan(bgColor), start, end, flags)
         setSpan(ForegroundColorSpan(0xFFFFFFFF.toInt()), start, end, flags)
         setSpan(StyleSpan(Typeface.BOLD), start, end, flags)
-        setSpan(RelativeSizeSpan(1.12f), start, end, flags)
+        setSpan(RelativeSizeSpan(relativeSize), start, end, flags)
         return this
     }
 
@@ -833,7 +834,7 @@ object LiveUpdateNotificationManager {
     }
 
     /**
-     * 将矢量图标 (ic_live_monster / ic_live_walker) 按设备真实物理 DPI 渲染为带高对比暗色圆底的精致游标 Icon
+     * 将功能导视矢量图标 (ic_live_class / ic_live_waiting / ic_live_schedule) 按设备真实物理 DPI 渲染为带高对比暗色圆底的游标 Icon
      */
     private fun createVectorTrackerIcon(
         context: Context,
@@ -865,7 +866,7 @@ object LiveUpdateNotificationManager {
             }
             canvas.drawCircle(cx, cy, radius, strokePaint)
 
-            // 3. 居中绘制純矢量小怪兽 / 行走小人
+            // 3. 居中绘制功能导视矢量图标
             val drawable = ContextCompat.getDrawable(context, drawableRes)?.mutate()
             if (drawable != null) {
                 val pad = (5.2f * density).toInt()
@@ -943,68 +944,68 @@ object LiveUpdateNotificationManager {
 
                 // 课程名称独立成行且不染主题色，防止超长教室挤压课程信息
                 val heroTitleSpan = SpannableStringBuilder()
-                    .appendStyled(current.name, relativeSize = 1.14f, color = null, bold = true)
+                    .appendStyled(current.name, relativeSize = 1.12f, color = null, bold = true)
 
                 val detailBodySpan = SpannableStringBuilder().apply {
                     if (!classroom.isEmpty) {
                         if (classroom.code.isNotEmpty()) {
-                            appendClassroomPill(classroom.code, badgeBgColor)
+                            appendClassroomPill(classroom.code, badgeBgColor, 1.32f)
                         }
                         if (classroom.hasVenue) {
                             appendStyled(
                                 if (classroom.code.isNotEmpty()) "  ${classroom.venue}" else classroom.venue,
-                                relativeSize = 0.90f,
-                                color = 0xFFCBD5E1.toInt()
+                                relativeSize = 0.76f,
+                                color = 0xFF94A3B8.toInt()
                             )
                         }
-                        appendStyled(" · ", relativeSize = 0.88f, color = 0xFF8E95A3.toInt())
+                        appendStyled("  ", relativeSize = 0.80f)
                     }
-                    appendStyled(endStr, relativeSize = 1.02f, color = accentColor, bold = true)
-                    appendStyled(" 下课", relativeSize = 0.86f, color = 0xFF8E95A3.toInt())
+                    appendStyled(endStr, relativeSize = 1.22f, color = accentColor, bold = true)
+                    appendStyled(" 下课", relativeSize = 0.84f, color = accentColor, bold = true)
                     if (nextCourse != null) {
                         val nextAccent = resolveCourseAccentColor(nextCourse.name, nextCourse.colorArgb)
                         val nextStartStr = timeFmt.format(Date(nextCourse.startTime))
                         val nextRoom = parseClassroomInfo(nextCourse.location)
-                        appendStyled(" · 下节 ", relativeSize = 0.84f, color = 0xFF8E95A3.toInt())
+                        appendStyled(" · 下节 ", relativeSize = 0.80f, color = 0xFF8E95A3.toInt())
                         if (!nextRoom.isEmpty && nextRoom.code.isNotEmpty()) {
-                            appendStyled(nextRoom.code, relativeSize = 0.96f, color = nextAccent, bold = true)
-                            appendStyled(" ${nextCourse.name}", relativeSize = 0.90f, color = null, bold = true)
+                            appendStyled(nextRoom.code, relativeSize = 0.90f, color = nextAccent, bold = true)
+                            appendStyled(" ${nextCourse.name}", relativeSize = 0.84f, color = null, bold = true)
                         } else {
-                            appendStyled("$nextStartStr ${nextCourse.name}", relativeSize = 0.90f, color = null, bold = true)
+                            appendStyled("$nextStartStr ${nextCourse.name}", relativeSize = 0.84f, color = null, bold = true)
                         }
                     } else {
-                        appendStyled(" · 今日最后一节", relativeSize = 0.86f, color = 0xFF8E95A3.toInt())
+                        appendStyled(" · 今日最后一节", relativeSize = 0.80f, color = 0xFF8E95A3.toInt())
                     }
                 }
 
                 val bigDetailBodySpan = SpannableStringBuilder().apply {
                     if (!classroom.isEmpty) {
                         if (classroom.code.isNotEmpty()) {
-                            appendClassroomPill(classroom.code, badgeBgColor)
+                            appendClassroomPill(classroom.code, badgeBgColor, 1.42f)
                         }
                         if (classroom.hasVenue) {
                             appendStyled(
                                 if (classroom.code.isNotEmpty()) "  ${classroom.venue}" else classroom.venue,
-                                relativeSize = 0.92f,
-                                color = 0xFFCBD5E1.toInt()
+                                relativeSize = 0.76f,
+                                color = 0xFF94A3B8.toInt()
                             )
                         }
                         append("\n")
                     }
-                    appendStyled(endStr, relativeSize = 1.02f, color = accentColor, bold = true)
-                    appendStyled(" 下课", relativeSize = 0.88f, color = 0xFF8E95A3.toInt())
+                    appendStyled(endStr, relativeSize = 1.30f, color = accentColor, bold = true)
+                    appendStyled(" 下课", relativeSize = 0.86f, color = accentColor, bold = true)
                     if (nextCourse != null) {
                         val nextAccent = resolveCourseAccentColor(nextCourse.name, nextCourse.colorArgb)
                         val nextRoom = parseClassroomInfo(nextCourse.location)
-                        append("\n下节 ")
+                        appendStyled("  ·  下节 ", relativeSize = 0.80f, color = 0xFF8E95A3.toInt())
                         if (nextRoom.code.isNotEmpty()) {
-                            appendStyled(nextRoom.code, relativeSize = 0.96f, color = nextAccent, bold = true)
-                            appendStyled(" ${nextCourse.name}", relativeSize = 0.92f, color = null, bold = true)
+                            appendStyled(nextRoom.code, relativeSize = 0.90f, color = nextAccent, bold = true)
+                            appendStyled(" ${nextCourse.name}", relativeSize = 0.84f, color = null, bold = true)
                         } else {
-                            appendStyled(nextCourse.name, relativeSize = 0.92f, color = null, bold = true)
+                            appendStyled(nextCourse.name, relativeSize = 0.84f, color = null, bold = true)
                         }
                     } else {
-                        appendStyled(" · 今日最后一节", relativeSize = 0.88f, color = 0xFF8E95A3.toInt())
+                        appendStyled("  ·  今日最后一节", relativeSize = 0.80f, color = 0xFF8E95A3.toInt())
                     }
                 }
 
@@ -1022,7 +1023,7 @@ object LiveUpdateNotificationManager {
                 } else {
                     "剩${remainingMin}分"
                 }
-                val capsule = if (classroom.code.isNotEmpty() && classroom.code.length <= 5) {
+                val capsule = if (classroom.code.isNotEmpty() && classroom.code.length <= 4) {
                     "${classroom.code}·$timeChip"
                 } else {
                     timeChip
@@ -1037,7 +1038,7 @@ object LiveUpdateNotificationManager {
                     badgePrimary = secNums.ifEmpty { "课堂" },
                     badgeSecondary = if (secNums.isNotEmpty()) "节" else "",
                     badgeBgColor = badgeBgColor,
-                    smallIconRes = R.drawable.ic_live_monster,
+                    smallIconRes = R.drawable.ic_live_class,
                     accentColor = accentColor,
                     trackColor = trackColor,
                     isOngoingClass = true,
@@ -1078,7 +1079,7 @@ object LiveUpdateNotificationManager {
                 val showBreakBar = diffMin <= 45
 
                 val heroTitleSpan = SpannableStringBuilder()
-                    .appendStyled(nextCourse.name, relativeSize = 1.14f, color = null, bold = true)
+                    .appendStyled(nextCourse.name, relativeSize = 1.12f, color = null, bold = true)
 
                 val waitText = if (diffMin >= 60) "${diffMin / 60}小时${diffMin % 60}分" else "${diffMin}分钟"
                 val teacherText = nextCourse.teacher.trim()
@@ -1086,56 +1087,57 @@ object LiveUpdateNotificationManager {
                 val detailBodySpan = SpannableStringBuilder().apply {
                     if (!classroom.isEmpty) {
                         if (classroom.code.isNotEmpty()) {
-                            appendClassroomPill(classroom.code, badgeBgColor)
+                            appendClassroomPill(classroom.code, badgeBgColor, 1.32f)
                         }
                         if (classroom.hasVenue) {
                             appendStyled(
                                 if (classroom.code.isNotEmpty()) "  ${classroom.venue}" else classroom.venue,
-                                relativeSize = 0.90f,
-                                color = 0xFFCBD5E1.toInt()
+                                relativeSize = 0.76f,
+                                color = 0xFF94A3B8.toInt()
                             )
                         }
-                        appendStyled(" · ", relativeSize = 0.88f, color = 0xFF8E95A3.toInt())
+                        appendStyled("  ", relativeSize = 0.80f)
                     }
-                    appendStyled("距开课 $waitText", relativeSize = 0.96f, color = accentColor, bold = true)
-                    if (teacherText.isNotEmpty()) {
-                        appendStyled(" · $teacherText", relativeSize = 0.86f, color = 0xFF8E95A3.toInt())
-                    }
+                    appendStyled("$nextStartStr–$nextEndStr", relativeSize = 1.22f, color = accentColor, bold = true)
+                    appendStyled(" · ${waitText}后", relativeSize = 0.80f, color = 0xFF8E95A3.toInt())
                 }
 
                 val bigDetailBodySpan = SpannableStringBuilder().apply {
                     if (!classroom.isEmpty) {
                         if (classroom.code.isNotEmpty()) {
-                            appendClassroomPill(classroom.code, badgeBgColor)
+                            appendClassroomPill(classroom.code, badgeBgColor, 1.42f)
                         }
                         if (classroom.hasVenue) {
                             appendStyled(
                                 if (classroom.code.isNotEmpty()) "  ${classroom.venue}" else classroom.venue,
-                                relativeSize = 0.92f,
-                                color = 0xFFCBD5E1.toInt()
+                                relativeSize = 0.76f,
+                                color = 0xFF94A3B8.toInt()
                             )
                         }
                     } else {
-                        appendStyled("未指定教室", relativeSize = 0.92f, color = 0xFF8E95A3.toInt())
+                        appendStyled("未指定教室", relativeSize = 0.82f, color = 0xFF8E95A3.toInt())
                     }
                     append("\n")
-                    appendStyled("距开课 $waitText", relativeSize = 0.94f, color = accentColor, bold = true)
-                    if (teacherText.isNotEmpty()) {
-                        appendStyled(" · $teacherText", relativeSize = 0.88f, color = 0xFF9CA3AF.toInt())
-                    }
+                    appendStyled("$nextStartStr–$nextEndStr", relativeSize = 1.30f, color = accentColor, bold = true)
+                    appendStyled("  ·  距开课 $waitText", relativeSize = 0.84f, color = 0xFFCBD5E1.toInt())
                     append("\n")
-                    appendStyled("今日余 ${remainTodayCount} 门课程", relativeSize = 0.86f, color = 0xFF8E95A3.toInt())
+                    appendStyled(
+                        "今日余 ${remainTodayCount} 门${if (teacherText.isNotEmpty()) " · $teacherText" else ""}",
+                        relativeSize = 0.78f,
+                        color = 0xFF8E95A3.toInt()
+                    )
                 }
 
                 val shortCapsule = when {
-                    diffMin <= 90 && classroom.code.isNotEmpty() && classroom.code.length <= 5 -> "${classroom.code}·${diffMin}分"
-                    diffMin <= 90 -> "${diffMin}分后"
-                    else -> nextStartStr
+                    diffMin <= 60 && classroom.code.isNotEmpty() && classroom.code.length <= 4 -> "${classroom.code}·${diffMin}分"
+                    diffMin <= 60 -> "${diffMin}分后"
+                    diffMin <= 180 -> "今·$nextStartStr"
+                    else -> "今日·${remainTodayCount}节"
                 }
                 val headerLabel = when {
-                    prevCourse == null -> "今日${todayWeekday} · $nextStartStr–$nextEndStr"
-                    diffMin <= 15 -> "即将开课 · $nextStartStr–$nextEndStr"
-                    else -> "课间候课 · $nextStartStr–$nextEndStr"
+                    prevCourse == null -> "今日$todayWeekday · 候课"
+                    diffMin <= 15 -> "即将开课"
+                    else -> "课间候课"
                 }
 
                 return LiveUpdateSnapshot(
@@ -1147,7 +1149,7 @@ object LiveUpdateNotificationManager {
                     badgePrimary = secNums.ifEmpty { "待上" },
                     badgeSecondary = if (secNums.isNotEmpty()) "节" else "",
                     badgeBgColor = badgeBgColor,
-                    smallIconRes = R.drawable.ic_live_walker,
+                    smallIconRes = R.drawable.ic_live_waiting,
                     accentColor = accentColor,
                     trackColor = trackColor,
                     isOngoingClass = false,
@@ -1164,7 +1166,7 @@ object LiveUpdateNotificationManager {
             }
         }
 
-        // ==================== 状态 C：今日课程已结束或无课（隐藏进度条，零字段重复 + 教室色块与右侧节次/星期徽章分离） ====================
+        // ==================== 状态 C：今日课程已结束或无课（隐藏进度条，状态栏胶囊仅显示次回概览） ====================
         val futureCourse = allCourses.filter { it.startTime > now }.minByOrNull { it.startTime }
 
         if (futureCourse != null) {
@@ -1192,7 +1194,7 @@ object LiveUpdateNotificationManager {
             val targetCount = targetDayCourses.size.coerceAtLeast(1)
 
             val heroTitleSpan = SpannableStringBuilder()
-                .appendStyled(futureCourse.name, relativeSize = 1.14f, color = null, bold = true)
+                .appendStyled(futureCourse.name, relativeSize = 1.12f, color = null, bold = true)
 
             val todayPrefix = if (todayCourses.isNotEmpty()) "今日已结课" else "今日无课"
             val teacher = futureCourse.teacher.trim()
@@ -1200,55 +1202,56 @@ object LiveUpdateNotificationManager {
             val detailBodySpan = SpannableStringBuilder().apply {
                 if (!classroom.isEmpty) {
                     if (classroom.code.isNotEmpty()) {
-                        appendClassroomPill(classroom.code, badgeBgColor)
+                        appendClassroomPill(classroom.code, badgeBgColor, 1.32f)
                     }
-                    if (classroom.hasVenue) {
-                        appendStyled(
-                            if (classroom.code.isNotEmpty()) "  ${classroom.venue}" else classroom.venue,
-                            relativeSize = 0.90f,
-                            color = 0xFFCBD5E1.toInt()
-                        )
-                    }
-                    appendStyled(" · ", relativeSize = 0.88f, color = 0xFF8E95A3.toInt())
+                    appendStyled("  ", relativeSize = 0.80f)
                 }
-                appendStyled("$startStr–$endStr", relativeSize = 0.96f, color = accentColor, bold = true)
+                appendStyled("$startStr–$endStr", relativeSize = 1.22f, color = accentColor, bold = true)
+                if (classroom.hasVenue) {
+                    appendStyled("  ${classroom.venue}", relativeSize = 0.76f, color = 0xFF94A3B8.toInt())
+                }
             }
 
             val bigDetailBodySpan = SpannableStringBuilder().apply {
                 if (!classroom.isEmpty) {
                     if (classroom.code.isNotEmpty()) {
-                        appendClassroomPill(classroom.code, badgeBgColor)
+                        appendClassroomPill(classroom.code, badgeBgColor, 1.42f)
                     }
                     if (classroom.hasVenue) {
                         appendStyled(
                             if (classroom.code.isNotEmpty()) "  ${classroom.venue}" else classroom.venue,
-                            relativeSize = 0.92f,
-                            color = 0xFFCBD5E1.toInt()
+                            relativeSize = 0.76f,
+                            color = 0xFF94A3B8.toInt()
                         )
                     }
                 } else {
-                    appendStyled("未指定教室", relativeSize = 0.92f, color = 0xFF8E95A3.toInt())
+                    appendStyled("未指定教室", relativeSize = 0.82f, color = 0xFF8E95A3.toInt())
                 }
                 append("\n")
-                appendStyled("$startStr–$endStr", relativeSize = 0.94f, color = accentColor, bold = true)
+                appendStyled("$startStr–$endStr", relativeSize = 1.30f, color = accentColor, bold = true)
                 appendStyled(
-                    " · $sectionLabel${if (teacher.isNotEmpty()) " · $teacher" else ""}\n",
-                    relativeSize = 0.88f,
+                    "  ·  $sectionLabel",
+                    relativeSize = 0.82f,
                     color = 0xFF9CA3AF.toInt()
                 )
-                appendStyled("$todayPrefix · 下一节课程预告", relativeSize = 0.86f, color = 0xFF8E95A3.toInt())
+                append("\n")
+                appendStyled(
+                    "$todayPrefix${if (teacher.isNotEmpty()) " · $teacher" else ""} · 下次上课预告",
+                    relativeSize = 0.78f,
+                    color = 0xFF8E95A3.toInt()
+                )
             }
 
             return LiveUpdateSnapshot(
                 headerSubText = "$monthDayOnly · $weekLabel",
-                shortCapsuleText = if (classroom.code.isNotEmpty() && classroom.code.length <= 5) "${classroom.code}·$startStr" else startStr,
+                shortCapsuleText = "$shortRelBadge·${targetCount}节",
                 heroTitleSpan = heroTitleSpan,
                 detailBodySpan = detailBodySpan,
                 bigDetailBodySpan = bigDetailBodySpan,
                 badgePrimary = shortRelBadge,
                 badgeSecondary = "${targetCount}门",
                 badgeBgColor = badgeBgColor,
-                smallIconRes = R.drawable.ic_live_walker,
+                smallIconRes = R.drawable.ic_live_schedule,
                 accentColor = accentColor,
                 trackColor = trackColor,
                 isOngoingClass = false,
@@ -1266,24 +1269,24 @@ object LiveUpdateNotificationManager {
 
         // ==================== 状态 D：近期暂无排课（彻底隐藏进度条并维持多行饱满卡片高度） ====================
         val fallbackTitleSpan = SpannableStringBuilder()
-            .appendStyled(fallbackTitle.ifEmpty { "今日暂无课程安排" }, relativeSize = 1.14f, color = null, bold = true)
+            .appendStyled(fallbackTitle.ifEmpty { "今日暂无课程安排" }, relativeSize = 1.12f, color = null, bold = true)
         val fallbackBodySpan = SpannableStringBuilder()
-            .appendStyled(fallbackBody.ifEmpty { "近期暂无待上排课 · 点击查看周课表" }, relativeSize = 0.88f, color = 0xFF8E95A3.toInt())
+            .appendStyled(fallbackBody.ifEmpty { "近期暂无待上排课 · 点击查看周课表" }, relativeSize = 0.82f, color = 0xFF8E95A3.toInt())
         val fallbackBigBodySpan = SpannableStringBuilder()
-            .appendStyled("近期暂无后续排课\n", relativeSize = 0.92f, color = 0xFFCBD5E1.toInt(), bold = true)
-            .appendStyled("可自由安排学习与生活计划\n", relativeSize = 0.88f, color = 0xFF9CA3AF.toInt())
-            .appendStyled("点击通知卡片查看完整周课表", relativeSize = 0.86f, color = 0xFF8E95A3.toInt())
+            .appendStyled("近期暂无后续排课\n", relativeSize = 0.84f, color = 0xFFCBD5E1.toInt(), bold = true)
+            .appendStyled("可自由安排学习与生活计划\n", relativeSize = 0.78f, color = 0xFF9CA3AF.toInt())
+            .appendStyled("点击通知卡片查看完整周课表", relativeSize = 0.78f, color = 0xFF8E95A3.toInt())
 
         return LiveUpdateSnapshot(
             headerSubText = "$weekLabel · 今日无课",
-            shortCapsuleText = fallbackSubLocation ?: "今日无课",
+            shortCapsuleText = "近期无课",
             heroTitleSpan = fallbackTitleSpan,
             detailBodySpan = fallbackBodySpan,
             bigDetailBodySpan = fallbackBigBodySpan,
             badgePrimary = "无课",
             badgeSecondary = "休息日",
             badgeBgColor = 0xFF475569.toInt(),
-            smallIconRes = R.drawable.ic_live_monster,
+            smallIconRes = R.drawable.ic_live_schedule,
             accentColor = 0xFF10B981.toInt(),
             trackColor = 0xFF1F4235.toInt(),
             isOngoingClass = false,

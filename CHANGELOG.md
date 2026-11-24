@@ -2,6 +2,25 @@
 
 本文档记录 CourseWidgets 各版本更新的动态活动演进，重点关注架构改进、渲染优化、故障诊断与教务抓取能力提升。
 
+## [v3.2.3] - 2026-11-25 (Build 3230 正式版)
+
+### 1. 课时配置页 120Hz 渲染彻底顺滑化与单节编辑 SharedElement 玻璃形变弹窗
+- **消除课时配置页滚动掉帧 (`android_schedule_config_screen.dart` & `liquid_components.dart`)**：移除 `ScrollView` 内 5 张 `HyperOSCard` 外侧多余的 `RepaintBoundary` 与 `SliverList` 隐式离屏边界，防止背景采样重绘连带销毁重构 5 份整卡 `RenderTarget`；顶部「保存」按钮改用轻量共享 `BackdropFilter.grouped` 磨砂胶囊（与标题胶囊共用单次背景读取），撤销禁用意向按钮 `Opacity` `SaveLayer` 与每行 `SquircleGeometry` CPU 路径细分，并将 `_RenderSharedBlurStencil._onScroll` 亚像素阈值提升至 `1.5dp`；
+- **单节时间编辑零闪现 SharedElement (`sharetransit`) 玻璃弹窗**：重构 `_showSectionEditDialog` 与 `_SectionScheduleTile`，点击任意节次行时直接从该行几何矩形位置物理形变展开为 FlClash 磨砂玻璃编辑框，关闭时沿原路径平滑收拢回对应行，同时将输入控制器生命周期收归弹窗内部 `StatefulWidget` 管理并适配键盘避让，彻底消除弹出闪现与关闭瞬间异常。
+
+### 2. 移动端周次选择器 FlClash 玻璃菜单升级 (`android_liquid_glass_main.dart` & `weekly_schedule_grid.dart`)
+- 将底部控制栏「第 X 周」胶囊与更多菜单「周次管理」全面由底部抽屉替换为统一的 SharedElement FlClash 磨砂玻璃周次选择菜单（内置「回到本周」快捷跳转与现实周高亮指示点），点击后直接从胶囊位置丝滑形变展开并在选定/取消时原路收回。
+
+### 3. Android 16 实况通知导视字号层级、胶囊轻重缓急、功能图标与 1:1 真实预览全面升级
+- **强化字号对比与重点突出 (`LiveUpdateNotificationManager.kt`)**：大幅放大高清填充色块教室编号（`1.42x` 加粗）与具体上下课时间范围（`1.30x` 课程主题高亮），缩小附属场馆说明（`0.76x` 中性灰）与次要提示文案，形成清晰明了的导视层级；
+- **实况胶囊信息按紧迫度分级 (`LiveUpdateNotificationManager.kt` & `live_notification_service_v2.dart`)**：上课中及今日 60 分钟内候课胶囊精准展示核心教室与剩余分钟；今日暂无立即上课且距下一节课较远或跨天/周末预告时，状态栏胶囊自动精简为下次上课概览（如 `周一·3节`、`明日·2节`、`今日·3节`），避免提前暴露无紧迫性的具体时段与教室细节；
+- **全新三态功能导视单色矢量图标**：移除旧版行走小人等图标，全新设计 `ic_live_class`（课本/上课中）、`ic_live_waiting`（铃钟计时盘/候课中）与 `ic_live_schedule`（课表网格日历/预告与休息日）；
+- **设置页 1:1 诚实导视预览 (`settings_notification_screen.dart`)**：在通知设置页同步呈现「状态栏实况胶囊预览」与完整通知预览卡片，1:1 真实还原色块教室、放大时间层级、纯文本原生计时器及三态功能图标排版。
+
+### 4. Android 原生单阶段 120Hz 动画开屏与离屏 GPU 渲染管线预热
+- **一体化原生 120Hz 开屏退场 (`MainActivity.kt` & `values-v31/styles.xml`)**：生成高分辨率浅/深双色品牌字标 `splash_branding_wordmark.png` 接入 `windowSplashScreenBrandingImage`，在 `MainActivity` 通过 Android 12+ `RenderThread` 硬件动画执行图标轻柔上浮放大淡出与无缝揭晓，同时移除 Android 端易被首帧吞没的二次叠层遮罩，实现连贯流畅的单阶段开屏体验；
+- **编译期与运行期管线预热协同 (`RenderPipelinePrewarmer`)**：在 `pubspec.yaml` 中声明的 5 份 `.frag` 片段着色器已于构建期通过 `impellerc` AOT 预烘焙，同时新增运行期 `RenderPipelinePrewarmer` 服务，在首帧光栅化落盘 `180ms` 后异步离屏预光栅化 `BackdropFilter` 高斯模糊、`RSuperellipse` 解析裁切阴影及渐变高光组合管线（GPU PSO），消除首次触发弹窗与变形动画时的初次卡顿。
+
 ## [v3.2.2] - 2026-11-24 (Build 3220 正式版)
 
 ### 1. Android 16 实况通知零重复信息对齐与教室填充色块升级 (`LiveUpdateNotificationManager.kt` & `AndroidManifest.xml`)
