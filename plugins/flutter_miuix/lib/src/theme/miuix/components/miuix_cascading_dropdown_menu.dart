@@ -7,6 +7,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import 'package:flutter/material.dart';
+import '../foundation/miuix_popup_utils.dart';
 import 'package:flutter/services.dart';
 
 import 'miuix_cascading_list_popup.dart';
@@ -25,6 +26,7 @@ class MiuixOverlayIconCascadingDropdownMenu extends StatelessWidget {
     this.collapseOnSelection = true,
     this.onExpandedChange,
     this.backgroundColor,
+    this.surfaceBuilder,
     this.cornerRadius = MiuixIconButtonDefaults.cornerRadius,
     this.minHeight = MiuixIconButtonDefaults.minHeight,
     this.minWidth = MiuixIconButtonDefaults.minWidth,
@@ -42,6 +44,7 @@ class MiuixOverlayIconCascadingDropdownMenu extends StatelessWidget {
     this.collapseOnSelection = true,
     this.onExpandedChange,
     this.backgroundColor,
+    this.surfaceBuilder,
     this.cornerRadius = MiuixIconButtonDefaults.cornerRadius,
     this.minHeight = MiuixIconButtonDefaults.minHeight,
     this.minWidth = MiuixIconButtonDefaults.minWidth,
@@ -57,6 +60,7 @@ class MiuixOverlayIconCascadingDropdownMenu extends StatelessWidget {
   final bool collapseOnSelection;
   final ValueChanged<bool>? onExpandedChange;
   final Color? backgroundColor;
+  final MiuixPopupSurfaceBuilder? surfaceBuilder;
   final double cornerRadius;
   final double minHeight;
   final double minWidth;
@@ -76,6 +80,7 @@ class MiuixOverlayIconCascadingDropdownMenu extends StatelessWidget {
     windowLevel: false,
     renderInRootScaffold: renderInRootScaffold,
     backgroundColor: backgroundColor,
+    surfaceBuilder: surfaceBuilder,
     cornerRadius: cornerRadius,
     minHeight: minHeight,
     minWidth: minWidth,
@@ -94,6 +99,7 @@ class MiuixWindowIconCascadingDropdownMenu extends StatelessWidget {
     this.collapseOnSelection = true,
     this.onExpandedChange,
     this.backgroundColor,
+    this.surfaceBuilder,
     this.cornerRadius = MiuixIconButtonDefaults.cornerRadius,
     this.minHeight = MiuixIconButtonDefaults.minHeight,
     this.minWidth = MiuixIconButtonDefaults.minWidth,
@@ -110,6 +116,7 @@ class MiuixWindowIconCascadingDropdownMenu extends StatelessWidget {
     this.collapseOnSelection = true,
     this.onExpandedChange,
     this.backgroundColor,
+    this.surfaceBuilder,
     this.cornerRadius = MiuixIconButtonDefaults.cornerRadius,
     this.minHeight = MiuixIconButtonDefaults.minHeight,
     this.minWidth = MiuixIconButtonDefaults.minWidth,
@@ -124,6 +131,7 @@ class MiuixWindowIconCascadingDropdownMenu extends StatelessWidget {
   final bool collapseOnSelection;
   final ValueChanged<bool>? onExpandedChange;
   final Color? backgroundColor;
+  final MiuixPopupSurfaceBuilder? surfaceBuilder;
   final double cornerRadius;
   final double minHeight;
   final double minWidth;
@@ -143,6 +151,7 @@ class MiuixWindowIconCascadingDropdownMenu extends StatelessWidget {
     windowLevel: true,
     renderInRootScaffold: true,
     backgroundColor: backgroundColor,
+    surfaceBuilder: surfaceBuilder,
     cornerRadius: cornerRadius,
     minHeight: minHeight,
     minWidth: minWidth,
@@ -161,6 +170,7 @@ class _CascadingDropdownMenuBody extends StatefulWidget {
     required this.windowLevel,
     required this.renderInRootScaffold,
     required this.backgroundColor,
+    this.surfaceBuilder,
     required this.cornerRadius,
     required this.minHeight,
     required this.minWidth,
@@ -176,6 +186,7 @@ class _CascadingDropdownMenuBody extends StatefulWidget {
   final bool windowLevel;
   final bool renderInRootScaffold;
   final Color? backgroundColor;
+  final MiuixPopupSurfaceBuilder? surfaceBuilder;
   final double cornerRadius;
   final double minHeight;
   final double minWidth;
@@ -231,29 +242,31 @@ class _CascadingDropdownMenuBodyState
   Widget build(BuildContext context) {
     final Widget popup = _hasEntries
         ? (widget.windowLevel
-            ? MiuixWindowCascadingListPopup(
-                key: const ValueKey<String>('cascading-popup'),
-                show: _expanded,
-                anchorBounds: _anchorBounds,
-                entries: _nonEmptyEntries,
-                onDismissRequest: _onDismiss,
-                onDismissFinished: _onDismissFinished,
-                maxHeight: widget.maxHeight,
-                dropdownColors: widget.dropdownColors,
-                collapseOnSelection: widget.collapseOnSelection,
-              )
-            : MiuixOverlayCascadingListPopup(
-                key: const ValueKey<String>('cascading-popup'),
-                show: _expanded,
-                anchorBounds: _anchorBounds,
-                entries: _nonEmptyEntries,
-                onDismissRequest: _onDismiss,
-                onDismissFinished: _onDismissFinished,
-                maxHeight: widget.maxHeight,
-                dropdownColors: widget.dropdownColors,
-                renderInRootScaffold: widget.renderInRootScaffold,
-                collapseOnSelection: widget.collapseOnSelection,
-              ))
+              ? MiuixWindowCascadingListPopup(
+                  key: const ValueKey<String>('cascading-popup'),
+                  show: _expanded,
+                  anchorBounds: _anchorBounds,
+                  entries: _nonEmptyEntries,
+                  surfaceBuilder: widget.surfaceBuilder,
+                  onDismissRequest: _onDismiss,
+                  onDismissFinished: _onDismissFinished,
+                  maxHeight: widget.maxHeight,
+                  dropdownColors: widget.dropdownColors,
+                  collapseOnSelection: widget.collapseOnSelection,
+                )
+              : MiuixOverlayCascadingListPopup(
+                  key: const ValueKey<String>('cascading-popup'),
+                  show: _expanded,
+                  anchorBounds: _anchorBounds,
+                  entries: _nonEmptyEntries,
+                  surfaceBuilder: widget.surfaceBuilder,
+                  onDismissRequest: _onDismiss,
+                  onDismissFinished: _onDismissFinished,
+                  maxHeight: widget.maxHeight,
+                  dropdownColors: widget.dropdownColors,
+                  renderInRootScaffold: widget.renderInRootScaffold,
+                  collapseOnSelection: widget.collapseOnSelection,
+                ))
         : const SizedBox.shrink();
 
     return Stack(

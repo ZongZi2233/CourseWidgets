@@ -1,10 +1,17 @@
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
+import 'package:flutter/rendering.dart' show RenderIndexedStack;
 import 'package:flutter/scheduler.dart' show SchedulerPhase;
 import 'package:flutter/widgets.dart';
 
 import '../../constants/glass_defaults.dart';
-import '../../src/renderer/liquid_glass_settings.dart';
+import '../../src/engine/liquid_glass_settings.dart';
+import '../../src/widgets/surfaces/shell_chrome_barrier.dart';
+import '../../src/widgets/surfaces/vertical_bar_regions.dart';
 import '../effects/glass_materialize.dart';
+import '../overlays/glass_modal_sheet.dart';
 import 'glass_bar_item.dart';
+import 'glass_large_title.dart';
+import 'glass_vertical_bar.dart';
 import 'shared/glass_nav_pinned_host.dart';
 
 /// What a single route contributes to the pinned navigation chrome.
@@ -20,7 +27,25 @@ class GlassNavBarRegistration {
     required this.showsBackButton,
     this.onBack,
     this.buttonSettings,
-  });
+    this.buttonSize,
+    this.toolbarHeight,
+    @Deprecated(
+      'A hoisted sheet item presents out of the hoisted capsule; the tap is '
+      'no longer handed back.',
+    )
+    this.presentSheet,
+    this.horizontalInset,
+    this.platformViewBackdrop = false,
+    this.largeTitleController,
+    this.stripRowTop,
+  })  : assert(
+          buttonSize == null || buttonSize > 0,
+          'buttonSize must be positive',
+        ),
+        assert(
+          toolbarHeight == null || toolbarHeight >= 0,
+          'toolbarHeight must not be negative',
+        );
 
   /// The trailing cluster items for this route.
   final List<GlassBarItem> actions;
@@ -40,6 +65,76 @@ class GlassNavBarRegistration {
 
   /// Glass settings applied to this route's pinned chrome.
   final LiquidGlassSettings? buttonSettings;
+
+  /// Diameter of standalone bar buttons (including the automatic back button
+  /// and [GlassBarItemBackground.separate], [GlassBarItemBackground.own], and
+  /// [GlassBarItemBackground.none] items), in logical pixels.
+  ///
+  /// Defaults to [GlassNavPinnedMetrics.backDiameter] (`44.0`). Shared
+  /// multi-item capsules ([GlassBarItemBackground.shared]) use
+  /// `buttonSize + (GlassNavPinnedMetrics.slot - GlassNavPinnedMetrics.backDiameter)`
+  /// (`buttonSize + 2.0`), preserving the `46 / 44` ratio.
+  ///
+  /// Ignored in iPhone Duo's vertical bar strip, where controls use
+  /// [GlassVerticalBarMetrics.controlExtent].
+  final double? buttonSize;
+
+  /// Height of the horizontal toolbar row that the pinned chrome centres
+  /// within, in logical pixels.
+  ///
+  /// Defaults to [GlassNavPinnedMetrics.toolbarHeight] (`44.0`), or
+  /// [buttonSize] when [buttonSize] is larger.
+  final double? toolbarHeight;
+
+  /// No longer called: a [GlassBarItem.sheet] presents out of the hoisted
+  /// capsule itself, which the shell keeps through the presentation. See
+  /// [GlassNavigationShellState.holdForSheet].
+  @Deprecated(
+    'A hoisted sheet item presents out of the hoisted capsule; the tap is no '
+    'longer handed back.',
+  )
+  final void Function(GlassBarSheetItem item)? presentSheet;
+
+  /// Inset from each screen edge to the pinned chrome, in logical pixels.
+  ///
+  /// Defaults to [GlassNavPinnedMetrics.horizontalPadding], which is what
+  /// [GlassAppBar] insets its own chrome by — so a bar the package draws at
+  /// both ends already agrees with itself and passes nothing.
+  ///
+  /// A bar the app draws is the case for it. The chrome hoists and hands back
+  /// on its own schedule — a presented sheet gives it to the route, a
+  /// transition takes it away again — and each hand-over is invisible only
+  /// while the two renderings land on the same guide. A bar aligned to its
+  /// app's page gutter rather than to this default passes that gutter here.
+  final double? horizontalInset;
+
+  /// Distance from the top of the screen to the row that keeps the items
+  /// staying horizontal, in iPhone Duo's vertical bar strip.
+  ///
+  /// Defaults to [GlassVerticalBarMetrics.edgeMargin], the row [GlassAppBar]
+  /// draws its title in. A bar the app draws with a header of its own passes the top
+  /// of that header's row, so the items land in it rather than above it.
+  /// Elsewhere it is not read.
+  final double? stripRowTop;
+
+  /// Whether the pinned chrome floats over a native platform view.
+  ///
+  /// The shell draws a hoisted cluster with its own [GlassButton], and the
+  /// shader that button uses reads a captured backdrop the platform view is
+  /// never part of — so over a map or a video the capsule has nothing to
+  /// refract and renders inert, whatever [buttonSettings] asks for. Only a
+  /// live `BackdropFilter` samples the composited view, and this is what
+  /// routes the shell's copy there, exactly as [GlassButton.platformViewBackdrop]
+  /// does for the bar's own.
+  final bool platformViewBackdrop;
+
+  /// The large title this route's bar collapses with, if any.
+  ///
+  /// Only read in iPhone Duo's vertical bar strip, where the title row holds
+  /// the large title: the items that stay horizontal share that row, so they
+  /// scroll away with the title, and the whole chrome hides while the title's
+  /// search is open ([GlassLargeTitleController.isSearchPresented]).
+  final GlassLargeTitleController? largeTitleController;
 
   /// The tappable items in [actions], with spacers removed.
   List<GlassBarActionItem> get actionItems =>
@@ -89,6 +184,9 @@ class GlassNavigationShell extends StatefulWidget {
     required this.child,
     this.enabled = true,
     this.effectTransition = GlassEffectTransition.materialize,
+    this.swipeCommitTransition = GlassSwipeCommitTransition.effect,
+    this.verticalBarBehavior = GlassVerticalBarBehavior.automatic,
+    this.verticalBarCompression = GlassVerticalBarCompression.automatic,
   });
 
   /// The subtree containing the [Navigator], typically the `child` handed to
@@ -114,6 +212,33 @@ class GlassNavigationShell extends StatefulWidget {
   /// would have no answer for which one wins.
   final GlassEffectTransition effectTransition;
 
+  /// How the chrome transitions once an interactive back-swipe commits.
+  ///
+  /// Defaults to [GlassSwipeCommitTransition.effect], which plays
+  /// [effectTransition] as for any other pop.
+  final GlassSwipeCommitTransition swipeCommitTransition;
+
+  /// Whether bars move into iPhone Duo's vertical bar strip.
+  ///
+  /// Defaults to [GlassVerticalBarBehavior.automatic]: where the device
+  /// reserves a strip, the pinned chrome stacks in it — back button first,
+  /// then the leading and trailing groups in order — and the title stays in a
+  /// horizontal row at the top of the content, beside any item that stays
+  /// horizontal (see [GlassBarActionItem.axisBehavior]). [GlassTabBar.bottom]
+  /// and [GlassToolbar] follow, from the bottom of the strip up. Read the
+  /// result with [GlassVerticalBar.maybeOf].
+  ///
+  /// Only the shell's own subtree follows, and only while [enabled]: UIKit
+  /// moves the bars a container owns and no others.
+  final GlassVerticalBarBehavior verticalBarBehavior;
+
+  /// What gives way when the vertical bar strip runs out of height.
+  ///
+  /// Defaults to [GlassVerticalBarCompression.automatic]. Set on the shell
+  /// because the choice is between the tab bar and the pinned chrome, which
+  /// only the shell sees together.
+  final GlassVerticalBarCompression verticalBarCompression;
+
   /// The nearest enclosing shell, or null if there is none.
   static GlassNavigationShellState? maybeOf(BuildContext context) {
     return context
@@ -131,10 +256,23 @@ class GlassNavigationShell extends StatefulWidget {
 /// so the shell always knows which route is on top and which sits beneath it
 /// mid-transition.
 class GlassNavigationShellState extends State<GlassNavigationShell>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   /// Registrations keyed by route, in registration order.
-  final Map<ModalRoute<dynamic>, GlassNavBarRegistration> _registry =
-      <ModalRoute<dynamic>, GlassNavBarRegistration>{};
+  ///
+  /// Multiple [GlassPinnedBarChrome] widgets may coexist under the same
+  /// [ModalRoute] (for example inside an [IndexedStack] within one screen);
+  /// keeping the per-registrant list lets the shell pick whichever bar is
+  /// currently onstage without an offstage sibling overwriting it.
+  final Map<ModalRoute<dynamic>, List<_RegistrantEntry>> _registry =
+      <ModalRoute<dynamic>, List<_RegistrantEntry>>{};
+
+  /// Registrants that were onstage during the most recent [_orderedEntries]
+  /// pass. When a previously hidden registrant (e.g. an inactive `IndexedStack`
+  /// or `Offstage` tab with `const` children) begins painting onstage, its
+  /// absence from this set triggers one deferred re-resolve — while multiple
+  /// simultaneously visible onstage routes (such as mid-transition or
+  /// non-opaque routes) remain a zero-cost no-op.
+  final Set<BuildContext> _onstageRegistrants = <BuildContext>{};
 
   /// Routes whose animations this shell currently listens to.
   final Set<Animation<double>> _listened = <Animation<double>>{};
@@ -147,6 +285,10 @@ class GlassNavigationShellState extends State<GlassNavigationShell>
   /// Registrants follow this rather than reading the routes themselves, so
   /// that the bar and the shell always swap in the same frame.
   Listenable get chromeChanges => _tick;
+
+  /// The page-level modal barriers currently up, behind which the chrome is
+  /// held. See [ShellChromeBarrier].
+  final ShellChromeBarriers _chromeBarriers = ShellChromeBarriers();
 
   /// Whether a deferred notification is already queued for this frame.
   bool _notifyQueued = false;
@@ -199,6 +341,56 @@ class GlassNavigationShellState extends State<GlassNavigationShell>
   /// Chrome progress the commit animation starts from.
   double _commitExitStart = 1.0;
 
+  // ---------------------------------------------------------------------------
+  // The chrome's own clock
+  // ---------------------------------------------------------------------------
+  // The choreography is timed against a route whose animation value is linear
+  // in time, which is what a duration-driven controller gives it. A route
+  // running a `Simulation` instead — a spring — reports a value that covers
+  // most of its travel in the first fraction of the flight and then creeps,
+  // so following it squeezed the whole morph into a few frames while the page
+  // was still moving. Such a route's chrome plays on its own controller over
+  // the route's declared `transitionDuration` (or `reverseTransitionDuration`)
+  // instead, which is the morph its duration promised. A duration-driven
+  // route is left on its own value, so it reads exactly as before; a
+  // back-swipe still scrubs the route's value, and a committed swipe is
+  // [_commitExit]'s.
+
+  /// Plays a sprung push or pop's chrome over the route's declared duration.
+  late final AnimationController _clock = AnimationController(vsync: this);
+
+  /// The route and direction [_clock] is playing, or null at rest.
+  ModalRoute<dynamic>? _clockRoute;
+  AnimationStatus? _clockStatus;
+
+  /// Where the current run starts from, held until the deferred start.
+  ///
+  /// A run begins from wherever the chrome already is, so a pop that
+  /// interrupts a push carries on from mid-morph rather than restarting at
+  /// the far end. Read in place of the controller while [_clockPending].
+  double _clockFrom = 0.0;
+
+  /// Whether a run has been scheduled but the controller not yet started.
+  bool _clockPending = false;
+
+  /// Each registered route's status listener, so it can be removed again.
+  final Map<ModalRoute<dynamic>, AnimationStatusListener> _clockListeners =
+      <ModalRoute<dynamic>, AnimationStatusListener>{};
+
+  // ---------------------------------------------------------------------------
+  // Sheet hold
+  // ---------------------------------------------------------------------------
+  // A presentation hands the chrome back to its route, because the shell draws
+  // above the Navigator and cannot get beneath a sheet. The capsule a sheet
+  // morphs out of is the exception: the morph has emptied it, so nothing of it
+  // is drawn above the sheet — and handing it back would take the anchor out
+  // from under the droplet mid-flight, and leave the route's copy painted
+  // under the barrier where the emptied capsule should be. That one group
+  // stays hoisted for as long as its trigger is standing in for the sheet.
+
+  /// The capsule kept hoisted through the sheet presented out of it, or null.
+  _SheetHold? _sheetHold;
+
   bool _pinningSupported = false;
 
   /// Whether pinning is currently active.
@@ -221,6 +413,14 @@ class GlassNavigationShellState extends State<GlassNavigationShell>
         _commitExit.reset();
         _scheduleNotify();
       });
+    _clock
+      ..addListener(_tick.notify)
+      // The frame the run ends is the frame the chrome settles.
+      ..addStatusListener((status) {
+        if (status == AnimationStatus.completed) _scheduleNotify();
+      });
+    VerticalBarRegions.instance.addListener(_onVerticalBarRegions);
+    VerticalBarRegions.instance.edge.addListener(_onVerticalBarRegions);
   }
 
   @override
@@ -265,23 +465,226 @@ class GlassNavigationShellState extends State<GlassNavigationShell>
   /// Registers or updates [route]'s pinned chrome.
   void register(
     ModalRoute<dynamic> route,
-    GlassNavBarRegistration registration,
-  ) {
-    final existing = _registry[route];
-    _registry[route] = registration;
-    if (existing == null) {
+    GlassNavBarRegistration registration, {
+    BuildContext? registrant,
+  }) {
+    final entries = _registry[route];
+    if (entries == null) {
+      _registry[route] = <_RegistrantEntry>[
+        _RegistrantEntry(registrant: registrant, registration: registration),
+      ];
       _listenTo(route.animation);
       _listenTo(route.secondaryAnimation);
+      final listener =
+          _clockListeners[route] = (status) => _onRouteStatus(route, status);
+      route.animation?.addStatusListener(listener);
+    } else {
+      final index = entries
+          .indexWhere((entry) => identical(entry.registrant, registrant));
+      if (index >= 0) {
+        entries[index].registration = registration;
+      } else {
+        entries.add(
+          _RegistrantEntry(registrant: registrant, registration: registration),
+        );
+      }
     }
     _scheduleNotify();
   }
 
-  /// Removes [route] from the registry.
-  void unregister(ModalRoute<dynamic> route) {
-    if (_registry.remove(route) == null) return;
+  /// Removes [route] (or a specific [registrant] on [route]) from the registry.
+  void unregister(
+    ModalRoute<dynamic> route, {
+    BuildContext? registrant,
+  }) {
+    final entries = _registry[route];
+    if (entries == null) return;
+    if (registrant != null) {
+      _onstageRegistrants.remove(registrant);
+      entries.removeWhere((entry) => identical(entry.registrant, registrant));
+      if (entries.isNotEmpty) {
+        _scheduleNotify();
+        return;
+      }
+    }
+    _registry.remove(route);
+    if (identical(_sheetHold?.route, route)) _dropSheetHold();
     _unlisten(route.animation);
     _unlisten(route.secondaryAnimation);
+    final listener = _clockListeners.remove(route);
+    if (listener != null) route.animation?.removeStatusListener(listener);
+    if (identical(_clockRoute, route)) _clockRoute = null;
     _scheduleNotify();
+  }
+
+  /// Called from [GlassPinnedBarChrome]'s paint probe when [registrant] paints
+  /// onstage.
+  ///
+  /// `IndexedStack` and `Offstage` skip painting inactive children without
+  /// rebuilding `const` subtrees; observing when a different registered bar
+  /// begins painting schedules one post-frame re-resolve at zero steady-state
+  /// cost.
+  void notifyRegistrantPainted(BuildContext registrant) {
+    if (_onstageRegistrants.contains(registrant)) return;
+    _scheduleNotify();
+  }
+
+  /// Whether [registrant] sits inside an inactive hidden branch beneath this
+  /// shell (such as an inactive [IndexedStack], `StatefulShellRoute.indexedStack`,
+  /// `CupertinoTabScaffold`, [Visibility], [Offstage], or [TickerMode] subtree),
+  /// as distinct from [route]'s own `_ModalScope` / `Overlay` machinery.
+  bool isBranchOffstage(BuildContext registrant, ModalRoute<dynamic> route) {
+    if (registrant is Element && !registrant.mounted) return true;
+    final stopAt = context;
+    final subtreeBoundary = route.subtreeContext;
+    final navContext = route.navigator?.context;
+
+    // 1. Walk from [registrant] up to `route.subtreeContext` (all widgets inside
+    // the route's page, below `_ModalScope`'s internal `Offstage` and `Overlay`'s
+    // `TickerMode`). If `subtreeContext` is not yet attached, still check
+    // `Visibility` and `RenderIndexedStack` up to `navContext`.
+    final checkPageOffstageAndTicker = subtreeBoundary != null;
+    if (_isSegmentHidden(
+      registrant,
+      stopAt: stopAt,
+      segmentStop1: subtreeBoundary,
+      segmentStop2: navContext,
+      checkOffstageAndTicker: checkPageOffstageAndTicker,
+    )) {
+      return true;
+    }
+
+    // 2. Jump past `route`'s `Navigator` (skipping `_ModalScope`'s pre-transition
+    // hero warm-up `Offstage`) and check everything between `navContext` and
+    // this shell (`StatefulShellRoute`, `CupertinoTabScaffold`, etc.).
+    if (navContext != null && !identical(navContext, stopAt)) {
+      if (navContext is Element && !navContext.mounted) return false;
+      if (_isSegmentHidden(
+        navContext,
+        stopAt: stopAt,
+        checkOffstageAndTicker: true,
+      )) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  bool _isSegmentHidden(
+    BuildContext start, {
+    required BuildContext stopAt,
+    BuildContext? segmentStop1,
+    BuildContext? segmentStop2,
+    required bool checkOffstageAndTicker,
+  }) {
+    Element? childElement = start is Element ? start : null;
+    var hidden = false;
+    start.visitAncestorElements((element) {
+      if (identical(element, stopAt) ||
+          (segmentStop1 != null && identical(element, segmentStop1)) ||
+          (segmentStop2 != null && identical(element, segmentStop2))) {
+        return false;
+      }
+      final w = element.widget;
+      if (w is Visibility && !w.visible) {
+        hidden = true;
+        return false;
+      }
+      if (checkOffstageAndTicker &&
+          ((w is Offstage && w.offstage) || (w is TickerMode && !w.enabled))) {
+        hidden = true;
+        return false;
+      }
+      if (element is MultiChildRenderObjectElement && childElement != null) {
+        final ro = element.renderObject;
+        if (ro is RenderIndexedStack) {
+          final slot = childElement!.slot;
+          if (slot is IndexedSlot && slot.index != ro.index) {
+            hidden = true;
+            return false;
+          }
+        }
+      }
+      childElement = element;
+      return true;
+    });
+    return hidden;
+  }
+
+  _RegistrantEntry? _activeEntryFor(ModalRoute<dynamic> route) {
+    final entries = _registry[route];
+    if (entries == null || entries.isEmpty) return null;
+    for (var i = entries.length - 1; i >= 0; i--) {
+      final entry = entries[i];
+      final registrant = entry.registrant;
+      if (registrant == null) {
+        if (!_isNavigatorBranchOffstage(route)) return entry;
+      } else if (!isBranchOffstage(registrant, route)) {
+        return entry;
+      }
+    }
+    return null;
+  }
+
+  bool _isNavigatorBranchOffstage(ModalRoute<dynamic> route) {
+    final navContext = route.navigator?.context;
+    if (navContext == null || (navContext is Element && !navContext.mounted)) {
+      return false;
+    }
+    return _isSegmentHidden(
+      navContext,
+      stopAt: context,
+      checkOffstageAndTicker: true,
+    );
+  }
+
+  /// Starts [_clock] when [route]'s own transition does, if it needs one.
+  ///
+  /// A push or pop under a gesture is the swipe's — its rebound and commit
+  /// are handled where the hold is. A run begins from wherever the chrome
+  /// already is, so a pop that interrupts a push carries on from mid-morph
+  /// rather than restarting at the far end.
+  void _onRouteStatus(ModalRoute<dynamic> route, AnimationStatus status) {
+    if (status != AnimationStatus.forward &&
+        status != AnimationStatus.reverse) {
+      return;
+    }
+    if (route.navigator?.userGestureInProgress ?? false) return;
+    if (identical(_clockRoute, route) && _clockStatus == status) return;
+    // Only a route on a simulation needs the clock; `createSimulation` is
+    // the hook it overrides to run one.
+    final forward = status == AnimationStatus.forward;
+    if (route.createSimulation(forward: forward) == null) {
+      if (identical(_clockRoute, route)) _clockRoute = null;
+      return;
+    }
+    final current = identical(_clockRoute, route)
+        ? _clockProgress()
+        : route.animation?.value ?? 0.0;
+    _clockRoute = route;
+    _clockStatus = status;
+    _clockFrom = forward ? current : 1.0 - current;
+    _clock
+      ..stop()
+      ..duration =
+          forward ? route.transitionDuration : route.reverseTransitionDuration;
+    // A page-based Navigator starts a route inside the build phase, and
+    // starting a controller notifies synchronously. Defer exactly as a tick
+    // does; the frame in between reads the start value.
+    final phase = WidgetsBinding.instance.schedulerPhase;
+    if (phase == SchedulerPhase.persistentCallbacks ||
+        phase == SchedulerPhase.midFrameMicrotasks) {
+      _clockPending = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !identical(_clockRoute, route)) return;
+        _clockPending = false;
+        _clock.forward(from: _clockFrom);
+      });
+    } else {
+      _clockPending = false;
+      _clock.forward(from: _clockFrom);
+    }
   }
 
   /// Listens to both the value and the status of [animation].
@@ -303,7 +706,11 @@ class GlassNavigationShellState extends State<GlassNavigationShell>
     animation.removeStatusListener(_onAnimationStatus);
   }
 
-  void _onAnimationTick() => _tick.notify();
+  // A route wiring its secondary animation (`ProxyAnimation.parent=` inside
+  // `didChangeNext`) notifies value listeners synchronously, and for a
+  // page-based Navigator that runs inside `didUpdateWidget` — the build
+  // phase — so the tick has to defer exactly as a status change does.
+  void _onAnimationTick() => _scheduleNotify();
 
   void _onAnimationStatus(AnimationStatus status) {
     // Not while a finger is down: several routes' animations are listened to
@@ -323,6 +730,7 @@ class GlassNavigationShellState extends State<GlassNavigationShell>
   /// would mutate the tree mid-frame. This mirrors the deferral used by the
   /// modal sheet morph's anchor.
   void _scheduleNotify() {
+    _cachedOrderedEntries = null;
     final phase = WidgetsBinding.instance.schedulerPhase;
     if (phase == SchedulerPhase.persistentCallbacks ||
         phase == SchedulerPhase.midFrameMicrotasks) {
@@ -332,6 +740,7 @@ class GlassNavigationShellState extends State<GlassNavigationShell>
       _notifyQueued = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _notifyQueued = false;
+        _cachedOrderedEntries = null;
         if (mounted) _tick.notify();
       });
     } else {
@@ -343,6 +752,10 @@ class GlassNavigationShellState extends State<GlassNavigationShell>
   // Ordering
   // ---------------------------------------------------------------------------
 
+  List<MapEntry<ModalRoute<dynamic>, GlassNavBarRegistration>>?
+      _cachedOrderedEntries;
+  bool _orderedEntriesResetScheduled = false;
+
   /// The registered routes ordered from topmost to bottom-most.
   ///
   /// Rank comes from `secondaryAnimation`, which measures how much a route is
@@ -350,15 +763,28 @@ class GlassNavigationShellState extends State<GlassNavigationShell>
   /// route being covered by a push animates toward 1. This derives stack order
   /// from the routes themselves, so no [NavigatorObserver] is needed and any
   /// Pages-API router works unchanged.
+  ///
+  /// Cached per frame so multiple [isHoisting] checks plus the overlay build in
+  /// the same frame share one traversal and sort.
   List<MapEntry<ModalRoute<dynamic>, GlassNavBarRegistration>>
       get _orderedEntries {
-    final entries = _registry.entries
-        .where((e) => _participates(e.key))
-        .toList(growable: false);
+    final cached = _cachedOrderedEntries;
+    if (cached != null) return cached;
+
+    final entries = <MapEntry<ModalRoute<dynamic>, GlassNavBarRegistration>>[];
     final insertionIndex = <ModalRoute<dynamic>, int>{};
+    _onstageRegistrants.clear();
     var i = 0;
     for (final route in _registry.keys) {
       insertionIndex[route] = i++;
+      if (!_participates(route)) continue;
+      final active = _activeEntryFor(route);
+      if (active != null) {
+        if (active.registrant != null) {
+          _onstageRegistrants.add(active.registrant!);
+        }
+        entries.add(MapEntry(route, active.registration));
+      }
     }
     entries.sort((a, b) {
       final byCoverage = _coverageOf(a.key).compareTo(_coverageOf(b.key));
@@ -366,6 +792,14 @@ class GlassNavigationShellState extends State<GlassNavigationShell>
       // Equally covered: the more recently pushed route is on top.
       return insertionIndex[b.key]!.compareTo(insertionIndex[a.key]!);
     });
+    _cachedOrderedEntries = entries;
+    if (!_orderedEntriesResetScheduled) {
+      _orderedEntriesResetScheduled = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _orderedEntriesResetScheduled = false;
+        _cachedOrderedEntries = null;
+      });
+    }
     return entries;
   }
 
@@ -390,11 +824,104 @@ class GlassNavigationShellState extends State<GlassNavigationShell>
   /// topmost one: mid-transition the chrome is a blend of two routes' items,
   /// so the outgoing route has to keep its placeholder or its own buttons
   /// would slide out from underneath the pinned copy.
-  bool isHoisting(ModalRoute<dynamic> route) {
+  ///
+  /// False under a presentation, even while [presentingSheetItem] is set: the
+  /// chrome as a whole has been handed back, and only that item's capsule is
+  /// still the shell's.
+  bool isHoisting(
+    ModalRoute<dynamic> route, {
+    BuildContext? registrant,
+  }) {
     if (!isActive || !_registry.containsKey(route)) return false;
+    final active = _activeEntryFor(route);
+    if (active == null) return false;
+    if (registrant != null &&
+        active.registrant != null &&
+        !identical(active.registrant, registrant)) {
+      return false;
+    }
     final ordered = _orderedEntries;
     if (ordered.isEmpty) return false;
     return !_isPresentedOver(ordered.first.key);
+  }
+
+  /// The [GlassBarItem.sheet] whose capsule the shell is keeping hoisted for
+  /// [route] through the sheet presented out of it, or null.
+  ///
+  /// Non-null only while [isHoisting] is false for the presentation: the rest
+  /// of the chrome is the route's to draw, and the slot this item's group
+  /// occupies stays the placeholder it already had, since the shell still
+  /// draws that capsule and the morph has emptied it. It reads null again the
+  /// frame the sheet is dismissed, when the whole chrome hoists back and the
+  /// droplet is still on its way home. The instance is the one that was
+  /// tapped, so a bar that rebuilds its items compares by `id`.
+  GlassBarSheetItem? presentingSheetItem(ModalRoute<dynamic> route) {
+    final hold = _sheetHold;
+    if (hold == null || !identical(hold.route, route) || isHoisting(route)) {
+      return null;
+    }
+    return hold.item;
+  }
+
+  /// Keeps [item]'s capsule hoisted through the sheet about to be presented
+  /// out of [anchor].
+  ///
+  /// Called by the pinned host on the tap, before the item presents, so the
+  /// hold is in place by the frame the sheet's route lands and the group is
+  /// never unmounted from under the droplet. The hold is inert until a route
+  /// is presented over [route] — the chrome stays hoisted exactly as it was —
+  /// so the presenter may take as long as it needs to get there: measuring
+  /// the sheet's content offscreen, awaiting a fetch. A tap that presents
+  /// nothing leaves a hold that the next tap, presentation or unregistration
+  /// of the route replaces. One whose presentation arrives with the anchor
+  /// unemptied — a dialog, a sheet shown without the morph — is dropped at
+  /// the end of that presentation's first frame, and the chrome hands back as
+  /// for any other presentation. So is one whose presentation has gone.
+  void holdForSheet(
+    ModalRoute<dynamic> route,
+    GlassBarSheetItem item,
+    GlassMorphAnchor anchor,
+  ) {
+    _dropSheetHold();
+    _sheetHold = _SheetHold(route: route, item: item, anchor: anchor);
+    anchor.presentationChanges.addListener(_onSheetPresentationChanged);
+  }
+
+  /// Whether [hold] keeps its capsule through the presentation now over its
+  /// route.
+  ///
+  /// True once the anchor has been emptied. Before that, the presenter empties
+  /// the trigger during the sheet route's first build, and this may resolve
+  /// earlier in the same frame — so the first presented-over resolve keeps
+  /// the capsule and asks again at the end of the frame: still full then
+  /// means no morph is coming out of it, and the hold is dropped.
+  bool _sheetHoldClaimed(_SheetHold hold) {
+    if (hold.anchor.isPresenting) return true;
+    if (hold.presented) return false;
+    hold.presented = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          !identical(_sheetHold, hold) ||
+          hold.anchor.isPresenting) {
+        return;
+      }
+      _dropSheetHold();
+      _scheduleNotify();
+    });
+    return true;
+  }
+
+  void _onSheetPresentationChanged() {
+    final hold = _sheetHold;
+    if (hold != null && !hold.anchor.isPresenting) _dropSheetHold();
+    _scheduleNotify();
+  }
+
+  void _dropSheetHold() {
+    final hold = _sheetHold;
+    if (hold == null) return;
+    hold.anchor.presentationChanges.removeListener(_onSheetPresentationChanged);
+    _sheetHold = null;
   }
 
   /// Whether a route this shell cannot rank has been *presented* over [route].
@@ -461,6 +988,12 @@ class GlassNavigationShellState extends State<GlassNavigationShell>
     return progress;
   }
 
+  /// [_clock]'s run as chrome progress: 0 to 1 on a push, 1 to 0 on a pop.
+  double _clockProgress() {
+    final t = _clockPending ? _clockFrom : _clock.value;
+    return _clockStatus == AnimationStatus.forward ? t : 1.0 - t;
+  }
+
   /// Drops the gesture hold once a transition is over.
   ///
   /// Without this the next push would be re-timed against a release point
@@ -489,6 +1022,8 @@ class GlassNavigationShellState extends State<GlassNavigationShell>
         popping: true,
         topRoute: exiting.topRoute,
         transition: exiting.transition,
+        crossFade: widget.swipeCommitTransition ==
+            GlassSwipeCommitTransition.crossFade,
       );
     }
 
@@ -496,34 +1031,63 @@ class GlassNavigationShellState extends State<GlassNavigationShell>
     if (ordered.isEmpty) return null;
 
     final top = ordered.first;
+    final below = ordered.length > 1 ? ordered[1] : null;
+    final from = below?.value ??
+        const GlassNavBarRegistration(
+          actions: <GlassBarItem>[],
+          showsBackButton: false,
+        );
 
     // Nothing drawn above the `Navigator` can be underneath a route presented
     // into it, so the shell stands down and the registrants take their chrome
-    // back for as long as one is up.
-    if (_isPresentedOver(top.key)) return null;
-
-    final below = ordered.length > 1 ? ordered[1] : null;
+    // back for as long as one is up — all but the capsule a sheet is morphing
+    // out of, which stays up at rest on its own.
+    if (_isPresentedOver(top.key)) {
+      final hold = _sheetHold;
+      if (hold == null ||
+          !identical(hold.route, top.key) ||
+          !_sheetHoldClaimed(hold)) {
+        return null;
+      }
+      return GlassNavPinnedState(
+        from: from,
+        to: top.value,
+        progress: 1.0,
+        coverage: 0.0,
+        settled: true,
+        topRoute: top.key,
+        transition: widget.effectTransition,
+        presenting: hold.item,
+      );
+    }
+    // A hold is for one presentation; with that gone, so is the hold. Dropped
+    // here rather than on the route's pop so a trigger unmounted while the
+    // sheet was up cannot leave one behind. One still waiting for its
+    // presentation to arrive is left alone.
+    if (_sheetHold?.presented ?? false) _dropSheetHold();
 
     // Progress of the top route's own entrance: 1 at rest, 0 when it has just
     // been pushed, and scrubbed by the interactive back-swipe during a pop.
-    var progress = top.key.animation?.value ?? 1.0;
+    // A completed route is at 1 whatever its controller last reported — a
+    // simulation stops inside a tolerance of its end, not on it.
+    final status = top.key.animation?.status ?? AnimationStatus.completed;
+    var progress = status == AnimationStatus.completed
+        ? 1.0
+        : top.key.animation?.value ?? 1.0;
 
-    // A route's `animation` is a ProxyAnimation that reports itself complete
-    // at 1.0 until the navigator attaches the real controller in `didPush`,
-    // which lands *after* the route's first build — and that build is when its
-    // bar registers. Taken at face value it says a route that has not begun to
-    // move is fully entered, so the incoming chrome paints solid for one frame
-    // before dropping back to 0 and materializing: a visible flash.
+    // A pushed route's first build is Flutter's offstage one (the hero
+    // controller measures it there), and that build is when its bar
+    // registers. While offstage, a route's `animation` reports itself
+    // complete at 1.0, before its entrance has begun. Taken at face value it
+    // says a route that has not begun to move is fully entered, so the
+    // incoming chrome paints solid for one frame before dropping back to 0
+    // and materializing: a visible flash.
     //
-    // The route underneath is the witness. It is covered in lockstep with the
-    // top route's entrance, so at rest the two agree (1.0 and fully covered),
-    // and during a real transition they agree at every scrubbed value. Only
-    // the frame before the controller is attached has the top route claiming
-    // to be fully in while nothing below it has been covered at all.
-    if (below != null &&
-        progress == 1.0 &&
-        _coverageOf(below.key) == 0.0 &&
-        top.key.animation?.status == AnimationStatus.completed) {
+    // The route's own `offstage` flag is what says so. The route underneath
+    // can't: it is only covered by a route that transitions it (not by a
+    // fullscreen dialog, nor by a route pushed over a sheet), so a route
+    // that is never covered would hold the chrome at 0 for good.
+    if (top.key.offstage && status == AnimationStatus.completed) {
       progress = 0.0;
     }
 
@@ -539,6 +1103,16 @@ class GlassNavigationShellState extends State<GlassNavigationShell>
     // once that animation has finished.
     final userGesture = top.key.navigator?.userGestureInProgress ?? false;
 
+    // A push or pop under no gesture plays on [_clock], started by
+    // [_onRouteStatus]. The run outlives the route if the route's own value
+    // got there first; the chrome is not settled until it has.
+    final running =
+        status == AnimationStatus.forward || status == AnimationStatus.reverse;
+    final clocked = identical(_clockRoute, top.key) &&
+        !userGesture &&
+        (running || _clockPending || _clock.isAnimating);
+    if (clocked) progress = _clockProgress();
+
     // Whether the chrome may be tapped. Deliberately not derived from
     // `progress`: a pop starts at 1.0 and a back-swipe sits there until the
     // finger moves, so by value alone a transition that is very much running
@@ -546,9 +1120,9 @@ class GlassNavigationShellState extends State<GlassNavigationShell>
     // are what actually tell the two apart, and `isCurrent` covers a route
     // that something unregistered has been pushed over.
     final settled = top.key.isCurrent &&
-        (top.key.animation?.status ?? AnimationStatus.completed) ==
-            AnimationStatus.completed &&
-        !userGesture;
+        status == AnimationStatus.completed &&
+        !userGesture &&
+        !(clocked && (_clockPending || _clock.isAnimating));
 
     // Whether the finger is still down with the pop not yet committed — which
     // is narrower than [userGesture], and is what the chrome hold needs.
@@ -577,16 +1151,12 @@ class GlassNavigationShellState extends State<GlassNavigationShell>
     // controller at whatever value the finger dictates without ever entering
     // AnimationStatus.reverse.
     final popping = !settled &&
-        ((top.key.animation?.status ?? AnimationStatus.completed) ==
-                AnimationStatus.reverse ||
-            userGesture);
+        (status == AnimationStatus.reverse ||
+            userGesture ||
+            (clocked && _clockStatus == AnimationStatus.reverse));
 
     final state = GlassNavPinnedState(
-      from: below?.value ??
-          const GlassNavBarRegistration(
-            actions: <GlassBarItem>[],
-            showsBackButton: false,
-          ),
+      from: from,
       to: top.value,
       progress: committing
           ? heldAtCommit.clamp(0.0, 1.0)
@@ -596,6 +1166,7 @@ class GlassNavigationShellState extends State<GlassNavigationShell>
       popping: popping,
       topRoute: top.key,
       transition: widget.effectTransition,
+      holdForSheet: (item, anchor) => holdForSheet(top.key, item, anchor),
     );
 
     if (committing) {
@@ -619,23 +1190,167 @@ class GlassNavigationShellState extends State<GlassNavigationShell>
 
   @override
   void dispose() {
+    VerticalBarRegions.instance.removeListener(_onVerticalBarRegions);
+    VerticalBarRegions.instance.edge.removeListener(_onVerticalBarRegions);
     for (final animation in _listened) {
       animation.removeListener(_onAnimationTick);
       animation.removeStatusListener(_onAnimationStatus);
     }
     _listened.clear();
+    for (final entry in _clockListeners.entries) {
+      entry.key.animation?.removeStatusListener(entry.value);
+    }
+    _clockListeners.clear();
+    _dropSheetHold();
     _commitExit.dispose();
+    _clock.dispose();
     _tick.dispose();
+    _chromeBarriers.dispose();
     super.dispose();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Vertical bar strip
+  // ---------------------------------------------------------------------------
+
+  /// The strip resolved by the last build, or null.
+  GlassVerticalBarData? _verticalBar;
+
+  /// The strip this shell resolved for the screen, or null where its bars are
+  /// horizontal.
+  ///
+  /// A subtree can keep its own bars horizontal under it with
+  /// [GlassVerticalBar.disabled]; [GlassVerticalBar.maybeOf] answers for a
+  /// particular context.
+  GlassVerticalBarData? get verticalBar => _verticalBar;
+
+  /// Height each bar at the bottom of the strip takes, keyed by its owner.
+  final Map<Object, double> _verticalBarBottom = <Object, double>{};
+
+  /// How much of the vertical bar strip, measured from the bottom of the
+  /// screen, the bars stacked there take — a tab bar, a toolbar.
+  ///
+  /// The pinned chrome is laid out in what is left above it, and overflows
+  /// into a ••• menu where that is not enough. Zero with nothing reserved.
+  double get verticalBarBottom => _verticalBarBottom.values
+      .fold(0.0, (max, extent) => extent > max ? extent : max);
+
+  /// Reserves [extent] of the strip's bottom for [owner], replacing any
+  /// earlier reservation it made.
+  ///
+  /// Called by the package's tab bar and toolbar while they lay out in the
+  /// strip. A bar drawn there by the app reserves its own height, plus the
+  /// strip's [GlassVerticalBarData.bottom], the same way.
+  void reserveVerticalBarBottom(Object owner, double extent) {
+    if (_verticalBarBottom[owner] == extent) return;
+    _verticalBarBottom[owner] = extent;
+    _scheduleNotify();
+  }
+
+  /// Drops [owner]'s reservation.
+  void releaseVerticalBarBottom(Object owner) {
+    if (_verticalBarBottom.remove(owner) != null) _scheduleNotify();
+  }
+
+  void _onVerticalBarRegions() => setState(() {});
+
+  /// The strip this shell's bars lay out in, or null where they are
+  /// horizontal.
+  ///
+  /// Read from the insets the shell itself sees, which is above any [SafeArea]
+  /// a page puts around its content, and from the regions UIKit reserves for
+  /// the status cluster and the camera, which Flutter does not report on iOS
+  /// yet. See [GlassVerticalBar.resolve].
+  GlassVerticalBarData? _resolveVerticalBar(BuildContext context) {
+    if (!isActive ||
+        widget.verticalBarBehavior == GlassVerticalBarBehavior.disabled) {
+      return null;
+    }
+    final bar = GlassVerticalBar.resolve(
+      viewPadding: MediaQuery.viewPaddingOf(context),
+      size: MediaQuery.sizeOf(context),
+      platform: defaultTargetPlatform,
+      textDirection: Directionality.maybeOf(context) ?? TextDirection.ltr,
+      displayFeatures: [
+        ...MediaQuery.displayFeaturesOf(context),
+        ...VerticalBarRegions.instance.value,
+      ],
+      systemEdge: VerticalBarRegions.instance.edge.value,
+      compression: widget.verticalBarCompression,
+    );
+    // Followed on iOS whether or not a strip is up yet: where UIKit leaves the
+    // strip to the app, its edge is the only sign of it.
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      VerticalBarRegions.instance.observe();
+    }
+    return bar;
+  }
+
+  /// [child] under the media query the app should see.
+  ///
+  /// The regions UIKit reserves join [MediaQueryData.displayFeatures], which
+  /// is where Flutter will report them once it does on iOS
+  /// (flutter/flutter#193025): the status cluster and the camera as cutouts,
+  /// and the fold of a half-folded display as a hinge, which
+  /// [DisplayFeatureSubScreen] keeps dialogs and sheets to one side of. And
+  /// for a strip UIKit leaves to the app, its width joins the insets on its
+  /// side, so the content keeps clear of it as it does of a strip the system
+  /// insets for.
+  Widget _mediaQueryFor(
+    BuildContext context,
+    GlassVerticalBarData? bar,
+    Widget child,
+  ) {
+    final regions = VerticalBarRegions.instance.value;
+    final insetsStrip = bar != null && !bar.systemInset;
+    if (regions.isEmpty && !insetsStrip) return child;
+    var data = MediaQuery.of(context);
+    if (regions.isNotEmpty) {
+      final reported = {for (final f in data.displayFeatures) f.bounds};
+      data = data.copyWith(displayFeatures: [
+        ...data.displayFeatures,
+        for (final region in regions)
+          if (!reported.contains(region.bounds)) region,
+      ]);
+    }
+    if (insetsStrip) {
+      final ltr = (Directionality.maybeOf(context) ?? TextDirection.ltr) ==
+          TextDirection.ltr;
+      final onLeft = (bar.edge == GlassVerticalBarEdge.leading) == ltr;
+      EdgeInsets add(EdgeInsets insets) => insets.copyWith(
+            left: onLeft ? insets.left + bar.width : insets.left,
+            right: onLeft ? insets.right : insets.right + bar.width,
+          );
+      data = data.copyWith(
+        padding: add(data.padding),
+        viewPadding: add(data.viewPadding),
+      );
+    }
+    return MediaQuery(data: data, child: child);
   }
 
   @override
   Widget build(BuildContext context) {
+    final verticalBar = _verticalBar = _resolveVerticalBar(context);
     return _GlassNavigationShellScope(
       state: this,
       child: Stack(
         children: [
-          widget.child,
+          GlassVerticalBar(
+            data: verticalBar,
+            child: _mediaQueryFor(
+              context,
+              verticalBar,
+              // Around the app only, not the chrome below: an overlay opened
+              // from the chrome (a GlassBarItem.menu) portals into the
+              // chrome's own Overlay, where its own barrier already covers
+              // the capsule, so it has no hold to take on the gate.
+              ShellChromeBarrierScope(
+                barriers: _chromeBarriers,
+                child: widget.child,
+              ),
+            ),
+          ),
           // The chrome gets an Overlay of its own because it deliberately sits
           // above the app's Navigator, and therefore outside the Navigator's
           // Overlay — a GlassBarItem.menu portals to the root overlay, and up
@@ -645,15 +1360,36 @@ class GlassNavigationShellState extends State<GlassNavigationShell>
           // barrier covers the page below. It is a *sibling* of the Navigator,
           // not an ancestor, so nothing inside the app resolves its root
           // overlay to this one.
+          //
+          // Being painted after the Navigator also puts the chrome above a
+          // page-level menu's dismiss barrier: out of reach of its
+          // BlockSemantics, which only drops what was painted before it, and
+          // first in line for pointers. So while such a barrier is up the
+          // gate puts the chrome behind it: hidden from screen readers, and
+          // ignoring pointers, which fall through to the barrier and close
+          // the menu. A menu portaled into this Overlay is not under the
+          // gate and keeps working. The host positions itself, so the gate gets a
+          // full-screen Stack of its own to sit above, in the Overlay's place.
           if (widget.enabled)
             Overlay.wrap(
-              child: ListenableBuilder(
-                listenable: _tick,
-                builder: (context, _) {
-                  final state = resolveState();
-                  if (state == null) return const SizedBox.shrink();
-                  return GlassNavPinnedHost(state: state);
-                },
+              child: ShellChromeBarrierGate(
+                barriers: _chromeBarriers,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    ListenableBuilder(
+                      listenable: _tick,
+                      builder: (context, _) {
+                        final state = resolveState();
+                        if (state == null) return const SizedBox.shrink();
+                        return GlassVerticalBar(
+                          data: verticalBar,
+                          child: GlassNavPinnedHost(state: state),
+                        );
+                      },
+                    ),
+                  ],
+                ),
               ),
             ),
         ],
@@ -676,8 +1412,44 @@ class _GlassNavigationShellScope extends InheritedWidget {
       state != oldWidget.state;
 }
 
+/// A capsule kept hoisted through the sheet presented out of it.
+class _SheetHold {
+  _SheetHold({
+    required this.route,
+    required this.item,
+    required this.anchor,
+  });
+
+  /// The route whose chrome the capsule belongs to.
+  final ModalRoute<dynamic> route;
+
+  /// The item that was tapped.
+  final GlassBarSheetItem item;
+
+  /// The hoisted capsule's anchor, whose [GlassMorphAnchor.isPresenting] is
+  /// the hold's lifetime.
+  final GlassMorphAnchor anchor;
+
+  /// Whether a route has been presented over [route] since the tap.
+  ///
+  /// Until then the hold is waiting for the sheet to arrive and is not
+  /// dropped by a resolve that finds nothing presented over the route.
+  bool presented = false;
+}
+
 /// A [ChangeNotifier] whose notification is callable by its owner.
 class _TickNotifier extends ChangeNotifier {
   /// Notifies listeners that the pinned chrome may have changed.
   void notify() => notifyListeners();
+}
+
+/// One [GlassPinnedBarChrome]'s registration on a [ModalRoute].
+class _RegistrantEntry {
+  _RegistrantEntry({
+    required this.registrant,
+    required this.registration,
+  });
+
+  final BuildContext? registrant;
+  GlassNavBarRegistration registration;
 }

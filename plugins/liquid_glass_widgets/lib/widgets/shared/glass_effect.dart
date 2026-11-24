@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/rendering.dart';
+import '../../src/renderer/glass_backdrop_group.dart';
 import '../../src/renderer/liquid_glass_renderer.dart';
 
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
@@ -34,7 +35,7 @@ class GlassEffect extends StatefulWidget {
     this.quality = GlassQuality.standard,
     this.densityFactor = 0.0,
     this.backgroundKey,
-    this.ambientRim = 0.0,
+    this.ambientRim = 0.1,
     this.baseAlphaMultiplier = 0.2,
     this.edgeAlphaMultiplier = 0.4,
     this.rimThickness = 0.5,
@@ -42,12 +43,6 @@ class GlassEffect extends StatefulWidget {
     this.clipExpansion = EdgeInsets.zero,
     super.key,
   });
-
-  /// [v2.7.0] 全局高性能着色器模式开关
-  static bool useHighPerformanceShader = false;
-
-  /// [v2.7.0] 手动使着色器缓存失效
-  static void invalidateShader() {}
 
   /// The child widget to display.
   final Widget child;
@@ -160,7 +155,8 @@ class _GlassEffectState extends State<GlassEffect>
   ui.FragmentShader? _localShader;
   bool _isDisposed = false;
   ui.Image? _backgroundImage;
-  late Ticker _ticker;
+  Ticker? _ticker;
+  bool _observingLifecycle = false;
   Size? _lastCaptureSize;
   Offset? _lastCapturePosition;
   // Web only: guards against overlapping async captures.
@@ -169,31 +165,40 @@ class _GlassEffectState extends State<GlassEffect>
   // current when _captureBackgroundSync / _captureBackgroundAsync runs.
   double _devicePixelRatio = 1.0;
 
+  bool get _needsLocalShader {
+    if (widget.quality == GlassQuality.minimal) return false;
+    // Path B (Impeller + premium) renders via LiquidGlass.withOwnLayer and
+    // never uses interactive_indicator.frag (_localShader).
+    final bool isImpeller = !kIsWeb && GlassEffect._canUseImpeller;
+    if (isImpeller && widget.quality == GlassQuality.premium) return false;
+    return true;
+  }
+
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    // Skip shader init entirely in minimal quality — build() returns early via
-    // the _FrostedFallback path and the shader is never used.
-    if (widget.quality != GlassQuality.minimal) {
+    // Skip shader init when minimal or Impeller-premium — neither path uses
+    // _localShader (interactive_indicator.frag).
+    if (_needsLocalShader) {
       _initShader();
     }
 
-    _ticker = createTicker(_handleTick);
-
-    // Defer ticker update until after first frame to ensure shader is ready
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        _updateTicker();
-      }
-    });
+    // Only schedule the post-frame capture check when already interacting or
+    // configured with a background capture source.
+    if (widget.interactionIntensity > 0.01 && widget.settings.blur > 0.0) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _updateTicker();
+        }
+      });
+    }
   }
 
   @override
   void didUpdateWidget(covariant GlassEffect oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.quality != widget.quality) {
-      if (_activeShader == null) {
+      if (_needsLocalShader && _activeShader == null) {
         _initShader();
       }
     }
@@ -225,7 +230,7 @@ class _GlassEffectState extends State<GlassEffect>
       case AppLifecycleState.inactive:
       case AppLifecycleState.paused:
       case AppLifecycleState.hidden:
-        if (_ticker.isActive) _ticker.stop();
+        if (_ticker?.isActive ?? false) _ticker!.stop();
         break;
       case AppLifecycleState.resumed:
         // Restart one frame after resume so surfaceChanged has completed
@@ -243,34 +248,55 @@ class _GlassEffectState extends State<GlassEffect>
 
   void _updateTicker() {
     final bool isImpeller = !kIsWeb && GlassEffect._canUseImpeller;
-    // [v3.0.0-alpha20] 官方原生现场 BackdropFilterLayer 通道：
-    // 在 Impeller 引擎与 Premium 材质下，直接透过现场场景图层，将实际底层背景与导航栏本身
-    // （磨砂底板、未选中/选中图标与光效）完整纳入 Backdrop 进行物理 3D 弯曲折射。
-    // 彻底停用 toImageSync() 离屏截图通道与每帧常驻 Ticker，彻底消灭 GPU 管道阻塞与掉帧，
-    // 恢复满帧 120 FPS 顶级丝滑体验。
     if (isImpeller && widget.quality == GlassQuality.premium) {
-      if (_ticker.isActive) {
-        _ticker.stop();
+      if (_ticker?.isActive ?? false) {
+        _ticker!.stop();
+        _lastCaptureElapsed = null;
         _backgroundImage?.dispose();
         _backgroundImage = null;
       }
       return;
     }
 
+    // Background capture requirements:
+    //  1. Widget is actively interacting (cost only paid during gesture)
+    //  2. A valid capture key is available
+    //  3. blur > 0 — when blur is 0 the component intentionally uses synthetic
+    //     glass (e.g. GlassSwitch thumb). Capturing the background would let the
+    //     green track bleed through as a dark/tinted frosted overlay, which
+    //     contradicts the intended white glass bloom effect.
     final bool shouldCapture = widget.interactionIntensity > 0.01 &&
-        _effectiveKey != null;
+        _effectiveKey != null &&
+        widget.settings.blur > 0.0;
     if (shouldCapture) {
-      if (!_ticker.isActive) {
-        _ticker.start();
+      if (!_observingLifecycle) {
+        WidgetsBinding.instance.addObserver(this);
+        _observingLifecycle = true;
+      }
+      final ticker = _ticker ??= createTicker(_handleTick);
+      if (!ticker.isActive) {
+        ticker.start();
       }
     } else {
-      if (_ticker.isActive) {
-        _ticker.stop();
+      if (_ticker?.isActive ?? false) {
+        _ticker!.stop();
+        _lastCaptureElapsed = null;
         _backgroundImage?.dispose();
         _backgroundImage = null;
       }
     }
   }
+
+  // Minimum interval between periodic re-captures during an active drag when
+  // the background boundary's size and position have not changed (~30 Hz
+  // instead of 120 Hz cuts GPU texture churn by 4×).
+  static const Duration _kMinCaptureInterval = Duration(milliseconds: 33);
+  // Cap captured background texture area at ~1M physical pixels so a
+  // full-screen GlassBackgroundSource on a 3× display does not allocate a
+  // 14 MB RGBA texture every capture; compact bar boundaries stay at full DPR.
+  static const double _kMaxCapturePixels = 1000000.0;
+
+  Duration? _lastCaptureElapsed;
 
   void _handleTick(Duration elapsed) {
     if (_isDisposed) return; // belt-and-suspenders: post-frame callbacks can
@@ -290,15 +316,15 @@ class _GlassEffectState extends State<GlassEffect>
     final currentPos = (key.currentContext?.findRenderObject() as RenderBox?)
         ?.localToGlobal(Offset.zero);
 
-    // Capture on geometry change always; during interaction capture every frame
-    // since toImageSync() is synchronous (no GPU readback, no CPU copy).
     final bool isInteracting = widget.interactionIntensity > 0.05;
-    bool needsCapture = _backgroundImage == null;
-    needsCapture |= _lastCaptureSize != currentSize;
-    needsCapture |= _lastCapturePosition != currentPos;
-    needsCapture |= isInteracting; // every frame during drag — free cost
+    final bool geometryChanged = _backgroundImage == null ||
+        _lastCaptureSize != currentSize ||
+        _lastCapturePosition != currentPos;
+    final bool intervalElapsed = _lastCaptureElapsed == null ||
+        (elapsed - _lastCaptureElapsed!) >= _kMinCaptureInterval;
 
-    if (needsCapture) {
+    if (geometryChanged || (isInteracting && intervalElapsed)) {
+      _lastCaptureElapsed = elapsed;
       _captureBackground(boundary, currentSize, currentPos);
     }
   }
@@ -345,7 +371,11 @@ class _GlassEffectState extends State<GlassEffect>
       // across, eliminating the blocky 3×3 pixel "staircase" aliasing on
       // Retina/3× displays when pixelRatio: 1.0 was used.
       final dpr = _devicePixelRatio;
-      final image = boundary.toImageSync(pixelRatio: dpr);
+      final fullPixels = size.width * size.height * dpr * dpr;
+      final captureDpr = fullPixels > _kMaxCapturePixels
+          ? (dpr * math.sqrt(_kMaxCapturePixels / fullPixels)).clamp(1.0, dpr)
+          : dpr;
+      final image = boundary.toImageSync(pixelRatio: captureDpr);
       // Guard: if the widget was disposed between the toImageSync call and
       // this point (possible during rapid navigation), dispose the image
       // immediately rather than leaking it into a dead State.
@@ -423,8 +453,12 @@ class _GlassEffectState extends State<GlassEffect>
   @override
   void dispose() {
     _isDisposed = true;
-    WidgetsBinding.instance.removeObserver(this);
-    _ticker.dispose();
+    if (_observingLifecycle) {
+      WidgetsBinding.instance.removeObserver(this);
+      _observingLifecycle = false;
+    }
+    _ticker?.dispose();
+    _ticker = null;
     // Null backgroundImage BEFORE disposing the shader to break the reference
     // chain: _backgroundImage → render object → engine layer tree → GPU texture.
     // On Mali GPUs, if the shader’s DlRuntimeEffectColorSource retains a
@@ -468,7 +502,7 @@ class _GlassEffectState extends State<GlassEffect>
     // used in the full-shader path. _FrostedFallback has no displacement, so
     // Clip.none would skip clipping entirely and let BackdropFilter blur the
     // full rectangular bounds (the grey-square artifact).
-    if (widget.quality == GlassQuality.minimal || avoidsRefraction) {
+    if (widget.quality == GlassQuality.minimal) {
       return AdaptiveGlass(
         shape: widget.shape,
         settings: widget.settings,
@@ -476,6 +510,25 @@ class _GlassEffectState extends State<GlassEffect>
         useOwnLayer: true,
         clipBehavior: Clip.antiAlias,
         isInteractive: true,
+        child: widget.child,
+      );
+    }
+
+    // Path A2: Nested glass vibrancy fill (avoidsRefraction: true)
+    //
+    // Triggered when an ancestor GlassContainer (or any widget that sets
+    // InheritedLiquidGlass.avoidsRefraction = true) is in the tree. A second
+    // BackdropFilter inside the parent glass surface causes Impeller GPU tile-
+    // memory thrash, missing surfaces, and visible compositor artifacts.
+    //
+    // The correct iOS 26 behaviour for nested glass is a UIVibrancyEffect-style
+    // translucent tinted fill: no refraction, no blur, but rim and specular
+    // highlights are preserved. _VibrancyFill delivers exactly this — zero GPU
+    // compositor overhead, correct on all renderers including Skia and Web.
+    if (avoidsRefraction) {
+      return AdaptiveGlass.vibrancy(
+        shape: widget.shape,
+        settings: widget.settings,
         child: widget.child,
       );
     }
@@ -507,13 +560,32 @@ class _GlassEffectState extends State<GlassEffect>
       // coverage:ignore-start
       // Unreachable in unit tests: isImpeller=false (no real GPU renderer).
       // Tested on physical device / Impeller integration tests only.
-      return LiquidGlass.withOwnLayer(
-        shape: widget.shape,
-        settings: widget.settings,
-        clipExpansion: widget.clipExpansion,
-        captureImage: null, // [v3.0.0-alpha20] 走原生 BackdropFilterLayer 现场通道，纳入真实背景与导航栏本身，彻底解决掉帧
-        captureOriginInScreenSpace: Offset.zero,
-        child: widget.child,
+      // An indicator lies over the glass it moves on, so it stays out of a
+      // GlassBackdropGroup the bar may be in: glass in a group can't see
+      // the glass of the same group below it.
+      final activeIntensity = widget.interactionIntensity.clamp(0.0, 1.0);
+      // At rest (activeIntensity == 0), skip mounting LiquidGlass.withOwnLayer
+      // so resting controls (e.g. a settings list of switches/sliders) pay zero
+      // Impeller backdrop-filter layer cost until touched.
+      if (activeIntensity <= 0.001) {
+        return widget.child;
+      }
+      return GlassBackdropGroup(
+        enabled: false,
+        child: LiquidGlass.withOwnLayer(
+          shape: widget.shape,
+          settings: widget.settings.copyWith(
+            thickness: widget.settings.thickness * activeIntensity,
+            refractiveIndex:
+                1.0 + (widget.settings.refractiveIndex - 1.0) * activeIntensity,
+            rimShade: widget.settings.rimShade * activeIntensity,
+            rimLight: widget.settings.rimLight * activeIntensity,
+          ),
+          clipExpansion: widget.clipExpansion,
+          captureImage: null,
+          captureOriginInScreenSpace: Offset.zero,
+          child: widget.child,
+        ),
       );
       // coverage:ignore-end
     }
@@ -521,47 +593,38 @@ class _GlassEffectState extends State<GlassEffect>
     // 4. Resolve if we can use the high-fidelity refraction shader
     final bool canUseRefraction = effectiveKey != null && !avoidsRefraction;
 
-    // Standard-path structural normalization for interactive_indicator.frag.
-    // The Premium Impeller path renders a real 3D bevel with natural gradient
-    // falloff. The 2D indicator shader draws a flat rim that reads as heavier
-    // at the same parameter values. Scaling these structural params down brings
-    // the pill's visual weight in line with the Premium bevel.
-    //
-    // NOTE: This mirrors the AdaptiveGlass normalization for lightweight_glass.frag
-    // (cards/buttons). Both are intentional Standard-path normalization sites —
-    // each scoped to its own shader's parameter space.
-    // Premium exits above via LiquidGlass.withOwnLayer; this block never runs there.
+    // Callers (AnimatedGlassIndicator, GlassSwitch, GlassSlider) already supply
+    // Standard-calibrated values for rimThickness (~0.47–0.7), ambientRim, and
+    // edgeAlphaMultiplier; clamp rimThickness only if a caller passes a raw
+    // 3D depth value.
     final double effectiveRimThickness = widget.quality == GlassQuality.standard
-        ? widget.rimThickness * 0.35
+        ? widget.rimThickness.clamp(0.35, 1.5)
         : widget.rimThickness;
-    final double effectiveAmbientRim = widget.quality == GlassQuality.standard
-        ? widget.ambientRim * 0.7
-        : widget.ambientRim;
-    final double effectiveEdgeAlpha = widget.quality == GlassQuality.standard
-        ? widget.edgeAlphaMultiplier * 0.7
-        : widget.edgeAlphaMultiplier;
+    final double effectiveAmbientRim = widget.ambientRim;
+    final double effectiveEdgeAlpha = widget.edgeAlphaMultiplier;
 
-    // Normalise LiquidGlassSettings for the Standard path.
-    // The 2D interactive_indicator.frag renders thickness and specular highlights
-    // heavier than the Impeller 3D path at equal parameter values.
-    // Ratios are identical to AdaptiveGlass (thickness × 0.4, lightIntensity × 0.6)
-    // so the visual language stays consistent between static and interactive surfaces.
-    //
-    // NOTE: glassColor.alpha is intentionally NOT normalised here (unlike AdaptiveGlass).
-    // Interactive thumb body opacity is already governed by
-    //   standardBaseAlpha = baseAlphaMultiplier × interactionIntensity
-    // inside the shader — normalising alpha here would double-count it.
+    // Normalise LiquidGlassSettings for the Standard / 2D indicator shader path.
+    // interactive_indicator.frag natively renders uRimLight (cos³ core + tail),
+    // uRimShade (directional contour hairline), uEdgeAbsorption (Beer-Lambert
+    // meniscus bevel), and uLightIntensity (classic directional specular).
+    final base = widget.settings;
+    final activeIntensity = widget.interactionIntensity.clamp(0.0, 1.0);
     final LiquidGlassSettings effectiveSettings;
     if (widget.quality == GlassQuality.standard) {
-      final base = widget.settings;
       effectiveSettings = base.copyWith(
         thickness: (base.effectiveThickness * 0.4).clamp(0.0, double.infinity),
-        lightIntensity: (base.effectiveLightIntensity * 0.6).clamp(0.0, 10.0),
+        lightIntensity: (base.effectiveLightIntensity * 0.65).clamp(0.0, 10.0),
         ambientStrength: (base.effectiveAmbientStrength * 0.25).clamp(0.0, 1.0),
         glowIntensity: (base.glowIntensity * 0.50).clamp(0.0, 5.0),
+        edgeAbsorption: base.edgeAbsorption,
+        rimShade: base.rimShade * activeIntensity,
+        rimLight: base.rimLight * activeIntensity,
       );
     } else {
-      effectiveSettings = widget.settings;
+      effectiveSettings = base.copyWith(
+        rimShade: base.rimShade * activeIntensity,
+        rimLight: base.rimLight * activeIntensity,
+      );
     }
 
     // Path B: High-Fidelity Refraction Shader (Custom GLSL)
@@ -937,12 +1000,19 @@ class _RenderInteractiveIndicator extends RenderProxyBox {
     return _cachedInteractiveFilter!;
   }
 
-  // Reusable ClipPathLayer handle — avoids allocation on every paint frame.
+  // Reusable layer handles and cached pill clip path — avoid allocations on
+  // every paint frame.
   final _clipPathLayerHandle = LayerHandle<ClipPathLayer>();
+  final _backdropLayerHandle = LayerHandle<BackdropFilterLayer>();
+  Path? _cachedPillPath;
+  Size? _cachedPillPathSize;
+  LiquidShape? _cachedPillPathShape;
 
   @override
   void dispose() {
     _clipPathLayerHandle.layer = null;
+    _backdropLayerHandle.layer = null;
+    _cachedPillPath = null;
     super.dispose();
   }
 
@@ -962,15 +1032,30 @@ class _RenderInteractiveIndicator extends RenderProxyBox {
       // compositor backdrop via a saveLayer, destroying the frosted-glass effect.
       // antiAlias creates a ClipPathLayer with no saveLayer, giving sub-pixel AA
       // on the pill edge without compositor isolation.
-      final pillPath = _shape.getOuterPath(offset & size);
+      //
+      // IMPORTANT: build the path in **local** coordinates (Offset.zero & size).
+      // PaintingContext.pushClipPath calls clipPath.shift(offset) internally, so
+      // passing `offset & size` here would shift the clip twice — placing it
+      // entirely outside the widget's screen bounds whenever offset != zero.
+      if (_cachedPillPath == null ||
+          _cachedPillPathSize != size ||
+          _cachedPillPathShape != _shape) {
+        _cachedPillPathSize = size;
+        _cachedPillPathShape = _shape;
+        _cachedPillPath = _shape.getOuterPath(Offset.zero & size);
+      }
+      final pillPath = _cachedPillPath!;
       _clipPathLayerHandle.layer = context.pushClipPath(
         needsCompositing,
         offset,
-        offset & size,
+        Offset.zero & size,
         pillPath,
         (context, offset) {
+          final backdropLayer = (_backdropLayerHandle.layer ??=
+              BackdropFilterLayer())
+            ..filter = filter;
           context.pushLayer(
-            BackdropFilterLayer(filter: filter),
+            backdropLayer,
             (context, offset) {
               _paintGlassContent(context, offset);
             },
@@ -982,6 +1067,7 @@ class _RenderInteractiveIndicator extends RenderProxyBox {
       );
     } else {
       _clipPathLayerHandle.layer = null;
+      _backdropLayerHandle.layer = null;
       _paintGlassContent(context, offset);
     }
   }
@@ -1135,5 +1221,20 @@ class _RenderInteractiveIndicator extends RenderProxyBox {
     // Slot 33: edgeAbsorption — Beer-Lambert meniscus rim darkening [0..1].
     // Passed directly — what the caller sets is what the shader gets.
     _shader.setFloat(index++, _edgeAbsorption.clamp(0.0, 1.0));
+
+    // Slots 34..37: uRimConfig — (rimShade, rimLight, rimShadeEnds, backdropLuma)
+    _shader.setFloat(
+      index++,
+      (_settings.rimShade * _settings.visibility).clamp(0.0, 2.0),
+    );
+    _shader.setFloat(
+      index++,
+      (_settings.rimLight * _settings.visibility).clamp(0.0, 2.0),
+    );
+    _shader.setFloat(index++, _settings.rimShadeEnds.clamp(0.0, 1.0));
+    _shader.setFloat(index++, _backdropLuma.clamp(0.0, 1.0));
+
+    // Slot 38: uFresnelStrength — grazing-angle Fresnel rim strength [0..∞].
+    _shader.setFloat(index++, _settings.fresnelStrength.clamp(0.0, 10.0));
   }
 }

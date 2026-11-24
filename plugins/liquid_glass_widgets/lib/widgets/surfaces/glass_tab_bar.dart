@@ -2,11 +2,16 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart' show ValueListenable;
 
 import '../../constants/glass_defaults.dart';
+import '../../src/renderer/glass_backdrop_group.dart';
 import '../../src/renderer/liquid_glass_renderer.dart';
+import '../../theme/glass_theme_helpers.dart';
 
 import '../../src/types/glass_interaction_behavior.dart';
 import '../../types/glass_quality.dart';
+import '../../utils/indicator_jelly.dart';
 import '../overlays/glass_menu.dart' show GlassMenuAlignment;
+import '../../theme/glass_theme.dart';
+import '../../types/glass_style.dart';
 import '../shared/inherited_liquid_glass.dart';
 import 'shared/glass_search_bar_config.dart';
 import 'shared/tab_bar_accessory_placement.dart';
@@ -17,6 +22,9 @@ import 'shared/tab_bar_types.dart';
 import '../../src/widgets/surfaces/dynamic_preferred_size.dart';
 import '../../src/widgets/surfaces/tab_bar_bottom_layout.dart';
 import '../../src/widgets/surfaces/tab_bar_searchable_layout.dart';
+import '../../src/widgets/surfaces/tab_bar_vertical_layout.dart';
+import 'glass_navigation_shell.dart';
+import 'glass_vertical_bar.dart';
 
 export 'shared/glass_bar_minimize_behavior.dart';
 export 'shared/glass_search_bar_config.dart';
@@ -199,19 +207,21 @@ class GlassTabBar extends StatefulWidget with GlassDynamicPreferredSize {
     EdgeInsetsGeometry tabPadding = const EdgeInsets.symmetric(horizontal: 4),
     double iconLabelSpacing = 4,
     bool enableBlend = true,
+    bool groupBackdrop = true,
     double blendAmount = 10,
     LiquidGlassSettings? settings,
     bool showIndicator = true,
     Color? indicatorColor,
     LiquidGlassSettings? indicatorSettings,
     double indicatorPinchStrength = 0.4,
+    IndicatorJellyPhysics? indicatorJelly,
     Color? selectedIconColor,
     Color? unselectedIconColor,
     Color? selectedLabelColor,
     Color? unselectedLabelColor,
     TextStyle? selectedLabelStyle,
     TextStyle? unselectedLabelStyle,
-    double iconSize = 24,
+    double? iconSize,
     double labelFontSize = 11,
     TextStyle? textStyle,
     Duration glowDuration = const Duration(milliseconds: 300),
@@ -220,7 +230,7 @@ class GlassTabBar extends StatefulWidget with GlassDynamicPreferredSize {
     double glowOpacity = 0.6,
     GlassQuality? quality,
     GlassQuality? backgroundQuality,
-    double magnification = 1.15,
+    double? magnification,
     double innerBlur = 0.0,
     MaskingQuality maskingQuality = MaskingQuality.high,
     GlobalKey? backgroundKey,
@@ -229,7 +239,7 @@ class GlassTabBar extends StatefulWidget with GlassDynamicPreferredSize {
     EdgeInsetsGeometry indicatorExpansion =
         const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
     Color? interactionGlowColor,
-    double interactionGlowRadius = 1.5,
+    double? interactionGlowRadius,
     GlassInteractionBehavior interactionBehavior =
         GlassInteractionBehavior.full,
     double pressScale = 1.04,
@@ -257,12 +267,14 @@ class GlassTabBar extends StatefulWidget with GlassDynamicPreferredSize {
           tabPadding: tabPadding,
           iconLabelSpacing: iconLabelSpacing,
           enableBlend: enableBlend,
+          groupBackdrop: groupBackdrop,
           blendAmount: blendAmount,
           settings: settings,
           showIndicator: showIndicator,
           indicatorColor: indicatorColor,
           indicatorSettings: indicatorSettings,
           indicatorPinchStrength: indicatorPinchStrength,
+          indicatorJelly: indicatorJelly,
           selectedIconColor: selectedIconColor,
           unselectedIconColor: unselectedIconColor,
           selectedLabelColor: selectedLabelColor,
@@ -333,21 +345,23 @@ class GlassTabBar extends StatefulWidget with GlassDynamicPreferredSize {
     double barHeight = 40,
     double barBorderRadius = 100,
     double labelFontSize = 13,
-    double iconSize = 18,
+    double? iconSize = 18,
     EdgeInsetsGeometry tabPadding = const EdgeInsets.symmetric(horizontal: 8),
     EdgeInsetsGeometry indicatorExpansion =
         const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
     // No magnification for compact label-centric layout
-    double magnification = 1.0,
+    double? magnification = 1.0,
     double innerBlur = 0.0,
     // Standard shared params
     double spacing = 4,
     double blendAmount = 10,
     bool enableBlend = true,
+    bool groupBackdrop = true,
     bool showIndicator = true,
     Color? indicatorColor,
     LiquidGlassSettings? indicatorSettings,
     double indicatorPinchStrength = 0.4,
+    IndicatorJellyPhysics? indicatorJelly,
     double? indicatorBorderRadius,
     Color? selectedIconColor,
     Color? unselectedIconColor,
@@ -371,7 +385,7 @@ class GlassTabBar extends StatefulWidget with GlassDynamicPreferredSize {
         GlassInteractionBehavior.full,
     double pressScale = 1.02,
     Color? interactionGlowColor,
-    double interactionGlowRadius = 1.0,
+    double? interactionGlowRadius,
     bool platformViewBackdrop = false,
     bool adaptiveBrightness = false,
     ValueChanged<Brightness>? onBrightnessChanged,
@@ -400,10 +414,12 @@ class GlassTabBar extends StatefulWidget with GlassDynamicPreferredSize {
           spacing: spacing,
           blendAmount: blendAmount,
           enableBlend: enableBlend,
+          groupBackdrop: groupBackdrop,
           showIndicator: showIndicator,
           indicatorColor: indicatorColor,
           indicatorSettings: indicatorSettings,
           indicatorPinchStrength: indicatorPinchStrength,
+          indicatorJelly: indicatorJelly,
           indicatorBorderRadius: indicatorBorderRadius,
           selectedIconColor: selectedIconColor,
           unselectedIconColor: unselectedIconColor,
@@ -463,19 +479,21 @@ class GlassTabBar extends StatefulWidget with GlassDynamicPreferredSize {
     EdgeInsetsGeometry tabPadding = const EdgeInsets.symmetric(horizontal: 4),
     double iconLabelSpacing = 4,
     bool enableBlend = true,
+    bool groupBackdrop = true,
     double blendAmount = 10,
     LiquidGlassSettings? settings,
     bool showIndicator = true,
     Color? indicatorColor,
     LiquidGlassSettings? indicatorSettings,
     double indicatorPinchStrength = 0.4,
+    IndicatorJellyPhysics? indicatorJelly,
     Color? selectedIconColor,
     Color? unselectedIconColor,
     Color? selectedLabelColor,
     Color? unselectedLabelColor,
     TextStyle? selectedLabelStyle,
     TextStyle? unselectedLabelStyle,
-    double iconSize = 24,
+    double? iconSize,
     double labelFontSize = 11,
     TextStyle? textStyle,
     Duration glowDuration = const Duration(milliseconds: 300),
@@ -486,12 +504,13 @@ class GlassTabBar extends StatefulWidget with GlassDynamicPreferredSize {
         GlassInteractionBehavior.full,
     double? pressScale,
     Color? interactionGlowColor,
-    double interactionGlowRadius = 1.5,
+    double? interactionGlowRadius,
     GlassQuality? quality,
     GlassQuality? backgroundQuality,
-    double magnification = 1.15,
+    double? magnification,
     double innerBlur = 0.0,
     bool platformViewBackdrop = false,
+    bool passthroughOverPlatformView = false,
     MaskingQuality maskingQuality = MaskingQuality.high,
     GlobalKey? backgroundKey,
     SpringDescription? springDescription,
@@ -532,12 +551,14 @@ class GlassTabBar extends StatefulWidget with GlassDynamicPreferredSize {
           tabPadding: tabPadding,
           iconLabelSpacing: iconLabelSpacing,
           enableBlend: enableBlend,
+          groupBackdrop: groupBackdrop,
           blendAmount: blendAmount,
           settings: settings,
           showIndicator: showIndicator,
           indicatorColor: indicatorColor,
           indicatorSettings: indicatorSettings,
           indicatorPinchStrength: indicatorPinchStrength,
+          indicatorJelly: indicatorJelly,
           selectedIconColor: selectedIconColor,
           unselectedIconColor: unselectedIconColor,
           selectedLabelColor: selectedLabelColor,
@@ -560,6 +581,7 @@ class GlassTabBar extends StatefulWidget with GlassDynamicPreferredSize {
           magnification: magnification,
           innerBlur: innerBlur,
           platformViewBackdrop: platformViewBackdrop,
+          passthroughOverPlatformView: passthroughOverPlatformView,
           maskingQuality: maskingQuality,
           backgroundKey: backgroundKey,
           springDescription: springDescription,
@@ -663,19 +685,21 @@ class GlassTabBar extends StatefulWidget with GlassDynamicPreferredSize {
     EdgeInsetsGeometry tabPadding = const EdgeInsets.symmetric(horizontal: 4),
     double iconLabelSpacing = 4,
     bool enableBlend = true,
+    bool groupBackdrop = true,
     double blendAmount = 10,
     LiquidGlassSettings? settings,
     bool showIndicator = true,
     Color? indicatorColor,
     LiquidGlassSettings? indicatorSettings,
     double indicatorPinchStrength = 0.4,
+    IndicatorJellyPhysics? indicatorJelly,
     Color? selectedIconColor,
     Color? unselectedIconColor,
     Color? selectedLabelColor,
     Color? unselectedLabelColor,
     TextStyle? selectedLabelStyle,
     TextStyle? unselectedLabelStyle,
-    double iconSize = 24,
+    double? iconSize,
     double labelFontSize = 11,
     TextStyle? textStyle,
     Duration glowDuration = const Duration(milliseconds: 300),
@@ -686,12 +710,13 @@ class GlassTabBar extends StatefulWidget with GlassDynamicPreferredSize {
         GlassInteractionBehavior.full,
     double? pressScale,
     Color? interactionGlowColor,
-    double interactionGlowRadius = 1.5,
+    double? interactionGlowRadius,
     GlassQuality? quality,
     GlassQuality? backgroundQuality,
-    double magnification = 1.15,
+    double? magnification,
     double innerBlur = 0.0,
     bool platformViewBackdrop = false,
+    bool passthroughOverPlatformView = false,
     MaskingQuality maskingQuality = MaskingQuality.high,
     GlobalKey? backgroundKey,
     SpringDescription? springDescription,
@@ -733,12 +758,14 @@ class GlassTabBar extends StatefulWidget with GlassDynamicPreferredSize {
           tabPadding: tabPadding,
           iconLabelSpacing: iconLabelSpacing,
           enableBlend: enableBlend,
+          groupBackdrop: groupBackdrop,
           blendAmount: blendAmount,
           settings: settings,
           showIndicator: showIndicator,
           indicatorColor: indicatorColor,
           indicatorSettings: indicatorSettings,
           indicatorPinchStrength: indicatorPinchStrength,
+          indicatorJelly: indicatorJelly,
           selectedIconColor: selectedIconColor,
           unselectedIconColor: unselectedIconColor,
           selectedLabelColor: selectedLabelColor,
@@ -761,6 +788,7 @@ class GlassTabBar extends StatefulWidget with GlassDynamicPreferredSize {
           magnification: magnification,
           innerBlur: innerBlur,
           platformViewBackdrop: platformViewBackdrop,
+          passthroughOverPlatformView: passthroughOverPlatformView,
           maskingQuality: maskingQuality,
           backgroundKey: backgroundKey,
           springDescription: springDescription,
@@ -794,12 +822,13 @@ class GlassTabBar extends StatefulWidget with GlassDynamicPreferredSize {
       this.unselectedLabelColor,
       this.selectedLabelStyle,
       this.unselectedLabelStyle,
-      this.iconSize = 24.0,
+      this.iconSize,
       this.settings,
       this.quality,
       this.backgroundQuality,
       this.indicatorSettings,
       this.indicatorPinchStrength = 0.4,
+      this.indicatorJelly,
       this.indicatorExpansion =
           const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       this.backgroundKey,
@@ -813,9 +842,10 @@ class GlassTabBar extends StatefulWidget with GlassDynamicPreferredSize {
       this.tabPadding = const EdgeInsets.symmetric(horizontal: 4),
       this.iconLabelSpacing = 4,
       this.enableBlend = true,
+      this.groupBackdrop = true,
       this.blendAmount = 10,
       this.showIndicator = true,
-      this.magnification = 1.15,
+      this.magnification,
       this.innerBlur = 0.0,
       this.glowDuration = const Duration(milliseconds: 300),
       this.glowBlurRadius = 32,
@@ -829,8 +859,9 @@ class GlassTabBar extends StatefulWidget with GlassDynamicPreferredSize {
       this.interactionBehavior = GlassInteractionBehavior.full,
       this.pressScale,
       this.interactionGlowColor,
-      this.interactionGlowRadius = 1.5,
+      this.interactionGlowRadius,
       this.platformViewBackdrop = false,
+      this.passthroughOverPlatformView = false,
       this.adaptiveBrightness = false,
       this.onBrightnessChanged,
       this.brightnessOverride,
@@ -907,7 +938,10 @@ class GlassTabBar extends StatefulWidget with GlassDynamicPreferredSize {
   final TextStyle? unselectedLabelStyle;
 
   /// Size of the icons.
-  final double iconSize;
+  ///
+  /// When null, defaults to 27.5 for [GlassStyle.ios27] and 24.0 for
+  /// [GlassStyle.classic] on bottom, searchable, and minimizable bars.
+  final double? iconSize;
 
   /// Glass effect settings.
   final LiquidGlassSettings? settings;
@@ -952,6 +986,15 @@ class GlassTabBar extends StatefulWidget with GlassDynamicPreferredSize {
   /// Set to `0.0` to disable the effect entirely, or `1.0` to restore the
   /// original full-strength warp.
   final double indicatorPinchStrength;
+
+  /// Physics of the native iOS jelly that stretches the indicator while it
+  /// travels and squishes it when it lands.
+  ///
+  /// Defaults to [IndicatorJellyPhysics.native], measured from UIKit. Change
+  /// single values with [IndicatorJellyPhysics.copyWith], or pass
+  /// [IndicatorJellyPhysics.disabled] for the classic velocity squash.
+  /// Applies to horizontal tab bar layouts (not the vertical strip layout).
+  final IndicatorJellyPhysics? indicatorJelly;
 
   /// Expansion padding applied to the active indicator pill during interaction.
   ///
@@ -1014,11 +1057,27 @@ class GlassTabBar extends StatefulWidget with GlassDynamicPreferredSize {
   /// Blend amount for the shared glass layer. Defaults to 10.
   final double blendAmount;
 
+  /// Whether the bar's glass reads the backdrop together, in one
+  /// [GlassBackdropGroup]: the pill, the search and minimize pills. The
+  /// selected-tab indicator lies over the pill and stays out of it, and so
+  /// do the search pill while the keyboard moves it, the searchable bar's
+  /// extra button (it fades out when search opens) and the bottom
+  /// accessory. On Impeller with premium glass this saves a
+  /// full-screen backdrop copy per surface. Inside a [GlassBackdropGroup] of
+  /// your own the bar joins that group, so one group around an app bar and
+  /// a tab bar makes them share a single read. Defaults to true; set false
+  /// to keep the bar out of any group, e.g. when glass of your own lies over
+  /// it.
+  final bool groupBackdrop;
+
   /// Whether to show the draggable indicator. Defaults to true.
   final bool showIndicator;
 
   /// Selected-icon magnification inside the indicator (bottom/searchable).
-  final double magnification;
+  ///
+  /// When null, defaults to 1.15 across [GlassStyle.ios27], [GlassStyle.ios26],
+  /// and [GlassStyle.classic].
+  final double? magnification;
 
   /// Blur applied to content inside the indicator (bottom/searchable).
   final double innerBlur;
@@ -1055,19 +1114,38 @@ class GlassTabBar extends StatefulWidget with GlassDynamicPreferredSize {
 
   /// Peak scale applied at maximum press depth.
   ///
-  /// null (default): the search and trailing circles press like a native
-  /// button (~17 pt growth) and the bar surface keeps its subtle 1.04. A
-  /// number applies that fixed factor everywhere instead.
+  /// null (default on searchable/minimizable): the search and trailing circles
+  /// press like a native button (~17 pt growth) and the bar surface keeps its
+  /// subtle `1.04` press-lift across all styles. A number applies that fixed
+  /// factor everywhere instead.
   final double? pressScale;
 
   /// Directional glow color on press. Null = theme default.
   final Color? interactionGlowColor;
 
   /// Spread radius of the directional glow. Defaults to 1.5.
-  final double interactionGlowRadius;
+  /// Radius of the interaction glow, as a fraction of the layer's shortest
+  /// side.
+  ///
+  /// Null — the default — asks for the iOS 26 calibration: a wide 1.6
+  /// radius under a sigma-16 Gaussian at a low alpha, the same native mode
+  /// [GlassButton] resolves from a null `glowRadius`. Pass a number to keep
+  /// the theme's glow palette instead.
+  final double? interactionGlowRadius;
 
   /// Forces BackdropFilter rendering over iOS PlatformViews. Defaults to false.
   final bool platformViewBackdrop;
+
+  /// Lifts the selected tab's content above the indicator's glass over a
+  /// platform view, for the searchable and minimizable placements.
+  ///
+  /// Set it together with [platformViewBackdrop] when the bar floats over a
+  /// map, camera preview or other platform view and its glass is configured
+  /// to stay transparent there ([LiquidGlassSettings.platformViewMode]). The
+  /// indicator refracts the bar's own icon layer, which is also drawn on
+  /// screen; without a body behind it both copies show and each label reads
+  /// twice. Defaults to false.
+  final bool passthroughOverPlatformView;
 
   /// Adapts brightness to content scrolling underneath. Defaults to false.
   final bool adaptiveBrightness;
@@ -1183,6 +1261,14 @@ class GlassTabBar extends StatefulWidget with GlassDynamicPreferredSize {
   @override
   Listenable? get preferredSizeListenable => minimizeController;
 
+  /// Whether this bar moves into iPhone Duo's vertical bar strip where a
+  /// [GlassNavigationShell] has resolved one ([GlassVerticalBar.maybeOf]).
+  ///
+  /// True for [GlassTabBar.bottom], [GlassTabBar.minimizable] and
+  /// [GlassTabBar.searchable], whose search becomes the last slot of the
+  /// capsule. The inline placement is part of the content rather than a bar.
+  bool get followsVerticalBar => _placement != _GlassTabBarPlacement.inline;
+
   @override
   Size get preferredSize {
     final minimized = _effectiveMinimized;
@@ -1261,8 +1347,99 @@ class _GlassTabBarState extends State<GlassTabBar> {
     if (mounted) setState(() {});
   }
 
+  /// Selected-item magnification inside the lifted indicator.
+  ///
+  /// An explicit [GlassTabBar.magnification] always wins. Otherwise defaults to
+  /// 1.15 across styles — pairing with the 27.5 pt base icon on
+  /// [GlassStyle.ios27] / [GlassStyle.ios26] and 24.0 pt on
+  /// [GlassStyle.classic] so lifted items get tactile zoom without ballooning
+  /// past the pill interior.
+  double _resolveMagnification(BuildContext context) {
+    return widget.magnification ?? 1.15;
+  }
+
+  /// Icon size for tab items.
+  ///
+  /// An explicit [GlassTabBar.iconSize] always wins. Otherwise the value
+  /// follows the active [GlassStyle]: native iOS 27 `UITabBar` renders
+  /// large-scale SF Symbols whose visual bounds match a 27.5 pt
+  /// `CupertinoIcons` glyph (measured on iOS 27.0 `24A434`), while the
+  /// classic iOS 26 calibration is 24.0.
+  double _resolveIconSize(BuildContext context) {
+    final explicit = widget.iconSize;
+    if (explicit != null) return explicit;
+    final style = GlassTheme.maybeOf(context)?.data.style ?? GlassStyle.ios27;
+    return style == GlassStyle.classic ? 24.0 : 27.5;
+  }
+
+  /// Vertical spacing between icon and label, adjusted for the larger iOS 27
+  /// icon bounding box when [iconSize] is not explicitly overridden so overall
+  /// tab item height stays identical to native `UITabBar` (`~32 pt` at rest).
+  double _resolveIconLabelSpacing(BuildContext context) {
+    if (widget.iconSize != null || widget.iconLabelSpacing != 4.0) {
+      return widget.iconLabelSpacing;
+    }
+    final style = GlassTheme.maybeOf(context)?.data.style ?? GlassStyle.ios27;
+    return style == GlassStyle.classic ? 4.0 : 2.0;
+  }
+
+  static const double _kPremiumVerticalExpansion = 8.0;
+  static const double _kStandardVerticalExpansion = 10.5;
+  static const double _kClassicHorizontalExpansion = 12.0;
+  static const double _kNativeHorizontalExpansion = 11.0;
+
+  /// Lifted indicator expansion beyond the resting selection pill.
+  ///
+  /// When [indicatorExpansion] is left at its default
+  /// `EdgeInsets.symmetric(horizontal: 12, vertical: 8)`, iOS 27 / iOS 26 mode
+  /// uses `EdgeInsets.symmetric(horizontal: 11, vertical: 8)` on
+  /// [GlassQuality.premium] — matching native `_UILiquidLensView` overhanging
+  /// the 4 pt-padded bar platter by 4 pt on top and bottom. On
+  /// [GlassQuality.standard] and [GlassQuality.minimal] (which do not apply
+  /// background texture vertical pinch), vertical expansion is `10.5` pt
+  /// (`6.5` pt net overhang) so the lifted capsule clearly crowns above and
+  /// below the bar border.
+  EdgeInsetsGeometry _resolveIndicatorExpansion(BuildContext context) {
+    if (widget._placement == _GlassTabBarPlacement.inline ||
+        widget.indicatorExpansion !=
+            const EdgeInsets.symmetric(
+              horizontal: _kClassicHorizontalExpansion,
+              vertical: _kPremiumVerticalExpansion,
+            )) {
+      return widget.indicatorExpansion;
+    }
+    final style = GlassTheme.maybeOf(context)?.data.style ?? GlassStyle.ios27;
+    final effectiveQuality = GlassThemeHelpers.resolveQuality(
+      context,
+      widgetQuality: widget.quality,
+      fallback: GlassQuality.premium,
+    );
+    final isStdPath = effectiveQuality == GlassQuality.standard ||
+        effectiveQuality == GlassQuality.minimal;
+    final verticalExpansion =
+        isStdPath ? _kStandardVerticalExpansion : _kPremiumVerticalExpansion;
+    return EdgeInsets.symmetric(
+      horizontal: style == GlassStyle.classic
+          ? _kClassicHorizontalExpansion
+          : _kNativeHorizontalExpansion,
+      vertical: verticalExpansion,
+    );
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => GlassBackdropGroup(
+        enabled: widget.groupBackdrop,
+        joinEnclosing: true,
+        child: Builder(builder: _buildPlacement),
+      );
+
+  Widget _buildPlacement(BuildContext context) {
+    // In iPhone Duo's vertical bar strip the bottom placements become an
+    // icon-only capsule at the bottom of the strip.
+    final verticalBar =
+        widget.followsVerticalBar ? GlassVerticalBar.maybeOf(context) : null;
+    if (verticalBar != null) return _buildVertical(context, verticalBar);
+
     // Dispatch to the correct rendering engine based on placement.
     switch (widget._placement) {
       case _GlassTabBarPlacement.bottom:
@@ -1274,6 +1451,36 @@ class _GlassTabBarState extends State<GlassTabBar> {
       case _GlassTabBarPlacement.inline:
         return _buildInline(context);
     }
+  }
+
+  /// Dispatches to [TabBarVerticalLayout] — the bar in iPhone Duo's vertical
+  /// bar strip.
+  Widget _buildVertical(BuildContext context, GlassVerticalBarData bar) {
+    // A bar without its pill ([GlassSearchBarConfig.showPill]) has no search
+    // slot either, as natively a TabView whose search tab is left out.
+    final searchable = widget._placement == _GlassTabBarPlacement.searchable &&
+        widget.searchConfig!.showPill;
+    return TabBarVerticalLayout(
+      bar: bar,
+      tabs: widget.tabs,
+      selectedIndex: widget.selectedIndex,
+      onTabSelected: widget.onTabSelected,
+      settings: widget.settings,
+      quality: widget.quality,
+      indicatorColor: widget.indicatorColor,
+      indicatorSettings: widget.indicatorSettings,
+      selectedIconColor: widget.selectedIconColor,
+      unselectedIconColor: widget.unselectedIconColor,
+      iconSize: _resolveIconSize(context),
+      platformViewBackdrop: widget.platformViewBackdrop,
+      searchConfig: searchable ? widget.searchConfig : null,
+      // An active bar that keeps its search pill compact is minimized rather
+      // than searching — Apple Music's mini mode — and the strip has no
+      // minimized form of its own.
+      isSearchActive: searchable &&
+          widget.isSearchActive &&
+          widget.searchConfig!.expandWhenActive,
+    );
   }
 
   /// Dispatches to [TabBarBottomLayout] — the iOS 26-style bottom placement engine.
@@ -1292,7 +1499,7 @@ class _GlassTabBarState extends State<GlassTabBar> {
       barHeight: widget.barHeight,
       barBorderRadius: widget.barBorderRadius,
       tabPadding: widget.tabPadding,
-      iconLabelSpacing: widget.iconLabelSpacing,
+      iconLabelSpacing: _resolveIconLabelSpacing(context),
       enableBlend: widget.enableBlend,
       blendAmount: widget.blendAmount,
       settings: widget.settings,
@@ -1300,13 +1507,14 @@ class _GlassTabBarState extends State<GlassTabBar> {
       indicatorColor: widget.indicatorColor,
       indicatorSettings: widget.indicatorSettings,
       indicatorPinchStrength: widget.indicatorPinchStrength,
+      indicatorJelly: widget.indicatorJelly,
       selectedIconColor: widget.selectedIconColor,
       unselectedIconColor: widget.unselectedIconColor,
       selectedLabelColor: widget.selectedLabelColor,
       unselectedLabelColor: widget.unselectedLabelColor,
       selectedLabelStyle: widget.selectedLabelStyle,
       unselectedLabelStyle: widget.unselectedLabelStyle,
-      iconSize: widget.iconSize,
+      iconSize: _resolveIconSize(context),
       labelFontSize: widget.labelFontSize,
       textStyle: widget.textStyle,
       glowDuration: widget.glowDuration,
@@ -1315,13 +1523,13 @@ class _GlassTabBarState extends State<GlassTabBar> {
       glowOpacity: widget.glowOpacity,
       quality: widget.quality,
       backgroundQuality: widget.backgroundQuality,
-      magnification: widget.magnification,
+      magnification: _resolveMagnification(context),
       innerBlur: widget.innerBlur,
       maskingQuality: widget.maskingQuality,
       backgroundKey: widget.backgroundKey,
       tabWidth: widget.tabWidth,
       indicatorBorderRadius: widget.indicatorBorderRadius,
-      indicatorExpansion: widget.indicatorExpansion,
+      indicatorExpansion: _resolveIndicatorExpansion(context),
       interactionGlowColor: widget.interactionGlowColor,
       interactionGlowRadius: widget.interactionGlowRadius,
       interactionBehavior: widget.interactionBehavior,
@@ -1351,7 +1559,7 @@ class _GlassTabBarState extends State<GlassTabBar> {
       barHeight: widget.barHeight,
       barBorderRadius: widget.barBorderRadius,
       tabPadding: widget.tabPadding,
-      iconLabelSpacing: widget.iconLabelSpacing,
+      iconLabelSpacing: _resolveIconLabelSpacing(context),
       enableBlend: widget.enableBlend,
       blendAmount: widget.blendAmount,
       settings: widget.settings,
@@ -1359,13 +1567,14 @@ class _GlassTabBarState extends State<GlassTabBar> {
       indicatorColor: widget.indicatorColor,
       indicatorSettings: widget.indicatorSettings,
       indicatorPinchStrength: widget.indicatorPinchStrength,
+      indicatorJelly: widget.indicatorJelly,
       selectedIconColor: widget.selectedIconColor,
       unselectedIconColor: widget.unselectedIconColor,
       selectedLabelColor: widget.selectedLabelColor,
       unselectedLabelColor: widget.unselectedLabelColor,
       selectedLabelStyle: widget.selectedLabelStyle,
       unselectedLabelStyle: widget.unselectedLabelStyle,
-      iconSize: widget.iconSize,
+      iconSize: _resolveIconSize(context),
       labelFontSize: widget.labelFontSize,
       textStyle: widget.textStyle,
       glowDuration: widget.glowDuration,
@@ -1374,13 +1583,13 @@ class _GlassTabBarState extends State<GlassTabBar> {
       glowOpacity: widget.glowOpacity,
       quality: widget.quality,
       backgroundQuality: widget.backgroundQuality,
-      magnification: widget.magnification,
+      magnification: _resolveMagnification(context),
       innerBlur: widget.innerBlur,
       maskingQuality: widget.maskingQuality,
       backgroundKey: widget.backgroundKey,
       tabWidth: widget.tabWidth,
       indicatorBorderRadius: widget.indicatorBorderRadius,
-      indicatorExpansion: widget.indicatorExpansion,
+      indicatorExpansion: _resolveIndicatorExpansion(context),
       interactionGlowColor: widget.interactionGlowColor,
       interactionGlowRadius: widget.interactionGlowRadius,
       interactionBehavior: widget.interactionBehavior,
@@ -1438,7 +1647,7 @@ class _GlassTabBarState extends State<GlassTabBar> {
       searchBarHeight: widget.searchBarHeight,
       barBorderRadius: widget.barBorderRadius,
       tabPadding: widget.tabPadding,
-      iconLabelSpacing: widget.iconLabelSpacing,
+      iconLabelSpacing: _resolveIconLabelSpacing(context),
       enableBlend: widget.enableBlend,
       blendAmount: widget.blendAmount,
       settings: widget.settings,
@@ -1446,13 +1655,14 @@ class _GlassTabBarState extends State<GlassTabBar> {
       indicatorColor: widget.indicatorColor,
       indicatorSettings: widget.indicatorSettings,
       indicatorPinchStrength: widget.indicatorPinchStrength,
+      indicatorJelly: widget.indicatorJelly,
       selectedIconColor: widget.selectedIconColor,
       unselectedIconColor: widget.unselectedIconColor,
       selectedLabelColor: widget.selectedLabelColor,
       unselectedLabelColor: widget.unselectedLabelColor,
       selectedLabelStyle: widget.selectedLabelStyle,
       unselectedLabelStyle: widget.unselectedLabelStyle,
-      iconSize: widget.iconSize,
+      iconSize: _resolveIconSize(context),
       labelFontSize: widget.labelFontSize,
       textStyle: widget.textStyle,
       glowDuration: widget.glowDuration,
@@ -1465,16 +1675,17 @@ class _GlassTabBarState extends State<GlassTabBar> {
       interactionGlowRadius: widget.interactionGlowRadius,
       quality: widget.quality,
       backgroundQuality: widget.backgroundQuality,
-      magnification: widget.magnification,
+      magnification: _resolveMagnification(context),
       innerBlur: widget.innerBlur,
       platformViewBackdrop: widget.platformViewBackdrop,
+      passthroughOverPlatformView: widget.passthroughOverPlatformView,
       maskingQuality: widget.maskingQuality,
       backgroundKey: widget.backgroundKey,
       springDescription: widget.springDescription,
       tabPillAnchor: widget.tabPillAnchor,
       tabWidth: widget.tabWidth,
       indicatorBorderRadius: widget.indicatorBorderRadius,
-      indicatorExpansion: widget.indicatorExpansion,
+      indicatorExpansion: _resolveIndicatorExpansion(context),
       onBarTap: widget.onBarTap,
       whitenAtBottom: widget.whitenAtBottom,
       whitenBottomThreshold: widget.whitenBottomThreshold,
@@ -1514,7 +1725,8 @@ class GlassTabBarTrailingButton {
     this.enabled = true,
   })  : menuItems = null,
         menuAlignment = null,
-        menuWidth = 200;
+        menuWidth = 200,
+        menuHeight = null;
 
   /// Opens a [GlassMenu] pull-down when the trailing pill is tapped.
   ///
@@ -1535,6 +1747,7 @@ class GlassTabBarTrailingButton {
     this.enabled = true,
     this.menuAlignment,
     this.menuWidth = 200,
+    this.menuHeight,
   }) : onTap = _noOp;
 
   /// The glyph centered on the pill.
@@ -1557,6 +1770,9 @@ class GlassTabBarTrailingButton {
 
   /// Width of the expanded menu panel in logical pixels. Defaults to 200.
   final double menuWidth;
+
+  /// Optional fixed height of the expanded menu panel in logical pixels.
+  final double? menuHeight;
 
   /// Whether this button opens a menu rather than firing a tap callback.
   bool get isMenu => menuItems != null;

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../../src/renderer/liquid_glass_renderer.dart';
 import '../../src/types/glass_interaction_behavior.dart';
 import '../../types/glass_quality.dart';
+import '../../types/glass_surface_style.dart';
 import 'glass_text_field.dart';
 
 /// A multi-line glass text area.
@@ -26,6 +27,11 @@ class GlassTextArea extends StatelessWidget {
     this.autofocus = false,
     this.textInputAction = TextInputAction.newline,
     this.inputFormatters,
+    this.textCapitalization = TextCapitalization.none,
+    this.autofillHints = const <String>[],
+    this.autocorrect = true,
+    this.enableSuggestions = true,
+    this.selectionControls,
     this.textStyle,
     this.placeholderStyle,
     this.padding = const EdgeInsets.all(16),
@@ -38,6 +44,8 @@ class GlassTextArea extends StatelessWidget {
     this.settings,
     this.useOwnLayer = false,
     this.quality,
+    this.surfaceStyle,
+    this.color,
     this.shape = const LiquidRoundedRectangle(borderRadius: 10),
     // ── iOS 26 interaction ────────────────────────────────────────────────────────────
     this.interactionBehavior = GlassInteractionBehavior.full,
@@ -83,6 +91,25 @@ class GlassTextArea extends StatelessWidget {
   /// Input formatters.
   final List<TextInputFormatter>? inputFormatters;
 
+  /// Configures how the platform keyboard capitalizes text.
+  ///
+  /// Mirrors [GlassTextField.textCapitalization]. Defaults to
+  /// [TextCapitalization.none].
+  final TextCapitalization textCapitalization;
+
+  /// Autofill hints forwarded to [GlassTextField.autofillHints].
+  final Iterable<String>? autofillHints;
+
+  /// Whether to enable automatic text correction. Defaults to `true`.
+  final bool autocorrect;
+
+  /// Whether to show input suggestions. Defaults to `true`.
+  final bool enableSuggestions;
+
+  /// Optional custom text selection handle and toolbar controls.
+  /// Mirrors [GlassTextField.selectionControls].
+  final TextSelectionControls? selectionControls;
+
   /// Text style.
   final TextStyle? textStyle;
 
@@ -100,6 +127,13 @@ class GlassTextArea extends StatelessWidget {
 
   /// Quality setting.
   final GlassQuality? quality;
+
+  /// How the area's surface is painted. Mirrors [GlassTextField.surfaceStyle].
+  final GlassSurfaceStyle? surfaceStyle;
+
+  /// Explicit fill color override for [GlassSurfaceStyle.solid] fields.
+  /// Mirrors [GlassTextField.color].
+  final Color? color;
 
   /// Shape setting.
   final LiquidShape shape;
@@ -158,12 +192,19 @@ class GlassTextArea extends StatelessWidget {
       readOnly: readOnly,
       autofocus: autofocus,
       inputFormatters: inputFormatters,
+      textCapitalization: textCapitalization,
+      autofillHints: autofillHints,
+      autocorrect: autocorrect,
+      enableSuggestions: enableSuggestions,
+      selectionControls: selectionControls,
       textStyle: textStyle,
       placeholderStyle: placeholderStyle,
       padding: padding,
       settings: settings,
       useOwnLayer: useOwnLayer,
       quality: quality,
+      surfaceStyle: surfaceStyle,
+      color: color,
       shape: shape,
       iconAlignment: iconAlignment,
       height: height,

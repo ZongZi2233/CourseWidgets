@@ -7,6 +7,7 @@ import 'glass_interaction_settings.dart';
 import 'glass_theme_settings.dart';
 
 import '../types/glass_quality.dart';
+import '../types/glass_style.dart';
 import 'glass_theme_helpers.dart';
 
 /// Color palette for glass glow effects.
@@ -23,6 +24,7 @@ class GlassGlowColors {
     this.warning,
     this.danger,
     this.info,
+    this.pressLight,
     this.glowBlurRadius = 4.0,
     this.glowSpreadRadius = 0,
     this.glowOpacity = 1,
@@ -45,6 +47,19 @@ class GlassGlowColors {
 
   /// Informational color (typically blue)
   final Color? info;
+
+  /// The colour of the light a pressed glass button gains: its even ambient
+  /// base light and its native specular sheen. Their strengths don't change.
+  ///
+  /// When null (the default), the light is white: the iOS 26 lift over the
+  /// system's neutral backgrounds. Over a tinted or coloured page white
+  /// washes a pressed button toward white, so it reads as a white flash
+  /// rather than a brighter piece of the same glass. A colour taken from the
+  /// page keeps the press in tone; set one on each of the light and dark
+  /// variants when the page colour differs between them.
+  ///
+  /// [GlassButton.pressLightColor] overrides it for one button.
+  final Color? pressLight;
 
   /// Gaussian blur sigma applied to the glow halo.
   ///
@@ -84,6 +99,7 @@ class GlassGlowColors {
     Color? warning,
     Color? danger,
     Color? info,
+    Color? pressLight,
     double? glowBlurRadius,
     double? glowSpreadRadius,
     double? glowOpacity,
@@ -95,6 +111,7 @@ class GlassGlowColors {
       warning: warning ?? this.warning,
       danger: danger ?? this.danger,
       info: info ?? this.info,
+      pressLight: pressLight ?? this.pressLight,
       glowBlurRadius: glowBlurRadius ?? this.glowBlurRadius,
       glowSpreadRadius: glowSpreadRadius ?? this.glowSpreadRadius,
       glowOpacity: glowOpacity ?? this.glowOpacity,
@@ -128,6 +145,7 @@ class GlassGlowColors {
       warning: _lerpColorField(a.warning, b.warning, t),
       danger: _lerpColorField(a.danger, b.danger, t),
       info: _lerpColorField(a.info, b.info, t),
+      pressLight: _lerpColorField(a.pressLight, b.pressLight, t),
       glowBlurRadius: lerpDouble(a.glowBlurRadius, b.glowBlurRadius, t)!,
       glowSpreadRadius: lerpDouble(a.glowSpreadRadius, b.glowSpreadRadius, t)!,
       glowOpacity: lerpDouble(a.glowOpacity, b.glowOpacity, t)!,
@@ -171,6 +189,7 @@ class GlassGlowColors {
           warning == other.warning &&
           danger == other.danger &&
           info == other.info &&
+          pressLight == other.pressLight &&
           glowBlurRadius == other.glowBlurRadius &&
           glowSpreadRadius == other.glowSpreadRadius &&
           glowOpacity == other.glowOpacity;
@@ -183,6 +202,7 @@ class GlassGlowColors {
         warning,
         danger,
         info,
+        pressLight,
         glowBlurRadius,
         glowSpreadRadius,
         glowOpacity,
@@ -197,6 +217,7 @@ class GlassThemeVariant {
   /// Creates a theme variant for light or dark mode.
   const GlassThemeVariant({
     this.settings,
+    this.indicatorSettings,
     this.quality,
     this.glowColors,
     this.borderRadius,
@@ -212,6 +233,15 @@ class GlassThemeVariant {
   /// To override a specific widget entirely, pass explicit `settings` directly
   /// to that widget constructor.
   final GlassThemeSettings? settings;
+
+  /// Partial glass visual settings applied to interactive indicator lenses
+  /// ([AnimatedGlassIndicator] inside [GlassTabBar] and
+  /// [GlassSegmentedControl]).
+  ///
+  /// Kept separate from [settings] so frosted platter properties (such as
+  /// `frost: 14` or `blur: 5`) never bleed into the clear refractive indicator
+  /// lens.
+  final GlassThemeSettings? indicatorSettings;
 
   /// Default rendering quality for all widgets.
   ///
@@ -229,12 +259,14 @@ class GlassThemeVariant {
   /// Creates a copy with overridden values.
   GlassThemeVariant copyWith({
     GlassThemeSettings? settings,
+    GlassThemeSettings? indicatorSettings,
     GlassQuality? quality,
     GlassGlowColors? glowColors,
     double? borderRadius,
   }) {
     return GlassThemeVariant(
       settings: settings ?? this.settings,
+      indicatorSettings: indicatorSettings ?? this.indicatorSettings,
       quality: quality ?? this.quality,
       glowColors: glowColors ?? this.glowColors,
       borderRadius: borderRadius ?? this.borderRadius,
@@ -248,6 +280,7 @@ class GlassThemeVariant {
   ///
   /// - [settings] delegates to [GlassThemeSettings.lerp] (per-field smooth
   ///   lerp with midpoint switching for one-sided `null`s).
+  /// - [indicatorSettings] delegates to [GlassThemeSettings.lerp].
   /// - [glowColors] delegates to [GlassGlowColors.lerp].
   /// - [borderRadius] interpolates when set on both sides, otherwise
   ///   switches at the midpoint.
@@ -269,52 +302,88 @@ class GlassThemeVariant {
     }
     return GlassThemeVariant(
       settings: GlassThemeSettings.lerp(a.settings, b.settings, t),
+      indicatorSettings:
+          GlassThemeSettings.lerp(a.indicatorSettings, b.indicatorSettings, t),
       quality: t < 0.5 ? a.quality : b.quality,
       glowColors: GlassGlowColors.lerp(a.glowColors, b.glowColors, t),
       borderRadius: radius,
     );
   }
 
-  /// Default light theme variant.
+  /// Default light theme variant (calibrated iOS 27 surface settings).
   ///
   /// [quality] is intentionally `null` here so that each widget's own
   /// documented default quality is respected (e.g. [GlassTabBar.bottom] defaults
   /// to [GlassQuality.premium]). Set quality explicitly in your
   /// [GlassThemeVariant] to override all widgets globally.
   static const GlassThemeVariant light = GlassThemeVariant(
-    settings: GlassThemeSettings(
-      thickness: 12.0, // Slightly thicker than dark — needs more body on white
-      blur: 5.0, // Matched with dark for consistency
-      glassColor: Color.fromRGBO(210, 220, 240, 0.12), // ~12% cool blue-white
-      lightAngle: 2.356, // 0.75 * pi ≈ 135° — upper-left, matches iOS 26
-      lightIntensity: 0.85, // Softer — bright backgrounds need less highlight
-      ambientStrength: 0.15, // Touch of ambient keeps glass visible on white
-      refractiveIndex: 1.2,
-      saturation: 1.2,
-      chromaticAberration: 0.02, // Subtle prismatic edge, not distracting
-    ),
+    settings: GlassThemeSettings.ios27Light,
     quality: null,
     glowColors: GlassGlowColors.fallback,
   );
 
-  /// Default dark theme variant.
+  /// Default dark theme variant (calibrated iOS 27 surface settings).
   ///
   /// [quality] is intentionally `null` here so that each widget's own
   /// documented default quality is respected (e.g. [GlassTabBar.bottom] defaults
   /// to [GlassQuality.premium]). Set quality explicitly in your
   /// [GlassThemeVariant] to override all widgets globally.
   static const GlassThemeVariant dark = GlassThemeVariant(
-    settings: GlassThemeSettings(
-      thickness: 10.0,
-      blur: 4.0,
-      glassColor: Color.fromRGBO(255, 255, 255, 0.08),
-      lightAngle: 2.356, // 0.75 * pi ≈ 135° — upper-left, matches iOS 26
-      lightIntensity: 0.7,
-      ambientStrength: 0.0,
-      refractiveIndex: 1.2,
-      saturation: 1.2,
-      chromaticAberration: 0.01,
-    ),
+    settings: GlassThemeSettings.ios27Dark,
+    quality: null,
+    glowColors: GlassGlowColors.fallback,
+  );
+
+  /// Classic `v1.x` light theme variant.
+  static const GlassThemeVariant classicLight = GlassThemeVariant(
+    settings: GlassThemeSettings.classicLight,
+    quality: null,
+    glowColors: GlassGlowColors.fallback,
+  );
+
+  /// Classic `v1.x` dark theme variant.
+  static const GlassThemeVariant classicDark = GlassThemeVariant(
+    settings: GlassThemeSettings.classicDark,
+    quality: null,
+    glowColors: GlassGlowColors.fallback,
+  );
+
+  /// iOS 26.0 `glassEffect(.regular)` light theme variant.
+  ///
+  /// [quality] is intentionally `null` so each widget's own documented default
+  /// quality is respected.
+  static const GlassThemeVariant ios26Light = GlassThemeVariant(
+    settings: GlassThemeSettings.ios26Light,
+    quality: null,
+    glowColors: GlassGlowColors.fallback,
+  );
+
+  /// iOS 26.0 `glassEffect(.regular)` dark theme variant.
+  ///
+  /// [quality] is intentionally `null` so each widget's own documented default
+  /// quality is respected.
+  static const GlassThemeVariant ios26Dark = GlassThemeVariant(
+    settings: GlassThemeSettings.ios26Dark,
+    quality: null,
+    glowColors: GlassGlowColors.fallback,
+  );
+
+  /// iOS 27 `glassEffect(.regular)` light theme variant.
+  ///
+  /// [quality] is intentionally `null` so each widget's own documented default
+  /// quality is respected.
+  static const GlassThemeVariant ios27Light = GlassThemeVariant(
+    settings: GlassThemeSettings.ios27Light,
+    quality: null,
+    glowColors: GlassGlowColors.fallback,
+  );
+
+  /// iOS 27 `glassEffect(.regular)` dark theme variant.
+  ///
+  /// [quality] is intentionally `null` so each widget's own documented default
+  /// quality is respected.
+  static const GlassThemeVariant ios27Dark = GlassThemeVariant(
+    settings: GlassThemeSettings.ios27Dark,
     quality: null,
     glowColors: GlassGlowColors.fallback,
   );
@@ -331,13 +400,14 @@ class GlassThemeVariant {
   ///
   /// ```dart
   /// GlassTheme(
-  ///   data: GlassThemeData(
-  ///     light: GlassThemeVariant.minimal,
-  ///     dark: GlassThemeVariant.minimal,
-  ///   ),
+  ///   data: const GlassThemeData.minimal(),
   ///   child: child!,
   /// )
   /// ```
+  ///
+  /// This variant has one cool tint for both brightnesses; [minimalLight] and
+  /// [minimalDark] take the neutral tint of the iOS 27 glass of each (paired
+  /// automatically by [GlassThemeData.minimal]).
   static const GlassThemeVariant minimal = GlassThemeVariant(
     settings: GlassThemeSettings(
       thickness: 10.0, // Consistent with light/dark
@@ -349,18 +419,50 @@ class GlassThemeVariant {
     glowColors: GlassGlowColors.fallback,
   );
 
+  /// [minimal] for light mode, with the neutral tint of
+  /// [GlassThemeSettings.ios27Light] instead of [minimal]'s cool blue-grey
+  /// one, so the frosted surfaces keep the light glass's milky veil.
+  static const GlassThemeVariant minimalLight = GlassThemeVariant(
+    settings: GlassThemeSettings(
+      thickness: 10.0,
+      blur: 8.0,
+      glassColor: Color(0x87F8F8F8), // GlassThemeSettings.ios27Light's tint
+    ),
+    quality: GlassQuality.minimal,
+    glowColors: GlassGlowColors.fallback,
+  );
+
+  /// [minimal] for dark mode, with the neutral tint of
+  /// [GlassThemeSettings.ios27Dark].
+  static const GlassThemeVariant minimalDark = GlassThemeVariant(
+    settings: GlassThemeSettings(
+      thickness: 10.0,
+      blur: 8.0,
+      glassColor: Color(0x1FFFFFFF), // GlassThemeSettings.ios27Dark's tint
+    ),
+    quality: GlassQuality.minimal,
+    glowColors: GlassGlowColors.fallback,
+  );
+
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is GlassThemeVariant &&
           runtimeType == other.runtimeType &&
           settings == other.settings &&
+          indicatorSettings == other.indicatorSettings &&
           quality == other.quality &&
           glowColors == other.glowColors &&
           borderRadius == other.borderRadius;
 
   @override
-  int get hashCode => Object.hash(settings, quality, glowColors, borderRadius);
+  int get hashCode => Object.hash(
+        settings,
+        indicatorSettings,
+        quality,
+        glowColors,
+        borderRadius,
+      );
 }
 
 /// Theme data for liquid glass widgets.
@@ -410,9 +512,53 @@ class GlassThemeData {
   const GlassThemeData({
     this.light = GlassThemeVariant.light,
     this.dark = GlassThemeVariant.dark,
+    this.style = GlassStyle.ios27,
     this.interaction = const GlassInteractionSettings(),
     this.brightness,
   });
+
+  /// Creates glass theme data configured with classic `v1.x` Liquid Glass
+  /// optics ([GlassThemeVariant.classicLight] and [GlassThemeVariant.classicDark]).
+  const GlassThemeData.classic({
+    this.interaction = const GlassInteractionSettings(),
+    this.brightness,
+  })  : style = GlassStyle.classic,
+        light = GlassThemeVariant.classicLight,
+        dark = GlassThemeVariant.classicDark;
+
+  /// Creates glass theme data configured with simulator-calibrated iOS 26.0
+  /// `glassEffect(.regular)` optics ([GlassThemeVariant.ios26Light] and
+  /// [GlassThemeVariant.ios26Dark]).
+  const GlassThemeData.ios26({
+    this.interaction = const GlassInteractionSettings(),
+    this.brightness,
+  })  : style = GlassStyle.ios26,
+        light = GlassThemeVariant.ios26Light,
+        dark = GlassThemeVariant.ios26Dark;
+
+  /// Creates glass theme data configured with authentic iOS 27
+  /// `glassEffect(.regular)` optics ([GlassThemeVariant.ios27Light] and
+  /// [GlassThemeVariant.ios27Dark]).
+  const GlassThemeData.ios27({
+    this.interaction = const GlassInteractionSettings(),
+    this.brightness,
+  })  : style = GlassStyle.ios27,
+        light = GlassThemeVariant.ios27Light,
+        dark = GlassThemeVariant.ios27Dark;
+
+  /// Creates shader-free glass theme data configured with
+  /// [GlassQuality.minimal] ([GlassThemeVariant.minimalLight] and
+  /// [GlassThemeVariant.minimalDark]).
+  ///
+  /// Uses plain `BackdropFilter` blur with brightness-matched neutral iOS 27
+  /// tints and zero custom fragment shaders — ideal for pre-iPhone 13 /
+  /// pre-A15 hardware or strict GPU budgets.
+  const GlassThemeData.minimal({
+    this.style = GlassStyle.ios27,
+    this.interaction = const GlassInteractionSettings(),
+    this.brightness,
+  })  : light = GlassThemeVariant.minimalLight,
+        dark = GlassThemeVariant.minimalDark;
 
   /// Creates glass theme data from a flat set of common properties.
   ///
@@ -448,6 +594,7 @@ class GlassThemeData {
     double? refractiveIndex,
     double? saturation,
     double? borderRadius,
+    GlassStyle style = GlassStyle.ios27,
     GlassInteractionSettings? interaction,
     Brightness? brightness,
   }) {
@@ -461,9 +608,21 @@ class GlassThemeData {
       saturation: saturation,
     );
 
+    final baseLight = switch (style) {
+      GlassStyle.classic => GlassThemeVariant.classicLight,
+      GlassStyle.ios26 => GlassThemeVariant.ios26Light,
+      GlassStyle.ios27 => GlassThemeVariant.light,
+    };
+    final baseDark = switch (style) {
+      GlassStyle.classic => GlassThemeVariant.classicDark,
+      GlassStyle.ios26 => GlassThemeVariant.ios26Dark,
+      GlassStyle.ios27 => GlassThemeVariant.dark,
+    };
+
     return GlassThemeData(
-      light: GlassThemeVariant.light.copyWith(
-        settings: GlassThemeVariant.light.settings?.copyWith(
+      style: style,
+      light: baseLight.copyWith(
+        settings: baseLight.settings?.copyWith(
               blur: blur,
               thickness: thickness,
               chromaticAberration: chromaticAberration,
@@ -476,8 +635,8 @@ class GlassThemeData {
         quality: quality,
         borderRadius: borderRadius,
       ),
-      dark: GlassThemeVariant.dark.copyWith(
-        settings: GlassThemeVariant.dark.settings?.copyWith(
+      dark: baseDark.copyWith(
+        settings: baseDark.settings?.copyWith(
               blur: blur,
               thickness: thickness,
               chromaticAberration: chromaticAberration,
@@ -500,6 +659,12 @@ class GlassThemeData {
 
   /// Theme variant for dark mode.
   final GlassThemeVariant dark;
+
+  /// Design-era style preset ([GlassStyle.ios27] by default).
+  ///
+  /// Coordinates surface platters, interactive indicator lenses, inner shadows,
+  /// and resting selection pills across widgets when not explicitly overridden.
+  final GlassStyle style;
 
   /// Interaction physics settings (brightness-agnostic).
   ///
@@ -554,8 +719,42 @@ class GlassThemeData {
   /// Returns a [GlassThemeSettings] rather than a full
   /// [LiquidGlassSettings] — callers should merge this on top of their own
   /// defaults via [GlassThemeSettings.applyTo].
+  ///
+  /// When the variant's [GlassThemeVariant.settings] is still one of the
+  /// unmodified built-in surface presets, this automatically aligns with
+  /// [style] so setting `GlassThemeData(style: GlassStyle.classic)` or
+  /// `GlassThemeData(style: GlassStyle.ios27)` switches all surfaces, tab bars,
+  /// and indicator lenses from a single property.
   GlassThemeSettings? settingsFor(BuildContext context) {
-    return variantFor(context).settings;
+    final s = variantFor(context).settings;
+    final isBuiltInLight = identical(s, GlassThemeSettings.ios27Light) ||
+        identical(s, GlassThemeSettings.ios26Light) ||
+        identical(s, GlassThemeSettings.classicLight);
+    final isBuiltInDark = identical(s, GlassThemeSettings.ios27Dark) ||
+        identical(s, GlassThemeSettings.ios26Dark) ||
+        identical(s, GlassThemeSettings.classicDark);
+
+    if (isBuiltInLight) {
+      return switch (style) {
+        GlassStyle.classic => GlassThemeSettings.classicLight,
+        GlassStyle.ios26 => GlassThemeSettings.ios26Light,
+        GlassStyle.ios27 => GlassThemeSettings.ios27Light,
+      };
+    }
+    if (isBuiltInDark) {
+      return switch (style) {
+        GlassStyle.classic => GlassThemeSettings.classicDark,
+        GlassStyle.ios26 => GlassThemeSettings.ios26Dark,
+        GlassStyle.ios27 => GlassThemeSettings.ios27Dark,
+      };
+    }
+    return s;
+  }
+
+  /// Gets the partial indicator lens settings override for the current
+  /// brightness.
+  GlassThemeSettings? indicatorSettingsFor(BuildContext context) {
+    return variantFor(context).indicatorSettings;
   }
 
   /// Gets rendering quality for current brightness.
@@ -605,12 +804,14 @@ class GlassThemeData {
   GlassThemeData copyWith({
     GlassThemeVariant? light,
     GlassThemeVariant? dark,
+    GlassStyle? style,
     GlassInteractionSettings? interaction,
     Object? brightness = _sentinel,
   }) {
     return GlassThemeData(
       light: light ?? this.light,
       dark: dark ?? this.dark,
+      style: style ?? this.style,
       interaction: interaction ?? this.interaction,
       // Use sentinel so callers can explicitly clear the override with null.
       brightness:
@@ -635,9 +836,10 @@ class GlassThemeData {
           runtimeType == other.runtimeType &&
           light == other.light &&
           dark == other.dark &&
+          style == other.style &&
           interaction == other.interaction &&
           brightness == other.brightness;
 
   @override
-  int get hashCode => Object.hash(light, dark, interaction, brightness);
+  int get hashCode => Object.hash(light, dark, style, interaction, brightness);
 }

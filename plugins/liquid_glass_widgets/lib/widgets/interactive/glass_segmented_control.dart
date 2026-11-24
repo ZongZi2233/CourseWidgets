@@ -6,6 +6,8 @@ import '../../src/types/glass_interaction_behavior.dart';
 import '../../theme/glass_theme.dart';
 import '../../theme/glass_theme_helpers.dart';
 import '../../types/glass_quality.dart';
+import '../../utils/indicator_jelly.dart';
+import '../../types/glass_style.dart';
 import '../shared/adaptive_liquid_glass_layer.dart';
 import '../surfaces/shared/tab_bar_types.dart' show MaskingQuality;
 import '../surfaces/glass_tab_bar.dart'
@@ -32,17 +34,21 @@ import '../../src/widgets/interactive/segmented_control_internal.dart';
 /// - **Flexible Sizing**: Automatically sizes segments evenly
 /// - **Customizable Appearance**: Full control over colors, sizes, and effects
 ///
-/// ## ⚠️ Do Not Wrap in GlassContainer or GlassCard
+/// ## ⚠️ Do Not Wrap in a Refractive GlassContainer or GlassContainer.card
 ///
-/// Placing this widget inside a [GlassContainer] or [GlassCard] is an
-/// anti-pattern that causes two problems:
+/// Placing this widget inside a default `glass` [GlassContainer] or
+/// [GlassContainer.card] is an anti-pattern that causes two problems:
 ///
-/// 1. **Visual degradation** — the container sets `avoidsRefraction: true`
+/// 1. **Visual degradation** — the glass container sets `avoidsRefraction: true`
 ///    on its children, causing the indicator's glass refraction to fall back
 ///    to a non-refracting path.
 /// 2. **Jelly-physics clipping** — with `useOwnLayer: true` on the container,
 ///    the container's own-layer clip cuts the indicator's jelly overshoot
 ///    during drag animations.
+///
+/// Exception: inside a `surfaceStyle: GlassSurfaceStyle.solid` card or
+/// `GlassGroupedSection` there is no glass layer and `avoidsRefraction` is not
+/// set, so placing [GlassSegmentedControl] inside a `solid` card works normally.
 ///
 /// The track background is already handled by [backgroundColor] — no outer
 /// container is needed. For a standalone glass layer, use [useOwnLayer] on
@@ -190,10 +196,12 @@ class GlassSegmentedControl extends StatefulWidget {
     this.padding = const EdgeInsets.all(2),
     this.selectedTextStyle,
     this.unselectedTextStyle,
+    this.activeSelectedColor,
     this.backgroundColor,
     this.indicatorColor,
     this.indicatorSettings,
     this.indicatorPinchStrength = 0.4,
+    this.indicatorJelly,
     this.indicatorExpansion =
         const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
     this.settings,
@@ -263,6 +271,7 @@ class GlassSegmentedControl extends StatefulWidget {
     this.padding = const EdgeInsets.all(2),
     this.selectedTextStyle,
     this.unselectedTextStyle,
+    this.activeSelectedColor,
     this.backgroundColor,
     this.indicatorColor,
     this.indicatorSettings,
@@ -286,6 +295,7 @@ class GlassSegmentedControl extends StatefulWidget {
     this.dividerSettings,
     this.indicatorShadow,
   })  : isScrollable = true,
+        indicatorJelly = null,
         direction = Axis.horizontal,
         segmentExtent = null,
         interactionBehavior = GlassInteractionBehavior.full,
@@ -396,6 +406,23 @@ class GlassSegmentedControl extends StatefulWidget {
   /// and white color at 60% opacity.
   final TextStyle? unselectedTextStyle;
 
+  /// Optional foreground color (text and icon) for the selected segment while
+  /// the active liquid-glass lens is lifted (pressed or dragged).
+  ///
+  /// Because the solid resting [indicatorColor] pill fades out to 0% opacity as
+  /// the interactive glass lens blooms (`thickness: 0.0 → 0.15`), a
+  /// high-contrast inverted resting pill (e.g. a dark pill in Light Mode with
+  /// white selected text, or a white pill in Dark Mode with dark selected text)
+  /// would otherwise leave its resting foreground color over the clear glass
+  /// lens.
+  ///
+  /// When `null` (default), [GlassSegmentedControl] automatically interpolates
+  /// the active segment's text and icon color to the theme's primary label
+  /// color whenever [indicatorColor] has inverted luminance relative to the
+  /// ambient [GlassTheme] brightness (and keeps the resting color unchanged
+  /// when [indicatorColor] is not inverted).
+  final Color? activeSelectedColor;
+
   /// Background color of the segmented control.
   ///
   /// If null, uses a semi-transparent fill depending on brightness.
@@ -430,6 +457,16 @@ class GlassSegmentedControl extends StatefulWidget {
   /// the original full-strength warp.
   final double indicatorPinchStrength;
 
+  /// Physics of the native iOS jelly that stretches the indicator while it
+  /// travels and squishes it when it lands.
+  ///
+  /// Defaults to [IndicatorJellyPhysics.native], measured from UIKit. Change
+  /// single values with [IndicatorJellyPhysics.copyWith], or pass
+  /// [IndicatorJellyPhysics.disabled] for the classic velocity squash.
+  /// Applies to horizontal controls; not used when [direction] is
+  /// [Axis.vertical] or on [GlassSegmentedControl.scrollable].
+  final IndicatorJellyPhysics? indicatorJelly;
+
   /// Expansion padding applied to the active indicator pill during interaction.
   ///
   /// The pill grows by this amount beyond its segment boundary as the user drags,
@@ -462,7 +499,10 @@ class GlassSegmentedControl extends StatefulWidget {
 
   /// Rendering quality for the glass effect.
   ///
-  /// Defaults to [GlassQuality.standard] (backdrop filter).
+  /// Defaults to [GlassQuality.premium] on [GlassStyle.ios27] / [GlassStyle.ios26]
+  /// ([GlassStyle.classic] keeps [GlassQuality.standard]), which renders the
+  /// calibrated 3D paraxial liquid lens while the indicator is pressed or
+  /// dragged (and mounts zero shader layers at rest).
   final GlassQuality? quality;
 
   /// Optional background key for Skia/Web refraction.
@@ -582,33 +622,44 @@ class _GlassSegmentedControlState extends State<GlassSegmentedControl> {
     super.dispose();
   }
 
-  // Default background colors — match GlassTabBar._buildInline() exactly.
-  static const _defaultLightBg = Color(0x1F000000); // black12
-  static const _defaultDarkBg = Color(0x1FFFFFFF); // white12
+  // Default track background colors — match native UISegmentedControl on
+  // iOS 26 and iOS 27 (CupertinoColors.tertiarySystemFill: rgba(120,120,128,0.12)
+  // in light mode, rgba(120,120,128,0.24) in dark mode; #EEEEEF under explicit
+  // GlassStyle.ios27 theme).
+  static const _defaultLightBg = Color(0x1F787880);
+  static const _ios27LightBg = Color(0x21767680);
+  static const _defaultDarkBg = Color(0x3D787880);
 
   @override
   Widget build(BuildContext context) {
+    final themeStyle = GlassTheme.maybeOf(context)?.data.style;
+    final isNativeTheme =
+        themeStyle == GlassStyle.ios27 || themeStyle == GlassStyle.ios26;
+    final lightBg = isNativeTheme ? _ios27LightBg : _defaultLightBg;
     final effectiveQuality = GlassThemeHelpers.resolveQuality(
       context,
       widgetQuality: widget.quality,
+      fallback: GlassThemeHelpers.nativeStyleQuality(context),
     );
 
-    final effectiveSettings = widget.settings ??
-        const LiquidGlassSettings(
-          thickness: GlassDefaults.thickness,
-          blur: GlassDefaults.blur,
-          chromaticAberration: GlassDefaults.chromaticAberration,
-          lightIntensity: GlassDefaults.lightIntensity,
-          refractiveIndex: GlassDefaults.refractiveIndex,
-          lightAngle: GlassDefaults.lightAngle,
-        );
+    final effectiveSettings = GlassThemeHelpers.resolveSettings(
+      context,
+      explicit: widget.settings,
+      fallback: const LiquidGlassSettings(
+        thickness: GlassDefaults.thickness,
+        blur: GlassDefaults.blur,
+        chromaticAberration: GlassDefaults.chromaticAberration,
+        lightIntensity: GlassDefaults.lightIntensity,
+        refractiveIndex: GlassDefaults.refractiveIndex,
+        lightAngle: GlassDefaults.lightAngle,
+      ),
+    );
 
     // ── Scrollable mode: 100% mirrors GlassTabBar(isScrollable: true) ────────
     if (widget.isScrollable) {
       final isLight = GlassTheme.brightnessOf(context) == Brightness.light;
-      final bg = widget.backgroundColor ??
-          (isLight ? _defaultLightBg : _defaultDarkBg);
-      final borderRadius = BorderRadius.circular(widget.borderRadius);
+      final bg = widget.backgroundColor ?? (isLight ? lightBg : _defaultDarkBg);
+      final borderRadius = GlassDefaults.safeBorderRadius(widget.borderRadius);
 
       final content = Container(
         height: widget.height,
@@ -628,6 +679,7 @@ class _GlassSegmentedControlState extends State<GlassSegmentedControl> {
           indicatorColor: widget.indicatorColor,
           selectedLabelStyle: widget.selectedTextStyle,
           unselectedLabelStyle: widget.unselectedTextStyle,
+          activeSelectedColor: widget.activeSelectedColor,
           selectedIconColor: widget.selectedIconColor,
           unselectedIconColor: widget.unselectedIconColor,
           iconSize: widget.iconSize,
@@ -658,8 +710,8 @@ class _GlassSegmentedControlState extends State<GlassSegmentedControl> {
     // ── Fixed mode: equal-width SegmentedControlContent ───────────────────────
     final backgroundColor = widget.backgroundColor ??
         (GlassTheme.brightnessOf(context) == Brightness.light
-            ? CupertinoColors.black.withValues(alpha: 0.08)
-            : CupertinoColors.white.withValues(alpha: 0.12));
+            ? lightBg
+            : _defaultDarkBg);
 
     // SizedBox sets the height without clipping. DecoratedBox paints the
     // background without enforcing a clip — jelly expansion can overflow freely.
@@ -672,7 +724,7 @@ class _GlassSegmentedControlState extends State<GlassSegmentedControl> {
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: backgroundColor,
-          borderRadius: BorderRadius.circular(widget.borderRadius),
+          borderRadius: GlassDefaults.safeBorderRadius(widget.borderRadius),
         ),
         child: Padding(
           padding: widget.padding,
@@ -683,9 +735,13 @@ class _GlassSegmentedControlState extends State<GlassSegmentedControl> {
             onSegmentSelected: widget.onSegmentSelected,
             selectedTextStyle: widget.selectedTextStyle,
             unselectedTextStyle: widget.unselectedTextStyle,
+            activeSelectedColor: widget.activeSelectedColor,
+            selectedIconColor: widget.selectedIconColor,
+            unselectedIconColor: widget.unselectedIconColor,
             indicatorColor: widget.indicatorColor,
             indicatorSettings: widget.indicatorSettings,
             indicatorPinchStrength: widget.indicatorPinchStrength,
+            indicatorJelly: widget.indicatorJelly,
             indicatorExpansion: widget.indicatorExpansion,
             borderRadius: widget.borderRadius,
             indicatorBorderRadius: widget.indicatorBorderRadius,

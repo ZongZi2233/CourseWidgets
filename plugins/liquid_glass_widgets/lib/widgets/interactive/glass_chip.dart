@@ -4,6 +4,9 @@ import '../../src/renderer/liquid_glass_renderer.dart';
 import '../../theme/glass_theme.dart';
 import '../../theme/glass_theme_data.dart';
 import '../../types/glass_quality.dart';
+import '../../types/glass_surface_style.dart';
+import '../shared/glass_focus_region.dart';
+import '../shared/glass_solid_surface.dart';
 import 'glass_button.dart';
 
 /// A glass morphism chip following Apple's iOS 26 design patterns.
@@ -94,6 +97,7 @@ class GlassChip extends StatelessWidget {
     super.key,
     this.icon,
     this.onTap,
+    this.enabled,
     this.onDeleted,
     this.selected = false,
     this.selectedColor,
@@ -107,6 +111,8 @@ class GlassChip extends StatelessWidget {
     this.settings,
     this.useOwnLayer = false,
     this.quality,
+    this.surfaceStyle,
+    this.color,
     this.platformViewBackdrop = false,
     // GlassButton properties
     this.interactionScale = 1.03,
@@ -117,6 +123,7 @@ class GlassChip extends StatelessWidget {
     this.focusNode,
     this.autofocus = false,
     this.semanticLabel,
+    this.deleteSemanticLabel,
   }) : deleteIcon = deleteIcon ?? const Icon(CupertinoIcons.xmark_circle_fill);
 
   // ===========================================================================
@@ -135,6 +142,13 @@ class GlassChip extends StatelessWidget {
   /// Semantic label for screen readers. Defaults to [label].
   final String? semanticLabel;
 
+  /// Screen reader label of the delete button.
+  ///
+  /// The delete button is always its own button node, so it can be reached
+  /// apart from the chip; this names it. Defaults to "Remove" followed by
+  /// [semanticLabel] (or [label]), e.g. "Remove Flutter".
+  final String? deleteSemanticLabel;
+
   /// Optional leading icon widget.
   final Widget? icon;
 
@@ -143,6 +157,20 @@ class GlassChip extends StatelessWidget {
   /// If both [onTap] and [onDeleted] are null, the chip will be
   /// non-interactive.
   final VoidCallback? onTap;
+
+  /// Whether the chip is enabled.
+  ///
+  /// - `null` (the default): derives enabled state from [onTap] and
+  ///   [onDeleted]. A chip with neither handler renders at 50% opacity and
+  ///   announces as a disabled button.
+  /// - `true`: draws the chip at full strength. When both [onTap] and
+  ///   [onDeleted] are null, the chip is a purely informational pill (a tag or
+  ///   status): inert to touch/focus/press motion and read by screen readers
+  ///   as static text rather than a button.
+  /// - `false`: forces the chip disabled (50% opacity, inert to touch/focus
+  ///   including [onDeleted], announced as a disabled button) even when
+  ///   handlers are provided.
+  final bool? enabled;
 
   /// Called when the delete button is tapped.
   ///
@@ -216,12 +244,39 @@ class GlassChip extends StatelessWidget {
 
   /// Rendering quality for the glass effect.
   ///
-  /// If null, inherits from parent [InheritedLiquidGlass] or defaults to
+  /// If null, inherits from parent `InheritedLiquidGlass` or defaults to
   /// [GlassQuality.standard], which uses backdrop filter rendering.
   /// This works reliably in all contexts, including scrollable lists.
   ///
   /// Use [GlassQuality.premium] for shader-based glass in static layouts only.
   final GlassQuality? quality;
+
+  /// How the chip's surface is painted.
+  ///
+  /// If null (the default), inherits from the nearest ancestor
+  /// [InheritedGlassSurfaceStyle] (such as a `solid` `GlassContainer.card` or
+  /// `GlassGroupedSection`), falling back to [GlassSurfaceStyle.glass].
+  ///
+  /// - [GlassSurfaceStyle.glass]: Renders the chip with [GlassButton] glass,
+  ///   directional [GlassGlow], and press-stretch feedback.
+  /// - [GlassSurfaceStyle.solid]: Renders a flat pill well
+  ///   ([resolveGlassSolidWellColor] by default, [color] when unselected, or
+  ///   [selectedColor] when [selected] is true) with zero shader or
+  ///   backdrop-filter overhead. [settings], [useOwnLayer], [quality],
+  ///   [platformViewBackdrop], [interactionScale], [stretch], [glowRadius],
+  ///   [anchorStretch], and [anchorStretchSettings] are ignored.
+  final GlassSurfaceStyle? surfaceStyle;
+
+  /// Explicit unselected fill color override for [GlassSurfaceStyle.solid]
+  /// chips.
+  ///
+  /// If null, an unselected solid chip uses [resolveGlassSolidWellColor]
+  /// (`#1E767680` in light mode, `#3D767680` in dark mode — matching iOS
+  /// `tertiarySystemFill`). When [selected] is true, [selectedColor] takes
+  /// precedence. Ignored when the resolved surface style is
+  /// [GlassSurfaceStyle.glass] (use [LiquidGlassSettings.glassColor] in
+  /// [settings] to tint glass).
+  final Color? color;
 
   /// Render the backdrop through a live [BackdropFilter] instead of the
   /// shader's captured backdrop.
@@ -264,24 +319,41 @@ class GlassChip extends StatelessWidget {
   final AnchorStretchSettings anchorStretchSettings;
 
   static const _chipShape = LiquidRoundedRectangle(borderRadius: 100);
+  static void _noOp() {}
 
   @override
   Widget build(BuildContext context) {
     final isDark = GlassTheme.brightnessOf(context) == Brightness.dark;
+    final effectiveSurfaceStyle = surfaceStyle ??
+        InheritedGlassSurfaceStyle.maybeOf(context) ??
+        GlassSurfaceStyle.glass;
+    final isSolid = effectiveSurfaceStyle == GlassSurfaceStyle.solid;
+
+    final hasHandlers = onTap != null || onDeleted != null;
+    final effectiveEnabled = enabled ?? hasHandlers;
+    final canInteract = hasHandlers && effectiveEnabled;
+    final isInformational = !hasHandlers && effectiveEnabled;
+
     final baseColor = isDark ? CupertinoColors.white : CupertinoColors.black;
-    final defaultContentColor = baseColor.withValues(alpha: 0.9);
+    final defaultContentColor = isSolid
+        ? (isDark
+            ? CupertinoColors.label.darkColor
+            : CupertinoColors.label.color)
+        : baseColor.withValues(alpha: 0.9);
     final defaultSelectedColor =
         baseColor.withValues(alpha: isDark ? 0.3 : 0.1);
     final defaultGlowUnselected =
         baseColor.withValues(alpha: isDark ? 0.2 : 0.05);
 
+    final defaultLabelStyle = TextStyle(
+      fontSize: 14,
+      color: defaultContentColor,
+      fontWeight: FontWeight.w500,
+    );
     final effectiveIconColor = iconColor ?? defaultContentColor;
-    final effectiveLabelStyle = labelStyle ??
-        TextStyle(
-          fontSize: 14,
-          color: defaultContentColor,
-          fontWeight: FontWeight.w500,
-        );
+    final effectiveLabelStyle = labelStyle != null
+        ? defaultLabelStyle.merge(labelStyle)
+        : defaultLabelStyle;
 
     // Build chip content
     final chipContent = Padding(
@@ -301,23 +373,38 @@ class GlassChip extends StatelessWidget {
             SizedBox(width: spacing),
           ],
 
-          // Label
-          Text(
-            label,
-            style: effectiveLabelStyle,
+          // Label. The chip is named here rather than through
+          // GlassButton.label: an explicit button label replaces ALL of its
+          // content's semantics, which would also hide the delete button.
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              semanticsLabel: semanticLabel ?? label,
+              style: effectiveLabelStyle,
+            ),
           ),
 
           // Delete button
           if (onDeleted != null) ...[
             SizedBox(width: spacing),
-            GestureDetector(
-              onTap: onDeleted,
-              child: IconTheme(
-                data: IconThemeData(
-                  color: effectiveIconColor,
-                  size: deleteIconSize,
+            // A node of its own: without it the delete tap merged into the
+            // chip's text node, so activating the chip's name could delete it.
+            Semantics(
+              container: true,
+              button: true,
+              enabled: effectiveEnabled,
+              label: deleteSemanticLabel ?? 'Remove ${semanticLabel ?? label}',
+              child: GestureDetector(
+                onTap: canInteract ? onDeleted : null,
+                child: IconTheme(
+                  data: IconThemeData(
+                    color: effectiveIconColor,
+                    size: deleteIconSize,
+                  ),
+                  child: deleteIcon,
                 ),
-                child: deleteIcon,
               ),
             ),
           ],
@@ -325,8 +412,78 @@ class GlassChip extends StatelessWidget {
       ),
     );
 
-    // Determine if chip should be interactive
-    final isInteractive = onTap != null || onDeleted != null;
+    if (isSolid) {
+      assert(() {
+        if (settings != null || quality != null) {
+          debugPrint(
+            'GlassChip: `settings` / `quality` have no effect when '
+            '`surfaceStyle` is GlassSurfaceStyle.solid (a solid chip is a '
+            'flat pill well and does not use the glass shader).',
+          );
+        }
+        return true;
+      }());
+
+      final solidSelectedColor = selectedColor ??
+          (isDark
+              ? CupertinoColors.white.withValues(alpha: 0.24)
+              : CupertinoColors.black.withValues(alpha: 0.14));
+      final fillColor = selected
+          ? solidSelectedColor
+          : (color ?? resolveGlassSolidWellColor(context));
+
+      final solidPill = DecoratedBox(
+        decoration: ShapeDecoration(
+          color: fillColor,
+          shape: _chipShape,
+        ),
+        child: chipContent,
+      );
+
+      if (isInformational) {
+        return Semantics(
+          label: semanticLabel ?? label,
+          selected: selected ? true : null,
+          child: ExcludeSemantics(child: solidPill),
+        );
+      }
+
+      if (!effectiveEnabled) {
+        return Semantics(
+          container: true,
+          button: true,
+          enabled: false,
+          selected: selected ? true : null,
+          label: semanticLabel ?? label,
+          child: ExcludeSemantics(
+            child: ExcludeFocus(
+              child: IgnorePointer(
+                child: Opacity(opacity: 0.5, child: solidPill),
+              ),
+            ),
+          ),
+        );
+      }
+
+      final effectiveTap = onTap ?? (onDeleted != null ? _noOp : null);
+
+      return GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        excludeFromSemantics: true,
+        child: GlassFocusRegion(
+          enabled: true,
+          focusNode: focusNode,
+          autofocus: autofocus,
+          isButton: true,
+          isSelected: selected,
+          semanticOnTap: effectiveTap,
+          shape: _chipShape,
+          onKeyboardActivate: onTap,
+          child: solidPill,
+        ),
+      );
+    }
 
     // Apply selected state color overlay
     final contentWithSelection = selected
@@ -355,14 +512,14 @@ class GlassChip extends StatelessWidget {
             ? anchorStretchSettings
             : themeInteraction.anchorStretchSettings ?? anchorStretchSettings;
 
-    return IntrinsicWidth(
+    final Widget glassChip = IntrinsicWidth(
       child: IntrinsicHeight(
         child: GlassButton.custom(
-          onTap: onTap ?? (onDeleted != null ? () {} : () {}),
+          onTap: onTap ?? _noOp,
           shape: _chipShape,
           settings: settings,
           useOwnLayer: useOwnLayer,
-          quality: quality ?? GlassQuality.standard,
+          quality: quality,
           platformViewBackdrop: platformViewBackdrop,
           interactionScale: effectiveInteractionScale,
           stretch: effectiveStretch,
@@ -370,16 +527,43 @@ class GlassChip extends StatelessWidget {
           glowColor: selected
               ? (selectedColor ?? defaultSelectedColor)
               : defaultGlowUnselected,
-          enabled: isInteractive,
+          enabled: effectiveEnabled,
+          isSelected: selected ? true : null,
+          isStationary: !canInteract,
           anchorStretch: effectiveAnchorStretch,
           anchorStretchSettings: effectiveAnchorStretchSettings,
           focusNode: focusNode,
           autofocus: autofocus,
-          label: semanticLabel ?? label,
+          // No `label:` — the Text above names the chip (see comment there).
           width: double.infinity, // Expand to intrinsic width
           height: double.infinity, // Expand to intrinsic height
           child: contentWithSelection,
         ),
+      ),
+    );
+    if (canInteract) return glassChip;
+    if (isInformational) {
+      // An informational chip (enabled: true, no handlers) is read as static
+      // text rather than a button, and takes no touch, focus, or press motion.
+      return Semantics(
+        label: semanticLabel ?? label,
+        selected: selected ? true : null,
+        child: ExcludeSemantics(
+          child: ExcludeFocus(child: IgnorePointer(child: glassChip)),
+        ),
+      );
+    }
+    // A disabled chip (enabled: false, or default with no handlers) stays
+    // inert to touch/focus (including onDeleted and press stretch) while
+    // retaining disabled button semantics for assistive technology.
+    return Semantics(
+      container: true,
+      button: true,
+      enabled: false,
+      selected: selected ? true : null,
+      label: semanticLabel ?? label,
+      child: ExcludeSemantics(
+        child: ExcludeFocus(child: IgnorePointer(child: glassChip)),
       ),
     );
   }

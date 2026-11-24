@@ -36,6 +36,28 @@ class CourseColorPalette {
     Color(0xFFFB7185), // 玫瑰石榴 (Pomegranate Rose)
   ];
 
+  // 12 组实况通知 / 状态胶囊高对比导视强调色（与 morandi / macaron 1:1 同索引映射）
+  static const List<Color> notificationPalette = [
+    Color(0xFFF43F5E), // 玫瑰红 (Rose)
+    Color(0xFF10B981), // 翡翠绿 (Emerald)
+    Color(0xFF38BDF8), // 晴空蓝 (Sky)
+    Color(0xFF8B5CF6), // 鸢尾紫 (Violet)
+    Color(0xFFF59E0B), // 琥珀金 (Amber)
+    Color(0xFFEC4899), // 樱花粉 (Pink)
+    Color(0xFF84CC16), // 青柠绿 (Lime)
+    Color(0xFF6366F1), // 靛蓝紫 (Indigo)
+    Color(0xFF0EA5E9), // 深海蓝 (Cerulean)
+    Color(0xFFF97316), // 落日橙 (Orange)
+    Color(0xFF14B8A6), // 碧玺青 (Teal)
+    Color(0xFFFB7185), // 珊瑚粉 (Coral)
+  ];
+
+  /// 根据课程名称 Hash 获取实况通知与胶囊强调色
+  static Color getNotificationAccentColor(String courseName) {
+    final hash = courseName.hashCode.abs();
+    return notificationPalette[hash % notificationPalette.length];
+  }
+
   /// 根据课程名称 Hash 取基准色（自动区分昼夜调色板）
   static Color getBaseColor(String courseName, [bool isDark = false]) {
     final hash = courseName.hashCode.abs();

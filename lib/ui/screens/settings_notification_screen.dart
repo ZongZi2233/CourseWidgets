@@ -6,12 +6,15 @@ import '../../services/notification_manager.dart';
 import '../../services/live_notification_service_v2.dart';
 import '../../services/data_import_service.dart';
 import '../../services/theme_service.dart';
+import '../../utils/classroom_parser.dart';
 import '../../utils/glass_settings_helper.dart';
+import '../theme/squircle_geometry.dart';
+import '../widgets/adaptive_smooth_scroll.dart';
+import '../widgets/course_color_helper.dart';
 import '../widgets/liquid_components.dart' as liquid;
 import '../widgets/immersive_status_bar_backdrop.dart';
 import '../widgets/windows_desktop_title_bar.dart'
     show setWindowsDesktopTitle, clearWindowsDesktopTitle;
-import 'package:smooth_scroll_multiplatform/smooth_scroll_multiplatform.dart';
 
 /// [v2.2.8 / v3.1.0] 课程通知设置页面
 class SettingsNotificationScreen extends StatefulWidget {
@@ -22,6 +25,8 @@ class SettingsNotificationScreen extends StatefulWidget {
       _SettingsNotificationScreenState();
 }
 
+enum _PreviewScenario { ongoing, longClassroom, emptyDay }
+
 class _SettingsNotificationScreenState
     extends State<SettingsNotificationScreen> {
   final NotificationManager _notificationManager = NotificationManager();
@@ -30,6 +35,7 @@ class _SettingsNotificationScreenState
   bool _doubleReminder = true;
   bool _liveActivitiesEnabled = true;
   String _liveProgressStyle = NotificationManager.styleCenteredDots;
+  _PreviewScenario _previewScenario = _PreviewScenario.ongoing;
 
   @override
   void initState() {
@@ -63,14 +69,15 @@ class _SettingsNotificationScreenState
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: Stack(
-        children: [
-          // 1. 全出血自由滑动内容区：穿透顶栏与状态栏，消除截断，满帧 120 FPS
-          Positioned.fill(
-            child: DynMouseScroll(
-              durationMS: 250,
-              scrollSpeed: 1.2,
-              builder: (context, controller, physics) => ListView(
+      body: BackdropGroup(
+        child: Stack(
+          children: [
+            // 1. 全出血自由滑动内容区：穿透顶栏与状态栏，消除截断，满帧 120 FPS
+            Positioned.fill(
+              child: AdaptiveSmoothScroll(
+                durationMS: 250,
+                scrollSpeed: 1.2,
+                builder: (context, controller, physics) => ListView(
                 controller: controller,
                 padding: EdgeInsets.fromLTRB(
                   16,
@@ -216,6 +223,7 @@ class _SettingsNotificationScreenState
           if (!isDesktop) const liquid.FloatingLiquidBackButton(),
         ],
       ),
+      ),
     );
   }
 
@@ -235,415 +243,50 @@ class _SettingsNotificationScreenState
     );
   }
 
-  /// [v3.2.0] 全新实况导视风格卡片实时预览 + 进度条双模式选择器
+  /// [v3.2.1] 全新实况导视风格卡片实时预览 + 多课程分色进度条双模式选择器
   Widget _buildProgressStyleCard(bool isDark) {
     final accent = ThemeService().primaryColor;
     final isCentered =
         _liveProgressStyle == NotificationManager.styleCenteredDots;
 
     return liquid.HyperOSCard(
-      cornerRadius: 24,
+      cornerRadius: 26,
       padding: const EdgeInsets.all(14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 顶部 1:1 实况通知导视预览卡片（完全对齐 Android 16 原生通知层级与真圆角徽章）
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            decoration: BoxDecoration(
-              color: const Color(0xFF0E1117),
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.08),
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.circle,
-                      color: Color(0xFF10B981),
-                      size: 8,
-                    ),
-                    const SizedBox(width: 6),
-                    const Expanded(
-                      child: Text(
-                        '课表 · 进行中 · 08:00–09:40',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: Color(0xFF9CA3AF),
-                          fontSize: 11,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 7,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF059669),
-                        borderRadius: BorderRadius.circular(99),
-                      ),
-                      child: const Text(
-                        '24:18',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text.rich(
-                            TextSpan(
-                              children: const [
-                                TextSpan(
-                                  text: 'A101',
-                                  style: TextStyle(
-                                    color: Color(0xFF10B981),
-                                    fontSize: 16.5,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                                TextSpan(
-                                  text: ' · ',
-                                  style: TextStyle(
-                                    color: Color(0xFF8E95A3),
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                TextSpan(
-                                  text: '高等数学（教室置前防截断）',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 15.5,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 4),
-                          Text.rich(
-                            TextSpan(
-                              children: const [
-                                TextSpan(
-                                  text: '09:40',
-                                  style: TextStyle(
-                                    color: Color(0xFF10B981),
-                                    fontSize: 12.5,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                                TextSpan(
-                                  text: ' 下课  ·  下节 ',
-                                  style: TextStyle(
-                                    color: Color(0xFF8E95A3),
-                                    fontSize: 11.5,
-                                  ),
-                                ),
-                                TextSpan(
-                                  text: 'C302',
-                                  style: TextStyle(
-                                    color: Color(0xFF10B981),
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                                TextSpan(
-                                  text: ' 数据结构',
-                                  style: TextStyle(
-                                    color: Color(0xFFE5E7EB),
-                                    fontSize: 11.5,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF059669),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.16),
-                          width: 1,
-                        ),
-                      ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Text(
-                            '1-2',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 14.5,
-                              fontWeight: FontWeight.w800,
-                              height: 1.05,
-                            ),
-                          ),
-                          Text(
-                            '节',
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.88),
-                              fontSize: 9.8,
-                              fontWeight: FontWeight.w600,
-                              height: 1.15,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 11),
-                if (isCentered)
-                  Row(
-                    children: [
-                      _buildPreviewDot(const Color(0xFF6B7280)),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Container(
-                          height: 7,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF1F4235),
-                            borderRadius: BorderRadius.circular(99),
-                          ),
-                          alignment: Alignment.centerLeft,
-                          child: FractionallySizedBox(
-                            widthFactor: 0.60,
-                            child: Container(
-                              height: 7,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF10B981),
-                                borderRadius: BorderRadius.circular(99),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      _buildPreviewDot(const Color(0xFF323743)),
-                      const SizedBox(width: 5),
-                      _buildPreviewDot(const Color(0xFF323743)),
-                    ],
-                  )
-                else
-                  Row(
-                    children: [
-                      Expanded(
-                        flex: 20,
-                        child: Container(
-                          height: 7,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF6B7280),
-                            borderRadius: BorderRadius.circular(99),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 5),
-                      Expanded(
-                        flex: 32,
-                        child: Container(
-                          height: 7,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF1F4235),
-                            borderRadius: BorderRadius.circular(99),
-                          ),
-                          alignment: Alignment.centerLeft,
-                          child: FractionallySizedBox(
-                            widthFactor: 0.62,
-                            child: Container(
-                              height: 7,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF10B981),
-                                borderRadius: BorderRadius.circular(99),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 5),
-                      Expanded(
-                        flex: 24,
-                        child: Container(
-                          height: 7,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF323743),
-                            borderRadius: BorderRadius.circular(99),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 5),
-                      Expanded(
-                        flex: 24,
-                        child: Container(
-                          height: 7,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF323743),
-                            borderRadius: BorderRadius.circular(99),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                const SizedBox(height: 6),
-                const Text(
-                  '无课或今日已结课时自动隐藏进度条',
-                  style: TextStyle(
-                    color: Color(0xFF6B7280),
-                    fontSize: 10,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-          ),
+          _buildScenarioSwitcher(isDark),
+          const SizedBox(height: 10),
+          _buildLivePreviewNotificationCard(isCentered: isCentered),
           const SizedBox(height: 12),
           _buildStyleOptionTile(
             styleKey: NotificationManager.styleCenteredDots,
             title: '居中样式（推荐）',
-            subtitle: '当前课程或课间居中展开为长胶囊，其余节次缩为圆点',
-            isSelected:
-                _liveProgressStyle == NotificationManager.styleCenteredDots,
+            subtitle: '按每门课程主题色区分过去圆点、当前展开胶囊与待上节点',
+            isSelected: isCentered,
             isDark: isDark,
             accent: accent,
-            previewBuilder: () => Row(
-              children: [
-                _buildPreviewDot(const Color(0xFF5A5A60)),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Container(
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF2C4332),
-                      borderRadius: BorderRadius.circular(99),
-                    ),
-                    alignment: Alignment.centerLeft,
-                    child: FractionallySizedBox(
-                      widthFactor: 0.58,
-                      child: Container(
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF8AE29A),
-                          borderRadius: BorderRadius.circular(99),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                _buildPreviewDot(const Color(0xFF34343A)),
-                const SizedBox(width: 5),
-                _buildPreviewDot(const Color(0xFF34343A)),
-                const SizedBox(width: 5),
-                _buildPreviewDot(const Color(0xFF34343A)),
-              ],
+            previewBuilder: () => _buildMultiCourseDotsBar(
+              courseNames: const ['线性代数', '高等数学', '大学物理', '数据结构'],
+              activeIndex: 1,
+              progressFraction: 0.58,
+              height: 8,
             ),
           ),
           const SizedBox(height: 10),
           _buildStyleOptionTile(
             styleKey: NotificationManager.styleDurationSegments,
             title: '按时长分段',
-            subtitle: '全天每门课程与课间按真实时长比例分段排布',
-            isSelected:
-                _liveProgressStyle == NotificationManager.styleDurationSegments,
+            subtitle: '全天每门课程按真实课时比例分段排布，并用独立课程色彩标识',
+            isSelected: !isCentered,
             isDark: isDark,
             accent: accent,
-            previewBuilder: () => Row(
-              children: [
-                Expanded(
-                  flex: 22,
-                  child: Container(
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF5A5A60),
-                      borderRadius: BorderRadius.circular(99),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 5),
-                Expanded(
-                  flex: 25,
-                  child: Container(
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF2C4332),
-                      borderRadius: BorderRadius.circular(99),
-                    ),
-                    alignment: Alignment.centerLeft,
-                    child: FractionallySizedBox(
-                      widthFactor: 0.62,
-                      child: Container(
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF8AE29A),
-                          borderRadius: BorderRadius.circular(99),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 5),
-                Expanded(
-                  flex: 24,
-                  child: Container(
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF34343A),
-                      borderRadius: BorderRadius.circular(99),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 5),
-                Expanded(
-                  flex: 12,
-                  child: Container(
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF34343A),
-                      borderRadius: BorderRadius.circular(99),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 5),
-                Expanded(
-                  flex: 20,
-                  child: Container(
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF34343A),
-                      borderRadius: BorderRadius.circular(99),
-                    ),
-                  ),
-                ),
-              ],
+            previewBuilder: () => _buildMultiCourseSegmentsBar(
+              courseNames: const ['线性代数', '高等数学', '大学物理', '离散数学', '数据结构'],
+              weights: const [20, 26, 22, 14, 18],
+              activeIndex: 1,
+              progressFraction: 0.62,
+              height: 8,
             ),
           ),
         ],
@@ -651,10 +294,515 @@ class _SettingsNotificationScreenState
     );
   }
 
-  Widget _buildPreviewDot(Color color) {
+  Widget _buildScenarioSwitcher(bool isDark) {
+    const items = [
+      (_PreviewScenario.ongoing, '正在上课'),
+      (_PreviewScenario.longClassroom, '长教室名'),
+      (_PreviewScenario.emptyDay, '今日无课'),
+    ];
+    final bg = isDark
+        ? Colors.white.withValues(alpha: 0.06)
+        : Colors.black.withValues(alpha: 0.05);
+
     return Container(
-      width: 8,
-      height: 8,
+      padding: const EdgeInsets.all(3.5),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: SquircleGeometry.smoothRadius(14),
+      ),
+      child: Row(
+        children: items.map((item) {
+          final selected = _previewScenario == item.$1;
+          return Expanded(
+            child: GestureDetector(
+              onTap: () {
+                if (_previewScenario == item.$1) return;
+                HapticFeedback.selectionClick();
+                setState(() => _previewScenario = item.$1);
+              },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                decoration: BoxDecoration(
+                  color: selected
+                      ? (isDark
+                          ? Colors.white.withValues(alpha: 0.14)
+                          : Colors.white)
+                      : Colors.transparent,
+                  borderRadius: SquircleGeometry.smoothRadius(11),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  item.$2,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                    color: selected
+                        ? GlassSettingsHelper.getTextColor(context)
+                        : GlassSettingsHelper.getSecondaryTextColor(context),
+                  ),
+                ),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildLivePreviewNotificationCard({required bool isCentered}) {
+    final isEmptyDay = _previewScenario == _PreviewScenario.emptyDay;
+    final isLongRoom = _previewScenario == _PreviewScenario.longClassroom;
+
+    final String headerText;
+    final String timerChip;
+    final String courseTitle;
+    final String rawRoom;
+    final String badgeSecondary;
+    final String primaryTimeLabel;
+    final String secondaryStatus;
+    final List<String> barCourses;
+    final int barActiveIdx;
+
+    if (isEmptyDay) {
+      headerText = '第 12 周 · 今日无课';
+      timerChip = '休息日';
+      courseTitle = '今日暂无课程安排';
+      rawRoom = 'B204信息中心';
+      badgeSecondary = '第12周';
+      primaryTimeLabel = '明日 08:00–09:40';
+      secondaryStatus = '高等数学 · 点击通知查看完整周课表与自动排课预告';
+      barCourses = const [];
+      barActiveIdx = 0;
+    } else if (isLongRoom) {
+      headerText = '进行中 · 10:00–11:40';
+      timerChip = '41:12';
+      courseTitle = '嵌入式系统原理与应用';
+      rawRoom = '中1203室（信工学院基础实验室）';
+      badgeSecondary = '3-4节';
+      primaryTimeLabel = '11:40 下课';
+      secondaryStatus = '下节 C302 数据结构';
+      barCourses = const ['高等数学', '嵌入式系统原理与应用', '大学英语', '体育'];
+      barActiveIdx = 1;
+    } else {
+      headerText = '进行中 · 08:00–09:40';
+      timerChip = '24:18';
+      courseTitle = '高等数学';
+      rawRoom = 'A101逸夫楼';
+      badgeSecondary = '1-2节';
+      primaryTimeLabel = '09:40 下课';
+      secondaryStatus = '下节 C302 数据结构';
+      barCourses = const ['早读', '高等数学', '嵌入式系统原理与应用', '数据结构'];
+      barActiveIdx = 1;
+    }
+
+    final roomInfo = ClassroomDisplayInfo.parse(rawRoom);
+    final Color themeColor = isEmptyDay
+        ? const Color(0xFF475569)
+        : CourseColorPalette.getNotificationAccentColor(courseTitle);
+    final Color badgeBg = Color.lerp(
+      themeColor,
+      const Color(0xFF0A0E16),
+      0.24,
+    )!;
+
+    return Container(
+      key: const ValueKey('live_preview_card'),
+      constraints: const BoxConstraints(minHeight: 156),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0E1117),
+        borderRadius: SquircleGeometry.smoothRadius(20),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.08),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          // 1. 顶部精简状态行（无应用名冗余前缀）
+          Row(
+            children: [
+              Icon(
+                Icons.circle,
+                color: isEmptyDay ? const Color(0xFF64748B) : themeColor,
+                size: 8,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  headerText,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFF9CA3AF),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 2.5,
+                ),
+                decoration: BoxDecoration(
+                  color: badgeBg,
+                  borderRadius: BorderRadius.circular(99),
+                ),
+                child: Text(
+                  timerChip,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                    fontFeatures: [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+
+          // 2. 独立无染色课程标题行 + 教室色块胶囊与附属场地说明 + 右侧 52dp 大圆角徽章
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      courseTitle,
+                      maxLines: isEmptyDay ? 1 : 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        height: 1.2,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    if (!roomInfo.isEmpty && !isEmptyDay) ...[
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 2.5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: themeColor,
+                              borderRadius: SquircleGeometry.smoothRadius(8),
+                            ),
+                            child: Text(
+                              roomInfo.code,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w800,
+                                height: 1.1,
+                              ),
+                            ),
+                          ),
+                          if (roomInfo.hasVenue) ...[
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: _MarqueeVenueText(
+                                text: roomInfo.venue,
+                                style: const TextStyle(
+                                  color: Color(0xFFCBD5E1),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 5),
+                    ],
+                    if (isEmptyDay) ...[
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 2.5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: CourseColorPalette.getNotificationAccentColor(
+                                '高等数学',
+                              ),
+                              borderRadius: SquircleGeometry.smoothRadius(8),
+                            ),
+                            child: Text(
+                              roomInfo.code,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w800,
+                                height: 1.1,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              '${roomInfo.venue} · $primaryTimeLabel',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Color(0xFFCBD5E1),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        secondaryStatus,
+                        maxLines: 2,
+                        style: const TextStyle(
+                          color: Color(0xFF9CA3AF),
+                          fontSize: 11.5,
+                          height: 1.35,
+                        ),
+                      ),
+                    ] else
+                      Text.rich(
+                        TextSpan(
+                          children: [
+                            TextSpan(
+                              text: primaryTimeLabel,
+                              style: TextStyle(
+                                color: themeColor,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const TextSpan(
+                              text: '  ·  ',
+                              style: TextStyle(
+                                color: Color(0xFF6B7280),
+                                fontSize: 11.5,
+                              ),
+                            ),
+                            TextSpan(
+                              text: secondaryStatus,
+                              style: const TextStyle(
+                                color: Color(0xFFD1D5DB),
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Container(
+                width: 52,
+                height: 52,
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                decoration: BoxDecoration(
+                  color: badgeBg,
+                  borderRadius: SquircleGeometry.smoothRadius(15),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.2),
+                    width: 1,
+                  ),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        isEmptyDay ? '无课' : roomInfo.code,
+                        maxLines: 1,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                          height: 1.08,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      badgeSecondary,
+                      maxLines: 1,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.9),
+                        fontSize: 9.8,
+                        fontWeight: FontWeight.w600,
+                        height: 1.1,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+
+          // 3. 底部按课程区分颜色的多节点进度条（今日无课时自动隐藏，卡片通过 minHeight 维持饱满高度）
+          if (!isEmptyDay) ...[
+            const SizedBox(height: 12),
+            if (isCentered)
+              _buildMultiCourseDotsBar(
+                courseNames: barCourses,
+                activeIndex: barActiveIdx,
+                progressFraction: 0.60,
+                height: 7,
+              )
+            else
+              _buildMultiCourseSegmentsBar(
+                courseNames: barCourses,
+                weights: const [20, 32, 24, 24],
+                activeIndex: barActiveIdx,
+                progressFraction: 0.62,
+                height: 7,
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMultiCourseDotsBar({
+    required List<String> courseNames,
+    required int activeIndex,
+    required double progressFraction,
+    required double height,
+  }) {
+    return Row(
+      children: [
+        for (int i = 0; i < courseNames.length; i++) ...[
+          if (i > 0) const SizedBox(width: 5.5),
+          Builder(
+            builder: (_) {
+              final courseColor =
+                  CourseColorPalette.getNotificationAccentColor(courseNames[i]);
+              if (i < activeIndex) {
+                return _buildPreviewDot(
+                  Color.lerp(courseColor, const Color(0xFF3E4452), 0.5)!,
+                  size: height,
+                );
+              }
+              if (i == activeIndex) {
+                final track = Color.lerp(
+                  courseColor,
+                  const Color(0xFF161A22),
+                  0.72,
+                )!;
+                return Expanded(
+                  child: Container(
+                    height: height,
+                    decoration: BoxDecoration(
+                      color: track,
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                    alignment: Alignment.centerLeft,
+                    child: FractionallySizedBox(
+                      widthFactor: progressFraction,
+                      child: Container(
+                        height: height,
+                        decoration: BoxDecoration(
+                          color: courseColor,
+                          borderRadius: BorderRadius.circular(99),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }
+              return _buildPreviewDot(
+                Color.lerp(courseColor, const Color(0xFF232833), 0.45)!,
+                size: height,
+              );
+            },
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildMultiCourseSegmentsBar({
+    required List<String> courseNames,
+    required List<int> weights,
+    required int activeIndex,
+    required double progressFraction,
+    required double height,
+  }) {
+    return Row(
+      children: [
+        for (int i = 0; i < courseNames.length; i++) ...[
+          if (i > 0) const SizedBox(width: 5),
+          Expanded(
+            flex: weights[i],
+            child: Builder(
+              builder: (_) {
+                final courseColor =
+                    CourseColorPalette.getNotificationAccentColor(
+                      courseNames[i],
+                    );
+                if (i == activeIndex) {
+                  final track = Color.lerp(
+                    courseColor,
+                    const Color(0xFF161A22),
+                    0.72,
+                  )!;
+                  return Container(
+                    height: height,
+                    decoration: BoxDecoration(
+                      color: track,
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                    alignment: Alignment.centerLeft,
+                    child: FractionallySizedBox(
+                      widthFactor: progressFraction,
+                      child: Container(
+                        height: height,
+                        decoration: BoxDecoration(
+                          color: courseColor,
+                          borderRadius: BorderRadius.circular(99),
+                        ),
+                      ),
+                    ),
+                  );
+                }
+                final muted = i < activeIndex
+                    ? Color.lerp(courseColor, const Color(0xFF3E4452), 0.5)!
+                    : Color.lerp(courseColor, const Color(0xFF232833), 0.45)!;
+                return Container(
+                  height: height,
+                  decoration: BoxDecoration(
+                    color: muted,
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildPreviewDot(Color color, {double size = 8}) {
+    return Container(
+      width: size,
+      height: size,
       decoration: BoxDecoration(color: color, shape: BoxShape.circle),
     );
   }
@@ -693,7 +841,7 @@ class _SettingsNotificationScreenState
               : (isDark
                     ? Colors.white.withValues(alpha: 0.03)
                     : Colors.black.withValues(alpha: 0.025)),
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: SquircleGeometry.smoothRadius(18),
           border: Border.all(
             color: isSelected
                 ? accent.withValues(alpha: 0.65)
@@ -748,7 +896,7 @@ class _SettingsNotificationScreenState
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
               decoration: BoxDecoration(
                 color: const Color(0xFF0B0B0E),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: SquircleGeometry.smoothRadius(12),
               ),
               child: previewBuilder(),
             ),
@@ -791,69 +939,10 @@ class _SettingsNotificationScreenState
     required ValueChanged<bool> onChanged,
     required bool isDark,
   }) {
-    return SizedBox(
-      height: kSettingsItemHeight,
-      child: Row(
-        children: [
-          SizedBox(
-            width: 36,
-            height: 36,
-            child: Center(
-              child: Icon(
-                icon,
-                color: isDark
-                    ? const Color(0xFFD6DBE5)
-                    : const Color(0xFF3A4150),
-                size: 22,
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: GlassSettingsHelper.getTextColor(context),
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    color: GlassSettingsHelper.getSecondaryTextColor(context),
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          liquid.LiquidSwitch(value: value, onChanged: onChanged),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildActionRow({
-    required String title,
-    required String subtitle,
-    required IconData icon,
-    required VoidCallback onTap,
-    required bool isDark,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: SizedBox(
-        height: kSettingsItemHeight,
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: kSettingsItemHeight),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
         child: Row(
           children: [
             SizedBox(
@@ -890,20 +979,87 @@ class _SettingsNotificationScreenState
                       fontSize: 11.5,
                       color: GlassSettingsHelper.getSecondaryTextColor(context),
                     ),
-                    maxLines: 1,
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),
             ),
-            Icon(
-              CupertinoIcons.right_chevron,
-              size: 15,
-              color: GlassSettingsHelper.getSecondaryTextColor(
-                context,
-              ).withValues(alpha: 0.6),
-            ),
+            const SizedBox(width: 8),
+            liquid.LiquidSwitch(value: value, onChanged: onChanged),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionRow({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required VoidCallback onTap,
+    required bool isDark,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: SquircleGeometry.smoothRadius(16),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: kSettingsItemHeight),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 36,
+                height: 36,
+                child: Center(
+                  child: Icon(
+                    icon,
+                    color: isDark
+                        ? const Color(0xFFD6DBE5)
+                        : const Color(0xFF3A4150),
+                    size: 22,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: GlassSettingsHelper.getTextColor(context),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: GlassSettingsHelper.getSecondaryTextColor(
+                          context,
+                        ),
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                CupertinoIcons.right_chevron,
+                size: 15,
+                color: GlassSettingsHelper.getSecondaryTextColor(
+                  context,
+                ).withValues(alpha: 0.6),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -923,22 +1079,26 @@ class _SettingsNotificationScreenState
                 size: 24,
               ),
               const SizedBox(width: 12),
-              Text(
-                'Live Activities 实况通知',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: GlassSettingsHelper.getTextColor(context),
+              Expanded(
+                child: Text(
+                  'Live Activities 实况通知',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: GlassSettingsHelper.getTextColor(context),
+                  ),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 12),
           Text(
-            '采用全新实况导视信息分级排版（教室号置前高对比高亮 + 右侧真圆角节次徽章 + 简洁下节指引），长课程名不遮挡教室，当日无课或已结课时自动隐藏进度条。\n\n'
+            '采用全新实况导视信息分级排版（独立无染色课程标题行 + 按课程主题色高亮教室编号胶囊与附属场地智能拆分 + 右侧 52dp 大圆角节次徽章），超长教室名不再遮挡课程名称，当日无课或已结课时隐藏进度条并维持饱满高度。\n\n'
+            '• 按课程分色引擎：通知主题色、右侧徽章、进度圆点与分段条均自动对齐各课程独立色彩\n'
             '• 秒级实时倒计时：由系统底层 Chronometer 驱动跳秒，零额外功耗\n'
-            '• 双模节点时间轴：支持「居中圆点样式」与「按时长分段样式」实时切换\n'
-            '• 跨天防歧义：午夜零点自动刷新今日/明日归属与状态栏胶囊摘要',
+            '• 双模节点时间轴：支持「居中圆点样式」与「按时长分段样式」实时切换',
             style: TextStyle(
               fontSize: 13,
               color: GlassSettingsHelper.getSecondaryTextColor(context),
@@ -947,6 +1107,151 @@ class _SettingsNotificationScreenState
           ),
         ],
       ),
+    );
+  }
+}
+
+/// 场地说明自适应文本组件：短文本静态零开销展示；仅在超出可用宽度时启动平滑往返跑马灯滚动。
+class _MarqueeVenueText extends StatefulWidget {
+  final String text;
+  final TextStyle style;
+
+  const _MarqueeVenueText({
+    required this.text,
+    required this.style,
+  });
+
+  @override
+  State<_MarqueeVenueText> createState() => _MarqueeVenueTextState();
+}
+
+class _MarqueeVenueTextState extends State<_MarqueeVenueText>
+    with SingleTickerProviderStateMixin {
+  AnimationController? _controller;
+  double _overflowPx = 0.0;
+
+  @override
+  void didUpdateWidget(covariant _MarqueeVenueText oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.text != widget.text) {
+      _controller?.stop();
+      _overflowPx = 0.0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  void _syncAnimation(double overflowPx) {
+    if (!mounted) return;
+    if (overflowPx <= 0.5) {
+      final wasActive = _overflowPx > 0.5 || (_controller?.isAnimating ?? false);
+      if (wasActive) {
+        _controller?.stop();
+        setState(() => _overflowPx = 0.0);
+      }
+      return;
+    }
+
+    if (_controller == null || (overflowPx - _overflowPx).abs() > 1.0) {
+      final durationMs = ((overflowPx + 60.0) * 45.0).round().clamp(3600, 9000);
+      _controller ??= AnimationController(
+        vsync: this,
+        duration: Duration(milliseconds: durationMs),
+      );
+      _controller!.duration = Duration(milliseconds: durationMs);
+      if (!_controller!.isAnimating) {
+        _controller!.repeat();
+      }
+      setState(() => _overflowPx = overflowPx);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxW = constraints.maxWidth;
+        if (!maxW.isFinite || maxW <= 0) {
+          return Text(
+            widget.text,
+            style: widget.style,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          );
+        }
+
+        final painter = TextPainter(
+          text: TextSpan(text: widget.text, style: widget.style),
+          maxLines: 1,
+          textDirection: Directionality.of(context),
+          textScaler: MediaQuery.textScalerOf(context),
+        )..layout();
+
+        final overflow = (painter.width - maxW).clamp(0.0, double.infinity);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          _syncAnimation(overflow);
+        });
+
+        if (overflow <= 0.5) {
+          return Text(
+            widget.text,
+            style: widget.style,
+            maxLines: 1,
+            overflow: TextOverflow.clip,
+          );
+        }
+
+        final controller = _controller;
+        if (controller == null) {
+          return Text(
+            widget.text,
+            style: widget.style,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          );
+        }
+
+        final slideAnim = TweenSequence<double>([
+          TweenSequenceItem(tween: ConstantTween(0.0), weight: 18),
+          TweenSequenceItem(
+            tween: Tween(begin: 0.0, end: -overflow)
+                .chain(CurveTween(curve: Curves.easeInOut)),
+            weight: 34,
+          ),
+          TweenSequenceItem(tween: ConstantTween(-overflow), weight: 16),
+          TweenSequenceItem(
+            tween: Tween(begin: -overflow, end: 0.0)
+                .chain(CurveTween(curve: Curves.easeInOut)),
+            weight: 32,
+          ),
+        ]).animate(controller);
+
+        return ClipRect(
+          child: OverflowBox(
+            alignment: Alignment.centerLeft,
+            minWidth: 0,
+            maxWidth: painter.width + 2,
+            child: AnimatedBuilder(
+              animation: slideAnim,
+              builder: (_, child) => Transform.translate(
+                offset: Offset(slideAnim.value, 0),
+                child: child,
+              ),
+              child: Text(
+                widget.text,
+                style: widget.style,
+                maxLines: 1,
+                softWrap: false,
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

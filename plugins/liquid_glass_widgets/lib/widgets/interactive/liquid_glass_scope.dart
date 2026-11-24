@@ -47,27 +47,6 @@ class LiquidGlassScope extends StatefulWidget {
   ///       ),
   ///       Positioned.fill(child: content),
   ///     ],
-  ///   ),
-  /// );
-  /// ```
-  factory LiquidGlassScope.stack({
-    Key? key,
-    required Widget background,
-    required Widget content,
-  }) {
-    return LiquidGlassScope(
-      key: key,
-      child: Stack(
-        children: [
-          Positioned.fill(
-            child: GlassBackgroundSource(child: background),
-          ),
-          Positioned.fill(child: content),
-        ],
-      ),
-    );
-  }
-
   /// The child widget to display.
   final Widget child;
 
@@ -99,7 +78,7 @@ class _LiquidGlassScopeState extends State<LiquidGlassScope> {
 /// Marks a widget as the texture capture source for the nearest [LiquidGlassScope].
 ///
 /// Wraps [child] in a [RepaintBoundary] tagged with the scope's [GlobalKey].
-/// Descendant [GlassEffect] widgets (e.g. [GlassCard], [GlassSegmentedControl])
+/// Descendant [GlassEffect] widgets (e.g. [GlassContainer.card], [GlassSegmentedControl])
 /// will sample this boundary every frame to produce real background colour absorption
 /// on Skia and Web paths, simulating true physical glass.
 ///

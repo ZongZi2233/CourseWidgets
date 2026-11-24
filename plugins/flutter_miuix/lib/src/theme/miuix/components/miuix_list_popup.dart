@@ -6,6 +6,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import '../foundation/miuix_popup_utils.dart';
 import 'package:flutter/physics.dart';
 import 'package:flutter/rendering.dart';
 
@@ -325,11 +326,13 @@ MiuixListPopupLayoutInfo computeListPopupLayoutInfo(
   required Rect parentBounds,
   required Size popupContentSize,
 }) {
-  final media = MediaQuery.of(context);
+  final Size mediaSize = MediaQuery.sizeOf(context);
+  final EdgeInsets mediaViewPadding = MediaQuery.viewPaddingOf(context);
+  final EdgeInsets mediaPadding = MediaQuery.paddingOf(context);
   final direction = Directionality.of(context);
-  final containerSize = media.size;
-  final viewPadding = media.viewPadding;
-  final padding = media.padding;
+  final containerSize = mediaSize;
+  final viewPadding = mediaViewPadding;
+  final padding = mediaPadding;
   final windowBounds = Rect.fromLTRB(
     viewPadding.left,
     padding.top,
@@ -584,6 +587,7 @@ class MiuixListPopupContent extends StatelessWidget {
     required this.child,
     this.animation,
     this.backgroundColor,
+    this.surfaceBuilder,
     this.cornerRadius = MiuixListPopupDefaults.cornerRadius,
   });
 
@@ -596,6 +600,9 @@ class MiuixListPopupContent extends StatelessWidget {
   final Widget child;
   final Listenable? animation;
   final Color? backgroundColor;
+
+  /// 替换面板表面但保留原列表内容、测量和动作。
+  final MiuixPopupSurfaceBuilder? surfaceBuilder;
   final double cornerRadius;
 
   @override
@@ -616,19 +623,34 @@ class MiuixListPopupContent extends StatelessWidget {
           child: _SizeReporter(
             previousSize: popupContentSize,
             onSizeChange: onPopupContentSizeChange,
-            child: ClipPath(
-              clipper: _PopupRevealClipper(
-                progress: fraction,
-                position: popupLayoutPosition,
-                cornerRadius: cornerRadius,
-              ),
-              child: ColoredBox(
-                color:
-                    backgroundColor ??
-                    MiuixTheme.of(context).colors.surfaceContainer,
-                child: child,
-              ),
-            ),
+            child: surfaceBuilder != null
+                ? surfaceBuilder!(
+                    context,
+                    RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(cornerRadius),
+                    ),
+                    ClipPath(
+                      clipper: MiuixPopupRevealClipper(
+                        progress: fraction,
+                        position: popupLayoutPosition,
+                        cornerRadius: cornerRadius,
+                      ),
+                      child: child,
+                    ),
+                  )
+                : ClipPath(
+                    clipper: MiuixPopupRevealClipper(
+                      progress: fraction,
+                      position: popupLayoutPosition,
+                      cornerRadius: cornerRadius,
+                    ),
+                    child: ColoredBox(
+                      color:
+                          backgroundColor ??
+                          MiuixTheme.of(context).colors.surfaceContainer,
+                      child: child,
+                    ),
+                  ),
           ),
         ),
       );
@@ -644,8 +666,8 @@ class MiuixListPopupContent extends StatelessWidget {
   }
 }
 
-class _PopupRevealClipper extends CustomClipper<Path> {
-  const _PopupRevealClipper({
+class MiuixPopupRevealClipper extends CustomClipper<Path> {
+  const MiuixPopupRevealClipper({
     required this.progress,
     required this.position,
     required this.cornerRadius,
@@ -677,7 +699,7 @@ class _PopupRevealClipper extends CustomClipper<Path> {
   }
 
   @override
-  bool shouldReclip(_PopupRevealClipper oldClipper) {
+  bool shouldReclip(MiuixPopupRevealClipper oldClipper) {
     return oldClipper.progress != progress ||
         oldClipper.position != position ||
         oldClipper.cornerRadius != cornerRadius;

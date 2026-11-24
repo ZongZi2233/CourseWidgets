@@ -11,9 +11,11 @@ import 'package:flutter/foundation.dart' show ValueListenable;
 import '../../renderer/liquid_glass_renderer.dart';
 import '../../types/glass_interaction_behavior.dart';
 import '../../../types/glass_quality.dart';
+import '../../../utils/indicator_jelly.dart';
 import '../../../widgets/shared/adaptive_liquid_glass_layer.dart';
 import '../../../widgets/shared/glass_content_aware_scope.dart';
 import '../../../theme/glass_theme_data.dart';
+import '../../../theme/glass_theme.dart';
 import '../../../theme/glass_theme_helpers.dart';
 import '../../../widgets/surfaces/shared/tab_bar_extra_button.dart'
     show GlassExtraButtonPlacement, GlassTabBarExtraButton;
@@ -25,7 +27,8 @@ import 'tab_bar_bottom_internal.dart'
         BottomBarExtraBtn,
         BottomBarTabItem,
         TabIndicator,
-        kBottomBarGlassDefaults,
+        resolveActiveLensTabColors,
+        resolveBarGlassSettings,
         resolveBarLabelColor;
 import '../../../widgets/surfaces/shared/tab_bar_accessory_placement.dart';
 import 'tab_bar_layout_utils.dart';
@@ -58,6 +61,7 @@ class TabBarBottomLayout extends StatefulWidget {
     this.indicatorColor,
     this.indicatorSettings,
     this.indicatorPinchStrength = 0.4,
+    this.indicatorJelly,
     this.selectedIconColor,
     this.unselectedIconColor,
     this.selectedLabelColor,
@@ -82,7 +86,7 @@ class TabBarBottomLayout extends StatefulWidget {
     this.indicatorExpansion =
         const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
     this.interactionGlowColor,
-    this.interactionGlowRadius = 1.5,
+    this.interactionGlowRadius,
     this.interactionBehavior = GlassInteractionBehavior.full,
     this.pressScale = 1.04,
     this.platformViewBackdrop = false,
@@ -116,6 +120,14 @@ class TabBarBottomLayout extends StatefulWidget {
   final Color? indicatorColor;
   final LiquidGlassSettings? indicatorSettings;
   final double indicatorPinchStrength;
+
+  /// Physics of the native iOS jelly that stretches the indicator while it
+  /// travels and squishes it when it lands.
+  ///
+  /// Defaults to [IndicatorJellyPhysics.native], measured from UIKit. Change
+  /// single values with [IndicatorJellyPhysics.copyWith], or pass
+  /// [IndicatorJellyPhysics.disabled] for the classic velocity squash.
+  final IndicatorJellyPhysics? indicatorJelly;
   final Color? selectedIconColor;
   final Color? unselectedIconColor;
   final Color? selectedLabelColor;
@@ -139,7 +151,11 @@ class TabBarBottomLayout extends StatefulWidget {
   final double? indicatorBorderRadius;
   final EdgeInsetsGeometry indicatorExpansion;
   final Color? interactionGlowColor;
-  final double interactionGlowRadius;
+
+  /// Radius of the interaction glow, as a fraction of the layer's shortest
+  /// side. Null asks for the iOS 26 calibration — see
+  /// [resolveTabBarInteractionGlow].
+  final double? interactionGlowRadius;
   final GlassInteractionBehavior interactionBehavior;
   final double pressScale;
   final bool platformViewBackdrop;
@@ -153,11 +169,7 @@ class TabBarBottomLayout extends StatefulWidget {
   State<TabBarBottomLayout> createState() => _TabBarBottomLayoutState();
 }
 
-class _TabBarBottomLayoutState extends State<TabBarBottomLayout>
-    with TickerProviderStateMixin {
-  // Delegate to the shared const — single source of truth in tab_bar_bottom_internal.dart.
-  // Both bars reference kBottomBarGlassDefaults so their glass is guaranteed identical.
-  static const _defaultGlassSettings = kBottomBarGlassDefaults;
+class _TabBarBottomLayoutState extends State<TabBarBottomLayout> {
   static const _kGestureRegionKey = ValueKey<String>(
     'glass_tab_bar_gesture_region',
   );
@@ -165,13 +177,15 @@ class _TabBarBottomLayoutState extends State<TabBarBottomLayout>
   /// Lays out the tab [Row] in physical (LTR) order regardless of the ambient
   /// direction, so the first child is on the left — matching the indicator and
   /// gesture coordinate space. RTL ordering is carried by the reversed tab data
-  /// in [_buildBar], not by the ambient direction of these Rows. Scoping the
-  /// pin to the Rows keeps `Directionality.of(context)` intact for the rest of
-  /// the subtree (notably [indicatorExpansion] / [tabPadding] resolution).
+  /// in [_buildBar], not by the layout direction of these Rows. Setting
+  /// `Row(textDirection: TextDirection.ltr)` directly (without overriding the
+  /// inherited [Directionality]) preserves `Directionality.of(context)` on
+  /// descendant [FocusNode]s and [Semantics], so RTL keyboard focus traversal
+  /// (`ReadingOrderTraversalPolicy`) visits the first (rightmost) tab first.
   static Widget _ltrTabRow({required List<Widget> children}) {
-    return Directionality(
+    return Row(
       textDirection: TextDirection.ltr,
-      child: Row(children: children),
+      children: children,
     );
   }
 
@@ -217,26 +231,39 @@ class _TabBarBottomLayoutState extends State<TabBarBottomLayout>
       fallback: GlassQuality.premium,
     );
 
-    // Resolve interaction glow color: explicit param → GlassThemeData.primary → null
-    // (null lets the internal widget use its own hardcoded fallback).
     final resolvedGlowColors =
         GlassThemeData.of(context).glowColorsFor(context);
-    final effectiveInteractionGlowColor =
-        widget.interactionGlowColor ?? resolvedGlowColors.primary;
+    // A null radius asks for native mode: the calibration GlassButton has
+    // resolved from a null `glowRadius` since 1.3.0. An explicit radius keeps
+    // the theme's palette, so a tuned app keeps what it tuned. The resolved
+    // colour may still be null, which lets the internal widget fall back to
+    // its own hardcoded highlight.
+    final glow = resolveTabBarInteractionGlow(
+      interactionGlowRadius: widget.interactionGlowRadius,
+      interactionGlowColor: widget.interactionGlowColor,
+      themeGlowColor: resolvedGlowColors.primary,
+      themeGlowBlurRadius: resolvedGlowColors.glowBlurRadius,
+      isDark: GlassTheme.brightnessOf(context) == Brightness.dark,
+    );
+    final effectiveInteractionGlowColor = glow.color;
 
+    final bool isLight = GlassTheme.brightnessOf(context) == Brightness.light;
     final dynamicLabelColor = resolveBarLabelColor(context, darkAmount);
     final resolvedSelectedIconColor =
         widget.selectedIconColor ?? dynamicLabelColor;
     final resolvedUnselectedIconColor =
         widget.unselectedIconColor ?? dynamicLabelColor;
 
-    // Glow appearance fields come from the theme; they cannot be set per-widget
-    // because they are part of the theme palette.
-    final effectiveGlowBlurRadius = resolvedGlowColors.glowBlurRadius;
+    // Spread and opacity come from the theme; they cannot be set per-widget
+    // because they are part of the theme palette. The blur is the exception:
+    // native mode owns it, because the radius and the falloff are one
+    // calibration and a wide radius under the theme's sigma-4 is a disc with
+    // an edge on it.
+    final effectiveGlowBlurRadius = glow.blurRadius;
     final effectiveGlowSpreadRadius = resolvedGlowColors.glowSpreadRadius;
     final effectiveGlowOpacity = resolvedGlowColors.glowOpacity;
 
-    final effectiveSettings = widget.settings ?? _defaultGlassSettings;
+    final effectiveSettings = resolveBarGlassSettings(context, widget.settings);
 
     // RTL support.
     //
@@ -286,6 +313,7 @@ class _TabBarBottomLayoutState extends State<TabBarBottomLayout>
             final resolvedExtraButton = widget.extraButton != null
                 ? _resolvedExtraButtonConfig()
                 : null;
+            final bool extraSelected = resolvedExtraButton?.selected == true;
             final extraPlacement = resolvedExtraButton?.placement ??
                 GlassExtraButtonPlacement.right;
             final extraOnLeft =
@@ -321,7 +349,9 @@ class _TabBarBottomLayoutState extends State<TabBarBottomLayout>
                               // not the indicator pill (effectiveQuality).
                               quality: effectiveBackgroundQuality,
                               iconColor: resolvedExtraButton.iconColor ??
-                                  resolvedUnselectedIconColor,
+                                  (extraSelected
+                                      ? resolvedSelectedIconColor
+                                      : resolvedUnselectedIconColor),
                               enableBlend: widget.enableBlend,
                               borderRadius: widget.barBorderRadius ==
                                       TabBarBottomLayout._kDefaultBorderRadius
@@ -348,12 +378,15 @@ class _TabBarBottomLayoutState extends State<TabBarBottomLayout>
                         quality: effectiveQuality,
                         backgroundQuality: effectiveBackgroundQuality,
                         springDescription: widget.springDescription,
-                        visible: widget.showIndicator,
+                        visible: widget.showIndicator && !extraSelected,
+                        showDuringDragWhenHidden:
+                            widget.showIndicator && extraSelected,
                         tabIndex: selectedIndex,
                         tabCount: tabs.length,
                         indicatorColor: widget.indicatorColor,
                         indicatorSettings: widget.indicatorSettings,
                         indicatorPinchStrength: widget.indicatorPinchStrength,
+                        indicatorJelly: widget.indicatorJelly,
                         onTabChanged: onTabSelected,
                         barHeight: widget.barHeight,
                         barBorderRadius: widget.barBorderRadius,
@@ -366,7 +399,7 @@ class _TabBarBottomLayoutState extends State<TabBarBottomLayout>
                         interactionGlowColor: widget.interactionBehavior.hasGlow
                             ? effectiveInteractionGlowColor
                             : const Color(0x00000000),
-                        interactionGlowRadius: widget.interactionGlowRadius,
+                        interactionGlowRadius: glow.radius,
                         interactionGlowBlurRadius: effectiveGlowBlurRadius,
                         interactionGlowSpreadRadius: effectiveGlowSpreadRadius,
                         interactionGlowOpacity: effectiveGlowOpacity,
@@ -397,14 +430,24 @@ class _TabBarBottomLayoutState extends State<TabBarBottomLayout>
                                   glowBlurRadius: widget.glowBlurRadius,
                                   glowSpreadRadius: widget.glowSpreadRadius,
                                   glowOpacity: widget.glowOpacity,
-                                  semanticsSelected: i == selectedIndex,
+                                  semanticsSelected:
+                                      !extraSelected && i == selectedIndex,
                                   onTap: null,
+                                  // Pointer selection stays with the
+                                  // indicator; this is the tap action a screen
+                                  // reader and the keyboard activate. Under
+                                  // RTL [onTabSelected] is the mirrored
+                                  // wrapper, so `i` reports the logical index.
+                                  semanticOnTap: () => onTabSelected(i),
                                 ),
                               ),
                           ],
                         ),
-                        selectedTabBuilder: (context, intensity, alignment) =>
+                        selectedTabBuilder: (ctx, intensity, alignment) =>
                             _buildSelectedTabs(
+                                ctx,
+                                isLight,
+                                dynamicLabelColor,
                                 intensity,
                                 alignment,
                                 tabs,
@@ -459,7 +502,17 @@ class _TabBarBottomLayoutState extends State<TabBarBottomLayout>
     );
   }
 
+  static double _tabProximityScale(double pillTabIndex, int i, double scale) {
+    final dist = (pillTabIndex - i).abs();
+    final t = 1.0 - ((dist - 0.52) / 0.36).clamp(0.0, 1.0);
+    final proximity = t * t * (3.0 - 2.0 * t);
+    return ui.lerpDouble(1.0, scale, proximity) ?? 1.0;
+  }
+
   Widget _buildSelectedTabs(
+      BuildContext context,
+      bool isLight,
+      Color dynamicLabelColor,
       double intensity,
       Alignment alignment,
       List<GlassTab> tabs,
@@ -471,38 +524,54 @@ class _TabBarBottomLayoutState extends State<TabBarBottomLayout>
     final affectedStart =
         (currentTabFloat - 1).floor().clamp(0, tabs.length - 1);
     final affectedEnd = (currentTabFloat + 1).ceil().clamp(0, tabs.length - 1);
+    final pillTabIndex = tabs.length <= 1
+        ? 0.0
+        : ((alignment.x + 1.0) * 0.5) * (tabs.length - 1);
+    final activeColors = resolveActiveLensTabColors(
+      context: context,
+      isLight: isLight,
+      intensity: intensity,
+      indicatorColor: widget.indicatorColor,
+      indicatorSettings: widget.indicatorSettings,
+      restingIconColor: resolvedSelectedIconColor,
+      restingLabelColor: widget.selectedLabelColor,
+      dynamicLabelColor: dynamicLabelColor,
+      fallbackLabelColor: widget.textStyle?.color,
+    );
 
-    return ExcludeSemantics(
-      child: _ltrTabRow(
-        children: [
-          for (var i = 0; i < tabs.length; i++)
-            Expanded(
-              child: (i >= affectedStart && i <= affectedEnd)
-                  ? Transform.scale(
-                      scale: scale,
-                      child: BottomBarTabItem(
-                        tab: tabs[i],
-                        selected: true,
-                        selectedIconColor: resolvedSelectedIconColor,
-                        unselectedIconColor: resolvedUnselectedIconColor,
-                        selectedLabelColor: widget.selectedLabelColor,
-                        unselectedLabelColor: widget.unselectedLabelColor,
-                        selectedLabelStyle: widget.selectedLabelStyle,
-                        unselectedLabelStyle: widget.unselectedLabelStyle,
-                        iconSize: widget.iconSize,
-                        labelFontSize: widget.labelFontSize,
-                        textStyle: widget.textStyle,
-                        iconLabelSpacing: widget.iconLabelSpacing,
-                        glowDuration: widget.glowDuration,
-                        glowBlurRadius: widget.glowBlurRadius,
-                        glowSpreadRadius: widget.glowSpreadRadius,
-                        glowOpacity: widget.glowOpacity,
-                        onTap: null,
-                      ),
-                    )
-                  : const SizedBox.shrink(),
-            ),
-        ],
+    return ExcludeFocus(
+      child: ExcludeSemantics(
+        child: _ltrTabRow(
+          children: [
+            for (var i = 0; i < tabs.length; i++)
+              Expanded(
+                child: (i >= affectedStart && i <= affectedEnd)
+                    ? Transform.scale(
+                        scale: _tabProximityScale(pillTabIndex, i, scale),
+                        child: BottomBarTabItem(
+                          tab: tabs[i],
+                          selected: true,
+                          selectedIconColor: activeColors.iconColor,
+                          unselectedIconColor: resolvedUnselectedIconColor,
+                          selectedLabelColor: activeColors.labelColor,
+                          unselectedLabelColor: widget.unselectedLabelColor,
+                          selectedLabelStyle: widget.selectedLabelStyle,
+                          unselectedLabelStyle: widget.unselectedLabelStyle,
+                          iconSize: widget.iconSize,
+                          labelFontSize: widget.labelFontSize,
+                          textStyle: widget.textStyle,
+                          iconLabelSpacing: widget.iconLabelSpacing,
+                          glowDuration: widget.glowDuration,
+                          glowBlurRadius: widget.glowBlurRadius,
+                          glowSpreadRadius: widget.glowSpreadRadius,
+                          glowOpacity: widget.glowOpacity,
+                          onTap: null,
+                        ),
+                      )
+                    : const SizedBox.shrink(),
+              ),
+          ],
+        ),
       ),
     );
   }

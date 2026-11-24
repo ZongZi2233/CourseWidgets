@@ -11,6 +11,14 @@
 
 📖 **[文档链接 / Documentation](https://miuix.nekofun.top/)**
 
+## Disclaimer
+
+> This project is an independent, community-maintained open-source library. It is **not affiliated with, endorsed by, or sponsored by Xiaomi Inc.** or any of its subsidiaries, and is not an official product of Xiaomi.
+>
+> "MIUI", "HyperOS", "miuix", and related names, logos, and design language are trademarks of their respective owners, used here for descriptive purposes only. This project is provided **as-is, for learning and reference purposes**, without warranty of any kind, express or implied.
+>
+> Use of this library in production or commercial applications is entirely at your own risk and responsibility.
+
 ## AI Coding Skill
 
 Writing Flutter UI with `flutter_miuix` via an AI coding assistant (Claude Code, or any tool supporting [Agent Skills](https://docs.claude.com/en/docs/claude-code/skills))? Install the companion skill so your AI gets correct component usage, theming wiring, composition patterns, and gotchas out of the box - with bilingual API reference for all 45+ components.

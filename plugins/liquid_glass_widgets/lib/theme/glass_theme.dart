@@ -83,8 +83,12 @@ class GlassTheme extends InheritedWidget {
   /// null-safe alternative.
   static GlassTheme of(BuildContext context) {
     final theme = maybeOf(context);
-    if (theme != null) return theme;
-    return const GlassTheme(data: GlassThemeData(), child: SizedBox.shrink());
+    assert(
+      theme != null,
+      'No GlassTheme found in context. '
+      'Wrap your app with GlassTheme to provide theme configuration.',
+    );
+    return theme!;
   }
 
   /// Resolves the effective brightness for all glass widgets in this context.

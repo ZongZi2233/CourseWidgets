@@ -50,6 +50,17 @@ class MiuixDialogDefaults {
       MiuixTheme.of(context).colors.background;
 }
 
+/// 对话框自定义表面构建器（如 [miuixGlassDialogSurface]）。
+/// 对应 Kotlin `OverlayDialog` 的 `surface: @Composable DialogSurfaceScope.() -> Modifier`。
+typedef MiuixDialogSurfaceBuilder =
+    Widget Function(
+      BuildContext context,
+      double cornerRadius,
+      Color scrimColor,
+      double scale,
+      Widget child,
+    );
+
 /// Scaffold 内 Miuix 对话框。对应 Kotlin `OverlayDialog`。
 class MiuixOverlayDialog extends StatefulWidget {
   const MiuixOverlayDialog({
@@ -61,6 +72,8 @@ class MiuixOverlayDialog extends StatefulWidget {
     this.summaryColor,
     this.backgroundColor,
     this.enableWindowDim = true,
+    this.dimColor,
+    this.surfaceBuilder,
     this.onDismissRequest,
     this.onDismissFinished,
     this.outsideMargin = MiuixDialogDefaults.outsideMargin,
@@ -80,6 +93,8 @@ class MiuixOverlayDialog extends StatefulWidget {
   final Color? summaryColor;
   final Color? backgroundColor;
   final bool enableWindowDim;
+  final Color? dimColor;
+  final MiuixDialogSurfaceBuilder? surfaceBuilder;
   final VoidCallback? onDismissRequest;
   final VoidCallback? onDismissFinished;
   final Size outsideMargin;
@@ -121,6 +136,7 @@ class _MiuixOverlayDialogState extends State<MiuixOverlayDialog> {
     return MiuixDialogLayout(
       controller: _controller,
       enableWindowDim: widget.enableWindowDim,
+      dimColor: widget.dimColor,
       enableAutoLargeScreen: widget.largeScreen ?? true,
       onDismissFinished: widget.onDismissFinished,
       renderInRoot: widget.renderInRootScaffold,
@@ -130,6 +146,9 @@ class _MiuixOverlayDialogState extends State<MiuixOverlayDialog> {
         summary: widget.summary,
         summaryColor: widget.summaryColor,
         backgroundColor: widget.backgroundColor,
+        enableWindowDim: widget.enableWindowDim,
+        dimColor: widget.dimColor,
+        surfaceBuilder: widget.surfaceBuilder,
         onDismissRequest: widget.onDismissRequest,
         outsideMargin: widget.outsideMargin,
         insideMargin: widget.insideMargin,
@@ -150,6 +169,9 @@ class _MiuixDialogContent extends StatelessWidget {
     required this.summary,
     required this.summaryColor,
     required this.backgroundColor,
+    required this.enableWindowDim,
+    required this.dimColor,
+    required this.surfaceBuilder,
     required this.onDismissRequest,
     required this.outsideMargin,
     required this.insideMargin,
@@ -165,6 +187,9 @@ class _MiuixDialogContent extends StatelessWidget {
   final String? summary;
   final Color? summaryColor;
   final Color? backgroundColor;
+  final bool enableWindowDim;
+  final Color? dimColor;
+  final MiuixDialogSurfaceBuilder? surfaceBuilder;
   final VoidCallback? onDismissRequest;
   final Size outsideMargin;
   final Size insideMargin;
@@ -199,10 +224,13 @@ class _MiuixDialogContent extends StatelessWidget {
               child: Text(
                 title!,
                 textAlign: TextAlign.center,
-                style: theme.textStyles.title4.copyWith(
-                  fontWeight: FontWeight.w500,
-                  color: titleColor ?? MiuixDialogDefaults.titleColor(context),
-                ).withMiuixWeight(theme.fontWeightAdjustment),
+                style: theme.textStyles.title4
+                    .copyWith(
+                      fontWeight: FontWeight.w500,
+                      color:
+                          titleColor ?? MiuixDialogDefaults.titleColor(context),
+                    )
+                    .withMiuixWeight(theme.fontWeightAdjustment),
               ),
             ),
           ),
@@ -214,10 +242,13 @@ class _MiuixDialogContent extends StatelessWidget {
               child: Text(
                 summary!,
                 textAlign: TextAlign.center,
-                style: theme.textStyles.body1.copyWith(
-                  color:
-                      summaryColor ?? MiuixDialogDefaults.summaryColor(context),
-                ).withMiuixWeight(theme.fontWeightAdjustment),
+                style: theme.textStyles.body1
+                    .copyWith(
+                      color:
+                          summaryColor ??
+                          MiuixDialogDefaults.summaryColor(context),
+                    )
+                    .withMiuixWeight(theme.fontWeightAdjustment),
               ),
             ),
           ),
@@ -228,19 +259,52 @@ class _MiuixDialogContent extends StatelessWidget {
       ],
     );
 
-    column = DecoratedBox(
-      decoration: ShapeDecoration(
-        color: backgroundColor ?? MiuixDialogDefaults.backgroundColor(context),
-        shape: MiuixSquircleBorder(cornerRadius: radius, enabled: radius > 0),
+    final Widget padded = Padding(
+      padding: EdgeInsets.symmetric(
+        horizontal: insideMargin.width,
+        vertical: insideMargin.height,
       ),
-      child: Padding(
-        padding: EdgeInsets.symmetric(
-          horizontal: insideMargin.width,
-          vertical: insideMargin.height,
-        ),
-        child: column,
-      ),
+      child: column,
     );
+
+    if (surfaceBuilder != null) {
+      final transitionScope = MiuixPopupTransitionScope.maybeOf(context);
+      final baseDim = dimColor ?? theme.colors.windowDimming;
+      if (transitionScope != null) {
+        column = AnimatedBuilder(
+          animation: Listenable.merge([
+            transitionScope.dimAnimation,
+            transitionScope.contentAnimation,
+          ]),
+          child: padded,
+          builder: (context, child) {
+            final dimProgress = transitionScope.dimAnimation.value.clamp(
+              0.0,
+              1.0,
+            );
+            final contentProgress = transitionScope.contentAnimation.value
+                .clamp(0.0, 1.0);
+            final scrim = enableWindowDim
+                ? baseDim.withValues(alpha: baseDim.a * dimProgress)
+                : const Color(0x00000000);
+            final scale = isLarge ? (0.8 + 0.2 * contentProgress) : 1.0;
+            return surfaceBuilder!(context, radius, scrim, scale, child!);
+          },
+        );
+      } else {
+        final scrim = enableWindowDim ? baseDim : const Color(0x00000000);
+        column = surfaceBuilder!(context, radius, scrim, 1.0, padded);
+      }
+    } else {
+      column = DecoratedBox(
+        decoration: ShapeDecoration(
+          color:
+              backgroundColor ?? MiuixDialogDefaults.backgroundColor(context),
+          shape: MiuixSquircleBorder(cornerRadius: radius, enabled: radius > 0),
+        ),
+        child: padded,
+      );
+    }
 
     final Widget panel = ConstrainedBox(
       constraints: BoxConstraints(

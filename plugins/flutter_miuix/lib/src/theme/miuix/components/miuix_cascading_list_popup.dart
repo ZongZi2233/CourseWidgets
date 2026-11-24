@@ -5,6 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import 'package:flutter/material.dart';
+import '../foundation/miuix_popup_utils.dart';
 
 import 'miuix_dropdown.dart';
 import 'miuix_list_popup.dart';
@@ -27,6 +28,7 @@ class MiuixOverlayCascadingListPopup extends StatelessWidget {
     this.renderInRootScaffold = true,
     this.dropdownColors,
     this.collapseOnSelection = true,
+    this.surfaceBuilder,
   });
 
   final bool show;
@@ -42,6 +44,7 @@ class MiuixOverlayCascadingListPopup extends StatelessWidget {
   final bool renderInRootScaffold;
   final MiuixDropdownColors? dropdownColors;
   final bool collapseOnSelection;
+  final MiuixPopupSurfaceBuilder? surfaceBuilder;
 
   @override
   Widget build(BuildContext context) => _MiuixCascadingPopup(
@@ -58,6 +61,7 @@ class MiuixOverlayCascadingListPopup extends StatelessWidget {
     renderInRootScaffold: renderInRootScaffold,
     dropdownColors: dropdownColors,
     collapseOnSelection: collapseOnSelection,
+    surfaceBuilder: surfaceBuilder,
     windowLevel: false,
   );
 }
@@ -78,6 +82,7 @@ class MiuixWindowCascadingListPopup extends StatelessWidget {
     this.minWidth = 200,
     this.dropdownColors,
     this.collapseOnSelection = true,
+    this.surfaceBuilder,
   });
 
   final bool show;
@@ -92,6 +97,7 @@ class MiuixWindowCascadingListPopup extends StatelessWidget {
   final double minWidth;
   final MiuixDropdownColors? dropdownColors;
   final bool collapseOnSelection;
+  final MiuixPopupSurfaceBuilder? surfaceBuilder;
 
   @override
   Widget build(BuildContext context) => _MiuixCascadingPopup(
@@ -108,6 +114,7 @@ class MiuixWindowCascadingListPopup extends StatelessWidget {
     renderInRootScaffold: true,
     dropdownColors: dropdownColors,
     collapseOnSelection: collapseOnSelection,
+    surfaceBuilder: surfaceBuilder,
     windowLevel: true,
   );
 }
@@ -128,6 +135,7 @@ class _MiuixCascadingPopup extends StatefulWidget {
     required this.dropdownColors,
     required this.collapseOnSelection,
     required this.windowLevel,
+    this.surfaceBuilder,
   });
 
   final bool show;
@@ -143,6 +151,7 @@ class _MiuixCascadingPopup extends StatefulWidget {
   final bool renderInRootScaffold;
   final MiuixDropdownColors? dropdownColors;
   final bool collapseOnSelection;
+  final MiuixPopupSurfaceBuilder? surfaceBuilder;
   final bool windowLevel;
 
   @override
@@ -197,6 +206,7 @@ class _MiuixCascadingPopupState extends State<_MiuixCascadingPopup> {
         onDismissFinished: widget.onDismissFinished,
         maxHeight: widget.maxHeight,
         minWidth: widget.minWidth,
+        surfaceBuilder: widget.surfaceBuilder,
         content: body,
       );
     }
@@ -211,6 +221,7 @@ class _MiuixCascadingPopupState extends State<_MiuixCascadingPopup> {
       maxHeight: widget.maxHeight,
       minWidth: widget.minWidth,
       renderInRootScaffold: widget.renderInRootScaffold,
+      surfaceBuilder: widget.surfaceBuilder,
       content: body,
     );
   }

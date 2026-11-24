@@ -3,7 +3,10 @@ import '../../theme/glass_theme.dart';
 import '../../src/renderer/liquid_glass_renderer.dart';
 
 import '../../types/glass_quality.dart';
+import '../../types/glass_surface_style.dart';
 import '../interactive/glass_button.dart';
+import '../shared/glass_solid_surface.dart';
+import '../../src/utils/glass_localizations.dart';
 import 'glass_text_field.dart';
 
 /// A glass morphism search bar following Apple's iOS 26 design patterns.
@@ -102,8 +105,12 @@ class GlassSearchBar extends StatefulWidget {
     this.onSubmitted,
     this.onCancel,
     this.showsCancelButton = false,
+    this.cancelButtonAlwaysVisible = false,
     this.autofocus = false,
     this.enabled = true,
+    this.autocorrect = true,
+    this.enableSuggestions = true,
+    this.selectionControls,
     this.searchIconColor,
     this.clearIconColor,
     this.cancelButtonColor,
@@ -115,6 +122,10 @@ class GlassSearchBar extends StatefulWidget {
     this.settings,
     this.useOwnLayer = false,
     this.quality,
+    this.surfaceStyle,
+    this.color,
+    this.clearButtonSemanticLabel,
+    this.cancelButtonSemanticLabel,
   });
 
   // ===========================================================================
@@ -161,10 +172,21 @@ class GlassSearchBar extends StatefulWidget {
   /// Whether to show the cancel button.
   ///
   /// When true, the cancel button slides in from the right when the search
-  /// bar is focused, matching iOS behavior.
+  /// bar is focused, matching iOS behavior. Set [cancelButtonAlwaysVisible]
+  /// to keep it visible even without focus.
   ///
   /// Defaults to false.
   final bool showsCancelButton;
+
+  /// With [showsCancelButton] set to `true`, keeps the cancel button in place
+  /// whether or not the field has focus — for a search bar that is a mode (the
+  /// field appears when search is switched on and [onCancel] is the way out),
+  /// so the way out never disappears with the keyboard.
+  ///
+  /// Has no effect unless [showsCancelButton] is also `true`.
+  ///
+  /// Defaults to false: the iOS behaviour, cancel with focus only.
+  final bool cancelButtonAlwaysVisible;
 
   /// Whether the search field should auto-focus.
   ///
@@ -175,6 +197,16 @@ class GlassSearchBar extends StatefulWidget {
   ///
   /// Defaults to true.
   final bool enabled;
+
+  /// Whether to enable automatic text correction. Defaults to `true`.
+  final bool autocorrect;
+
+  /// Whether to show input suggestions. Defaults to `true`.
+  final bool enableSuggestions;
+
+  /// Optional custom text selection handle and toolbar controls.
+  /// Mirrors [GlassTextField.selectionControls].
+  final TextSelectionControls? selectionControls;
 
   // ===========================================================================
   // Style Properties
@@ -208,6 +240,16 @@ class GlassSearchBar extends StatefulWidget {
   /// Defaults to `24`, matching the visual weight of the search and clear icons.
   final double cancelIconSize;
 
+  /// Screen reader label of the clear (×) button inside the field.
+  ///
+  /// Defaults to the app's [CupertinoLocalizations.clearButtonLabel].
+  final String? clearButtonSemanticLabel;
+
+  /// Screen reader label of the cancel button beside the field.
+  ///
+  /// Defaults to the app's [CupertinoLocalizations.cancelButtonLabel].
+  final String? cancelButtonSemanticLabel;
+
   /// The style of the search text.
   final TextStyle? textStyle;
 
@@ -240,6 +282,19 @@ class GlassSearchBar extends StatefulWidget {
   /// and chromatic aberration (Impeller only) in static layouts.
   final GlassQuality? quality;
 
+  /// How the search field's surface is painted.
+  ///
+  /// If null (the default), inherits from the nearest ancestor
+  /// [InheritedGlassSurfaceStyle] (such as a `solid` `GlassContainer.card` or
+  /// `GlassGroupedSection`), falling back to [GlassSurfaceStyle.glass].
+  final GlassSurfaceStyle? surfaceStyle;
+
+  /// Explicit fill color override for a [GlassSurfaceStyle.solid] search field.
+  ///
+  /// If null, uses [resolveGlassSolidWellColor] (`#1E767680` in light mode,
+  /// `#3D767680` in dark mode — matching iOS `tertiarySystemFill`).
+  final Color? color;
+
   @override
   State<GlassSearchBar> createState() => _GlassSearchBarState();
 }
@@ -250,7 +305,14 @@ class _GlassSearchBarState extends State<GlassSearchBar> {
   bool _ownsController = false;
   bool _ownsFocusNode = false;
   bool _hasText = false;
-  bool _showCancelButton = false;
+  bool _lastHasFocus = false;
+
+  /// Derived from the flags and the focus, so a change of
+  /// [GlassSearchBar.showsCancelButton] or
+  /// [GlassSearchBar.cancelButtonAlwaysVisible] after mount applies too.
+  bool get _showCancelButton =>
+      widget.showsCancelButton &&
+      (widget.cancelButtonAlwaysVisible || _focusNode.hasFocus);
 
   @override
   void initState() {
@@ -269,6 +331,7 @@ class _GlassSearchBarState extends State<GlassSearchBar> {
     }
 
     _hasText = _controller.text.isNotEmpty;
+    _lastHasFocus = _focusNode.hasFocus;
     _controller.addListener(_onTextChanged);
     _focusNode.addListener(_onFocusChanged);
   }
@@ -288,10 +351,11 @@ class _GlassSearchBarState extends State<GlassSearchBar> {
   }
 
   void _onFocusChanged() {
-    if (widget.showsCancelButton) {
-      final hasFocus = _focusNode.hasFocus;
-      if (hasFocus != _showCancelButton) {
-        setState(() => _showCancelButton = hasFocus);
+    final hasFocus = _focusNode.hasFocus;
+    if (hasFocus != _lastHasFocus) {
+      _lastHasFocus = hasFocus;
+      if (widget.showsCancelButton && !widget.cancelButtonAlwaysVisible) {
+        setState(() {});
       }
     }
   }
@@ -323,13 +387,28 @@ class _GlassSearchBarState extends State<GlassSearchBar> {
   @override
   Widget build(BuildContext context) {
     final isDark = GlassTheme.brightnessOf(context) == Brightness.dark;
+    final effectiveSurfaceStyle = widget.surfaceStyle ??
+        InheritedGlassSurfaceStyle.maybeOf(context) ??
+        GlassSurfaceStyle.glass;
+    final isSolid = effectiveSurfaceStyle == GlassSurfaceStyle.solid;
 
+    final solidIconColor = isDark
+        ? CupertinoColors.secondaryLabel.darkColor
+        : CupertinoColors.secondaryLabel.color;
     final searchIconColor = widget.searchIconColor ??
-        (isDark ? const Color(0x99FFFFFF) : const Color(0x99000000));
+        (isSolid
+            ? solidIconColor
+            : (isDark ? const Color(0x99FFFFFF) : const Color(0x99000000)));
     final clearIconColor = widget.clearIconColor ??
-        (isDark ? const Color(0x99FFFFFF) : const Color(0x99000000));
+        (isSolid
+            ? solidIconColor
+            : (isDark ? const Color(0x99FFFFFF) : const Color(0x99000000)));
     final cancelButtonColor = widget.cancelButtonColor ??
-        (isDark ? const Color(0xE6FFFFFF) : const Color(0xE6000000));
+        (isSolid
+            ? (isDark
+                ? CupertinoColors.label.darkColor
+                : CupertinoColors.label.color)
+            : (isDark ? const Color(0xE6FFFFFF) : const Color(0xE6000000)));
 
     return Row(
       children: [
@@ -365,10 +444,15 @@ class _GlassSearchBarState extends State<GlassSearchBar> {
               ),
             ),
             onSuffixTap: _hasText ? _handleClear : null,
+            suffixSemanticLabel: widget.clearButtonSemanticLabel ??
+                glassCupertinoLocalizationsOf(context).clearButtonLabel,
             onChanged: widget.onChanged,
             onSubmitted: widget.onSubmitted,
             autofocus: widget.autofocus,
             enabled: widget.enabled,
+            autocorrect: widget.autocorrect,
+            enableSuggestions: widget.enableSuggestions,
+            selectionControls: widget.selectionControls,
             onTapOutside: _handleTapOutside,
             textStyle: widget.textStyle,
             placeholderStyle: widget.placeholderStyle,
@@ -379,6 +463,8 @@ class _GlassSearchBarState extends State<GlassSearchBar> {
             settings: widget.settings,
             useOwnLayer: widget.useOwnLayer,
             quality: widget.quality,
+            surfaceStyle: widget.surfaceStyle,
+            color: widget.color,
           ),
         ),
 
@@ -397,6 +483,10 @@ class _GlassSearchBarState extends State<GlassSearchBar> {
                     padding: const EdgeInsetsDirectional.only(start: 10),
                     child: GlassButton(
                       onTap: _handleCancel,
+                      enabled: widget.enabled,
+                      label: widget.cancelButtonSemanticLabel ??
+                          glassCupertinoLocalizationsOf(context)
+                              .cancelButtonLabel,
                       width: widget.height,
                       height: widget.height,
                       shape: const LiquidOval(),

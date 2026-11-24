@@ -283,7 +283,6 @@ class _WindowsCustomWindowState extends State<WindowsCustomWindow> {
       quality: GlassQuality.premium,
       stretch: 0.20,
       interactionScale: 1.12,
-      showOverlayColor: false,
       ambientBaseLight: 0.0,
       onTap: () {
         HapticFeedback.selectionClick();

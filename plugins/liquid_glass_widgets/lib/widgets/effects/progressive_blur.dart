@@ -3,6 +3,8 @@ import 'dart:ui' as ui;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 
+import '../../src/engine/internal/transform_tracking_repaint_boundary_mixin.dart';
+
 /// The edge a [ProgressiveBlur] is *strongest* at; it eases to perfectly sharp
 /// at the opposite edge. Named after the direction the blur travels — e.g.
 /// [topToBottom] is heavy at the top and dissolves downward (the classic
@@ -70,6 +72,7 @@ class ProgressiveBlur extends StatefulWidget {
     this.maxSigma = 18,
     this.direction = ProgressiveBlurDirection.topToBottom,
     this.falloff = 1.2,
+    this.backdropKey,
   });
 
   /// Blur sigma (logical px) at the strong edge. 0 ⇒ no blur (passthrough).
@@ -83,6 +86,11 @@ class ProgressiveBlur extends StatefulWidget {
   /// Gradient gamma. >1 keeps the blur strong across the strong edge then eases
   /// to sharp near the opposite edge.
   final double falloff;
+
+  /// Optional [BackdropKey] allowing multiple non-overlapping [ProgressiveBlur]
+  /// strips (e.g. top and bottom scroll edge blurs) to share a single backdrop
+  /// copy on Impeller.
+  final BackdropKey? backdropKey;
 
   // ── Shader program: compiled once, process-wide ───────────────────────────
   static ui.FragmentProgram? _program;
@@ -118,13 +126,7 @@ class ProgressiveBlur extends StatefulWidget {
     try {
       return await ui.FragmentProgram.fromAsset(path);
     } catch (_) {
-      try {
-        return await ui.FragmentProgram.fromAsset(testPath);
-      } catch (_) {
-        return await ui.FragmentProgram.fromAsset(
-          'plugins/liquid_glass_widgets/shaders/progressive_blur.frag',
-        );
-      }
+      return ui.FragmentProgram.fromAsset(testPath);
     }
   }
 
@@ -177,6 +179,7 @@ class _ProgressiveBlurState extends State<ProgressiveBlur> {
     if (h == null || v == null || !ui.ImageFilter.isShaderFilterSupported) {
       return ClipRect(
         child: BackdropFilter(
+          backdropGroupKey: widget.backdropKey,
           filter: ui.ImageFilter.blur(
             sigmaX: widget.maxSigma * 0.6,
             sigmaY: widget.maxSigma * 0.6,
@@ -208,6 +211,7 @@ class _ProgressiveBlurState extends State<ProgressiveBlur> {
         falloff: widget.falloff,
         direction: widget.direction,
         devicePixelRatio: MediaQuery.devicePixelRatioOf(context),
+        backdropKey: widget.backdropKey,
         child: const SizedBox.expand(),
       ),
     );
@@ -261,6 +265,15 @@ List<double> progressiveBlurUniforms({
 ///    build (or in a post-frame callback) is stale for as long as the motion
 ///    lasts, and the gradient is normalised over the wrong rectangle the whole
 ///    time.
+///  * Even a paint-time read goes stale when the motion does NOT repaint this
+///    render object: under a repaint boundary, a route transition (or any
+///    animated ancestor) only moves the boundary's retained layer, and the
+///    origin the last paint baked into the uniforms stays. If that paint landed
+///    mid-transition, the region is offset from where the widget ends up and
+///    the blur is missing or misplaced until something else repaints.
+///    [TransformTrackingRenderObjectMixin] closes that gap the way the glass
+///    render objects do: its layer compares the render object's transform at
+///    compositing time and requests a repaint when it changed.
 ///  * Dropping the [LayoutBuilder] also lets a [ProgressiveBlur] sit under a
 ///    parent that asks for intrinsic dimensions, which LayoutBuilder refuses to
 ///    answer.
@@ -272,6 +285,7 @@ class _ProgressiveBlurLayer extends SingleChildRenderObjectWidget {
     required this.falloff,
     required this.direction,
     required this.devicePixelRatio,
+    this.backdropKey,
     required Widget super.child,
   });
 
@@ -281,6 +295,7 @@ class _ProgressiveBlurLayer extends SingleChildRenderObjectWidget {
   final double falloff;
   final ProgressiveBlurDirection direction;
   final double devicePixelRatio;
+  final BackdropKey? backdropKey;
 
   @override
   RenderObject createRenderObject(BuildContext context) =>
@@ -291,6 +306,7 @@ class _ProgressiveBlurLayer extends SingleChildRenderObjectWidget {
         falloff: falloff,
         direction: direction,
         devicePixelRatio: devicePixelRatio,
+        backdropKey: backdropKey,
       );
 
   @override
@@ -305,10 +321,16 @@ class _ProgressiveBlurLayer extends SingleChildRenderObjectWidget {
         falloff: falloff,
         direction: direction,
         devicePixelRatio: devicePixelRatio,
+        backdropKey: backdropKey,
       );
 }
 
-class _RenderProgressiveBlur extends RenderProxyBox {
+/// The shader-path render object, exposed so tests can mount it directly.
+@visibleForTesting
+typedef RenderProgressiveBlur = _RenderProgressiveBlur;
+
+class _RenderProgressiveBlur extends RenderProxyBox
+    with TransformTrackingRenderObjectMixin {
   _RenderProgressiveBlur({
     required ui.FragmentShader hShader,
     required ui.FragmentShader vShader,
@@ -316,12 +338,14 @@ class _RenderProgressiveBlur extends RenderProxyBox {
     required double falloff,
     required ProgressiveBlurDirection direction,
     required double devicePixelRatio,
+    BackdropKey? backdropKey,
   })  : _hShader = hShader,
         _vShader = vShader,
         _maxSigma = maxSigma,
         _falloff = falloff,
         _direction = direction,
-        _devicePixelRatio = devicePixelRatio;
+        _devicePixelRatio = devicePixelRatio,
+        _backdropKey = backdropKey;
 
   ui.FragmentShader _hShader;
   ui.FragmentShader _vShader;
@@ -329,6 +353,11 @@ class _RenderProgressiveBlur extends RenderProxyBox {
   double _falloff;
   ProgressiveBlurDirection _direction;
   double _devicePixelRatio;
+  BackdropKey? _backdropKey;
+
+  ui.ImageFilter? _cachedFilter;
+  Offset? _cachedOrigin;
+  Size? _cachedSize;
 
   /// One setter for the lot: every field arrives from the same widget on the
   /// same rebuild, so a single comparison is all the change detection this
@@ -341,13 +370,15 @@ class _RenderProgressiveBlur extends RenderProxyBox {
     required double falloff,
     required ProgressiveBlurDirection direction,
     required double devicePixelRatio,
+    BackdropKey? backdropKey,
   }) {
     if (identical(_hShader, hShader) &&
         identical(_vShader, vShader) &&
         _maxSigma == maxSigma &&
         _falloff == falloff &&
         _direction == direction &&
-        _devicePixelRatio == devicePixelRatio) {
+        _devicePixelRatio == devicePixelRatio &&
+        identical(_backdropKey, backdropKey)) {
       return;
     }
     _hShader = hShader;
@@ -356,49 +387,67 @@ class _RenderProgressiveBlur extends RenderProxyBox {
     _falloff = falloff;
     _direction = direction;
     _devicePixelRatio = devicePixelRatio;
+    _backdropKey = backdropKey;
+    _cachedFilter = null;
     markNeedsPaint();
   }
 
-  @override
-  bool get alwaysNeedsCompositing => true;
+  // The mixin owns `layer` (its transform-tracking layer), so the backdrop
+  // layer lives in its own handle.
+  final _blur = LayerHandle<BackdropFilterLayer>();
 
   @override
-  BackdropFilterLayer? get layer => super.layer as BackdropFilterLayer?;
+  void onTransformChanged() => markNeedsPaint();
+
+  @override
+  void dispose() {
+    _blur.layer = null;
+    _cachedFilter = null;
+    super.dispose();
+  }
 
   @override
   void paint(PaintingContext context, Offset offset) {
     if (child == null) {
-      layer = null;
+      _blur.layer = null;
+      super.paint(context, offset);
       return;
     }
     // The offset in the backdrop layer's own coordinate space — which is what
     // the shader's FlutterFragCoord() is expressed in.
     final origin = localToGlobal(Offset.zero);
-    _configure(_hShader, 0, origin);
-    _configure(_vShader, 1, origin);
+    var filter = _cachedFilter;
+    if (filter == null || _cachedOrigin != origin || _cachedSize != size) {
+      _configure(_hShader, 0, origin);
+      _configure(_vShader, 1, origin);
+      // Separable 2-pass: horizontal (inner) then vertical (outer) = a clean
+      // 2-D gaussian.
+      filter = _cachedFilter = ui.ImageFilter.compose(
+        outer: ui.ImageFilter.shader(_vShader),
+        inner: ui.ImageFilter.shader(_hShader),
+      );
+      _cachedOrigin = origin;
+      _cachedSize = size;
+    }
 
-    // Separable 2-pass: horizontal (inner) then vertical (outer) = a clean
-    // 2-D gaussian.
-    (layer ??= BackdropFilterLayer()).filter = ui.ImageFilter.compose(
-      outer: ui.ImageFilter.shader(_vShader),
-      inner: ui.ImageFilter.shader(_hShader),
-    );
-    context.pushLayer(layer!, super.paint, offset);
+    final blur = (_blur.layer ??= BackdropFilterLayer())
+      ..backdropKey = _backdropKey
+      ..filter = filter;
+    // `super.paint` pushes the tracking layer and paints the child.
+    context.pushLayer(blur, super.paint, offset);
   }
 
   void _configure(ui.FragmentShader shader, double axis, Offset origin) {
-    final uniforms = progressiveBlurUniforms(
-      origin: origin,
-      size: size,
-      devicePixelRatio: _devicePixelRatio,
-      maxSigma: _maxSigma,
-      falloff: _falloff,
-      direction: _direction,
-      axis: axis,
-    );
-    for (var i = 0; i < uniforms.length; i++) {
-      shader.setFloat(2 + i, uniforms[i]);
-    }
+    final dpr = _devicePixelRatio;
+    shader
+      ..setFloat(2, _maxSigma * dpr)
+      ..setFloat(3, _falloff)
+      ..setFloat(4, _direction._uniform)
+      ..setFloat(5, axis)
+      ..setFloat(6, origin.dx * dpr)
+      ..setFloat(7, origin.dy * dpr)
+      ..setFloat(8, size.width * dpr)
+      ..setFloat(9, size.height * dpr);
   }
 }
 // coverage:ignore-end

@@ -9,6 +9,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/rendering.dart' show RenderPositionedBox;
 import '../../../constants/glass_defaults.dart';
 import '../../renderer/liquid_glass_renderer.dart';
+import '../../../theme/glass_theme.dart';
 import '../../../types/glass_quality.dart';
 import '../../../utils/draggable_indicator_physics.dart';
 import '../../../utils/glass_spring.dart';
@@ -49,6 +50,7 @@ class ScrollableSegmentContent extends StatefulWidget {
     required this.iconSize,
     required this.labelPadding,
     required this.quality,
+    this.activeSelectedColor,
     this.indicatorBorderRadius,
     this.indicatorSettings,
     this.indicatorPinchStrength = 0.4,
@@ -73,6 +75,7 @@ class ScrollableSegmentContent extends StatefulWidget {
   final Color? indicatorColor;
   final TextStyle? selectedLabelStyle;
   final TextStyle? unselectedLabelStyle;
+  final Color? activeSelectedColor;
   final Color? selectedIconColor;
   final Color? unselectedIconColor;
   final double iconSize;
@@ -117,9 +120,16 @@ class ScrollableSegmentContent extends StatefulWidget {
 @visibleForTesting
 class ScrollableSegmentContentState extends State<ScrollableSegmentContent>
     with TickerProviderStateMixin {
-  // Cache default indicator color to avoid allocations
+  // Cache default indicator color and resting shadow to avoid allocations
   static const _defaultIndicatorColor =
-      Color(0x33FFFFFF); // white.withValues(alpha: 0.2)
+      Color(0x4DEBEBF5); // rgba(235, 235, 245, 0.30) in dark mode
+  static const _defaultLightIndicatorShadow = [
+    BoxShadow(
+      color: Color(0x1F000000),
+      blurRadius: 4,
+      offset: Offset(0, 1),
+    ),
+  ];
 
   bool _isDown = false;
   bool _isDragging = false;
@@ -210,12 +220,6 @@ class ScrollableSegmentContentState extends State<ScrollableSegmentContent>
 
   /// The list currently RENDERED — the merged morph list while morphing.
   List<GlassSegment> get _renderTabs => _morphTabs ?? widget.tabs;
-
-  /// Shadows are suppressed while the indicator is being dragged so they
-  /// do not interact with the live BackdropFilter blur, then restored
-  /// when the pill is idle.
-  List<BoxShadow>? get _effectiveShadow =>
-      _isDraggingIndicator ? null : widget.indicatorShadow;
 
   // Scrollable-overlay indicator position, animated in content space.
   // Decoupled from the _xAlign spring so scroll never causes drift.
@@ -905,21 +909,39 @@ class ScrollableSegmentContentState extends State<ScrollableSegmentContent>
 
   @override
   Widget build(BuildContext context) {
-    final indicatorColor = widget.indicatorColor ?? _defaultIndicatorColor;
+    final isLight = GlassTheme.brightnessOf(context) == Brightness.light;
+    final rawIndicatorColor = widget.indicatorColor ??
+        (isLight ? CupertinoColors.white : _defaultIndicatorColor);
+    final indicatorColor =
+        CupertinoDynamicColor.resolve(rawIndicatorColor, context);
+    final effectiveShadow = _isDraggingIndicator
+        ? null
+        : (widget.indicatorShadow ??
+            (isLight && widget.indicatorColor == null
+                ? _defaultLightIndicatorShadow
+                : null));
 
     // Resolve label and icon colors from CupertinoTheme — brightness-aware.
     // Matches the pattern used by GlassTabBar.bottom (tab_bar_bottom_layout.dart).
-    final dynamicLabelColor =
-        CupertinoTheme.of(context).textTheme.textStyle.color ??
-            CupertinoColors.label.resolveFrom(context);
+    final dynamicLabelColor = CupertinoDynamicColor.resolve(
+      CupertinoTheme.of(context).textTheme.textStyle.color ??
+          CupertinoColors.label,
+      context,
+    );
     final dynamicSecondaryColor =
         CupertinoColors.secondaryLabel.resolveFrom(context);
 
-    final selectedLabelStyle = TextStyle(
+    final baseSelectedLabelStyle = TextStyle(
       fontSize: 14,
       fontWeight: FontWeight.w600,
       color: dynamicLabelColor,
     ).merge(widget.selectedLabelStyle);
+    final restingSelectedTextColor = CupertinoDynamicColor.resolve(
+      baseSelectedLabelStyle.color ?? dynamicLabelColor,
+      context,
+    );
+    final selectedLabelStyle =
+        baseSelectedLabelStyle.copyWith(color: restingSelectedTextColor);
 
     final unselectedLabelStyle = TextStyle(
       fontSize: 14,
@@ -927,14 +949,45 @@ class ScrollableSegmentContentState extends State<ScrollableSegmentContent>
       color: dynamicSecondaryColor,
     ).merge(widget.unselectedLabelStyle);
 
-    final selectedIconColor = widget.selectedIconColor ?? dynamicLabelColor;
-    final unselectedIconColor =
-        widget.unselectedIconColor ?? dynamicSecondaryColor;
+    final restingSelectedIconColor = CupertinoDynamicColor.resolve(
+      widget.selectedIconColor ?? restingSelectedTextColor,
+      context,
+    );
+    final unselectedIconColor = CupertinoDynamicColor.resolve(
+      widget.unselectedIconColor ?? dynamicSecondaryColor,
+      context,
+    );
+
+    final isIndicatorInverted = widget.indicatorColor != null &&
+        indicatorColor.a >= 0.5 &&
+        (isLight
+            ? indicatorColor.computeLuminance() < 0.5
+            : indicatorColor.computeLuminance() > 0.5);
+    final isTextColorInverted = isLight
+        ? restingSelectedTextColor.computeLuminance() > 0.5
+        : restingSelectedTextColor.computeLuminance() < 0.5;
+    final isIconColorInverted = isLight
+        ? restingSelectedIconColor.computeLuminance() > 0.5
+        : restingSelectedIconColor.computeLuminance() < 0.5;
+    final resolvedActiveSelectedColor = widget.activeSelectedColor != null
+        ? CupertinoDynamicColor.resolve(widget.activeSelectedColor!, context)
+        : null;
+    final lensSelectedTextColor = resolvedActiveSelectedColor ??
+        (isIndicatorInverted && isTextColorInverted
+            ? dynamicLabelColor
+            : restingSelectedTextColor);
+    final lensSelectedIconColor = resolvedActiveSelectedColor ??
+        (isIndicatorInverted && isIconColorInverted
+            ? dynamicLabelColor
+            : restingSelectedIconColor);
+    final needsLensColorShift =
+        lensSelectedTextColor != restingSelectedTextColor ||
+            lensSelectedIconColor != restingSelectedIconColor;
 
     final Widget tabLabels = _buildTabLabels(
       selectedLabelStyle,
       unselectedLabelStyle,
-      selectedIconColor,
+      restingSelectedIconColor,
       unselectedIconColor,
     );
 
@@ -1023,6 +1076,28 @@ class ScrollableSegmentContentState extends State<ScrollableSegmentContent>
                 ),
                 value: _isDown || isMoving ? 1.0 : 0.0,
                 builder: (context, thickness, _) {
+                  final glassPhase =
+                      isMoving ? 1.0 : (thickness / 0.15).clamp(0.0, 1.0);
+                  final effectiveTabLabels =
+                      (needsLensColorShift && glassPhase > 0.0)
+                          ? _buildTabLabels(
+                              selectedLabelStyle.copyWith(
+                                color: Color.lerp(
+                                  restingSelectedTextColor,
+                                  lensSelectedTextColor,
+                                  glassPhase,
+                                ),
+                              ),
+                              unselectedLabelStyle,
+                              Color.lerp(
+                                restingSelectedIconColor,
+                                lensSelectedIconColor,
+                                glassPhase,
+                              )!,
+                              unselectedIconColor,
+                            )
+                          : safeTabLabels;
+
                   // Helper to prevent indicator parameter duplication
                   Widget buildIndicator(
                       {required bool paintBackground,
@@ -1043,7 +1118,7 @@ class ScrollableSegmentContentState extends State<ScrollableSegmentContent>
                           : widget.indicatorExpansion,
                       paintBackground: paintBackground,
                       paintGlass: paintGlass,
-                      shadows: paintBackground ? _effectiveShadow : null,
+                      shadows: paintBackground ? effectiveShadow : null,
                       exactWidth:
                           widget.isScrollable ? _indWidthSpring.value : null,
                       exactOffset: widget.isScrollable ? screenLeft : null,
@@ -1103,7 +1178,7 @@ class ScrollableSegmentContentState extends State<ScrollableSegmentContent>
                                   controller: widget.scrollController,
                                   scrollDirection: Axis.horizontal,
                                   physics: physics,
-                                  child: safeTabLabels,
+                                  child: effectiveTabLabels,
                                 ),
                               ),
                             ],
@@ -1133,7 +1208,7 @@ class ScrollableSegmentContentState extends State<ScrollableSegmentContent>
                           buildIndicator(
                               paintBackground: true,
                               paintGlass: !isPremiumQuality),
-                        safeTabLabels,
+                        effectiveTabLabels,
                         if (canShowIndicator && isPremiumQuality)
                           buildIndicator(
                               paintBackground: false, paintGlass: true),

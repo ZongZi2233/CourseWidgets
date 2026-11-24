@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import '../../src/renderer/liquid_glass_renderer.dart';
 import '../../src/types/glass_interaction_behavior.dart';
 import '../../types/glass_quality.dart';
+import '../../types/glass_surface_style.dart';
+import '../shared/glass_solid_surface.dart';
 import 'glass_text_field.dart';
 
 /// A secure glass text field for password entry.
@@ -23,6 +25,10 @@ class GlassPasswordField extends StatefulWidget {
     this.autofocus = false,
     this.textInputAction,
     this.inputFormatters,
+    this.autofillHints = const <String>[],
+    this.autocorrect = false,
+    this.enableSuggestions = false,
+    this.selectionControls,
     this.textStyle,
     this.placeholderStyle,
     this.padding = const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -30,7 +36,9 @@ class GlassPasswordField extends StatefulWidget {
     // Glass properties
     this.settings,
     this.useOwnLayer = false,
-    this.quality = GlassQuality.standard,
+    this.quality,
+    this.surfaceStyle,
+    this.color,
     this.shape = const LiquidRoundedRectangle(borderRadius: 10),
     // ── iOS 26 interaction ────────────────────────────────────────────────
     this.interactionBehavior = GlassInteractionBehavior.full,
@@ -38,6 +46,8 @@ class GlassPasswordField extends StatefulWidget {
     this.glowColor,
     this.glowRadius = 1.5,
     this.onTapOutside,
+    this.showPasswordSemanticLabel = 'Show password',
+    this.hidePasswordSemanticLabel = 'Hide password',
   });
 
   /// Controls the text being edited.
@@ -70,6 +80,20 @@ class GlassPasswordField extends StatefulWidget {
   /// Input formatters.
   final List<TextInputFormatter>? inputFormatters;
 
+  /// Autofill hints forwarded to [GlassTextField.autofillHints] (for example
+  /// `[AutofillHints.password]` or `[AutofillHints.newPassword]`).
+  final Iterable<String>? autofillHints;
+
+  /// Whether to enable automatic text correction. Defaults to `false`.
+  final bool autocorrect;
+
+  /// Whether to show input suggestions. Defaults to `false`.
+  final bool enableSuggestions;
+
+  /// Optional custom text selection handle and toolbar controls.
+  /// Mirrors [GlassTextField.selectionControls].
+  final TextSelectionControls? selectionControls;
+
   /// Style for the text.
   final TextStyle? textStyle;
 
@@ -89,7 +113,14 @@ class GlassPasswordField extends StatefulWidget {
   final bool useOwnLayer;
 
   /// Rendering quality.
-  final GlassQuality quality;
+  final GlassQuality? quality;
+
+  /// How the field's surface is painted. Mirrors [GlassTextField.surfaceStyle].
+  final GlassSurfaceStyle? surfaceStyle;
+
+  /// Explicit fill color override for [GlassSurfaceStyle.solid] fields.
+  /// Mirrors [GlassTextField.color].
+  final Color? color;
 
   /// Shape of the field.
   final LiquidShape shape;
@@ -114,6 +145,16 @@ class GlassPasswordField extends StatefulWidget {
   /// Called when user taps outside. Mirrors [GlassTextField.onTapOutside].
   final TapRegionCallback? onTapOutside;
 
+  /// Screen reader label of the eye button while the password is hidden.
+  ///
+  /// Pass a localized string; the default is English.
+  final String showPasswordSemanticLabel;
+
+  /// Screen reader label of the eye button while the password is shown.
+  ///
+  /// Pass a localized string; the default is English.
+  final String hidePasswordSemanticLabel;
+
   @override
   State<GlassPasswordField> createState() => _GlassPasswordFieldState();
 }
@@ -123,6 +164,11 @@ class _GlassPasswordFieldState extends State<GlassPasswordField> {
 
   @override
   Widget build(BuildContext context) {
+    final effectiveSurfaceStyle = widget.surfaceStyle ??
+        InheritedGlassSurfaceStyle.maybeOf(context) ??
+        GlassSurfaceStyle.glass;
+    final isSolid = effectiveSurfaceStyle == GlassSurfaceStyle.solid;
+
     return GlassTextField(
       controller: widget.controller,
       focusNode: widget.focusNode,
@@ -135,29 +181,34 @@ class _GlassPasswordFieldState extends State<GlassPasswordField> {
       readOnly: widget.readOnly,
       autofocus: widget.autofocus,
       inputFormatters: widget.inputFormatters,
+      autofillHints: widget.autofillHints,
+      autocorrect: widget.autocorrect,
+      enableSuggestions: widget.enableSuggestions,
+      selectionControls: widget.selectionControls,
       textStyle: widget.textStyle,
       placeholderStyle: widget.placeholderStyle,
       padding: widget.padding,
       settings: widget.settings,
       useOwnLayer: widget.useOwnLayer,
-      quality: widget.quality,
+      quality: isSolid ? null : widget.quality,
+      surfaceStyle: widget.surfaceStyle,
+      color: widget.color,
       shape: widget.shape,
       prefixIcon: Icon(
         CupertinoIcons.lock_fill,
         size: 20,
         color: CupertinoColors.secondaryLabel.resolveFrom(context),
       ),
-      suffixIcon: Semantics(
-        label: _obscureText ? 'Show password' : 'Hide password',
-        button: true,
-        child: Icon(
-          _obscureText
-              ? CupertinoIcons.eye_slash_fill
-              : CupertinoIcons.eye_fill,
-          size: 20,
-          color: CupertinoColors.secondaryLabel.resolveFrom(context),
-        ),
+      suffixIcon: Icon(
+        _obscureText ? CupertinoIcons.eye_slash_fill : CupertinoIcons.eye_fill,
+        size: 20,
+        color: CupertinoColors.secondaryLabel.resolveFrom(context),
       ),
+      // GlassTextField makes the tappable suffix a button node; naming it
+      // there keeps one node instead of a button nested in a button.
+      suffixSemanticLabel: _obscureText
+          ? widget.showPasswordSemanticLabel
+          : widget.hidePasswordSemanticLabel,
       onSuffixTap: () {
         setState(() {
           _obscureText = !_obscureText;

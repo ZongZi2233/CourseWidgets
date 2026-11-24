@@ -9,7 +9,6 @@ library;
 
 import 'package:flutter/widgets.dart';
 
-import '../../../src/renderer/internal/glass_materialize_scope.dart';
 import '../../../src/renderer/liquid_glass_renderer.dart';
 import '../../shared/glass_accessibility_scope.dart';
 
@@ -101,6 +100,7 @@ class GlassMaterializeEffect extends StatelessWidget {
     this.alignment = Alignment.center,
     this.scaleFrom = 1.0,
     this.contentSigma = 8.0,
+    this.plain = false,
     super.key,
   });
 
@@ -123,6 +123,9 @@ class GlassMaterializeEffect extends StatelessWidget {
   /// Peak gaussian sigma on the glass content, in logical pixels.
   final double contentSigma;
 
+  /// Plays [progress] as the plain cross-dissolve of reduce motion.
+  final bool plain;
+
   @override
   Widget build(BuildContext context) {
     final t = progress.clamp(0.0, 1.0);
@@ -132,7 +135,7 @@ class GlassMaterializeEffect extends StatelessWidget {
     final double content;
     final double sigma;
     final double scale;
-    if (reduceMotion) {
+    if (reduceMotion || plain) {
       glass = t;
       content = t;
       sigma = 0.0;

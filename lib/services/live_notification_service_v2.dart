@@ -1,12 +1,15 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui' show Color;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:local_notifier/local_notifier.dart';
 import '../models/course_event.dart';
+import '../ui/widgets/course_color_helper.dart';
+import '../utils/classroom_parser.dart';
 import 'notification_manager.dart';
 
 /// [v2.2.9 / v3.1.0] 实时通知与桌面小组件全链路同步服务
@@ -163,6 +166,8 @@ class LiveNotificationServiceV2 {
             'endTime': c.endTime,
             'startSection': c.startSection ?? 0,
             'endSection': c.endSection ?? 0,
+            'colorArgb':
+                CourseColorPalette.getNotificationAccentColor(c.name).toARGB32(),
           },
         )
         .toList();
@@ -456,17 +461,22 @@ class LiveNotificationServiceV2 {
             '${nextDt.hour.toString().padLeft(2, '0')}:${nextDt.minute.toString().padLeft(2, '0')}';
         final endStr =
             '${nextEndDt.hour.toString().padLeft(2, '0')}:${nextEndDt.minute.toString().padLeft(2, '0')}';
-        final loc = nextFirst.location.trim();
-        final hasLoc = loc.isNotEmpty && !loc.contains('未知');
-        title = hasLoc
-            ? '<b><font color="#3B82F6">$loc</font> · ${nextFirst.name}</b>'
-            : '<b>${nextFirst.name}</b>';
+        final room = ClassroomDisplayInfo.parse(nextFirst.location);
+        final accentHex = _hexRgb(
+          CourseColorPalette.getNotificationAccentColor(nextFirst.name),
+        );
+        title = '<b>${nextFirst.name}</b>';
         subLocation = '$relDay·$startStr';
-        body = '$relDay · $startStr–$endStr · 后续共${count}门';
+        final roomHtml = room.isEmpty
+            ? ''
+            : '<b><font color="$accentHex">${room.code}</font></b>${room.hasVenue ? " ${room.venue}" : ""} · ';
+        final teacherStr = nextFirst.teacher.trim();
+        body =
+            '$roomHtml$relDay $startStr–$endStr\n后续共 $count 门课程${teacherStr.isNotEmpty ? " · $teacherStr" : ""}';
         showProgress = false;
       } else {
-        title = '<b>近期暂无排课</b>';
-        body = '今日无课 · 点击查看完整课表';
+        title = '<b>今日暂无课程安排</b>';
+        body = '今日无课 · 第 $_currentWeek 周\n点击进入应用查看完整课表';
         subLocation = '今日无课';
         showProgress = false;
       }
@@ -476,6 +486,13 @@ class LiveNotificationServiceV2 {
       );
       final end = DateTime.fromMillisecondsSinceEpoch(_currentCourse!.endTime);
       final diff = start.difference(now);
+      final accentHex = _hexRgb(
+        CourseColorPalette.getNotificationAccentColor(_currentCourse!.name),
+      );
+      final room = ClassroomDisplayInfo.parse(_currentCourse!.location);
+      final roomHtml = room.isEmpty
+          ? ''
+          : '<b><font color="$accentHex">${room.code}</font></b>${room.hasVenue ? " ${room.venue}" : ""} · ';
 
       if (diff.isNegative) {
         final totalMs =
@@ -489,23 +506,19 @@ class LiveNotificationServiceV2 {
             '${end.hour.toString().padLeft(2, '0')}:${end.minute.toString().padLeft(2, '0')}';
 
         if (remainingSec > 0) {
-          final courseLoc = _currentCourse!.location.trim();
-          final hasLoc = courseLoc.isNotEmpty && !courseLoc.contains('未知');
           final remainingMin = (remainingSec / 60).ceil();
           subLocation = remainingMin >= 60
               ? '剩${remainingMin ~/ 60}时${remainingMin % 60}分'
               : (remainingMin > 0 ? '剩${remainingMin}分' : '即将下课');
 
-          title = hasLoc
-              ? '<b><font color="#10B981">$courseLoc</font> · ${_currentCourse!.name}</b>'
-              : '<b>${_currentCourse!.name}</b>';
+          title = '<b>${_currentCourse!.name}</b>';
 
           if (totalMs > 0) {
             progressPercent =
                 ((elapsedMs / totalMs) * 100).clamp(0, 100).toInt();
             showProgress = true;
           }
-          body = '$startStr–$endStr · <b>$endStr 下课</b>';
+          body = '$roomHtml$startStr–$endStr · <b>$endStr 下课</b>';
           eventTime = end;
           isCountingDown = true;
 
@@ -519,18 +532,18 @@ class LiveNotificationServiceV2 {
             );
             final nextStartStr =
                 '${nextStart.hour.toString().padLeft(2, '0')}:${nextStart.minute.toString().padLeft(2, '0')}';
-            final nextLocRaw = nextCourseToday.location.trim();
-            final hasNextLoc =
-                nextLocRaw.isNotEmpty && !nextLocRaw.contains('未知');
-            body += hasNextLoc
-                ? '  ·  下节 $nextLocRaw ${nextCourseToday.name}'
+            final nextRoom = ClassroomDisplayInfo.parse(
+              nextCourseToday.location,
+            );
+            body += !nextRoom.isEmpty
+                ? '  ·  下节 ${nextRoom.code} ${nextCourseToday.name}'
                 : '  ·  下节 $nextStartStr ${nextCourseToday.name}';
           } else {
             body += '  ·  今日最后一节';
           }
         } else {
-          title = '<b>课间休息 · ${_currentCourse!.name}</b>';
-          body = '本节已结束 · 点击查看后续课程';
+          title = '<b>${_currentCourse!.name}</b>';
+          body = '本节已结束 · 课间休息\n点击查看后续课程安排';
           subLocation = '课间休息';
           showProgress = false;
         }
@@ -544,17 +557,13 @@ class LiveNotificationServiceV2 {
         final isToday = start.year == now.year &&
             start.month == now.month &&
             start.day == now.day;
-        final courseLoc = _currentCourse!.location.trim();
-        final hasLoc = courseLoc.isNotEmpty && !courseLoc.contains('未知');
         final secBadge = _currentCourse!.startSection != null &&
                 _currentCourse!.endSection != null
             ? '第 ${_currentCourse!.startSection}-${_currentCourse!.endSection} 节'
-            : '下节';
+            : '待上课';
 
         if (isToday) {
-          title = hasLoc
-              ? '<b><font color="#F43F5E">$courseLoc</font> · ${_currentCourse!.name}</b>'
-              : '<b>${_currentCourse!.name}</b>';
+          title = '<b>${_currentCourse!.name}</b>';
           if (m <= 45) {
             subLocation = m > 0 ? '${m}分后' : '即将开课';
             progressPercent =
@@ -564,17 +573,19 @@ class LiveNotificationServiceV2 {
             isCountingDown = true;
 
             body =
-                '<b>$startStr 开课</b> ($startStr–$endStr)  ·  ${m <= 15 ? "提前入座" : "课间候课"}';
+                '$roomHtml<b>$startStr 开课</b> ($startStr–$endStr) · ${m <= 15 ? "提前入座" : "课间候课"}';
           } else if (m <= 90) {
             subLocation = '${m}分后';
             showProgress = false;
             eventTime = start;
             isCountingDown = true;
-            body = '<b>$startStr 开课</b> ($startStr–$endStr)  ·  课间候课';
+            body =
+                '$roomHtml<b>$startStr 开课</b> ($startStr–$endStr)\n距上课不足 90 分钟 · 请留意开课时间';
           } else {
             final waitStr = m >= 60 ? '${m ~/ 60}小时${m % 60}分' : '${m}分钟';
-            body = '<b>$startStr 开课</b>  ·  距开课 $waitStr';
-            subLocation = hasLoc ? courseLoc : startStr;
+            body =
+                '$roomHtml<b>$startStr 开课</b> ($startStr–$endStr)\n距开课 $waitStr · $secBadge';
+            subLocation = !room.isEmpty ? room.code : startStr;
             showProgress = false;
             eventTime = start;
             isCountingDown = true;
@@ -584,11 +595,10 @@ class LiveNotificationServiceV2 {
           final targetCourses = _getCoursesForDate(startDate);
           final count = targetCourses.isNotEmpty ? targetCourses.length : 1;
           final relDay = _formatRelativeDate(start, now);
-          title = hasLoc
-              ? '<b><font color="#3B82F6">$courseLoc</font> · ${_currentCourse!.name}</b>'
-              : '<b>${_currentCourse!.name}</b>';
+          title = '<b>${_currentCourse!.name}</b>';
           subLocation = '$relDay·$startStr';
-          body = '$relDay · $startStr–$endStr · $secBadge · 共${count}门';
+          body =
+              '$roomHtml$relDay $startStr–$endStr\n$secBadge · 当日共 $count 门课程';
           showProgress = false;
           eventTime = null;
           isCountingDown = false;
@@ -636,7 +646,7 @@ class LiveNotificationServiceV2 {
           htmlFormatBigText: true,
           contentTitle: title,
           htmlFormatContentTitle: true,
-          summaryText: '实时活动',
+          summaryText: subLocation,
           htmlFormatSummaryText: true,
         ),
       );
@@ -822,6 +832,11 @@ class LiveNotificationServiceV2 {
     } catch (e) {
       debugPrint('⚠️ Windows Toast 通知发送跳过: $e');
     }
+  }
+
+  static String _hexRgb(Color c) {
+    final rgb = c.toARGB32() & 0x00FFFFFF;
+    return '#${rgb.toRadixString(16).padLeft(6, '0').toUpperCase()}';
   }
 
   static String _stripHtml(String input) {

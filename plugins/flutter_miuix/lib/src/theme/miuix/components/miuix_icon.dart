@@ -102,7 +102,10 @@ class MiuixIcon extends StatelessWidget {
             size: vector!.viewport,
             child: CustomPaint(
               size: vector!.viewport,
-              painter: MiuixVectorIconPainter(vector!, tint: resolvedTint),
+              painter: MiuixVectorIconPainter(
+                vector!, tint: resolvedTint,
+                textDirection: Directionality.maybeOf(context) ?? TextDirection.ltr,
+              ),
             ),
           ),
         ),

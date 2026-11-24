@@ -27,6 +27,7 @@ class MiuixOverlayListPopup extends StatelessWidget {
     this.maxHeight,
     this.minWidth = MiuixListPopupDefaults.minWidth,
     this.renderInRootScaffold = true,
+    this.surfaceBuilder,
     required this.content,
   });
 
@@ -41,6 +42,7 @@ class MiuixOverlayListPopup extends StatelessWidget {
   final double minWidth;
   final bool renderInRootScaffold;
   final Widget content;
+  final MiuixPopupSurfaceBuilder? surfaceBuilder;
 
   @override
   Widget build(BuildContext context) => _MiuixListPopupLayout(
@@ -56,6 +58,7 @@ class MiuixOverlayListPopup extends StatelessWidget {
     renderInRootScaffold: renderInRootScaffold,
     windowLevel: false,
     content: content,
+    surfaceBuilder: surfaceBuilder,
   );
 }
 
@@ -74,6 +77,7 @@ class MiuixWindowListPopup extends StatelessWidget {
     this.onDismissFinished,
     this.maxHeight,
     this.minWidth = MiuixListPopupDefaults.minWidth,
+    this.surfaceBuilder,
     required this.content,
   });
 
@@ -87,6 +91,7 @@ class MiuixWindowListPopup extends StatelessWidget {
   final double? maxHeight;
   final double minWidth;
   final Widget content;
+  final MiuixPopupSurfaceBuilder? surfaceBuilder;
 
   @override
   Widget build(BuildContext context) => _MiuixListPopupLayout(
@@ -102,6 +107,7 @@ class MiuixWindowListPopup extends StatelessWidget {
     renderInRootScaffold: true,
     windowLevel: true,
     content: content,
+    surfaceBuilder: surfaceBuilder,
   );
 }
 
@@ -118,6 +124,7 @@ class _MiuixListPopupLayout extends StatefulWidget {
     required this.minWidth,
     required this.renderInRootScaffold,
     required this.windowLevel,
+    this.surfaceBuilder,
     required this.content,
   });
 
@@ -133,6 +140,7 @@ class _MiuixListPopupLayout extends StatefulWidget {
   final bool renderInRootScaffold;
   final bool windowLevel;
   final Widget content;
+  final MiuixPopupSurfaceBuilder? surfaceBuilder;
 
   @override
   State<_MiuixListPopupLayout> createState() => _MiuixListPopupLayoutState();
@@ -280,13 +288,15 @@ class _MiuixListPopupLayoutState extends State<_MiuixListPopupLayout>
   ) => child;
 
   Widget _buildHostedContent(BuildContext sourceContext) {
-    final MediaQueryData media = MediaQuery.of(sourceContext);
+    final Size mediaSize = MediaQuery.sizeOf(sourceContext);
+    final EdgeInsets mediaViewPadding = MediaQuery.viewPaddingOf(sourceContext);
+    final EdgeInsets mediaPadding = MediaQuery.paddingOf(sourceContext);
     final TextDirection direction = Directionality.of(sourceContext);
     final Rect windowBounds = Rect.fromLTRB(
-      media.viewPadding.left,
-      media.padding.top,
-      media.size.width - media.viewPadding.right,
-      media.size.height - media.padding.bottom,
+      mediaViewPadding.left,
+      mediaPadding.top,
+      mediaSize.width - mediaViewPadding.right,
+      mediaSize.height - mediaPadding.bottom,
     );
     final EdgeInsets margin = _positionProvider.margins.resolve(direction);
     final double availableHeight =
@@ -326,63 +336,64 @@ class _MiuixListPopupLayoutState extends State<_MiuixListPopupLayout>
         child: Stack(
           fit: StackFit.expand,
           children: <Widget>[
-          GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: widget.onDismissRequest,
-            child: AnimatedBuilder(
-              animation: _alpha,
-              builder: (_, _) => ColoredBox(
-                color: widget.enableWindowDim
-                    ? MiuixTheme.of(
-                        sourceContext,
-                      ).colors.windowDimming.withValues(
-                        alpha:
-                            MiuixTheme.of(
-                              sourceContext,
-                            ).colors.windowDimming.a *
-                            _alpha.value,
-                      )
-                    : const Color(0x00000000),
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: widget.onDismissRequest,
+              child: AnimatedBuilder(
+                animation: _alpha,
+                builder: (_, _) => ColoredBox(
+                  color: widget.enableWindowDim
+                      ? MiuixTheme.of(
+                          sourceContext,
+                        ).colors.windowDimming.withValues(
+                          alpha:
+                              MiuixTheme.of(
+                                sourceContext,
+                              ).colors.windowDimming.a *
+                              _alpha.value,
+                        )
+                      : const Color(0x00000000),
+                ),
               ),
             ),
-          ),
-          Positioned(
-            left: position.dx,
-            top: position.dy,
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                minWidth: widget.minWidth,
-                minHeight: MiuixListPopupDefaults.minPopupHeight,
-                maxHeight: resolvedMaxHeight,
-                maxWidth: windowBounds.width,
-              ),
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () {},
-                child: MiuixDismissScope(
-                  onDismissRequest: widget.onDismissRequest ?? () {},
-                  child: MiuixListPopupContent(
-                    popupContentSize: _contentSize,
-                    onPopupContentSizeChange: (size) {
-                      if (!mounted || size == _contentSize) return;
-                      setState(() => _contentSize = size);
-                      _windowEntry?.markNeedsBuild();
-                    },
-                    fractionProgress: () => _fraction.value,
-                    alphaProgress: () => _alpha.value,
-                    popupLayoutPosition: info.popupLayoutPosition,
-                    localTransformOrigin: info.localTransformOrigin,
-                    animation: Listenable.merge(<Listenable>[
-                      _fraction,
-                      _alpha,
-                    ]),
-                    child: widget.content,
+            Positioned(
+              left: position.dx,
+              top: position.dy,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minWidth: widget.minWidth,
+                  minHeight: MiuixListPopupDefaults.minPopupHeight,
+                  maxHeight: resolvedMaxHeight,
+                  maxWidth: windowBounds.width,
+                ),
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {},
+                  child: MiuixDismissScope(
+                    onDismissRequest: widget.onDismissRequest ?? () {},
+                    child: MiuixListPopupContent(
+                      popupContentSize: _contentSize,
+                      onPopupContentSizeChange: (size) {
+                        if (!mounted || size == _contentSize) return;
+                        setState(() => _contentSize = size);
+                        _windowEntry?.markNeedsBuild();
+                      },
+                      fractionProgress: () => _fraction.value,
+                      alphaProgress: () => _alpha.value,
+                      popupLayoutPosition: info.popupLayoutPosition,
+                      localTransformOrigin: info.localTransformOrigin,
+                      animation: Listenable.merge(<Listenable>[
+                        _fraction,
+                        _alpha,
+                      ]),
+                      surfaceBuilder: widget.surfaceBuilder,
+                      child: widget.content,
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
         ),
       ),
     );

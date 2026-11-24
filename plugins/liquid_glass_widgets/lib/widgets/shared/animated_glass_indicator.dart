@@ -1,15 +1,18 @@
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show listEquals;
-import 'dart:ui' as ui show ImageFilter;
+import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/cupertino.dart';
 import '../../src/renderer/liquid_glass_renderer.dart';
 
 import '../../constants/glass_defaults.dart';
+import '../../src/widgets/shared/lens_inner_shadow_painter.dart';
 import '../../theme/glass_theme.dart';
 import '../../types/glass_quality.dart';
+import '../../types/glass_style.dart';
 import '../../utils/draggable_indicator_physics.dart';
+import '../../utils/indicator_jelly.dart';
 import 'glass_effect.dart';
 
 /// A shared component that renders the interactive "Jelly" indicator
@@ -79,16 +82,22 @@ class AnimatedGlassIndicator extends StatelessWidget {
   /// `chromaticAberration: 0.15` (the iOS 26 iridescent rim default) is
   /// preserved unless the caller explicitly overrides it.
   ///
-  /// Example — only change blur while keeping iOS 26 aberration:
+  /// **`blur` is always zero for indicator pills.** An indicator is a refractive
+  /// lens, not a frosted pane. Applying a [BackdropFilter] blur to a lens
+  /// samples an already-blurred image, destroying the SDF rim and specular
+  /// highlights and reducing the pill to an opaque blur blob. Any `blur` value
+  /// you pass here is silently neutralised.
+  ///
+  /// Example — increase lens refraction while keeping iOS 26 aberration:
   /// ```dart
-  /// indicatorSettings: LiquidGlassSettings(blur: 2)
+  /// indicatorSettings: LiquidGlassSettings(refractiveIndex: 1.25)
   /// ```
   ///
   /// To fully reset to the `LiquidGlassSettings()` constructor defaults,
   /// start from that and specify every field you want:
   /// ```dart
   /// indicatorSettings: AnimatedGlassIndicator.baseIndicatorSettings
-  ///     .copyWith(blur: 2, chromaticAberration: 0.0)
+  ///     .copyWith(refractiveIndex: 1.15, chromaticAberration: 0.0)
   /// ```
   final LiquidGlassSettings? settings;
 
@@ -134,9 +143,17 @@ class AnimatedGlassIndicator extends StatelessWidget {
   /// ([paintBackground] == true); reads through a translucent [indicatorColor].
   final double innerBlur;
 
-  /// Whether the user is actively pressing or dragging the indicator.
-  /// When true, triggers instant 0ms glass activation without waiting for spring ramp-up.
-  final bool isInteracting;
+  /// Native iOS-style jelly deformation (see [IndicatorJellyPhysics]).
+  ///
+  /// When non-null it replaces the velocity-based squash, and the resting
+  /// pill is deformed too so the landing squish and settle stay visible after
+  /// the glass fades out.
+  final IndicatorJelly? jelly;
+
+  /// Whether the lifted lens' horizontal [expansion] is capped by the room
+  /// left to the ends of the track (plus [padding]), so the lens can reach
+  /// the bar's edge but never grow past it. Used with the native [jelly].
+  final bool clampExpansionToTrack;
 
   /// Creates a new [AnimatedGlassIndicator].
   const AnimatedGlassIndicator({
@@ -148,7 +165,6 @@ class AnimatedGlassIndicator extends StatelessWidget {
     required this.quality,
     required this.indicatorColor,
     required this.isBackgroundIndicator,
-    this.isInteracting = false,
     this.borderRadius = GlassDefaults.capsuleRadius,
     this.settings,
     this.padding = EdgeInsets.zero,
@@ -162,63 +178,61 @@ class AnimatedGlassIndicator extends StatelessWidget {
     this.pinchStrength = 1.0,
     this.innerBlur = 0.0,
     this.direction = Axis.horizontal,
+    this.jelly,
+    this.clampExpansionToTrack = false,
   });
 
-  /// The iOS 26-calibrated default glass settings for all indicator pills.
+  /// The iOS 27-calibrated default glass settings for all indicator pills.
   ///
-  /// Used as the merge base when the caller provides [settings]. Fields the
-  /// caller leaves at [LiquidGlassSettings()] defaults are filled in from
-  /// here unless the caller explicitly overrides them.
+  /// Alias for [LiquidGlassSettings.ios27Indicator]. Used as the merge base
+  /// when the caller provides [settings] and no [GlassStyle.classic] theme is
+  /// active. Fields the caller leaves at [LiquidGlassSettings()] defaults are
+  /// filled in from here unless the caller explicitly overrides them.
+  ///
+  /// Note: `blur` is always zero for indicator pills (see [settings]). This
+  /// constant reflects that: `blur: 0` is non-negotiable for a refractive lens.
   ///
   /// Pass this as a starting point when you need partial overrides while
-  /// keeping iOS 26 parity:
+  /// keeping iOS 27 parity:
   /// ```dart
   /// indicatorSettings: AnimatedGlassIndicator.baseIndicatorSettings
-  ///     .copyWith(blur: 2)
+  ///     .copyWith(refractiveIndex: 1.25)
   /// ```
-  static const baseIndicatorSettings = LiquidGlassSettings(
-    glassColor: Color.from(
-      alpha: 0.0,
-      red: 1,
-      green: 1,
-      blue: 1,
-    ),
-    // [v3.0.0-alpha19] 纯净无模糊光学凸透镜：0.0 模糊、1.50 真实玻璃折射率、0.10 边缘微色散
-    thickness: 26,
-    refractiveIndex: 1.50,
-    lightIntensity: 0.65,
-    ambientStrength: 0.25,
-    ambientRim: 0.12,
-    fresnelStrength: 0.40,
-    edgeAbsorption: 0.05,
-    chromaticAberration: 0.10,
-    lightAngle: GlassDefaults.lightAngle,
-    blur: 0.0,
-  );
+  static const baseIndicatorSettings = LiquidGlassSettings.ios27Indicator;
 
   // Sentinel representing the LiquidGlassSettings() constructor defaults, used
   // by _mergeWithBase to detect which fields the caller explicitly changed.
   static const _settingsDefaults = LiquidGlassSettings();
 
-  /// Merges [override] on top of [baseIndicatorSettings].
+  /// Merges [override] on top of [base] (defaults to [baseIndicatorSettings]).
   ///
   /// Only fields that differ from [LiquidGlassSettings()] defaults are
   /// treated as intentional overrides. Fields the caller left at the
-  /// constructor default are filled from [baseIndicatorSettings] instead.
+  /// constructor default are filled from [base] instead.
   ///
   /// Edge-case: if a caller explicitly wants a field value that happens to
   /// equal the [LiquidGlassSettings()] default (e.g. `chromaticAberration:
   /// 0.01`), they should start from [baseIndicatorSettings] and use
   /// [LiquidGlassSettings.copyWith] directly to express the intent clearly.
-  static LiquidGlassSettings _mergeWithBase(LiquidGlassSettings override) {
-    return baseIndicatorSettings.copyWith(
+  ///
+  /// `blur` is **always neutralised** regardless of [override]. An indicator
+  /// pill is a refractive lens; applying a BackdropFilter blur causes it to
+  /// sample an already-blurred composite image, destroying the SDF-rendered
+  /// rim, specular highlights, and lens-refraction effect. Callers who
+  /// accidentally pass a surface-settings object (e.g. `indicatorSettings:
+  /// myGlass`) get correct visual output rather than an opaque blur blob.
+  static LiquidGlassSettings _mergeWithBase(
+    LiquidGlassSettings override, [
+    LiquidGlassSettings base = baseIndicatorSettings,
+  ]) {
+    return base.copyWith(
       glassColor: override.glassColor != _settingsDefaults.glassColor
           ? override.glassColor
           : null,
       thickness: override.thickness != _settingsDefaults.thickness
           ? override.thickness
           : null,
-      blur: override.blur != _settingsDefaults.blur ? override.blur : null,
+      // blur is unconditionally kept at 0 — see docstring above.
       chromaticAberration:
           override.chromaticAberration != _settingsDefaults.chromaticAberration
               ? override.chromaticAberration
@@ -271,6 +285,21 @@ class AnimatedGlassIndicator extends StatelessWidget {
           override.edgeAbsorption != _settingsDefaults.edgeAbsorption
               ? override.edgeAbsorption
               : null,
+      rimShade: override.rimShade != _settingsDefaults.rimShade
+          ? override.rimShade
+          : null,
+      rimShadeEnds: override.rimShadeEnds != _settingsDefaults.rimShadeEnds
+          ? override.rimShadeEnds
+          : null,
+      rimLight: override.rimLight != _settingsDefaults.rimLight
+          ? override.rimLight
+          : null,
+      bodyShade: override.bodyShade != _settingsDefaults.bodyShade
+          ? override.bodyShade
+          : null,
+      lensModel: override.lensModel != _settingsDefaults.lensModel
+          ? override.lensModel
+          : null,
       fresnelStrength:
           override.fresnelStrength != _settingsDefaults.fresnelStrength
               ? override.fresnelStrength
@@ -356,47 +385,81 @@ class AnimatedGlassIndicator extends StatelessWidget {
     // can pass a smaller borderRadius explicitly.
     final shape = LiquidRoundedRectangle(borderRadius: borderRadius);
 
+    // Resolve indicator lens settings cascade:
+    // 1. Style preset (classicIndicator vs ios26Indicator vs ios27Indicator)
+    // 2. Ambient GlassThemeVariant.indicatorSettings partial override
+    // 3. Explicit widget [settings] partial override
+    final theme = GlassTheme.maybeOf(context)?.data;
+    final style = theme?.style ?? GlassStyle.ios27;
+    final eraBase = switch (style) {
+      GlassStyle.classic => LiquidGlassSettings.classicIndicator,
+      GlassStyle.ios26 => LiquidGlassSettings.ios26Indicator,
+      GlassStyle.ios27 => baseIndicatorSettings,
+    };
+    final themedBase =
+        theme?.indicatorSettingsFor(context)?.applyTo(eraBase) ?? eraBase;
+    final LiquidGlassSettings base;
+    if (settings == null) {
+      base = themedBase;
+    } else {
+      final s = settings!;
+      final presetBase = (s.blur == 0.0 && s.rimShadeEnds == 0.0)
+          ? (s.lensModel == GlassLensModel.spherical
+              ? LiquidGlassSettings.classicIndicator
+              : LiquidGlassSettings.ios26Indicator)
+          : (s.blur == 0.0 &&
+                  s.rimShadeEnds == 0.56 &&
+                  s.lensModel == GlassLensModel.paraxial)
+              ? LiquidGlassSettings.ios27Indicator
+              : themedBase;
+      base = _mergeWithBase(s, presetBase);
+    }
+    // The paraxial lens is the defining optic of the iOS 27 lens
+    // (`_UILiquidLensView`); the classic iOS 26 indicator is spherical. The
+    // resting pill and top inner shadow follow whichever lens the fully
+    // resolved settings describe, so style presets, theme overrides and
+    // per-widget overrides all agree.
+    final useIos27PillMaterials = base.lensModel == GlassLensModel.paraxial;
+
     // 1. Background Indicator (Resting state)
-    final base =
-        settings != null ? _mergeWithBase(settings!) : baseIndicatorSettings;
-
-    // [v3.0.0-alpha18] 边缘大范围物理漫反射阴影与 3D 折射，杜绝生硬描边
+    // Fade out as the drag spring thickness increases toward 0.15.
+    // When using the default tab selection color with iOS 27 indicator optics
+    // (rimShade > 0), render the iOS 27 _UITabSelectionView color-matrix
+    // equivalent (2-pass colorBurn + srcOver) directly into the bar's canvas
+    // without an offscreen Opacity layer.
+    final backgroundOpacity = (1.0 - (thickness / 0.15)).clamp(0.0, 1.0);
     final isDark = GlassTheme.brightnessOf(context) == Brightness.dark;
-    final defaultWideShadow = <BoxShadow>[
-      BoxShadow(
-        color: (isDark ? const Color(0xFF000000) : const Color(0xFF1E2129))
-            .withValues(alpha: isDark ? 0.38 : 0.14),
-        blurRadius: 18.0,
-        spreadRadius: -2.0,
-        offset: const Offset(0, 4.0),
-      ),
-    ];
-    final effectiveShadows = shadows ??
-        (base.shadow != null ? base.effectiveShadow : defaultWideShadow);
-
-    // [v3.0.0-alpha22] 触摸瞬间 0ms 极速响应（Zero Touch Latency），彻底根除触摸延迟与粘滞感：
-    // 当处于触摸按下/拖拽（isInteracting 或 thickness > 0.02）时，立刻达到 100% 玻璃激活状态；
-    // 仅在静默/松开且 spring 减速停靠至末端（thickness <= 0.08）时，才平滑淡出交接给主题色背景胶囊。
-    final bool isTriggered = isInteracting || thickness > 0.02;
-    final effectiveFade = isInteracting
-        ? 1.0
-        : (isTriggered
-            ? (thickness >= 0.08 ? 1.0 : (thickness / 0.08))
-            : 0.0);
-    final backgroundOpacity = (1.0 - effectiveFade).clamp(0.0, 1.0);
-
+    final isDefaultTabSelection =
+        indicatorColor == CupertinoColors.white.withValues(alpha: .1) ||
+            indicatorColor == CupertinoColors.black.withValues(alpha: .1);
     final backgroundIndicator = IgnorePointer(
-      child: Opacity(
-        opacity: backgroundOpacity,
-        child: DecoratedBox(
-          decoration: ShapeDecoration(
-            color: indicatorColor,
-            shape: shape,
-            shadows: effectiveShadows,
-          ),
-          child: const SizedBox.expand(),
-        ),
-      ),
+      child: (isDefaultTabSelection && useIos27PillMaterials)
+          ? DecoratedBox(
+              decoration: ShapeDecoration(
+                shape: shape,
+                shadows: shadows,
+              ),
+              child: CustomPaint(
+                painter: _RestingSelectionPillPainter(
+                  isDark: isDark,
+                  isIos26: style == GlassStyle.ios26 || base.rimShade == 0.0,
+                  opacity: backgroundOpacity,
+                  borderRadius: borderRadius,
+                ),
+                child: const SizedBox.expand(),
+              ),
+            )
+          : Opacity(
+              opacity: backgroundOpacity,
+              child: DecoratedBox(
+                decoration: ShapeDecoration(
+                  color: indicatorColor,
+                  shape: shape,
+                  shadows: shadows,
+                ),
+                child: const SizedBox.expand(),
+              ),
+            ),
     );
 
     // 2. Glass Indicator (Active/Dragging state)
@@ -418,7 +481,7 @@ class AnimatedGlassIndicator extends StatelessWidget {
     // distortion is stabilised.
     final stablePinchFade = 1.0 - (1.0 - fade) * (1.0 - fade);
     final effectiveSettings = base
-        .copyWith(visibility: effectiveFade)
+        .copyWith(visibility: fade)
         .copyWithPinch(stablePinchFade * pinchStrength);
 
     final glassWidget = GlassEffect(
@@ -429,112 +492,223 @@ class AnimatedGlassIndicator extends StatelessWidget {
       backgroundKey: backgroundKey,
       clipExpansion:
           isVertical ? _jellyClipExpansionVertical : _jellyClipExpansion,
+      // rimThickness translation: Premium uses thickness as 3D glass depth
+      // (Impeller SDF — no visible border drawn). Standard uses rimThickness
+      // as a literal pixel-width border in the GLSL shader, so the same raw
+      // value (default 30) would produce a ~2.8 px ring (clamped 8.0 × 0.35).
+      //
+      // For graceful fallback parity — the primary use case is Premium quality
+      // with Standard as an automatic device fallback — we proportionally map
+      // the depth intent to an equivalent rim weight:
+      //   anchor : thickness=30 (default) → 0.5 pre-norm → 0.175 px actual
+      //   floor  : 0.35 → minimum hairline even at very low thickness (5–20),
+      //            where Premium still reads via optical depth but Standard
+      //            would otherwise have a sub-pixel invisible rim.
+      //   cap    : 1.5 → prevents extreme thickness values producing thick rings.
       rimThickness: isStdPath
-          ? ((settings?.effectiveThickness ?? 30.0) * (0.5 / 30.0))
-              .clamp(0.35, 1.5)
+          ? (base.effectiveThickness * (0.5 / 30.0)).clamp(0.35, 1.5)
           : (settings?.effectiveThickness ?? 0.8).clamp(0.8, 8.0),
-      ambientRim: effectiveSettings.ambientRim,
-      baseAlphaMultiplier:
-          isStdPath ? 0.08 : 0.2, // Match GlassSlider (near clear center)
+      // iOS 26 Standard glass matching GlassSwitch/Slider pattern.
+      // settings.ambientRim (default 0) overrides the hardcoded floor — the
+      // omnidirectional ring that the directional key/kick highlights can't
+      // provide. Same field boosts the premium Fresnel rim, so one knob
+      // brightens the ring on either quality path.
+      ambientRim: (effectiveSettings.ambientRim > 0)
+          ? effectiveSettings.ambientRim
+          : (isStdPath ? 0.08 : 0.1),
+      baseAlphaMultiplier: isStdPath
+          ? (isDark ? 0.0 : 0.06)
+          : 0.2, // Match GlassSlider/Switch (clear in dark mode, subtle lift in light)
       edgeAlphaMultiplier:
           isStdPath ? 0.15 : 0.4, // Match GlassSlider/Switch (subtle rim)
-      child: const GlassGlow(
-        glowColor: Color(0x00000000),
-        child: SizedBox.expand(),
-      ),
+      child: const SizedBox.expand(),
     );
 
-    final explicitJellyShadows = (settings != null && settings!.shadow != null)
-        ? settings!.shadow!
-        : effectiveShadows;
+    // Drop shadow for the moving glass jelly. GlassEffect itself never paints
+    // LiquidGlassSettings.effectiveShadow (only container widgets like
+    // AdaptiveGlass do), so without this the jelly renders shadowless no
+    // matter what the caller sets. Gated on an EXPLICIT shadow/shadowElevation
+    // in the caller's indicator settings — the constructor default (1.0) must
+    // not grow a shadow under every existing indicator. Alpha tracks [fade] so
+    // the shadow materialises with the glass and vanishes at rest.
+    // Shadows only apply in light mode — same rule as every other
+    // effectiveShadow consumer (AdaptiveGlass, AdaptiveLiquidGlassLayer,
+    // the tab-bar shadow overlay).
+    final jellyShadowIsDark =
+        GlassTheme.brightnessOf(context) == Brightness.dark;
+    final explicitJellyShadows = (!jellyShadowIsDark &&
+            settings != null &&
+            (settings!.shadow != null ||
+                settings!.shadowElevation != _settingsDefaults.shadowElevation))
+        ? effectiveSettings.effectiveShadow
+        : const <BoxShadow>[];
     final shadowedGlass = explicitJellyShadows.isEmpty
         ? glassWidget
         : CustomPaint(
             painter: _OuterShadowPainter(
               borderRadius: borderRadius,
               shadows: explicitJellyShadows,
-              opacity: effectiveFade,
+              opacity: fade,
             ),
             child: glassWidget,
           );
 
-    // 预渲染且随 spring 激活淡入淡出：静止状态下透明度为 0（无折射与边缘光环），
-    // 激活瞬间流畅淡入大范围物理折射，杜绝着色器首帧冷启动卡顿
-    final interactiveIndicator = Opacity(
-      opacity: effectiveFade,
-      child: shadowedGlass,
-    );
+    // Mount early (0.01) so geometry is built before the indicator is visible.
+    // We MUST NOT wrap this in a RepaintBoundary because the jelly Transform
+    // below will apply a sub-pixel shift/scale. If we pre-rasterise the glass
+    // with a RepaintBoundary, the pre-computed AA will misalign with the pixel
+    // grid during the transform, causing stair-stepping on the edges.
+    final interactiveIndicator =
+        thickness > 0.01 ? shadowedGlass : const SizedBox.expand();
 
+    // Standard: background pill included inside Transform so the solid pill
+    // carries the jelly squish visually. The glass lens alone is too
+    // translucent on Standard (baseAlpha 0.08) to show the squish.
+    // Premium: glass lens only inside Transform — the Impeller SDF lens has
+    // full 3D optical contrast and carries the squish without the solid pill.
     final glassChild = Stack(
       clipBehavior: Clip.none,
       children: [
-        if (paintBackground && isStdPath && backgroundOpacity > 0)
+        if (paintBackground &&
+            (isStdPath || jelly != null) &&
+            backgroundOpacity > 0)
           backgroundIndicator,
-        if (paintGlass) interactiveIndicator,
+        if (paintGlass && fade > 0.05) interactiveIndicator,
+        // Native `_UILiquidLensView` inner shadow (`spec.innerShadowOpacity`:
+        // 0.06 on iOS 27 paraxial lens, 0.12 on iOS 26 / classic lens),
+        // painted over the lens in both Standard and Premium modes so it reads
+        // as the soft darkening along the top of the glass and lifted drop shadow.
+        if (paintGlass && quality != GlassQuality.minimal && fade > 0.05)
+          IgnorePointer(
+            child: CustomPaint(
+              painter: LensInnerShadowPainter(
+                borderRadius: borderRadius,
+                opacity: fade,
+                shadowOpacity: base.rimShade > 0.0
+                    ? LensInnerShadowPainter.defaultShadowOpacity
+                    : LensInnerShadowPainter.classicShadowOpacity,
+              ),
+              child: const SizedBox.expand(),
+            ),
+          ),
       ],
     );
 
-    final indicatorBody = Stack(
-      clipBehavior: Clip.none,
-      children: [
-        // Rest-blur: an Apple-style backdrop frost behind the RESTING pill.
-        // Sigma is scaled by backgroundOpacity so it is full when settled and
-        // fades toward zero as the pill morphs into the glass lens (motion stays
-        // crisp). Sits at the bottom of the stack so the (translucent) pill +
-        // icons read on top of the frosted backdrop.
-        //
-        // The ClipRRect + BackdropFilter stay MOUNTED for the whole gesture — we
-        // gate only on [innerBlur] > 0, never on backgroundOpacity. Adding or
-        // removing a clip layer over an iOS PlatformView mid-gesture makes the
-        // engine reconstruct the platform-view clip-view chain, which cancels
-        // the in-flight touch and freezes an interactive bar overlaid on it.
-        // [v3.0.0-alpha19] 顶级纯净 Premium 凸透镜绝对禁用任何底衬背景模糊（保持 100% 晶澈通透，零 blur）
-        if (paintBackground && innerBlur > 0 && isStdPath)
-          Positioned.fromRelativeRect(
-            rect: rect!,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(borderRadius),
-              child: BackdropFilter(
-                filter: ui.ImageFilter.blur(
-                  sigmaX: (innerBlur * backgroundOpacity)
-                      .clamp(0.001, double.infinity),
-                  sigmaY: (innerBlur * backgroundOpacity)
-                      .clamp(0.001, double.infinity),
+    Widget bodyFor(RelativeRect rect) => Stack(
+          clipBehavior: Clip.none,
+          children: [
+            // Rest-blur: an Apple-style backdrop frost behind the RESTING pill.
+            // Sigma is scaled by backgroundOpacity so it is full when settled and
+            // fades toward zero as the pill morphs into the glass lens (motion stays
+            // crisp). Sits at the bottom of the stack so the (translucent) pill +
+            // icons read on top of the frosted backdrop.
+            //
+            // The ClipRRect + BackdropFilter stay MOUNTED for the whole gesture — we
+            // gate only on [innerBlur] > 0, never on backgroundOpacity. Adding or
+            // removing a clip layer over an iOS PlatformView mid-gesture makes the
+            // engine reconstruct the platform-view clip-view chain, which cancels
+            // the in-flight touch and freezes an interactive bar overlaid on it.
+            // Fading the sigma (rather than unmounting the layer) keeps the look
+            // without the churn; a small sigma floor keeps it a real backdrop layer
+            // so the engine can't drop it on its own either.
+            if (paintBackground && innerBlur > 0)
+              Positioned.fromRelativeRect(
+                rect: rect,
+                child: ClipRRect(
+                  borderRadius: GlassDefaults.safeBorderRadius(borderRadius),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(
+                      sigmaX: (innerBlur * backgroundOpacity)
+                          .clamp(0.001, double.infinity),
+                      sigmaY: (innerBlur * backgroundOpacity)
+                          .clamp(0.001, double.infinity),
+                    ),
+                    child: const SizedBox.expand(),
+                  ),
                 ),
-                child: const SizedBox.expand(),
+              ),
+            // Premium: background pill is rigid (outside Transform). The Impeller
+            // glass lens has enough 3D contrast to carry the jelly on its own.
+            // With a native [jelly] the resting pill moves into the Transform
+            // instead, because the landing squish/settle happens on it.
+            if (paintBackground &&
+                !isStdPath &&
+                jelly == null &&
+                backgroundOpacity > 0)
+              Positioned.fromRelativeRect(
+                rect: rect,
+                child: backgroundIndicator,
+              ),
+            // Jelly-physics Transform.
+            // Standard: wraps both the solid background pill + glass lens so the
+            //   pill itself flexes (the only element with enough visual weight).
+            //   maxDistortion is capped at 0.35 — enough to feel organic, below the
+            //   threshold where 2D ClipPath corners start looking boxy.
+            // Premium: wraps only the glass lens. The 3D SDF shader absorbs the
+            //   full 0.8 distortion naturally via optical pinch.
+            Positioned.fromRelativeRect(
+              rect: rect,
+              child: IgnorePointer(
+                child: jelly != null
+                    ? FractionalTranslation(
+                        translation: Offset(jelly!.offsetX, 0),
+                        child: Transform(
+                          alignment: Alignment.center,
+                          transform: jelly!.matrix,
+                          child: glassChild,
+                        ),
+                      )
+                    : Transform(
+                        alignment: Alignment.center,
+                        transform:
+                            DraggableIndicatorPhysics.buildJellyTransform(
+                          velocity: direction == Axis.horizontal
+                              ? Offset(velocity, 0)
+                              : Offset(0, velocity),
+                          maxDistortion: isStdPath ? 0.35 : 0.8,
+                          velocityScale: 10,
+                        ),
+                        child: glassChild,
+                      ),
               ),
             ),
-          ),
-        // Premium: background pill is rigid (outside Transform). The Impeller
-        // glass lens has enough 3D contrast to carry the jelly on its own.
-        if (paintBackground && !isStdPath && backgroundOpacity > 0)
-          Positioned.fromRelativeRect(
-            rect: rect!,
-            child: backgroundIndicator,
-          ),
-        // Jelly-physics Transform.
-        // Standard: wraps both the solid background pill + glass lens so the
-        //   pill itself flexes (the only element with enough visual weight).
-        //   maxDistortion is capped at 0.35 — enough to feel organic, below the
-        //   threshold where 2D ClipPath corners start looking boxy.
-        // Premium: wraps only the glass lens. The 3D SDF shader absorbs the
-        //   full 0.8 distortion naturally via optical pinch.
-        Positioned.fromRelativeRect(
-          rect: rect!,
-          child: Transform(
-            alignment: Alignment.center,
-            transform: DraggableIndicatorPhysics.buildJellyTransform(
-              velocity: direction == Axis.horizontal
-                  ? Offset(velocity, 0)
-                  : Offset(0, velocity),
-              maxDistortion: isStdPath ? 0.35 : 0.8,
-              velocityScale: 10,
-            ),
-            child: glassChild,
-          ),
-        ),
-      ],
-    );
+          ],
+        );
+
+    final Widget indicatorBody;
+    if (clampExpansionToTrack && !isVertical && exactWidth == null) {
+      final resolvedAlignment = alignment.resolve(Directionality.of(context));
+      final resolvedPadding = padding.resolve(Directionality.of(context));
+      indicatorBody = LayoutBuilder(
+        builder: (context, constraints) {
+          // Cells between the pill and each end of the track, plus the
+          // track's own inset: the lifted lens may grow up to the bar's edge
+          // but never past it, as in UIKit.
+          final cell = constraints.maxWidth;
+          final position = (resolvedAlignment.x + 1) / 2 * (itemCount - 1);
+          final roomLeft =
+              math.max(0.0, resolvedPadding.left + position * cell);
+          final roomRight = math.max(
+            0.0,
+            resolvedPadding.right + (itemCount - 1 - position) * cell,
+          );
+          return bodyFor(
+            RelativeRect.lerp(
+              RelativeRect.fill,
+              RelativeRect.fromLTRB(
+                -math.min(resolvedExpansion.left, roomLeft),
+                -resolvedExpansion.top,
+                -math.min(resolvedExpansion.right, roomRight),
+                -resolvedExpansion.bottom,
+              ),
+              thickness,
+            )!,
+          );
+        },
+      );
+    } else {
+      indicatorBody = bodyFor(rect!);
+    }
 
     Widget positioning;
     if (exactWidth != null && exactOffset != null) {
@@ -594,7 +768,7 @@ class _OuterShadowPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final rrect = RRect.fromRectAndRadius(
       Offset.zero & size,
-      Radius.circular(borderRadius),
+      GlassDefaults.safeCircularRadius(borderRadius),
     );
     var slack = 0.0;
     for (final s in shadows) {
@@ -628,5 +802,79 @@ class _OuterShadowPainter extends CustomPainter {
       !listEquals(oldDelegate.shadows, shadows);
 }
 
+/// Paints the resting tab selection pill (`_UITabSelectionView` on iOS 27).
+///
+/// Native `_UITabSelectionView` applies a `CAColorMatrix` with linear slope
+/// and negative constant bias (`v_out = 1.13 * v_in - 0.20` in light mode,
+/// `v_out = 0.87 * v_in - 0.07` in dark mode) so the selected pill darkens
+/// on both bright and mid-tone bars without muddying saturated backdrops.
+///
+/// Because `colorBurn(s, dst) = dst / s - (1 - s) / s`, a 2-pass canvas draw
+/// (`BlendMode.colorBurn` followed by `BlendMode.srcOver` black) reproduces
+/// the exact linear slope + negative bias with zero `BackdropFilter` passes.
+class _RestingSelectionPillPainter extends CustomPainter {
+  const _RestingSelectionPillPainter({
+    required this.isDark,
+    required this.opacity,
+    required this.borderRadius,
+    this.isIos26 = false,
+  });
 
+  final bool isDark;
+  final bool isIos26;
+  final double opacity;
+  final double borderRadius;
 
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (opacity <= 0.0) return;
+    final rrect = RRect.fromRectAndRadius(
+      Offset.zero & size,
+      GlassDefaults.safeCircularRadius(borderRadius),
+    );
+    if (isDark) {
+      if (isIos26) {
+        // iOS 26.0 dark mode: native _UITabSelectionView uses `plusL`
+        // lifting the resting selection pill from rgb(25) to rgb(58).
+        canvas.drawRRect(
+          rrect,
+          Paint()
+            ..color =
+                Color.from(alpha: 0.13 * opacity, red: 1, green: 1, blue: 1)
+            ..blendMode = BlendMode.plus,
+        );
+        return;
+      }
+      // iOS 27.0 dark mode: single colorBurn pass (C_s = 0.70, alpha = 0.70) matches
+      // native _UITabSelectionView across black (32 -> 10), mid-gray
+      // (134 -> 98), and saturated vivid backdrops (255 -> 250).
+      canvas.drawRRect(
+        rrect,
+        Paint()
+          ..color = const Color(0xFFB3B3B3).withValues(alpha: 0.70 * opacity)
+          ..blendMode = BlendMode.colorBurn,
+      );
+      return;
+    }
+    // Light mode: m = 1.13, b = 0.20 -> burn gray 0xD2D2D2 + 0.07 black srcOver
+    canvas.drawRRect(
+      rrect,
+      Paint()
+        ..color = const Color(0xFFD2D2D2).withValues(alpha: opacity)
+        ..blendMode = BlendMode.colorBurn,
+    );
+    canvas.drawRRect(
+      rrect,
+      Paint()
+        ..color = Color.from(alpha: 0.07 * opacity, red: 0, green: 0, blue: 0)
+        ..blendMode = BlendMode.srcOver,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_RestingSelectionPillPainter oldDelegate) =>
+      oldDelegate.isDark != isDark ||
+      oldDelegate.isIos26 != isIos26 ||
+      oldDelegate.opacity != opacity ||
+      oldDelegate.borderRadius != borderRadius;
+}

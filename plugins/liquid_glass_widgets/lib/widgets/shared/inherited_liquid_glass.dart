@@ -16,6 +16,8 @@ class InheritedLiquidGlass extends InheritedWidget {
     this.quality = GlassQuality.standard,
     this.isBlurProvidedByAncestor = false,
     this.avoidsRefraction = false,
+    this.hasExplicitSettings = true,
+    this.hasExplicitQuality = true,
     required super.child,
     super.key,
   });
@@ -31,9 +33,41 @@ class InheritedLiquidGlass extends InheritedWidget {
   final bool isBlurProvidedByAncestor;
 
   /// Whether children should avoid high-fidelity refraction.
-  /// Set to true by containers like GlassCard to prevent refraction artifacts
+  /// Set to true by containers like GlassContainer.card to prevent refraction artifacts
   /// when glass is nested within glass.
   final bool avoidsRefraction;
+
+  /// Whether [settings] was explicitly supplied to the ancestor layer rather
+  /// than synthesized from the ambient [GlassTheme].
+  final bool hasExplicitSettings;
+
+  /// Whether [quality] was explicitly supplied to the ancestor layer rather
+  /// than synthesized from the ambient [GlassTheme] fallback.
+  final bool hasExplicitQuality;
+
+  /// Returns `true` when the nearest [InheritedLiquidGlass] (or renderer layer)
+  /// carries explicitly supplied [LiquidGlassSettings].
+  static bool hasExplicitSettingsOf(BuildContext context) {
+    final inherited =
+        context.dependOnInheritedWidgetOfExactType<InheritedLiquidGlass>();
+    if (inherited != null) {
+      return inherited.hasExplicitSettings;
+    }
+    try {
+      LiquidGlassSettings.of(context);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Returns `true` when the nearest [InheritedLiquidGlass] carries an
+  /// explicitly supplied [GlassQuality] override.
+  static bool hasExplicitQualityOf(BuildContext context) {
+    final inherited =
+        context.dependOnInheritedWidgetOfExactType<InheritedLiquidGlass>();
+    return inherited?.hasExplicitQuality ?? false;
+  }
 
   /// Retrieves the nearest [LiquidGlassSettings] from the ancestor tree.
   ///
@@ -70,6 +104,8 @@ class InheritedLiquidGlass extends InheritedWidget {
     return settings != oldWidget.settings ||
         quality != oldWidget.quality ||
         isBlurProvidedByAncestor != oldWidget.isBlurProvidedByAncestor ||
-        avoidsRefraction != oldWidget.avoidsRefraction;
+        avoidsRefraction != oldWidget.avoidsRefraction ||
+        hasExplicitSettings != oldWidget.hasExplicitSettings ||
+        hasExplicitQuality != oldWidget.hasExplicitQuality;
   }
 }

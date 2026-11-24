@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:math' as math;
 import 'dart:ui';
-import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart' hide GlassContextMenu;
 import 'package:provider/provider.dart';
 import '../../constants/theme_constants.dart';
 import '../../models/course_event.dart';
@@ -16,7 +16,8 @@ import 'course_name_formatter.dart';
 import 'glass_context_menu.dart';
 import '../theme/squircle_geometry.dart';
 import '../transitions/smooth_slide_transitions.dart';
-import 'package:smooth_scroll_multiplatform/smooth_scroll_multiplatform.dart';
+import 'adaptive_smooth_scroll.dart';
+import '../../utils/glass_settings_helper.dart';
 import '../animations/app_motion.dart';
 import '../../utils/responsive_utils.dart';
 import '../../services/theme_service.dart' as theme;
@@ -175,6 +176,23 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
       builder: Builder(
         builder: (dialogCtx) {
           final dialogDark = Theme.of(dialogCtx).brightness == Brightness.dark;
+          final pickerGlassSettings =
+              GlassSettingsHelper.getDialogSettings().copyWith(
+            glassColor: dialogDark
+                ? const Color(0x9E151822)
+                : const Color(0x9DF7F9FE),
+            blur: 10.0,
+            thickness: 22.0,
+            refractiveIndex: 1.48,
+            chromaticAberration: 0.08,
+            lightIntensity: 0.72,
+            ambientStrength: 0.34,
+            ambientRim: 0.0,
+            fresnelStrength: 0.0,
+            edgeAbsorption: 0.0,
+            saturation: 1.40,
+            specularSharpness: GlassSpecularSharpness.sharp,
+          );
           return Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 420),
@@ -182,20 +200,19 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
                 type: MaterialType.transparency,
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(24),
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 24.0, sigmaY: 24.0),
-                      child: Container(
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          color: dialogDark
-                              ? const Color(0xB8141720)
-                              : const Color(0x70FFFFFF),
-                          borderRadius: BorderRadius.circular(24),
-                          boxShadow: liquid.HyperOSShadows.modal(dialogDark),
-                        ),
-                        child: Column(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: SquircleGeometry.smoothRadius(28),
+                      boxShadow: liquid.HyperOSShadows.modal(dialogDark),
+                    ),
+                    child: GlassContainer(
+                      useOwnLayer: true,
+                      quality: theme.ThemeService().glassQuality,
+                      clipBehavior: Clip.antiAlias,
+                      shape: const LiquidRoundedSuperellipse(borderRadius: 28),
+                      padding: const EdgeInsets.all(20),
+                      settings: pickerGlassSettings,
+                      child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Row(
@@ -290,9 +307,8 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
                   ),
                 ),
               ),
-            ),
-          );
-        },
+            );
+          },
       ),
     );
   }
@@ -479,7 +495,7 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
           left: 0,
           right: 0,
           bottom: 0,
-          child: DynMouseScroll(
+          child: AdaptiveSmoothScroll(
             durationMS: 250,
             scrollSpeed: 1.2,
             builder: (context, controller, physics) => SingleChildScrollView(

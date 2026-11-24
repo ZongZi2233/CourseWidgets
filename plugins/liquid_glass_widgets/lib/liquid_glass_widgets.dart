@@ -9,17 +9,16 @@ export 'src/renderer/liquid_glass_renderer.dart'
     show
         AnchorStretchSettings,
         GlassBodyMode,
+        GlassLensModel,
         LiquidGlassSettings,
         PlatformViewGlassMode,
         LiquidGlassLayer,
         LiquidGlassBlendGroup,
         GlassGlow,
-        LiquidStretch,
-        RawLiquidStretch,
-        LiquidGlass,
         debugPaintLiquidGlassGeometry;
-export 'src/renderer/liquid_shape.dart'; // all shapes are public
-export 'src/renderer/internal/interaction_notification.dart'; // public for Smart Silence support
+export 'src/renderer/glass_backdrop_group.dart' show GlassBackdropGroup;
+export 'src/engine/liquid_shape.dart'; // all shapes are public
+export 'types/interaction_notification.dart'; // public for Smart Silence support
 export 'types/glass_specular_sharpness.dart'; // GlassSpecularSharpness enum
 
 // Setup and Configuration
@@ -37,6 +36,8 @@ export 'theme/glass_theme_settings.dart';
 
 // Types
 export 'types/glass_quality.dart';
+export 'types/glass_style.dart'; // GlassStyle enum
+export 'types/glass_surface_style.dart'; // GlassSurfaceStyle enum
 export 'types/glass_quality_change_reason.dart'; // GlassQualityChangeReason enum
 export 'src/types/glass_interaction_behavior.dart'; // GlassInteractionBehavior enum
 
@@ -48,12 +49,20 @@ export 'widgets/shared/animated_glass_indicator.dart'
 export 'widgets/shared/glass_accessibility_scope.dart'; // GlassAccessibilityScope + GlassAccessibilityData
 export 'widgets/shared/glass_adaptive_scope.dart'; // GlassAdaptiveScope + GlassAdaptiveScopeData + GlassAdaptiveDiagnostic
 export 'widgets/shared/glass_content_aware_scope.dart'; // GlassContentAwareScope + GlassContentAwareContent + GlassContentAwareBrightness
-export 'widgets/shared/glass_page.dart' show GlassPage, GlassStatusBarStyle;
+export 'widgets/shared/glass_page.dart'
+    show
+        GlassPage,
+        GlassStatusBarStyle,
+        GlassPageTransitionClip,
+        GlassPageRoute,
+        GlassPageTransitionsBuilder;
 export 'widgets/shared/glass_motion_scope.dart';
 export 'widgets/shared/glass_scroll_edge_effect.dart';
+export 'widgets/shared/glass_swipe_action_scope.dart';
+export 'widgets/shared/glass_edit_scope.dart';
 export 'widgets/shared/inherited_liquid_glass.dart';
+export 'widgets/shared/glass_solid_surface.dart';
 export 'widgets/shared/lightweight_liquid_glass.dart';
-export 'widgets/shared/glass_effect.dart';
 
 // Utils — for advanced / custom widget authors
 export 'utils/glass_morph_controller.dart'
@@ -64,6 +73,7 @@ export 'utils/glass_morph_controller.dart'
         LiquidMorphState,
         MorphPhase;
 export 'utils/glass_spring.dart';
+export 'utils/indicator_jelly.dart' show IndicatorJelly, IndicatorJellyPhysics;
 export 'utils/glass_performance_monitor.dart'
     show GlassPerformanceMonitor; // PremiumGlassTracker is internal
 
@@ -71,12 +81,14 @@ export 'utils/glass_performance_monitor.dart'
 export 'widgets/containers/glass_card.dart';
 export 'widgets/containers/glass_container.dart';
 export 'widgets/containers/glass_divider.dart';
+export 'widgets/containers/glass_disclosure_group.dart';
 export 'widgets/containers/glass_grouped_section.dart';
 export 'widgets/containers/glass_list_tile.dart';
+export 'widgets/containers/glass_reorderable_list.dart';
 export 'widgets/containers/glass_stepper.dart';
-export 'widgets/containers/fake_glass.dart';
-export 'widgets/containers/glassify.dart';
+export 'widgets/containers/glass_swipe_actions.dart';
 // Widgets - Input
+export 'widgets/input/glass_date_picker.dart';
 export 'widgets/input/glass_form_field.dart';
 export 'widgets/input/glass_password_field.dart';
 export 'widgets/input/glass_picker.dart';
@@ -87,6 +99,7 @@ export 'widgets/input/glass_text_field.dart';
 export 'widgets/interactive/glass_badge.dart';
 export 'widgets/interactive/glass_button.dart';
 export 'widgets/interactive/glass_chip.dart';
+export 'widgets/interactive/glass_edit_button.dart';
 export 'widgets/interactive/glass_icon_button.dart';
 export 'widgets/interactive/glass_page_control.dart';
 export 'widgets/interactive/glass_segmented_control.dart';
@@ -101,7 +114,9 @@ export 'types/glass_button_style.dart';
 export 'widgets/feedback/glass_progress_indicator.dart';
 // Widgets - Overlays
 export 'widgets/overlays/glass_action_sheet.dart';
+export 'widgets/overlays/glass_context_menu.dart';
 export 'widgets/overlays/glass_dialog.dart';
+export 'widgets/overlays/glass_full_screen_cover.dart';
 export 'widgets/overlays/glass_menu.dart';
 export 'widgets/overlays/glass_menu_item.dart';
 export 'widgets/overlays/glass_sheet.dart';
@@ -111,6 +126,7 @@ export 'widgets/overlays/glass_modal_sheet.dart'
         GlassSheetState,
         GlassSheetMode,
         GlassSheetDetent, // the `detents` set on GlassModalSheet / .show()
+        GlassSheetPlacement, // the `placement` on GlassModalSheet / .show()
         GlassFillTransition,
         GlassModalSheetController,
         GlassMorphTrigger, // wraps a trigger a sheet morphs out of
@@ -123,7 +139,7 @@ export 'widgets/overlays/glass_toast.dart';
 export 'widgets/overlays/glass_popover.dart';
 // Widgets - Effects
 export 'widgets/effects/glass_materialize.dart';
-export 'widgets/effects/progressive_blur.dart';
+export 'widgets/effects/progressive_blur.dart' hide RenderProgressiveBlur;
 // Widgets - Surfaces
 export 'widgets/surfaces/glass_app_bar.dart';
 export 'widgets/surfaces/glass_bar_item.dart';
@@ -132,6 +148,7 @@ export 'widgets/surfaces/glass_navigation_shell.dart'
         GlassNavigationShell,
         GlassNavigationShellState,
         GlassNavBarRegistration;
+export 'widgets/surfaces/glass_navigation_stack.dart';
 // Geometry a bar that is not a GlassAppBar aligns its in-route chrome to.
 export 'widgets/surfaces/shared/glass_nav_pinned_host.dart'
     show GlassNavPinnedMetrics;
@@ -143,7 +160,4 @@ export 'widgets/surfaces/shared/glass_search_bar_config.dart';
 export 'widgets/surfaces/shared/tab_bar_searchable_controller.dart';
 export 'widgets/surfaces/glass_tab_bar.dart';
 export 'widgets/surfaces/glass_toolbar.dart';
-export 'src/renderer/liquid_glass.dart' show LiquidGlass;
-export 'widgets/containers/glass_panel.dart';
-export 'widgets/surfaces/glass_bottom_bar.dart' hide JellyClipper;
-export 'widgets/surfaces/glass_side_bar.dart';
+export 'widgets/surfaces/glass_vertical_bar.dart';

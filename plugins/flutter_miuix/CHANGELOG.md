@@ -1,5 +1,75 @@
 # Changelog
 
+## 1.4.0
+
+### 新增
+
+- **HyperOS 4 玻璃底部抽屉与对话框组件体系**（对齐上游 `feat/miuix-glass` 至 `bf54f494`）：
+  - **`MiuixGlassBottomSheet` / `MiuixGlassBottomSheetDefaults` / `miuixGlassBottomSheetSurface`**：Scaffold 托管的玻璃底部抽屉，支持拖拽关闭、遮罩预压暗采样以及向上过拖时的无描边玻璃延展；`MiuixOverlayBottomSheet` / `MiuixWindowBottomSheet` 同步支持 `dimColor` 与 `surfaceBuilder`。
+  - **`MiuixGlassDialogButton` / `MiuixGlassDialogButtonRole` / `MiuixGlassDialogButtonDefaults`**：提供 `normal` / `primary` / `destructive` 三种角色及前景按压遮罩反馈。
+  - **`MiuixGlassDialog` / `MiuixGlassDialogDefaults` / `miuixGlassDialogSurface`**：升级为 Scaffold 托管玻璃对话框（无宿主时自动退回根 `OverlayPortal`），支持 `title`、`summary`、`dialogGlass` 三层材质、小号高光描边、`dimColor`、遮罩预压暗与缩放抵消采样；同时兼容 `show` 与旧 `visible` 参数。`MiuixOverlayDialog` 同步支持 `dimColor` 与 `surfaceBuilder`。
+  - **`MiuixGlassDropdownPreference` 与 `MiuixGlassValueAnchor`**：内置偏好行与弧线玻璃下拉弹窗，自动按「选中值 + 箭头」就近边缘水平对齐并在展开时平滑淡出/恢复。
+  - **`MiuixGlassIconDropdownMenu`**：从 `MiuixGlassIconButton` 锚点展开的级联玻璃菜单，内置一级变形弹窗、二级展开菜单、分组分隔线与展开态材质共享。
+  - **`MiuixScrimBackdrop` / `MiuixCombinedBackdrop`**：支持模糊前遮罩预压暗、缩放抵消以及双背景叠加采样。
+- **材质与描边预设**：新增 `MiuixGlassMaterials.dialogGlassLight` / `dialogGlassDark` / `dialogGlass()`、`forTheme()`、`MiuixGlassMaterial.withUnderlayBlur()` 及 `MiuixGlassStrokes.big()`。
+- **顶栏、按钮、标签与导航栏增强**：
+  - `MiuixGlassTopAppBar` 新增 `progressiveBlur`、`material`、`stroke`、`showStroke`、`buttonShape`、`buttonShadow`、`fill`、`backgroundAlpha`。
+  - `MiuixGlassIconButton` 新增 `inheritTopBarMaterial`（设为 `false` 可在页顶保持按钮材质可见）、`material` 与 `showStroke`。
+  - `MiuixGlassTabRow` / `MiuixGlassSegmentedTabRow` 新增 `showStroke` 并自动叠加顶栏底衬模糊方差。
+  - `MiuixGlassNavigationBar` 新增 `trailingAction`（与胶囊整体居中并共享显隐过渡）、`actionSpacing`、`showStroke` 与 `defaultWindowInsetsPadding`。
+
+### 改进
+
+- **玻璃弹窗与图标细节**：更新 `popupViewGlassLight` / `popupViewGlassDark` 配色层与上游一致；变形弹窗在按钮表面与菜单材质间平滑过渡；二级弹窗继承一级菜单的展开态 visuals；`MiuixGlassPopupItem` 固定选中勾号占位宽度避免切换抖动；修正 `MiuixIcons.os4.markAsUnread` 命名（保留已弃用 `markRasUnread` 别名兼容）；修复极小表面下描边与高光宽度的安全截断顺序。
+- **示例页与文档**：更新 `example` OS4 展示页及中英双语 API 参考文档（同步至 AI Skill 包）。
+
+### 测试
+
+- 新增 `test/os4_glass_upstream_adaptation_test.dart`，覆盖全部新增 OS4 组件、材质预设、渐进模糊、独立按钮与导航栏 `trailingAction`。
+
+## 1.3.0
+
+### 新增
+
+- **`MiuixGlassNavigationItem.isAction`**：导航栏可放置「动作项」（如搜索、新建），点击只触发 `onSelect`，不移动选中指示器、不改变选中态。
+- **`MiuixGlassTopAppBar.bandHeightFactor` / `bandBlurRadius`**：可调节顶栏模糊带的高度比例（默认 1）与实时高斯模糊半径（默认 24，0 关闭模糊）。
+- **`MiuixLayerBackdropCapture.pixelRatio`**：可覆盖背景快照的像素比，降低快照分辨率以换取性能。
+- **`MiuixGlassRendering.loadError` / `loadedPrograms` / `has()`**：暴露 OS4 shader 加载状态，便于排查「玻璃不够通透」类降级问题。
+
+### 改进
+
+- **OS4 玻璃 shader 逐个降级**：单个 shader 加载失败不再拖垮全部玻璃效果；blend shader 缺席时改用原生 `BlendMode` 混色（`MiuixGlassColorBlendMode.fallback`），无 runtime shader 的设备也能得到「模糊背景 + 混色层」的真玻璃，而非一块实色。
+- **玻璃模糊改走 `saveLayer`**：修复部分后端（尤其 Impeller）上 `drawImageRect` 的 image filter 静默失效、玻璃里能看清背后文字的问题。
+- **玻璃淡入更柔和**：不做仿生着色的表面（栏、菜单、栏内按钮）改为整层 alpha 淡入，消除「硬边模糊圆片先冒出、颜色再补上」的延迟感。
+- **顶栏模糊带**：默认色调渐变改为半透明，下方叠加真实高斯模糊并在下缘平滑淡出，更贴近原生 HyperOS 4。
+- **导航栏拖拽**：滑块按手指位置直接跟随；松手在栏内才提交选择；按下态仅重建必要子树。
+- **性能**：玻璃材质按值比较并缓存栏内材质实例，避免滚动时逐帧丢纹理缓存；背景快照只在内容真正变化时重新截取；多处 `MediaQuery.of` 改为细粒度 `sizeOf` / `paddingOf` 等，减少无关重建。
+- **无障碍**：颜色调色板补充 `increasedValue` / `decreasedValue` 语义。
+
+### 测试
+
+- 新增 OS4 玻璃交互与渲染回归测试（shader 降级、快照复用、导航拖拽等）。
+
+## 1.2.0
+
+### 新增
+
+- **HyperOS 4 玻璃材质与组件（可选，不改动既有组件默认表现）**：移植上游 `feat/miuix-glass` 分支 `3f7debbf`（2026-09-06），新增一整套 `MiuixGlass*` 组件与玻璃材质基础设施，与旧组件并存。导入 `package:flutter_miuix/miuix.dart` 后按需使用，无需更换主题，原有界面样式零变化。
+  - 组件：`MiuixBlurTopAppBar`、`MiuixGlassTopAppBar`、`MiuixGlassIconButton`、`MiuixGlassNavigationBar`、`MiuixGlassTabRow`、`MiuixGlassSegmentedTabRow`、`MiuixGlassPopup` / `MiuixGlassPopupItem`、`MiuixGlassTransformPopup`、`MiuixGlassSecondaryPopup`、`MiuixGlassDropdownPopup`、`MiuixGlassDialog`，以及 `MiuixGlass` / `MiuixGlassPanel` / `miuixGlassSurface` 三种材质包装方式。
+  - 材质与动效：35 组玻璃样式预设（`MiuixGlassStyles`）、材质混合层、6 个运行时片元着色器（`miuix_os4_glass/mask/stroke/shadow/rim/blend.frag`）、可逆弹窗变形动效、导航栏拖拽切换。
+  - 图标：`MiuixIcons.os4` 新增 176 枚 OS4 符号，覆盖 5 档字重，含 RTL 镜像处理。
+- **旧版级联菜单支持玻璃表面**：`MiuixCascadingDropdownMenu` / `MiuixCascadingListPopup` 等新增可选的玻璃表面构建器，老接口可渐进接入 OS4 观感。
+- **OS4 示例页**：example 新增独立 OS4 展示页，内置图标搜索。
+- **文档**：新增中英双语 API 参考章节 `110_os4.{zh,en}.md`（同步至 AI Skill 包 references）。
+
+### 测试
+
+- 新增交互、生命周期、几何、兼容性与像素级渲染测试（`test/os4_glass*.dart`）。
+
+### 其他
+
+- README 中英文版新增免责声明章节（本项目与小米公司无从属关系）。
+
 
 
 ## 1.1.1

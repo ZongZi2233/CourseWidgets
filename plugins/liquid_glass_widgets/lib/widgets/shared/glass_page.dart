@@ -1,6 +1,12 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:flutter/rendering.dart'
+    show RenderClipRSuperellipse, RenderCustomPaint;
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
+import '../../constants/glass_defaults.dart';
+import '../../src/renderer/liquid_glass_push_back_scope.dart';
 import '../../src/renderer/liquid_glass_renderer.dart';
 import 'adaptive_liquid_glass_layer.dart';
 
@@ -150,6 +156,7 @@ class GlassPage extends StatefulWidget {
     this.statusBarStyle = GlassStatusBarStyle.none,
     this.edgeToEdge = false,
     this.themeOverride,
+    this.transitionCornerRadius,
   });
 
   /// The background widget (e.g. an [Image] or gradient [Container]) that sits
@@ -252,7 +259,7 @@ class GlassPage extends StatefulWidget {
 
   /// Glass effect settings applied to the page's internal rendering layer.
   ///
-  /// All grouped glass widgets ([GlassCard], [GlassContainer], etc.) within
+  /// All grouped glass widgets ([GlassContainer.card], [GlassContainer], etc.) within
   /// this page will inherit these settings automatically — no need to set
   /// `useOwnLayer: true` or pass `settings:` to each widget individually.
   ///
@@ -270,12 +277,72 @@ class GlassPage extends StatefulWidget {
   /// ```
   final LiquidGlassSettings? settings;
 
+  /// Continuous superellipse corner radius applied to clip the entire page
+  /// surface (both [background] and [child]) during route push/pop transitions
+  /// and interactive swipe-back gestures.
+  ///
+  /// Matches native iOS `_UIParallaxTransitionCardView` behavior where the
+  /// transitioning page's exposed corners are rounded with a continuous
+  /// superellipse matching the display corner radius, and unclipped at rest
+  /// ([Clip.none]) so steady-state rendering incurs zero clipping overhead.
+  ///
+  /// When `null` (the default), inherits from an enclosing
+  /// [GlassPageTransitionClip], [GlassPageRoute], or [GlassNavigationStack] on
+  /// the same route if present, or defaults to
+  /// [GlassDefaults.pageTransitionCornerRadius] (55.0).
+  ///
+  /// Set to `0.0` to disable rounded page clipping during transitions.
+  final double? transitionCornerRadius;
+
   @override
   State<GlassPage> createState() => _GlassPageState();
 }
 
 class _GlassPageState extends State<GlassPage> {
   SystemUiOverlayStyle? _previousOverlayStyle;
+
+  // ── Push-back scope ────────────────────────────────────────────────────────
+  // Tracks whether the route this page sits on is currently being pushed back
+  // by a presented sheet (secondaryAnimation > 0 and not yet fully dismissed).
+  // When true, LiquidGlassPushBackScope emits active: true into the subtree,
+  // allowing RenderLiquidGlassLayer._hasScale() to freeze UV coordinates.
+  // When false (at rest, or no route found), the scope is inactive, so a
+  // static app-level scale (e.g. responsive_framework) never triggers the
+  // freeze that caused jitter (#292).
+  bool _pushBackActive = false;
+  Animation<double>? _listenedSecondaryAnimation;
+  ModalRoute<dynamic>? _route;
+
+  // Mirrors GlassNavigationShell._isAtRest() — no transition is in flight.
+  static bool _isAtRest(ModalRoute<dynamic> route) =>
+      (route.animation?.status ?? AnimationStatus.completed) ==
+          AnimationStatus.completed &&
+      (route.secondaryAnimation?.status ?? AnimationStatus.dismissed) ==
+          AnimationStatus.dismissed &&
+      !(route.navigator?.userGestureInProgress ?? false);
+
+  void _onAnimationTick() {
+    if (!mounted) return;
+    final route = _route;
+    if (route == null) return;
+    final secondary = route.secondaryAnimation;
+    final next = !_isAtRest(route) && (secondary?.value ?? 0.0) > 0.0;
+    if (next != _pushBackActive) {
+      setState(() => _pushBackActive = next);
+    }
+  }
+
+  void _subscribeSecondaryAnimation(Animation<double>? animation) {
+    if (animation == _listenedSecondaryAnimation) return;
+    _listenedSecondaryAnimation?.removeListener(_onAnimationTick);
+    _listenedSecondaryAnimation?.removeStatusListener(_onAnimationStatus);
+    _listenedSecondaryAnimation = animation;
+    _listenedSecondaryAnimation?.addListener(_onAnimationTick);
+    _listenedSecondaryAnimation?.addStatusListener(_onAnimationStatus);
+  }
+
+  void _onAnimationStatus(AnimationStatus _) => _onAnimationTick();
+  // ── End push-back scope ───────────────────────────────────────────────────
 
   bool get _effectiveSampling =>
       widget.enableBackgroundSampling ?? (widget.background != null);
@@ -293,6 +360,8 @@ class _GlassPageState extends State<GlassPage> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     _applyStatusBarStyle();
+    _route = ModalRoute.of(context);
+    _subscribeSecondaryAnimation(_route?.secondaryAnimation);
   }
 
   @override
@@ -311,6 +380,8 @@ class _GlassPageState extends State<GlassPage> {
 
   @override
   void dispose() {
+    _subscribeSecondaryAnimation(null); // removes listeners
+    _route = null;
     // Restore the previous overlay style if we changed it.
     if (_previousOverlayStyle != null) {
       SystemChrome.setSystemUIOverlayStyle(_previousOverlayStyle!);
@@ -368,39 +439,50 @@ class _GlassPageState extends State<GlassPage> {
 
     final bool doSample = _effectiveSampling && quality != GlassQuality.minimal;
 
-    Widget content = LiquidGlassScope(
-      child: Stack(
-        children: [
-          // 1. Background layer — only rendered when a background is provided.
-          if (widget.background != null)
+    Widget content = LiquidGlassPushBackScope(
+      active: _pushBackActive,
+      child: LiquidGlassScope(
+        child: Stack(
+          children: [
+            // 1. Background layer — only rendered when a background is provided.
+            if (widget.background != null)
+              Positioned.fill(
+                child: GlassBackgroundSource(
+                  enabled: doSample,
+                  child: widget.background!,
+                ),
+              ),
+
+            // 2. Content layer.
+            // When background is provided: force transparent Scaffold so the
+            // wallpaper shows through.
+            // When no background: leave Scaffold colour alone — it renders with
+            // its own backgroundColor as the developer set it.
+            //
+            // The AdaptiveLiquidGlassLayer provides the LiquidGlassRenderScope
+            // that all glass widgets (GlassAppBar, GlassButton, GlassContainer.card, etc.)
+            // need to render. Without it, using any glass widget inside a
+            // Scaffold's appBar slot would crash with "No liquid glass renderer
+            // found in context". Settings and quality resolve from GlassTheme
+            // automatically; individual widgets override via their own `settings`
+            // parameter.
             Positioned.fill(
-              child: GlassBackgroundSource(
-                enabled: doSample,
-                child: widget.background!,
+              child: AdaptiveLiquidGlassLayer(
+                settings: widget.settings,
+                child: widget.child,
               ),
             ),
-
-          // 2. Content layer.
-          // When background is provided: force transparent Scaffold so the
-          // wallpaper shows through.
-          // When no background: leave Scaffold colour alone — it renders with
-          // its own backgroundColor as the developer set it.
-          //
-          // The AdaptiveLiquidGlassLayer provides the LiquidGlassRenderScope
-          // that all glass widgets (GlassAppBar, GlassButton, GlassCard, etc.)
-          // need to render. Without it, using any glass widget inside a
-          // Scaffold's appBar slot would crash with "No liquid glass renderer
-          // found in context". Settings and quality resolve from GlassTheme
-          // automatically; individual widgets override via their own `settings`
-          // parameter.
-          Positioned.fill(
-            child: AdaptiveLiquidGlassLayer(
-              settings: widget.settings,
-              child: widget.child,
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
+    );
+
+    // Clip the entire page surface (background + content) with continuous
+    // superellipse rounded corners while a route push/pop or interactive
+    // swipe-back transition is in flight, and leave unclipped at rest.
+    content = GlassPageTransitionClip(
+      cornerRadius: widget.transitionCornerRadius,
+      child: content,
     );
 
     // Wrap in a scoped GlassTheme override if the caller provided one.
@@ -434,5 +516,620 @@ class _GlassPageState extends State<GlassPage> {
     }
 
     return content;
+  }
+}
+
+/// Clips a route or page surface with continuous rounded corners
+/// ([ClipRSuperellipse]) while a navigation transition or interactive
+/// swipe-back gesture is in flight, and leaves the child unclipped
+/// ([Clip.none]) at rest.
+///
+/// Mirrors native iOS `_UIParallaxTransitionCardView`, which wraps incoming
+/// and outgoing pages in a continuous-corner card (`UICornerConfiguration`
+/// matching the display corner radius) during push, pop, and interactive
+/// back-swipe transitions, and unwraps at rest so steady-state rendering
+/// incurs zero clipping overhead.
+///
+/// [GlassPage], [GlassScaffold], [GlassPageRoute], and
+/// [GlassPageTransitionsBuilder] apply this automatically. Use
+/// [GlassPageTransitionClip] directly when wrapping custom page widgets or
+/// third-party route builders.
+class GlassPageTransitionClip extends StatefulWidget {
+  /// Creates a [GlassPageTransitionClip].
+  const GlassPageTransitionClip({
+    super.key,
+    required this.child,
+    this.cornerRadius,
+    this.primaryAnimation,
+    this.secondaryAnimation,
+  });
+
+  /// The page widget to clip during route transitions.
+  final Widget child;
+
+  /// Continuous superellipse corner radius applied while transitioning.
+  ///
+  /// When `null` (the default), inherits from an enclosing
+  /// [GlassPageTransitionClip] or [GlassPageRoute] on the same route if
+  /// present, or resolves adaptively via [resolveDisplayCornerRadius] to match
+  /// the host device's physical display corner radius (e.g. `62.0` pt on
+  /// iPhone 16/17/18 Pro & Pro Max, `55.0` pt on Dynamic Island iPhones,
+  /// `47.33` pt on Notch iPhones, `18.0` pt on rounded-screen iPads, and
+  /// [GlassDefaults.pageTransitionCornerRadius] (`55.0`) as fallback).
+  ///
+  /// Set to `0.0` to disable rounded clipping.
+  final double? cornerRadius;
+
+  /// Optional explicit primary route animation. When `null`, resolved from
+  /// `ModalRoute.of(context)?.animation`.
+  final Animation<double>? primaryAnimation;
+
+  /// Optional explicit secondary route animation. When `null`, resolved from
+  /// `ModalRoute.of(context)?.secondaryAnimation`.
+  final Animation<double>? secondaryAnimation;
+
+  /// Resolves the native iOS display corner radius
+  /// (`UIScreen._displayCornerRadius`) from the ambient [MediaQuery] geometry.
+  ///
+  /// Mirrors UIKit's `_UIParallaxTransitionCardView` `UICornerConfiguration`,
+  /// which matches the physical hardware screen bezel radius:
+  /// - `62.0` pt on 6.3" / 6.9" Pro models (iPhone 16/17/18 Pro & Pro Max)
+  /// - `55.0` pt on Dynamic Island iPhones (iPhone 14 Pro, 15, 16)
+  /// - `47.33` pt on Notch iPhones (iPhone 12/13/14)
+  /// - `18.0` pt on rounded-screen iPads with a home indicator
+  /// - [GlassDefaults.pageTransitionCornerRadius] (`55.0` pt) when no hardware
+  ///   safe-area insets are present (e.g. desktop previews or widget tests).
+  static double resolveDisplayCornerRadius(BuildContext context) {
+    final viewPadding = MediaQuery.maybeViewPaddingOf(context);
+    final size = MediaQuery.maybeSizeOf(context);
+    if (viewPadding == null || size == null) {
+      return GlassDefaults.pageTransitionCornerRadius;
+    }
+
+    // Rectangular display or test surface without hardware home indicator.
+    if (viewPadding.bottom <= 0.0 && viewPadding.top <= 24.0) {
+      return GlassDefaults.pageTransitionCornerRadius;
+    }
+
+    final shortestSide = size.shortestSide;
+    final longestSide = size.longestSide;
+
+    // Rounded-screen iPads with home indicator.
+    if (shortestSide >= 600.0) {
+      return viewPadding.bottom > 0.0 ? 18.0 : 0.0;
+    }
+
+    // iPhone 16/17/18 Pro & Pro Max (top inset >= 60pt or height >= 870pt).
+    if (viewPadding.top >= 60.0 || longestSide >= 870.0) {
+      return 62.0;
+    }
+
+    // Dynamic Island iPhones (top inset >= 54pt or height >= 800pt).
+    if (viewPadding.top >= 54.0 || longestSide >= 800.0) {
+      return GlassDefaults.pageTransitionCornerRadius; // 55.0
+    }
+
+    // Notch iPhones (iPhone X / 11 / 12 / 13 / 14).
+    if (viewPadding.top >= 44.0) {
+      return 47.33;
+    }
+
+    return GlassDefaults.pageTransitionCornerRadius;
+  }
+
+  @override
+  State<GlassPageTransitionClip> createState() =>
+      _GlassPageTransitionClipState();
+}
+
+class _GlassPageTransitionClipState extends State<GlassPageTransitionClip> {
+  ModalRoute<dynamic>? _route;
+  Animation<double>? _listenedPrimary;
+  ValueListenable<bool>? _listenedUserGesture;
+  _GlassPageTransitionClipState? _parentClipState;
+  double? _inheritedCornerRadius;
+  int _activeChildClips = 0;
+  _GlassPageSlideState? _slide;
+  bool _hasRadius = false;
+  bool _isTransitioning = false;
+
+  void _syncShadowOwner() {
+    _slide?._setRounded(this, _activeChildClips == 0 && _hasRadius);
+  }
+
+  static bool _isPositionInFlight(Animation<double>? animation) {
+    if (animation == null) return false;
+    final value = animation.value;
+    return value > 0.0 && value < 1.0;
+  }
+
+  bool _computeIsTransitioning() {
+    final route = _route;
+    // Do not clip popup routes (dialogs, menus, sheets) when auto-resolving
+    // from ModalRoute.of(context).
+    if (widget.primaryAnimation == null &&
+        widget.secondaryAnimation == null &&
+        route is PopupRoute<dynamic>) {
+      return false;
+    }
+    final primary = widget.primaryAnimation ?? route?.animation;
+    final gestureInProgress = _listenedUserGesture?.value ??
+        (route?.navigator?.userGestureInProgress ?? false);
+    final isTopGestureRoute =
+        gestureInProgress && (route == null || route.isCurrent);
+
+    // Only the primary sliding route (0 < primary.value < 1, or the top route
+    // during an interactive back gesture) clips its corners. In UIKit's
+    // _UIParallaxTransitionCardView, the underlying route (secondaryAnimation)
+    // translates from x = 0 to x = -W/3 with its left edge offscreen and its
+    // right edge behind the incoming card; clipping the underlying route's
+    // right corners would punch a triangular gap behind the incoming card's
+    // rounded leading corners when 0 < t < 0.23.
+    return _isPositionInFlight(primary) || isTopGestureRoute;
+  }
+
+  void _onAnimationTick() {
+    if (!mounted) return;
+    final next = _computeIsTransitioning();
+    if (next != _isTransitioning) {
+      setState(() => _isTransitioning = next);
+    }
+  }
+
+  void _onAnimationStatus(AnimationStatus _) => _onAnimationTick();
+
+  void _subscribePrimary(Animation<double>? animation) {
+    if (animation == _listenedPrimary) return;
+    _listenedPrimary?.removeListener(_onAnimationTick);
+    _listenedPrimary?.removeStatusListener(_onAnimationStatus);
+    _listenedPrimary = animation;
+    _listenedPrimary?.addListener(_onAnimationTick);
+    _listenedPrimary?.addStatusListener(_onAnimationStatus);
+  }
+
+  void _subscribeUserGesture(ValueListenable<bool>? listenable) {
+    if (listenable == _listenedUserGesture) return;
+    _listenedUserGesture?.removeListener(_onAnimationTick);
+    _listenedUserGesture = listenable;
+    _listenedUserGesture?.addListener(_onAnimationTick);
+  }
+
+  void _registerChildClip() {
+    _activeChildClips++;
+    _syncShadowOwner();
+    if (_activeChildClips == 1 && mounted) {
+      final renderObject = context.findRenderObject();
+      if (renderObject is RenderClipRSuperellipse) {
+        renderObject.clipBehavior = Clip.none;
+      } else if (renderObject is RenderCustomPaint) {
+        renderObject.painter = null;
+        final child = renderObject.child;
+        if (child is RenderClipRSuperellipse) {
+          child.clipBehavior = Clip.none;
+        }
+      }
+      if (_isTransitioning) {
+        SchedulerBinding.instance.addPostFrameCallback((_) {
+          if (mounted) setState(() {});
+        });
+      }
+    }
+  }
+
+  void _unregisterChildClip() {
+    _activeChildClips--;
+    _syncShadowOwner();
+    if (_activeChildClips == 0 && _isTransitioning && mounted) {
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() {});
+      });
+    }
+  }
+
+  void _updateParentRegistration(_GlassPageTransitionClipState? newParent) {
+    if (_parentClipState == newParent) return;
+    _parentClipState?._unregisterChildClip();
+    _parentClipState = newParent;
+    _parentClipState?._registerChildClip();
+  }
+
+  void _syncSubscriptions() {
+    final route = _route;
+    _subscribePrimary(widget.primaryAnimation ?? route?.animation);
+    _subscribeUserGesture(route?.navigator?.userGestureInProgressNotifier);
+    _isTransitioning = _computeIsTransitioning();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _route = ModalRoute.of(context);
+    final slide = context.findAncestorStateOfType<_GlassPageSlideState>();
+    final owner = slide?.widget.route == _route ? slide : null;
+    if (_slide != owner) {
+      _slide?._setRounded(this, false);
+      _slide = owner;
+    }
+    final parentScope = context.dependOnInheritedWidgetOfExactType<
+        _InheritedPageTransitionClipScope>();
+    final sameRouteParent = (parentScope != null && parentScope.route == _route)
+        ? parentScope.state
+        : null;
+    _inheritedCornerRadius =
+        (parentScope != null && parentScope.route == _route)
+            ? parentScope.cornerRadius
+            : null;
+    _updateParentRegistration(sameRouteParent);
+    _syncSubscriptions();
+  }
+
+  @override
+  void didUpdateWidget(covariant GlassPageTransitionClip oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.primaryAnimation != widget.primaryAnimation ||
+        oldWidget.secondaryAnimation != widget.secondaryAnimation) {
+      _syncSubscriptions();
+    }
+  }
+
+  @override
+  void dispose() {
+    _slide?._setRounded(this, false);
+    _updateParentRegistration(null);
+    _subscribePrimary(null);
+    _subscribeUserGesture(null);
+    _route = null;
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final double rawRadius = widget.cornerRadius ??
+        _inheritedCornerRadius ??
+        GlassPageTransitionClip.resolveDisplayCornerRadius(context);
+    final double effectiveRadius = GlassDefaults.safeRadius(rawRadius);
+    _hasRadius = effectiveRadius > 0.0;
+    _syncShadowOwner();
+    final bool shouldClip =
+        _isTransitioning && _activeChildClips == 0 && effectiveRadius > 0.0;
+
+    return _InheritedPageTransitionClipScope(
+      state: this,
+      route: _route,
+      cornerRadius: widget.cornerRadius ?? _inheritedCornerRadius,
+      child: CustomPaint(
+        painter: shouldClip
+            ? _TransitionCardShadowPainter(cornerRadius: effectiveRadius)
+            : null,
+        child: ClipRSuperellipse(
+          borderRadius: BorderRadius.circular(effectiveRadius),
+          clipBehavior: shouldClip ? Clip.antiAlias : Clip.none,
+          child: widget.child,
+        ),
+      ),
+    );
+  }
+}
+
+/// Paints the native iOS 27 `_UIParallaxTransitionCardView` continuous
+/// superellipse drop shadow (`shadowOpacity: 0.04`, `shadowRadius: 12.0`,
+/// `shadowOffset: (0.0, -3.0)`) behind the sliding page card so the shadow
+/// follows the curved top-left and bottom-left corners seamlessly.
+class _TransitionCardShadowPainter extends CustomPainter {
+  const _TransitionCardShadowPainter({required this.cornerRadius});
+
+  final double cornerRadius;
+
+  static const Color _shadowColor = Color(0x0A000000); // 0.04 alpha black
+  static const double _shadowSigma = 6.0; // shadowRadius 12.0 * 0.5
+  static const Offset _shadowOffset = Offset(0.0, -3.0);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.isEmpty || cornerRadius <= 0.0) return;
+    final rect = (_shadowOffset & size);
+    final rsuperellipse = RSuperellipse.fromRectAndRadius(
+      rect,
+      Radius.circular(cornerRadius),
+    );
+    final paint = Paint()
+      ..color = _shadowColor
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, _shadowSigma);
+    canvas.drawRSuperellipse(rsuperellipse, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _TransitionCardShadowPainter oldDelegate) =>
+      oldDelegate.cornerRadius != cornerRadius;
+}
+
+class _InheritedPageTransitionClipScope extends InheritedWidget {
+  const _InheritedPageTransitionClipScope({
+    required this.state,
+    required this.route,
+    required this.cornerRadius,
+    required super.child,
+  });
+
+  final _GlassPageTransitionClipState state;
+  final ModalRoute<dynamic>? route;
+  final double? cornerRadius;
+
+  @override
+  bool updateShouldNotify(_InheritedPageTransitionClipScope oldWidget) =>
+      state != oldWidget.state ||
+      route != oldWidget.route ||
+      cornerRadius != oldWidget.cornerRadius;
+}
+
+/// A [CupertinoPageRoute] that applies native iOS continuous rounded-corner
+/// clipping ([GlassPageTransitionClip]) to the page surface during push, pop,
+/// and interactive swipe-back transitions.
+///
+/// At rest (`animation.value == 1.0 && secondaryAnimation.value == 0.0`), the
+/// page is unclipped ([Clip.none]) so steady-state rendering incurs zero
+/// clipping overhead.
+///
+/// Used automatically by `GlassNavigationStack` and `GlassNavigationLink`. Can
+/// also be pushed directly onto any [Navigator]:
+///
+/// ```dart
+/// Navigator.of(context).push(
+///   GlassPageRoute(
+///     builder: (context) => const DetailScreen(),
+///   ),
+/// );
+/// ```
+class GlassPageRoute<T> extends CupertinoPageRoute<T> {
+  /// Creates a [GlassPageRoute] with transition-time rounded page clipping.
+  GlassPageRoute({
+    required super.builder,
+    super.title,
+    super.settings,
+    super.maintainState = true,
+    super.fullscreenDialog,
+    super.allowSnapshotting = true,
+    super.barrierDismissible = false,
+    this.transitionCornerRadius,
+  });
+
+  /// Continuous superellipse corner radius applied to the page while
+  /// transitioning.
+  ///
+  /// When `null` (the default), uses
+  /// [GlassDefaults.pageTransitionCornerRadius] (55.0), unless overridden by a
+  /// descendant [GlassPage] or `GlassScaffold`.
+  ///
+  /// Set to `0.0` to disable rounded page clipping for this route.
+  final double? transitionCornerRadius;
+
+  static final Animatable<Offset> _kMiddleLeftTween = Tween<Offset>(
+    begin: Offset.zero,
+    end: const Offset(-1.0 / 3.0, 0.0),
+  );
+
+  @override
+  DelegatedTransitionBuilder? get delegatedTransition =>
+      fullscreenDialog ? null : _buildDelegatedTransition;
+
+  static Widget? _buildDelegatedTransition(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    bool allowSnapshotting,
+    Widget? child,
+  ) {
+    if (Navigator.maybeOf(context)?.userGestureInProgress ?? false) {
+      return SlideTransition(
+        position: secondaryAnimation.drive(_kMiddleLeftTween),
+        textDirection: Directionality.of(context),
+        transformHitTests: false,
+        child: child,
+      );
+    }
+
+    return CupertinoPageTransition.delegatedTransition(
+      context,
+      animation,
+      secondaryAnimation,
+      allowSnapshotting,
+      child,
+    );
+  }
+
+  @override
+  Widget buildTransitions(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    return GlassPageTransitionsBuilder(
+      transitionCornerRadius: transitionCornerRadius,
+    ).buildTransitions<T>(this, context, animation, secondaryAnimation, child);
+  }
+}
+
+/// A [PageTransitionsBuilder] that provides native iOS parallax slide
+/// transitions with continuous rounded-corner page clipping
+/// ([GlassPageTransitionClip]) during push, pop, and interactive swipe-back
+/// gestures. The card owns the horizontal transition shadow, so it follows the
+/// resolved corner radius including overrides on a descendant [GlassPage].
+/// Square pages retain the standard Cupertino edge shadow.
+///
+/// Plug into `PageTransitionsTheme` in a `MaterialApp` (or router theme) to
+/// apply rounded iOS page transitions app-wide:
+///
+/// ```dart
+/// MaterialApp(
+///   theme: ThemeData(
+///     pageTransitionsTheme: const PageTransitionsTheme(
+///       builders: {
+///         TargetPlatform.iOS: GlassPageTransitionsBuilder(),
+///         TargetPlatform.macOS: GlassPageTransitionsBuilder(),
+///       },
+///     ),
+///   ),
+///   home: const HomeScreen(),
+/// )
+/// ```
+class GlassPageTransitionsBuilder extends PageTransitionsBuilder {
+  /// Creates a [GlassPageTransitionsBuilder].
+  const GlassPageTransitionsBuilder({
+    this.transitionCornerRadius,
+  });
+
+  /// Continuous superellipse corner radius applied to the page while
+  /// transitioning.
+  ///
+  /// When `null` (the default), uses
+  /// [GlassDefaults.pageTransitionCornerRadius] (55.0), unless overridden by a
+  /// descendant [GlassPage] or `GlassScaffold`.
+  ///
+  /// Set to `0.0` to disable rounded page clipping.
+  final double? transitionCornerRadius;
+
+  @override
+  Duration get transitionDuration =>
+      CupertinoRouteTransitionMixin.kTransitionDuration;
+
+  @override
+  DelegatedTransitionBuilder? get delegatedTransition =>
+      GlassPageRoute._buildDelegatedTransition;
+
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    final transition = CupertinoRouteTransitionMixin.buildPageTransitions<T>(
+      route,
+      context,
+      animation,
+      secondaryAnimation,
+      GlassPageTransitionClip(
+        cornerRadius: transitionCornerRadius,
+        primaryAnimation: animation,
+        secondaryAnimation: secondaryAnimation,
+        child: child,
+      ),
+    );
+    if (transition is! CupertinoPageTransition) return transition;
+    return _GlassPageSlide(route: route, transition: transition);
+  }
+}
+
+/// Cupertino builds the back-gesture detector inside its slide. Keep that
+/// child and its gesture controller, but let the card paint its own shadow.
+class _GlassPageSlide extends StatefulWidget {
+  const _GlassPageSlide({required this.route, required this.transition});
+  final PageRoute<dynamic> route;
+  final CupertinoPageTransition transition;
+
+  @override
+  State<_GlassPageSlide> createState() => _GlassPageSlideState();
+}
+
+class _GlassPageSlideState extends State<_GlassPageSlide> {
+  static final _enter = Tween(begin: const Offset(1, 0), end: Offset.zero);
+  static final _recede =
+      Tween(begin: Offset.zero, end: const Offset(-1 / 3, 0));
+  late CurvedAnimation _primary;
+  late CurvedAnimation _secondary;
+
+  // Only the innermost clips own the page shape. Use a paint-time signal so a
+  // child override takes effect in the same frame without rebuilding the page.
+  final _roundedClips = <_GlassPageTransitionClipState>{};
+  final _squareShadow = ValueNotifier<double>(1);
+  late final _shadowOpacity =
+      Animation<double>.fromValueListenable(_squareShadow);
+
+  void _setRounded(_GlassPageTransitionClipState clip, bool rounded) {
+    if (rounded) {
+      _roundedClips.add(clip);
+    } else {
+      _roundedClips.remove(clip);
+    }
+    _squareShadow.value = _roundedClips.isEmpty ? 1 : 0;
+  }
+
+  void _configureCurves() {
+    _primary = CurvedAnimation(
+      parent: widget.transition.primaryRouteAnimation,
+      curve: Curves.fastEaseInToSlowEaseOut,
+      reverseCurve: Curves.fastEaseInToSlowEaseOut.flipped,
+    );
+    _secondary = CurvedAnimation(
+      parent: widget.transition.secondaryRouteAnimation,
+      curve: Curves.linearToEaseOut,
+      reverseCurve: Curves.easeInToLinear,
+    );
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _configureCurves();
+  }
+
+  @override
+  void didUpdateWidget(_GlassPageSlide oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final old = oldWidget.transition;
+    final next = widget.transition;
+    if (next.primaryRouteAnimation != old.primaryRouteAnimation ||
+        next.secondaryRouteAnimation != old.secondaryRouteAnimation ||
+        next.linearTransition != old.linearTransition) {
+      _primary.dispose();
+      _secondary.dispose();
+      _configureCurves();
+    }
+  }
+
+  @override
+  void dispose() {
+    _primary.dispose();
+    _secondary.dispose();
+    _squareShadow.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final transition = widget.transition;
+    final linear = transition.linearTransition;
+    final direction = Directionality.of(context);
+    return Stack(fit: StackFit.passthrough, clipBehavior: Clip.none, children: [
+      // Flutter owns the rectangular gradient, including its gesture timing.
+      // This decoration has no page content or gesture detector of its own.
+      Positioned.fill(
+        child: IgnorePointer(
+          child: FadeTransition(
+            opacity: _shadowOpacity,
+            child: CupertinoPageTransition(
+              primaryRouteAnimation: transition.primaryRouteAnimation,
+              secondaryRouteAnimation: transition.secondaryRouteAnimation,
+              linearTransition: linear,
+              child: const SizedBox.expand(),
+            ),
+          ),
+        ),
+      ),
+      SlideTransition(
+        position: (linear ? transition.secondaryRouteAnimation : _secondary)
+            .drive(_recede),
+        textDirection: direction,
+        transformHitTests: false,
+        child: SlideTransition(
+          position: (linear ? transition.primaryRouteAnimation : _primary)
+              .drive(_enter),
+          textDirection: direction,
+          child: transition.child,
+        ),
+      ),
+    ]);
   }
 }

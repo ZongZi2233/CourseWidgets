@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart' hide GlassContextMenu;
 import 'package:coursewidgets/ui/widgets/glass_context_menu.dart';
 import 'package:coursewidgets/ui/widgets/app_update_dialog.dart';
 import 'package:coursewidgets/services/app_update_service.dart';

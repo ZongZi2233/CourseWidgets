@@ -4,6 +4,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 
+import '../../theme/glass_theme.dart';
 import '../effects/progressive_blur.dart';
 import '../interactive/liquid_glass_scope.dart';
 
@@ -60,7 +61,7 @@ enum GlassScrollEdgeStyle {
 /// [GlassPage], falls back to a solid-colour gradient overlay using [fadeColor].
 ///
 /// **[GlassScrollEdgeStyle.hard]**:
-/// Like [soft], but applies a 50% height zone and steeper alpha curve for a
+/// Like [GlassScrollEdgeStyle.soft], but applies a 50% height zone and steeper alpha curve for a
 /// crisper structural edge.
 ///
 /// **[GlassScrollEdgeStyle.blur]** (opt-in GPU enhancement):
@@ -75,6 +76,7 @@ enum GlassScrollEdgeStyle {
 /// GlassScrollEdgeEffect(
 ///   topFadeHeight: 100,
 ///   bottomFadeHeight: 80,
+///   absorbPointer: true,
 ///   child: ListView.builder(
 ///     itemBuilder: (_, i) => ListTile(title: Text('Item $i')),
 ///   ),
@@ -117,6 +119,7 @@ class GlassScrollEdgeEffect extends StatefulWidget {
     this.bottomFadeHeight = 60.0,
     this.fadeTop = true,
     this.fadeBottom = true,
+    this.absorbPointer = false,
     this.style = GlassScrollEdgeStyle.soft,
     this.maxSigma = 18.0,
     this.fadeColor,
@@ -152,6 +155,13 @@ class GlassScrollEdgeEffect extends StatefulWidget {
   /// Defaults to true.
   final bool fadeBottom;
 
+  /// Whether the fade overlays absorb pointer events instead of passing them
+  /// through to [child]. Defaults to `false`.
+  ///
+  /// When enabled, taps and gestures are blocked across the full visible fade
+  /// zones, including content that is still visible beneath the fades.
+  final bool absorbPointer;
+
   /// The edge effect style.
   ///
   /// Defaults to [GlassScrollEdgeStyle.blur], matching iOS 26's
@@ -183,10 +193,31 @@ class _GlassScrollEdgeEffectState extends State<GlassScrollEdgeEffect> {
   /// [_finishCapture] checks this and issues the deferred capture.
   bool _recaptureRequested = false;
 
+  /// Generation counter for background captures. Incremented whenever an
+  /// in-flight capture is invalidated (e.g. on theme switch or color change),
+  /// ensuring stale async results are discarded rather than overwriting
+  /// newly updated state.
+  int _captureGeneration = 0;
+
+  /// Tracks the last resolved brightness to detect theme changes in [didChangeDependencies].
+  Brightness? _lastBrightness;
+
+  /// Shared [BackdropKey] so top and bottom [ProgressiveBlur] strips reuse one
+  /// backdrop copy on Impeller instead of taking two separate full-screen reads.
+  final BackdropKey _blurBackdropKey = BackdropKey();
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _backgroundKey = LiquidGlassScope.of(context);
+
+    // Track brightness via the package's single brightness authority so that
+    // theme mode switches (e.g. dark -> light in MaterialApp / CupertinoTheme)
+    // invalidate the stale background texture and schedule a fresh capture.
+    final currentBrightness = GlassTheme.brightnessOf(context);
+    final brightnessChanged =
+        _lastBrightness != null && _lastBrightness != currentBrightness;
+    _lastBrightness = currentBrightness;
 
     // For blur style, ProgressiveBlur captures the live backdrop dynamically
     // via BackdropFilterLayer at paint time, so no static background image
@@ -199,14 +230,29 @@ class _GlassScrollEdgeEffectState extends State<GlassScrollEdgeEffect> {
     // All three cases (first mount / route resume / dep changed while visible)
     // are handled identically: schedule a capture on the next frame.
     if (!(ModalRoute.isCurrentOf(context) ?? true)) return;
+
+    if (brightnessChanged) {
+      _captureGeneration++;
+      _backgroundImage?.dispose();
+      _backgroundImage = null;
+    }
     _scheduleCapture();
   }
 
   @override
   void didUpdateWidget(GlassScrollEdgeEffect oldWidget) {
     super.didUpdateWidget(oldWidget);
+    final bool styleBecameRaster = widget.style != GlassScrollEdgeStyle.blur &&
+        oldWidget.style == GlassScrollEdgeStyle.blur;
+    final bool fadeColorChanged = widget.fadeColor != oldWidget.fadeColor;
+
     if (widget.style != GlassScrollEdgeStyle.blur &&
-        oldWidget.style == GlassScrollEdgeStyle.blur) {
+        (styleBecameRaster || fadeColorChanged)) {
+      if (fadeColorChanged) {
+        _captureGeneration++;
+        _backgroundImage?.dispose();
+        _backgroundImage = null;
+      }
       _scheduleCapture();
     }
   }
@@ -263,11 +309,12 @@ class _GlassScrollEdgeEffectState extends State<GlassScrollEdgeEffect> {
       return;
     }
     _capturePending = true;
+    final currentGen = _captureGeneration;
     try {
       boundary
           .toImage(pixelRatio: 1.0)
           .then<void>((image) {
-            if (!mounted) {
+            if (!mounted || currentGen != _captureGeneration) {
               image.dispose();
               return;
             }
@@ -299,6 +346,7 @@ class _GlassScrollEdgeEffectState extends State<GlassScrollEdgeEffect> {
 
   @override
   void dispose() {
+    _captureGeneration++;
     _backgroundImage?.dispose();
     _backgroundImage = null;
     super.dispose();
@@ -345,6 +393,7 @@ class _GlassScrollEdgeEffectState extends State<GlassScrollEdgeEffect> {
     required Size screenSize,
     required bool hasTexture,
   }) {
+    // Ignore the visual layer unless the opt-in absorber is enabled.
     if (widget.style == GlassScrollEdgeStyle.blur) {
       return Positioned(
         top: isTop ? 0 : null,
@@ -352,18 +401,24 @@ class _GlassScrollEdgeEffectState extends State<GlassScrollEdgeEffect> {
         left: 0,
         right: 0,
         height: height,
-        child: IgnorePointer(
-          child: ProgressiveBlur(
-            maxSigma: widget.maxSigma,
-            // ease-in quadratic falloff: keeps sigma near-zero for the first
-            // ~40% of the zone so content stays perceptually sharp until it
-            // is well inside the bar area. Default ProgressiveBlur falloff
-            // (1.2) is near-linear and makes the blur visible too early.
-            // No shader changes — uFalloff is already a uniform.
-            falloff: 2.0,
-            direction: isTop
-                ? ProgressiveBlurDirection.topToBottom
-                : ProgressiveBlurDirection.bottomToTop,
+        child: AbsorbPointer(
+          absorbing: widget.absorbPointer,
+          child: IgnorePointer(
+            child: ProgressiveBlur(
+              maxSigma: widget.maxSigma,
+              // ease-in quadratic falloff: keeps sigma near-zero for the first
+              // ~40% of the zone so content stays perceptually sharp until it
+              // is well inside the bar area. Default ProgressiveBlur falloff
+              // (1.2) is near-linear and makes the blur visible too early.
+              // No shader changes — uFalloff is already a uniform.
+              falloff: 2.0,
+              direction: isTop
+                  ? ProgressiveBlurDirection.topToBottom
+                  : ProgressiveBlurDirection.bottomToTop,
+              backdropKey: (widget.fadeTop && widget.fadeBottom)
+                  ? _blurBackdropKey
+                  : null,
+            ),
           ),
         ),
       );
@@ -375,18 +430,26 @@ class _GlassScrollEdgeEffectState extends State<GlassScrollEdgeEffect> {
       left: 0,
       right: 0,
       height: height,
-      child: IgnorePointer(
-        child: hasTexture
-            ? CustomPaint(
-                size: Size(screenSize.width, height),
-                painter: _TextureFadePainter(
-                  image: _backgroundImage!,
-                  isTop: isTop,
-                  screenHeight: screenSize.height,
-                  style: widget.style,
-                ),
-              )
-            : _buildColorOverlay(isTop: isTop),
+      child: AbsorbPointer(
+        absorbing: widget.absorbPointer,
+        child: IgnorePointer(
+          child: hasTexture
+              // RepaintBoundary caches the static faded texture strip on the
+              // GPU so 60/120 Hz scroll repaints underneath do not re-run two
+              // full-width canvas.saveLayer + dstIn passes every frame.
+              ? RepaintBoundary(
+                  child: CustomPaint(
+                    size: Size(screenSize.width, height),
+                    painter: _TextureFadePainter(
+                      image: _backgroundImage!,
+                      isTop: isTop,
+                      screenHeight: screenSize.height,
+                      style: widget.style,
+                    ),
+                  ),
+                )
+              : _buildColorOverlay(isTop: isTop),
+        ),
       ),
     );
   }
@@ -447,13 +510,16 @@ class _GlassScrollEdgeEffectState extends State<GlassScrollEdgeEffect> {
 /// - **Hard**: holds opacity longer then drops sharply, but still includes a
 ///   feathered tail to avoid the hard cutoff seam.
 class _FadeCurve {
-  const _FadeCurve(this.alphas, this.stops);
+  const _FadeCurve(this.alphas, this.stops, this.maskColors);
 
   /// Alpha multipliers from edge (1.0 = fully opaque) to content (0.0).
   final List<double> alphas;
 
   /// Corresponding gradient stop positions in [0, 1].
   final List<double> stops;
+
+  /// Pre-computed black-with-alpha stops for [_TextureFadePainter]'s dstIn mask.
+  final List<Color> maskColors;
 }
 
 /// Gradient curves for the two raster styles ([soft] and [hard] only).
@@ -468,6 +534,13 @@ const Map<GlassScrollEdgeStyle, _FadeCurve> _kFadeCurves = {
   GlassScrollEdgeStyle.soft: _FadeCurve(
     [1.0, 0.70, 0.30, 0.04, 0.0],
     [0.0, 0.15, 0.45, 0.75, 0.92],
+    [
+      Color(0xFF000000),
+      Color(0xB3000000),
+      Color(0x4D000000),
+      Color(0x0A000000),
+      Color(0x00000000),
+    ],
   ),
   // Hard: crisp but feathered. Stays opaque for longer (the "hard" feel),
   // then drops more steeply, but still includes a tail to prevent seaming.
@@ -476,6 +549,13 @@ const Map<GlassScrollEdgeStyle, _FadeCurve> _kFadeCurves = {
   GlassScrollEdgeStyle.hard: _FadeCurve(
     [1.0, 0.90, 0.50, 0.04, 0.0],
     [0.0, 0.30, 0.60, 0.85, 0.95],
+    [
+      Color(0xFF000000),
+      Color(0xE6000000),
+      Color(0x80000000),
+      Color(0x0A000000),
+      Color(0x00000000),
+    ],
   ),
 };
 
@@ -503,6 +583,9 @@ class _TextureFadePainter extends CustomPainter {
   final double screenHeight;
   final GlassScrollEdgeStyle style;
 
+  static final Paint _layerPaint = Paint();
+  static final Paint _imagePaint = Paint();
+
   @override
   void paint(Canvas canvas, Size size) {
     if (size.isEmpty) return;
@@ -525,10 +608,10 @@ class _TextureFadePainter extends CustomPainter {
 
     // Paint the background strip with gradient alpha.
     // saveLayer is safe here — no BackdropFilterLayer inside.
-    canvas.saveLayer(dstRect, Paint());
+    canvas.saveLayer(dstRect, _layerPaint);
 
     // Draw the background texture slice.
-    canvas.drawImageRect(image, srcRect, dstRect, Paint());
+    canvas.drawImageRect(image, srcRect, dstRect, _imagePaint);
 
     // Apply gradient alpha mask: opaque at the edge, transparent towards
     // the content. Uses a multi-stop eased gradient to produce a
@@ -539,9 +622,7 @@ class _TextureFadePainter extends CustomPainter {
       ..shader = LinearGradient(
         begin: isTop ? Alignment.topCenter : Alignment.bottomCenter,
         end: isTop ? Alignment.bottomCenter : Alignment.topCenter,
-        colors: curve.alphas
-            .map((a) => Color.fromARGB((a * 255).round(), 0, 0, 0))
-            .toList(),
+        colors: curve.maskColors,
         stops: curve.stops,
       ).createShader(dstRect);
 

@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 3.2.0+3200
+version: 3.2.1+3210
 
 environment:
   sdk: ^3.14.0
@@ -136,12 +136,12 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
-  # [v2.7.7] 确保 1.4.0 液态玻璃着色器全部正确附带到 Release 版本
+  # [v2.7.7 / v3.2.1] 确保 1.20.0 液态玻璃着色器全部正确附带到 Release 版本
   shaders:
     - plugins/liquid_glass_widgets/shaders/lightweight_glass.frag
     - plugins/liquid_glass_widgets/shaders/interactive_indicator.frag
     - plugins/liquid_glass_widgets/shaders/liquid_glass_geometry_blended.frag
-    - plugins/liquid_glass_widgets/shaders/liquid_glass_final_render.frag
+    - plugins/liquid_glass_widgets/shaders/liquid_glass_render.frag
     - plugins/liquid_glass_widgets/shaders/progressive_blur.frag
 
   # To add assets to your application, add an assets section, like this:

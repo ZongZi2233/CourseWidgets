@@ -64,9 +64,9 @@ class MiuixTopAppBarState extends ChangeNotifier {
     double initialHeightOffsetLimit = double.negativeInfinity,
     double initialHeightOffset = 0,
     double initialContentOffset = 0,
-  })  : _heightOffsetLimit = initialHeightOffsetLimit,
-        _heightOffset = initialHeightOffset,
-        _contentOffset = initialContentOffset;
+  }) : _heightOffsetLimit = initialHeightOffsetLimit,
+       _heightOffset = initialHeightOffset,
+       _contentOffset = initialContentOffset;
 
   double _heightOffsetLimit;
   double _heightOffset;
@@ -116,22 +116,33 @@ class MiuixTopAppBarState extends ChangeNotifier {
     // 仅记账不通知：折叠量已被钳制在端点时，每个滚动像素都通知会让监听者
     // 白白重建（可见为标题闪烁 / 无谓的重绘开销）。
     if (_contentOffset == value) return;
+    final crossedTop = (_contentOffset < 0) != (value < 0);
     _contentOffset = value;
+    // OS4 材质仅在页面离开/回到顶部时需要额外通知。
+    if (crossedTop) _notify();
   }
 
   bool _notifyScheduled = false;
+  bool _disposed = false;
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
 
   /// 布局/绘制阶段（滚动通知可能在 performLayout 中冒泡）直接 notifyListeners
   /// 会触发 "Build scheduled during frame"，此时延迟到帧末；其余阶段立即通知，
   /// 不引入任何一帧滞后。
   void _notify() {
+    if (_disposed) return;
     if (SchedulerBinding.instance.schedulerPhase ==
         SchedulerPhase.persistentCallbacks) {
       if (_notifyScheduled) return;
       _notifyScheduled = true;
       SchedulerBinding.instance.addPostFrameCallback((_) {
         _notifyScheduled = false;
-        notifyListeners();
+        if (!_disposed) notifyListeners();
       });
       return;
     }
@@ -147,9 +158,9 @@ class MiuixTopAppBarState extends ChangeNotifier {
   /// 内容与 TopAppBar 的重叠百分比。
   double get overlappedFraction {
     if (_heightOffsetLimit == 0 || _heightOffsetLimit.isInfinite) return 0;
-    final v = 1 -
-        (_heightOffsetLimit - _contentOffset)
-                .clamp(_heightOffsetLimit, 0.0) /
+    final v =
+        1 -
+        (_heightOffsetLimit - _contentOffset).clamp(_heightOffsetLimit, 0.0) /
             _heightOffsetLimit;
     return v.clamp(0.0, 1.0);
   }
@@ -188,8 +199,7 @@ abstract class MiuixScrollBehavior {
 /// );
 /// MiuixTopAppBar(title: 'Title', scrollBehavior: behavior);
 /// ```
-class MiuixExitUntilCollapsedScrollBehavior
-    implements MiuixScrollBehavior {
+class MiuixExitUntilCollapsedScrollBehavior implements MiuixScrollBehavior {
   MiuixExitUntilCollapsedScrollBehavior({
     MiuixTopAppBarState? state,
     this.canScroll,
@@ -290,9 +300,7 @@ class MiuixExitUntilCollapsedScrollBehavior
     _syncOffsetToPosition(metrics);
 
     // 可选增强：折叠后锁定小标题，直到新手势。
-    if (lockSmallTitleUntilTop &&
-        state.heightOffset < -5.0 &&
-        pixels > 0.5) {
+    if (lockSmallTitleUntilTop && state.heightOffset < -5.0 && pixels > 0.5) {
       _smallTitleLocked = true;
     }
 
@@ -316,8 +324,9 @@ class MiuixExitUntilCollapsedScrollBehavior
     if (n is ScrollEndNotification) {
       // 回弹期标题一直冻结，当前折叠比例即松手时的比例——吸附到近端。
       final fraction = state.collapsedFraction;
-      state.heightOffset =
-          fraction >= MiuixTopAppBarDefaults.titleCoverHandoff ? limit : 0.0;
+      state.heightOffset = fraction >= MiuixTopAppBarDefaults.titleCoverHandoff
+          ? limit
+          : 0.0;
       state.contentOffset = metrics.pixels;
       return false;
     }
@@ -373,12 +382,12 @@ class MiuixExitUntilCollapsedScrollBehavior
     final metrics = n.metrics;
     final expansion = -limit;
     final minExtent = metrics.minScrollExtent;
-    final targetPixels =
-        fraction < 0.5 ? minExtent : minExtent + expansion;
+    final targetPixels = fraction < 0.5 ? minExtent : minExtent + expansion;
 
     final context = n.context;
-    final ScrollPosition? position =
-        context == null ? null : Scrollable.maybeOf(context)?.position;
+    final ScrollPosition? position = context == null
+        ? null
+        : Scrollable.maybeOf(context)?.position;
     if (position == null || !position.hasPixels) return;
     if ((position.pixels - targetPixels).abs() < 0.5) return;
 
@@ -485,6 +494,9 @@ class MiuixTopAppBar extends StatefulWidget {
     this.blurred = false,
     this.blurRadius = 24,
     this.blurTintAlpha = 0.55,
+    this.largeTitleBlurRadius = 0,
+    this.titleAlpha = 1,
+    this.clipBehavior = Clip.hardEdge,
   });
 
   final String title;
@@ -544,6 +556,15 @@ class MiuixTopAppBar extends StatefulWidget {
   /// 毛玻璃上叠加的背景色调不透明度 [0,1]。仅 [blurred] 为 true 时生效。
   /// 太高会盖住模糊、太低对比不足；默认 0.55。
   final double blurTintAlpha;
+
+  /// OS4 大标题折叠模糊；0 保持原行为。
+  final double largeTitleBlurRadius;
+
+  /// 大、小标题及副标题的统一透明度，用于搜索模式过渡。
+  final double titleAlpha;
+
+  /// OS4 允许操作按钮阴影超出栏边界，大标题仍单独裁切。
+  final Clip clipBehavior;
 
   @override
   State<MiuixTopAppBar> createState() => _MiuixTopAppBarState();
@@ -626,18 +647,47 @@ class _MiuixTopAppBarState extends State<MiuixTopAppBar>
         }
       }
 
+      if (widget.navigationIcon == null) _navigationIconSize = null;
+      if (widget.actions?.isEmpty ?? true) _actionsSize = null;
+      if (widget.bottomContent == null) _bottomContentSize = null;
       measure(_largeTitleKey, _largeTitleSize, (s) => _largeTitleSize = s);
-      measure(_navigationIconKey, _navigationIconSize,
-          (s) => _navigationIconSize = s);
+      measure(
+        _navigationIconKey,
+        _navigationIconSize,
+        (s) => _navigationIconSize = s,
+      );
       measure(_actionsKey, _actionsSize, (s) => _actionsSize = s);
       measure(_subtitleKey, _subtitleSize, (s) => _subtitleSize = s);
-      measure(_bottomContentKey, _bottomContentSize,
-          (s) => _bottomContentSize = s);
+      measure(
+        _bottomContentKey,
+        _bottomContentSize,
+        (s) => _bottomContentSize = s,
+      );
       if (mounted) {
         _measured = true;
         setState(() {});
       }
     });
+  }
+
+  Widget _titleOpacity({
+    required double opacity,
+    required Widget child,
+    bool large = false,
+  }) {
+    return Opacity(
+      opacity: (opacity * widget.titleAlpha).clamp(0.0, 1.0),
+      child: large && widget.largeTitleBlurRadius > 0
+          ? ImageFiltered(
+              imageFilter: ui.ImageFilter.blur(
+                sigmaX: widget.largeTitleBlurRadius * (1 - opacity),
+                sigmaY: widget.largeTitleBlurRadius * (1 - opacity),
+                tileMode: TileMode.decal,
+              ),
+              child: child,
+            )
+          : child,
+    );
   }
 
   @override
@@ -661,14 +711,12 @@ class _MiuixTopAppBarState extends State<MiuixTopAppBar>
     final expansion = largeTitleHeight.clamp(0.0, double.infinity);
 
     // 主标题的"大字号"与"小字号"样式（不随 fraction 变化，定义在 builder 外避免每帧重建）。
-    final largeTitleStyle = theme.textStyles.title1.copyWith(
-      color: largeTitleColor,
-      fontWeight: FontWeight.normal,
-    ).withMiuixWeight(theme.fontWeightAdjustment);
-    final smallTitleStyle = theme.textStyles.title3.copyWith(
-      color: titleColor,
-      fontWeight: FontWeight.w500,
-    ).withMiuixWeight(theme.fontWeightAdjustment);
+    final largeTitleStyle = theme.textStyles.title1
+        .copyWith(color: largeTitleColor, fontWeight: FontWeight.normal)
+        .withMiuixWeight(theme.fontWeightAdjustment);
+    final smallTitleStyle = theme.textStyles.title3
+        .copyWith(color: titleColor, fontWeight: FontWeight.w500)
+        .withMiuixWeight(theme.fontWeightAdjustment);
 
     // 测量并缓存大/小字号下的文字尺寸：只在标题文字变化时重算，
     // 滚动时不创建任何 TextPainter（文字 shaping 昂贵，每帧调用会掉帧）。
@@ -696,8 +744,9 @@ class _MiuixTopAppBarState extends State<MiuixTopAppBar>
     final verticalCenter = collapsedHeight / 2;
 
     // 副标题高度（用于 contentTop 计算）。
-    final smallSubtitleHeight =
-        hasSubtitle ? (_subtitleSize?.height ?? 0.0) : 0.0;
+    final smallSubtitleHeight = hasSubtitle
+        ? (_subtitleSize?.height ?? 0.0)
+        : 0.0;
     final expandedBottomPadding = hasSubtitle
         ? MiuixTopAppBarDefaults.subtitleBottomPadding
         : MiuixTopAppBarDefaults.largeTitleBottomPadding;
@@ -705,9 +754,8 @@ class _MiuixTopAppBarState extends State<MiuixTopAppBar>
 
     _scheduleMeasure();
 
-    final mediaQuery = MediaQuery.of(context);
     final horizontalPadding = widget.defaultWindowInsetsPadding
-        ? mediaQuery.padding.horizontal
+        ? MediaQuery.paddingOf(context).horizontal
         : 0.0;
 
     final navWidth = _navigationIconSize?.width ?? 0.0;
@@ -715,7 +763,8 @@ class _MiuixTopAppBarState extends State<MiuixTopAppBar>
     final actionsWidth = _actionsSize?.width ?? 0.0;
     final actionsHeight = _actionsSize?.height ?? 0.0;
 
-    final contentWidth = mediaQuery.size.width - horizontalPadding * 2;
+    final contentWidth =
+        MediaQuery.sizeOf(context).width - horizontalPadding * 2;
 
     Widget body = AnimatedBuilder(
       animation: Listenable.merge([
@@ -737,8 +786,8 @@ class _MiuixTopAppBarState extends State<MiuixTopAppBar>
         // === 小标题阈值开关（原版 boolean derivedStateOf） ===
         // 跨过 1/3 折叠时翻转一次，由弹簧曲线驱动透明度 + 上浮过渡；
         // 而非每帧跟随 fraction。
-        final smallVisible = curFraction >=
-            MiuixTopAppBarDefaults.smallTitleRevealFraction;
+        final smallVisible =
+            curFraction >= MiuixTopAppBarDefaults.smallTitleRevealFraction;
         if (_smallTitleShown == null) {
           // 首次构建：直接定位到当前状态，不播放动画。
           _smallTitleShown = smallVisible;
@@ -754,11 +803,12 @@ class _MiuixTopAppBarState extends State<MiuixTopAppBar>
 
         // === 大标题：原版公式 `alpha = 1 - (collapsedFraction * 3)` ===
         // 从折叠的第一个像素就开始淡出，1/3 处完全消失，早于小标题出现。
-        final largeOpacity = (1.0 -
-                curFraction * MiuixTopAppBarDefaults.largeTitleFadeRate)
-            .clamp(0.0, 1.0);
+        final largeOpacity =
+            (1.0 - curFraction * MiuixTopAppBarDefaults.largeTitleFadeRate)
+                .clamp(0.0, 1.0);
         final smallOpacity = _smallTitleAnim.value;
-        final smallTitleRise = MiuixTopAppBarDefaults.smallTitleRisePx *
+        final smallTitleRise =
+            MiuixTopAppBarDefaults.smallTitleRisePx *
             (1.0 - _smallTitleAnim.value);
 
         // 大标题端点：左对齐，随折叠偏移上移。
@@ -771,8 +821,10 @@ class _MiuixTopAppBarState extends State<MiuixTopAppBar>
         // 小标题端点：水平居中（避开 nav/actions），垂直中心 = verticalCenter。
         // 文字宽度先按 nav/actions 之间的可用区间钳制：超长标题按钳制后的
         // 宽度参与定位，再由 Positioned 上的 maxWidth 约束触发省略号。
-        final smallAvailWidth =
-            math.max(0.0, contentWidth - navWidth - actionsWidth);
+        final smallAvailWidth = math.max(
+          0.0,
+          contentWidth - navWidth - actionsWidth,
+        );
         final smallTitleWidth = math.min(_smallTitleTextWidth, smallAvailWidth);
         var smallLeft = (contentWidth - smallTitleWidth) / 2;
         if (smallLeft < navWidth) {
@@ -812,7 +864,7 @@ class _MiuixTopAppBarState extends State<MiuixTopAppBar>
           width: contentWidth,
           height: curLayoutHeight,
           child: Stack(
-            clipBehavior: Clip.hardEdge,
+            clipBehavior: widget.clipBehavior,
             children: [
               // === 下层：大标题（+ 大副标题），严格位于折叠带之下 ===
               // 图层起点在折叠带下缘（top = collapsedHeight），字形随折叠
@@ -823,7 +875,8 @@ class _MiuixTopAppBarState extends State<MiuixTopAppBar>
                 top: collapsedHeight,
                 left: 0,
                 right: 0,
-                height: _largeTitleTextHeight +
+                height:
+                    _largeTitleTextHeight +
                     (hasSubtitle ? smallSubtitleHeight : 0.0),
                 child: ClipRect(
                   child: Stack(
@@ -831,7 +884,8 @@ class _MiuixTopAppBarState extends State<MiuixTopAppBar>
                       Positioned(
                         left: largeLeft,
                         top: effectiveOffset,
-                        child: Opacity(
+                        child: _titleOpacity(
+                          large: true,
                           opacity: largeOpacity,
                           child: ConstrainedBox(
                             constraints: BoxConstraints(
@@ -851,7 +905,8 @@ class _MiuixTopAppBarState extends State<MiuixTopAppBar>
                         Positioned(
                           left: largeLeft,
                           top: _largeTitleTextHeight + effectiveOffset,
-                          child: Opacity(
+                          child: _titleOpacity(
+                            large: true,
                             opacity: largeOpacity,
                             child: ConstrainedBox(
                               constraints: BoxConstraints(
@@ -861,7 +916,9 @@ class _MiuixTopAppBarState extends State<MiuixTopAppBar>
                                 widget.subtitle,
                                 style: theme.textStyles.body2
                                     .copyWith(color: subtitleColor)
-                                    .withMiuixWeight(theme.fontWeightAdjustment),
+                                    .withMiuixWeight(
+                                      theme.fontWeightAdjustment,
+                                    ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -878,11 +935,10 @@ class _MiuixTopAppBarState extends State<MiuixTopAppBar>
                 Positioned(
                   left: smallLeft,
                   top: smallTitleTop + smallTitleRise,
-                  child: Opacity(
+                  child: _titleOpacity(
                     opacity: smallOpacity,
                     child: ConstrainedBox(
-                      constraints:
-                          BoxConstraints(maxWidth: smallTitleMaxWidth),
+                      constraints: BoxConstraints(maxWidth: smallTitleMaxWidth),
                       child: Text(
                         widget.title,
                         style: smallTitleStyle,
@@ -898,11 +954,10 @@ class _MiuixTopAppBarState extends State<MiuixTopAppBar>
                 Positioned(
                   left: smallSubtitleLeft,
                   top: smallTitleBottomForLayout + smallTitleRise,
-                  child: Opacity(
+                  child: _titleOpacity(
                     opacity: smallOpacity,
                     child: ConstrainedBox(
-                      constraints:
-                          BoxConstraints(maxWidth: smallAvailWidth),
+                      constraints: BoxConstraints(maxWidth: smallAvailWidth),
                       child: Text(
                         widget.subtitle,
                         style: theme.textStyles.body2
@@ -918,19 +973,29 @@ class _MiuixTopAppBarState extends State<MiuixTopAppBar>
               // 导航图标（垂直居中）
               if (widget.navigationIcon != null)
                 Positioned(
-                  left: widget.navigationIconPadding,
+                  left: 0,
                   top: verticalCenter - navHeight / 2,
-                  child: widget.navigationIcon!,
+                  child: Padding(
+                    key: _navigationIconKey,
+                    padding: EdgeInsets.only(
+                      left: widget.navigationIconPadding,
+                    ),
+                    child: widget.navigationIcon!,
+                  ),
                 ),
 
               // 操作图标（垂直居中，右对齐）
               if (widget.actions?.isNotEmpty ?? false)
                 Positioned(
-                  right: widget.actionIconPadding,
+                  right: 0,
                   top: verticalCenter - actionsHeight / 2,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: widget.actions!,
+                  child: Padding(
+                    key: _actionsKey,
+                    padding: EdgeInsets.only(right: widget.actionIconPadding),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: widget.actions!,
+                    ),
                   ),
                 ),
 
@@ -940,7 +1005,10 @@ class _MiuixTopAppBarState extends State<MiuixTopAppBar>
                   left: 0,
                   right: 0,
                   top: curContentTop,
-                  child: widget.bottomContent!,
+                  child: KeyedSubtree(
+                    key: _bottomContentKey,
+                    child: widget.bottomContent!,
+                  ),
                 ),
             ],
           ),
@@ -948,7 +1016,7 @@ class _MiuixTopAppBarState extends State<MiuixTopAppBar>
       },
     );
 
-    // 测量层：与显示层一致的 widget 树，用 Offstage 测出真实尺寸。
+    // 仅纯文本使用离屏测量；交互槽从实际渲染节点读取尺寸，禁止重复挂载 GlobalKey。
     Widget measurer = Offstage(
       offstage: true,
       child: Column(
@@ -985,21 +1053,6 @@ class _MiuixTopAppBarState extends State<MiuixTopAppBar>
               ),
             ),
           ),
-          if (widget.navigationIcon != null)
-            Padding(
-              key: _navigationIconKey,
-              padding: EdgeInsets.only(left: widget.navigationIconPadding),
-              child: widget.navigationIcon!,
-            ),
-          if (widget.actions?.isNotEmpty ?? false)
-            Padding(
-              key: _actionsKey,
-              padding: EdgeInsets.only(right: widget.actionIconPadding),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: widget.actions!,
-              ),
-            ),
           Padding(
             key: _subtitleKey,
             padding: const EdgeInsets.symmetric(horizontal: 0),
@@ -1009,11 +1062,6 @@ class _MiuixTopAppBarState extends State<MiuixTopAppBar>
               color: subtitleColor,
             ),
           ),
-          if (widget.bottomContent != null)
-            KeyedSubtree(
-              key: _bottomContentKey,
-              child: widget.bottomContent!,
-            ),
         ],
       ),
     );
@@ -1029,13 +1077,17 @@ class _MiuixTopAppBarState extends State<MiuixTopAppBar>
     }
 
     final Widget foreground = SafeArea(
-      top: true,
+      top: widget.defaultWindowInsetsPadding,
       bottom: false,
       child: Padding(
         padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
         child: Stack(
+          clipBehavior: widget.clipBehavior,
           children: [
-            ClipRect(child: body),
+            if (widget.clipBehavior == Clip.none)
+              body
+            else
+              ClipRect(clipBehavior: widget.clipBehavior, child: body),
             measurer,
           ],
         ),
@@ -1126,9 +1178,9 @@ class MiuixSmallTopAppBar extends StatelessWidget {
       });
     }
 
-    final mediaQuery = MediaQuery.of(context);
-    final horizontalPadding =
-        defaultWindowInsetsPadding ? mediaQuery.padding.horizontal : 0.0;
+    final horizontalPadding = defaultWindowInsetsPadding
+        ? MediaQuery.paddingOf(context).horizontal
+        : 0.0;
 
     final hasSubtitle = subtitle.isNotEmpty;
     final centerHeight = MiuixTopAppBarDefaults.smallTopAppBarCenterHeight;
@@ -1153,8 +1205,7 @@ class MiuixSmallTopAppBar extends StatelessWidget {
                       Align(
                         alignment: Alignment.centerLeft,
                         child: Padding(
-                          padding:
-                              EdgeInsets.only(left: navigationIconPadding),
+                          padding: EdgeInsets.only(left: navigationIconPadding),
                           child: navigationIcon!,
                         ),
                       ),
@@ -1162,8 +1213,7 @@ class MiuixSmallTopAppBar extends StatelessWidget {
                       Align(
                         alignment: Alignment.centerRight,
                         child: Padding(
-                          padding:
-                              EdgeInsets.only(right: actionIconPadding),
+                          padding: EdgeInsets.only(right: actionIconPadding),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: actions!,
@@ -1173,8 +1223,7 @@ class MiuixSmallTopAppBar extends StatelessWidget {
                     Align(
                       alignment: Alignment.center,
                       child: Padding(
-                        padding:
-                            EdgeInsets.symmetric(horizontal: titlePadding),
+                        padding: EdgeInsets.symmetric(horizontal: titlePadding),
                         child: MiuixText(
                           title,
                           style: theme.textStyles.title3,

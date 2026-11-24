@@ -417,9 +417,9 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('实况导视样式预览'), findsOneWidget);
-      expect(find.text('1-2'), findsOneWidget);
-      expect(find.text('节'), findsOneWidget);
-      expect(find.textContaining('A101', findRichText: true), findsOneWidget);
+      expect(find.text('1-2节'), findsOneWidget);
+      expect(find.textContaining('A101', findRichText: true), findsAtLeastNWidgets(1));
+      expect(find.textContaining('课表 ·', findRichText: true), findsNothing);
       expect(find.textContaining('轨道', findRichText: true), findsNothing);
       expect(find.textContaining('JR', findRichText: true), findsNothing);
       expect(find.textContaining('重庆', findRichText: true), findsNothing);

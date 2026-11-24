@@ -1,4 +1,8 @@
+import 'dart:math' as math;
+
 import 'package:flutter/widgets.dart';
+
+import '../../../utils/indicator_jelly.dart';
 
 // =============================================================================
 // Masking Quality
@@ -77,6 +81,8 @@ class JellyClipper extends CustomClipper<Path> {
     required this.transform,
     required this.borderRadius,
     this.inverse = false,
+    this.jelly,
+    this.clampExpansionToTrack = false,
   });
 
   /// The number of items.
@@ -100,6 +106,14 @@ class JellyClipper extends CustomClipper<Path> {
   /// Whether the clipper is inverted.
   final bool inverse;
 
+  /// Native-style jelly deformation. When non-null it replaces [transform]
+  /// so the mask matches the lens exactly.
+  final IndicatorJelly? jelly;
+
+  /// Whether the lifted mask stops at the ends of the clip area, matching
+  /// [AnimatedGlassIndicator.clampExpansionToTrack].
+  final bool clampExpansionToTrack;
+
   /// Threshold for clip recalculation optimization.
   ///
   /// When changes in alignment or thickness are below this threshold,
@@ -109,25 +123,44 @@ class JellyClipper extends CustomClipper<Path> {
 
   @override
   Path getClip(Size size) {
-    final tabWidth = size.width / itemCount;
-    final availableWidth = size.width - tabWidth;
+    // AnimatedGlassIndicator pads the WHOLE track before dividing it into
+    // equal-width cells. Use the same order here: insetting each cell instead
+    // makes the mask narrower than the lens, with a position-dependent offset.
+    const indicatorInset = 4.0;
+    final trackWidth = size.width - 2 * indicatorInset;
+    final tabWidth = trackWidth / itemCount;
+    final availableWidth = trackWidth - tabWidth;
+    final rawLeft = indicatorInset + (alignment.x + 1) / 2 * availableWidth;
 
-    // Map alignment (-1 to 1) to horizontal offset
-    final left = (alignment.x + 1) / 2 * availableWidth;
-
-    final baseRect = Rect.fromLTWH(left, 0, tabWidth, size.height);
+    // Keep the edge tab covered during rubber-band overdrag (#328). Only
+    // extend the outward edge; normal positions still match the optical lens.
+    final left = rawLeft.clamp(
+      double.negativeInfinity,
+      indicatorInset + availableWidth,
+    );
+    final right = (rawLeft + tabWidth).clamp(
+      indicatorInset + tabWidth,
+      double.infinity,
+    );
     final paddedRect = Rect.fromLTRB(
-      baseRect.left + 4.0,
-      baseRect.top + 4.0,
-      baseRect.right - 4.0,
-      baseRect.bottom - 4.0,
+      left,
+      indicatorInset,
+      right,
+      size.height - indicatorInset,
     );
 
     // Apply expansion based on thickness (drag state)
+    var inflatedLeft = paddedRect.left - (expansion.left * thickness);
+    var inflatedRight = paddedRect.right + (expansion.right * thickness);
+    if (clampExpansionToTrack) {
+      inflatedLeft = math.min(paddedRect.left, math.max(inflatedLeft, 0.0));
+      inflatedRight =
+          math.max(paddedRect.right, math.min(inflatedRight, size.width));
+    }
     final inflatedRect = Rect.fromLTRB(
-      paddedRect.left - (expansion.left * thickness),
+      inflatedLeft,
       paddedRect.top - (expansion.top * thickness),
-      paddedRect.right + (expansion.right * thickness),
+      inflatedRight,
       paddedRect.bottom + (expansion.bottom * thickness),
     );
 
@@ -142,12 +175,19 @@ class JellyClipper extends CustomClipper<Path> {
         Radius.circular(safeRadius > 0 ? safeRadius : 0),
       ));
 
-    // Apply jelly physics transform around the center
-    final center = inflatedRect.center;
-    final centeredTransform = Matrix4.identity()
-      ..translateByDouble(center.dx, center.dy, 0.0, 1.0)
-      ..multiply(transform)
-      ..translateByDouble(-center.dx, -center.dy, 0.0, 1.0);
+    // Apply the jelly transform: the classic velocity squash around the
+    // centre, or the native jelly (scale plus shift).
+    final Matrix4 centeredTransform;
+    final nativeJelly = jelly;
+    if (nativeJelly != null) {
+      centeredTransform = nativeJelly.matrixFor(inflatedRect);
+    } else {
+      final center = inflatedRect.center;
+      centeredTransform = Matrix4.identity()
+        ..translateByDouble(center.dx, center.dy, 0.0, 1.0)
+        ..multiply(transform)
+        ..translateByDouble(-center.dx, -center.dy, 0.0, 1.0);
+    }
 
     final indicatorPath = path.transform(centeredTransform.storage);
 
@@ -168,6 +208,8 @@ class JellyClipper extends CustomClipper<Path> {
         borderRadius == oldClipper.borderRadius &&
         expansion == oldClipper.expansion &&
         transform == oldClipper.transform &&
+        jelly == oldClipper.jelly &&
+        clampExpansionToTrack == oldClipper.clampExpansionToTrack &&
         (alignment.x - oldClipper.alignment.x).abs() < _recalcThreshold &&
         (thickness - oldClipper.thickness).abs() < _recalcThreshold) {
       return false;
@@ -178,6 +220,8 @@ class JellyClipper extends CustomClipper<Path> {
         thickness != oldClipper.thickness ||
         expansion != oldClipper.expansion ||
         transform != oldClipper.transform ||
+        jelly != oldClipper.jelly ||
+        clampExpansionToTrack != oldClipper.clampExpansionToTrack ||
         borderRadius != oldClipper.borderRadius ||
         inverse != oldClipper.inverse;
   }

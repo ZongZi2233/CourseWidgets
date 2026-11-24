@@ -76,7 +76,8 @@ class ScheduleGlanceWidget : GlanceAppWidget() {
         val isOngoing: Boolean,
         val currentIdx: Int = 0,
         val totalCount: Int = 1,
-        val nextHint: String? = null
+        val nextHint: String? = null,
+        val dotColors: List<Int> = emptyList()
     )
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
@@ -302,14 +303,15 @@ class ScheduleGlanceWidget : GlanceAppWidget() {
 
                                 Spacer(modifier = GlanceModifier.height(4.dp))
 
-                                // 矢量多节点时间轴进度条（与 Android 16 实况通知同款圆点节点设计）
+                                // 矢量多节点时间轴进度条（与 Android 16 实况通知同款按课程区分颜色圆点设计）
                                 val timelineBmp = renderWidgetNodeTimeline(
                                     context = context,
                                     progressPercent = courseData.progressPercent,
                                     activeColor = courseData.statusColorArgb,
                                     currentIdx = courseData.currentIdx,
                                     totalCount = courseData.totalCount,
-                                    isOngoing = courseData.isOngoing
+                                    isOngoing = courseData.isOngoing,
+                                    dotColors = courseData.dotColors
                                 )
                                 Image(
                                     provider = ImageProvider(timelineBmp),
@@ -362,7 +364,8 @@ class ScheduleGlanceWidget : GlanceAppWidget() {
         activeColor: Int,
         currentIdx: Int,
         totalCount: Int,
-        isOngoing: Boolean
+        isOngoing: Boolean,
+        dotColors: List<Int> = emptyList()
     ): Bitmap {
         val dm = context.resources.displayMetrics
         val density = dm.density.coerceIn(2.0f, 3.5f)
@@ -374,7 +377,7 @@ class ScheduleGlanceWidget : GlanceAppWidget() {
 
         val trackPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.FILL
-            color = 0x2EFFFFFF
+            color = LiveUpdateNotificationManager.mixColor(activeColor, 0xFF161A22.toInt(), 0.28f)
         }
         val activePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.FILL
@@ -398,13 +401,27 @@ class ScheduleGlanceWidget : GlanceAppWidget() {
         val futureDots = (totalCount - 1 - currentIdx).coerceIn(0, 4)
 
         var leftX = dotR + 1f * density
+        val pastStartIdx = (currentIdx - pastDots).coerceAtLeast(0)
         for (i in 0 until pastDots) {
+            val cIdx = pastStartIdx + i
+            dotDonePaint.color = if (cIdx in dotColors.indices && dotColors[cIdx] != 0) {
+                LiveUpdateNotificationManager.mixColor(dotColors[cIdx], 0xFF3E4452.toInt(), 0.55f)
+            } else {
+                activeColor
+            }
             canvas.drawCircle(leftX, cy, dotR, dotDonePaint)
             leftX += dotR * 2 + dotGap
         }
 
         var rightX = w - dotR - 1f * density
+        val futureStartIdx = currentIdx + futureDots
         for (i in 0 until futureDots) {
+            val cIdx = futureStartIdx - i
+            dotFuturePaint.color = if (cIdx in dotColors.indices && dotColors[cIdx] != 0) {
+                LiveUpdateNotificationManager.mixColor(dotColors[cIdx], 0xFF232833.toInt(), 0.65f)
+            } else {
+                0x55FFFFFF
+            }
             canvas.drawCircle(rightX, cy, dotR, dotFuturePaint)
             rightX -= dotR * 2 + dotGap
         }
@@ -484,6 +501,12 @@ class ScheduleGlanceWidget : GlanceAppWidget() {
 
         if (dayCourses.isEmpty()) return null
         dayCourses.sortBy { it.optLong("startTime", 0L) }
+        val dayDotColors = dayCourses.map { obj ->
+            LiveUpdateNotificationManager.resolveCourseAccentColor(
+                obj.optString("name", "课程"),
+                obj.optInt("colorArgb", 0)
+            )
+        }
 
         if (dayOffset == 0) {
             // 1. 查找正在进行的课程
@@ -501,10 +524,7 @@ class ScheduleGlanceWidget : GlanceAppWidget() {
                     } else {
                         "今日最后一节"
                     }
-                    cal.timeInMillis = st
-                    val isEvening = cal.get(Calendar.HOUR_OF_DAY) >= 18
-                    // 与参考图一致：日间课采用莫奈薄荷绿 #8AE29A，晚间课采用暖金 #F2CE69
-                    val argb = if (isEvening) 0xFFF2CE69.toInt() else 0xFF8AE29A.toInt()
+                    val argb = dayDotColors[idx]
                     return WidgetCourseData(
                         name = c.optString("name", "课程"),
                         location = c.optString("location", ""),
@@ -518,7 +538,8 @@ class ScheduleGlanceWidget : GlanceAppWidget() {
                         isOngoing = true,
                         currentIdx = idx,
                         totalCount = dayCourses.size,
-                        nextHint = nextHint
+                        nextHint = nextHint,
+                        dotColors = dayDotColors
                     )
                 }
             }
@@ -535,11 +556,7 @@ class ScheduleGlanceWidget : GlanceAppWidget() {
                         diffMin <= 45 -> "课间 · ${diffMin}分后"
                         else -> "待上课 · 共${dayCourses.size - idx}节"
                     }
-                    // 课间/即将上课采用参考图同款玫瑰粉 #EB7A99，远期预告采用柔和冰川蓝 #8AB4F8
-                    val argb = when {
-                        diffMin <= 45 -> 0xFFEB7A99.toInt()
-                        else -> 0xFF8AB4F8.toInt()
-                    }
+                    val argb = dayDotColors[idx]
                     val prevEnd = if (idx > 0) dayCourses[idx - 1].optLong("endTime", st - 600_000L) else st - 1800_000L
                     val breakTotal = (st - prevEnd).coerceAtLeast(60_000L).toDouble()
                     val breakProg = if (diffMin <= 45) {
@@ -558,7 +575,8 @@ class ScheduleGlanceWidget : GlanceAppWidget() {
                         progressPercent = breakProg,
                         isOngoing = diffMin <= 45,
                         currentIdx = idx,
-                        totalCount = dayCourses.size
+                        totalCount = dayCourses.size,
+                        dotColors = dayDotColors
                     )
                 }
             }
@@ -570,7 +588,7 @@ class ScheduleGlanceWidget : GlanceAppWidget() {
             val et = first.optLong("endTime", 0L)
             val countDesc = if (dayCourses.size > 1) " · 共${dayCourses.size}节" else ""
             val statusTitle = if (dayOffset > 0) "首节$countDesc" else "历史$countDesc"
-            val argb = if (dayOffset > 0) 0xFF8AB4F8.toInt() else 0xFF94A3B8.toInt()
+            val argb = if (dayOffset > 0) dayDotColors.first() else 0xFF94A3B8.toInt()
             return WidgetCourseData(
                 name = first.optString("name", "课程"),
                 location = first.optString("location", ""),
@@ -583,7 +601,8 @@ class ScheduleGlanceWidget : GlanceAppWidget() {
                 progressPercent = 0,
                 isOngoing = false,
                 currentIdx = 0,
-                totalCount = dayCourses.size
+                totalCount = dayCourses.size,
+                dotColors = dayDotColors
             )
         }
     }

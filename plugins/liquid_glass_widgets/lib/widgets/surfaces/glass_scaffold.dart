@@ -1,15 +1,31 @@
+import 'dart:math' as math;
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/services.dart';
 
+import '../../theme/glass_theme.dart';
+
+import '../../src/renderer/glass_backdrop_group.dart';
 import '../../src/renderer/liquid_glass_renderer.dart';
 import '../../src/widgets/surfaces/dynamic_preferred_size.dart';
+import '../../src/widgets/surfaces/status_bar_row.dart';
+import '../../src/widgets/surfaces/vertical_bar_background.dart';
+import '../../src/widgets/surfaces/vertical_bar_title_row.dart';
 import '../../types/glass_quality.dart';
 import '../../theme/glass_theme_data.dart';
+import '../shared/glass_accessibility_scope.dart';
 import '../shared/glass_content_aware_scope.dart';
 import '../shared/glass_isolation_scope.dart';
 import '../shared/glass_page.dart';
 import '../shared/glass_scroll_edge_effect.dart';
+import 'glass_app_bar.dart';
+import 'glass_navigation_stack.dart' show GlassNavigationTitleScope;
+import 'glass_tab_bar.dart';
+import 'glass_toolbar.dart';
+import 'glass_vertical_bar.dart';
+
+final Listenable _kEmptyListenable = Listenable.merge(const []);
 
 /// A one-stop-shop scaffold that replaces the manual assembly of [GlassPage],
 /// [Scaffold], [GlassScrollEdgeEffect], and a [Stack] for proper z-ordering.
@@ -123,9 +139,11 @@ class GlassScaffold extends StatelessWidget {
     this.edgeToEdge = false,
     this.themeOverride,
     this.enableBackgroundSampling,
+    this.transitionCornerRadius,
     this.edgeFade = true,
     this.topEdgeFade,
     this.bottomEdgeFade,
+    this.edgeFadeAbsorbsPointers = false,
     this.topEdgeFadeExtent = 20.0,
     this.bottomEdgeFadeExtent = 20.0,
     this.edgeStyle = GlassScrollEdgeStyle.soft,
@@ -198,9 +216,12 @@ class GlassScaffold extends StatelessWidget {
   /// Set this explicitly whenever you use a `background` widget and the edge
   /// fade colour matters.
   ///
-  /// When neither [background] nor [backgroundColor] is set the Scaffold
-  /// inherits `Theme.scaffoldBackgroundColor` as normal — the inner Scaffold
-  /// is **not** forced transparent.
+  /// When neither [background] nor [backgroundColor] is set, the scaffold
+  /// background colour is resolved from the glass brightness cascade (see
+  /// [GlassTheme.brightnessOf]) so that it correctly follows Material
+  /// [ThemeMode] — including [ThemeMode.dark] — rather than relying on
+  /// [CupertinoTheme], which does not read Material's [Theme] in a
+  /// [MaterialApp] (issue #289).
   final Color? backgroundColor;
 
   /// Glass settings for the page's rendering layer. See [GlassPage.settings].
@@ -219,6 +240,11 @@ class GlassScaffold extends StatelessWidget {
   /// absorption. See [GlassPage.enableBackgroundSampling].
   final bool? enableBackgroundSampling;
 
+  /// Continuous superellipse corner radius applied to clip the page surface
+  /// during route push/pop transitions and interactive swipe-back gestures.
+  /// See [GlassPage.transitionCornerRadius].
+  final double? transitionCornerRadius;
+
   // ===========================================================================
   // Edge fading
   // ===========================================================================
@@ -236,6 +262,12 @@ class GlassScaffold extends StatelessWidget {
   /// Whether to fade content at the bottom edge. When `null`, follows
   /// [edgeFade]. Automatically set to `true` when [bottomBar] is provided.
   final bool? bottomEdgeFade;
+
+  /// Whether the edge fades absorb pointer events. Defaults to `false`.
+  ///
+  /// When enabled, taps and gestures are blocked across each visible fade
+  /// zone, including content that is still visible beneath the fade.
+  final bool edgeFadeAbsorbsPointers;
 
   /// Extra fade height beyond the auto-calculated app bar area.
   ///
@@ -319,7 +351,10 @@ class GlassScaffold extends StatelessWidget {
   ///
   /// Use this for floating elements that should render above the body content
   /// but below the app bar and bottom bar. Each widget is typically wrapped
-  /// in an [AnimatedPositioned] or [Positioned].
+  /// in an [AnimatedPositioned] or [Positioned]. Like [appBar] and [bottomBar],
+  /// each overlay is wrapped in a [GlassIsolationScope] with
+  /// `defaultQuality: GlassQuality.premium` so floating pills and action
+  /// buttons render with their own premium glass layer out of the box.
   ///
   /// Example: Apple Music's floating play bar pill:
   /// ```dart
@@ -419,23 +454,47 @@ class GlassScaffold extends StatelessWidget {
   }
 
   Widget _buildContent(BuildContext context, Widget? _) {
-    final mediaQuery = MediaQuery.of(context);
-    final topPad = mediaQuery.padding.top;
-    final botPad = mediaQuery.padding.bottom;
+    final padding = MediaQuery.paddingOf(context);
+    final topPad = padding.top;
+    final botPad = padding.bottom;
+
+    // In iPhone Duo's vertical bar strip a pinned app bar keeps only its
+    // title row, and the package's bottom bars leave the bottom edge for the
+    // strip — so neither covers what its preferred size says it does.
+    final verticalBar = GlassVerticalBar.maybeOf(context);
+    final bar = appBar;
+    final appBarInStrip =
+        verticalBar != null && bar is GlassAppBar && bar.pinnedActions != null;
+    // On iPhone Duo's inner display held upright it shares the status bar's
+    // row, and the content starts under the status bar, as natively.
+    final statusRow = bar is GlassAppBar && bar.pinnedActions != null
+        ? StatusBarRow.of(context)
+        : null;
+    final bottom = bottomBar;
+    final bottomBarInStrip = verticalBar != null &&
+        (bottom is GlassToolbar ||
+            (bottom is GlassTabBar && bottom.followsVerticalBar));
 
     // Resolve effective bar heights.
     // If appBar implements PreferredSizeWidget, use its preferred height;
     // otherwise fall back to the explicit appBarHeight parameter.
-    final effectiveAppBarHeight = appBar is PreferredSizeWidget
-        ? (appBar! as PreferredSizeWidget).preferredSize.height
-        : appBarHeight;
-    final effectiveBottomBarHeight = bottomBar is PreferredSizeWidget
-        ? (bottomBar as PreferredSizeWidget).preferredSize.height
-        : (bottomBar != null ? (bottomBarHeight ?? 60.0) : 0.0);
+    final effectiveAppBarHeight = appBarInStrip
+        ? verticalBar.rowTop + GlassVerticalBarMetrics.rowHeight
+        : statusRow != null
+            ? math.max(0.0, statusRow.bottom - topPad)
+            : appBar is PreferredSizeWidget
+                ? (appBar! as PreferredSizeWidget).preferredSize.height
+                : appBarHeight;
+    final effectiveBottomBarHeight = bottomBarInStrip
+        ? 0.0
+        : bottomBar is PreferredSizeWidget
+            ? (bottomBar as PreferredSizeWidget).preferredSize.height
+            : (bottomBar != null ? (bottomBarHeight ?? 60.0) : 0.0);
 
     // Resolve edge fade toggles.
     final doFadeTop = topEdgeFade ?? (edgeFade && appBar != null);
-    final doFadeBottom = bottomEdgeFade ?? (edgeFade && bottomBar != null);
+    final doFadeBottom =
+        bottomEdgeFade ?? (edgeFade && bottomBar != null && !bottomBarInStrip);
 
     // Calculate fade heights.
     // Only include appBarHeight when an appBar is present — without one, the
@@ -451,17 +510,39 @@ class GlassScaffold extends StatelessWidget {
 
     // Wrap with edge fading if enabled.
     if (extendBody && (doFadeTop || doFadeBottom)) {
-      bodyContent = GlassScrollEdgeEffect(
-        topFadeHeight: topFadeHeight,
-        bottomFadeHeight: bottomFadeHeight,
-        fadeTop: doFadeTop,
-        fadeBottom: doFadeBottom,
-        style: edgeStyle,
-        maxSigma: maxSigma,
-        // Pass the explicit background colour so the async-capture fallback
-        // gradient uses the correct colour in dark mode instead of defaulting
-        // to CupertinoTheme.scaffoldBackgroundColor (which is near-black).
-        fadeColor: backgroundColor,
+      Widget edgeEffect(double topFadeHeight, Widget child) =>
+          GlassScrollEdgeEffect(
+            topFadeHeight: topFadeHeight,
+            bottomFadeHeight: bottomFadeHeight,
+            fadeTop: doFadeTop,
+            fadeBottom: doFadeBottom,
+            absorbPointer: edgeFadeAbsorbsPointers,
+            style: edgeStyle,
+            maxSigma: maxSigma,
+            // Pass the explicit background colour so the async-capture
+            // fallback gradient uses the correct colour in dark mode instead
+            // of defaulting to CupertinoTheme.scaffoldBackgroundColor (which
+            // is near-black).
+            fadeColor: backgroundColor,
+            child: child,
+          );
+
+      // In the strip a large title's row scrolls away, and hides while its
+      // search is open, so the fade under it goes with it. Built the same way
+      // either side of a posture change, so the body is never remounted.
+      final largeTitle = appBarInStrip ? bar.largeTitleController : null;
+      bodyContent = ListenableBuilder(
+        listenable: largeTitle ?? _kEmptyListenable,
+        builder: (context, child) => edgeEffect(
+          largeTitle == null
+              ? topFadeHeight
+              : topFadeHeight -
+                  VerticalBarTitleRow.collapseExtent *
+                      (largeTitle.isSearchPresented
+                          ? 1.0
+                          : largeTitle.collapseProgress),
+          child!,
+        ),
         child: bodyContent,
       );
     }
@@ -477,21 +558,52 @@ class GlassScaffold extends StatelessWidget {
     // them by identity rather than position. Without keys, toggling header
     // (null → widget → null) shifts the index of appBar and bottomBar,
     // causing Flutter to unmount/remount them — losing animation state.
+    // Keep body glass outside the scaffold's top+bottom chrome BackdropGroup
+    // so appBar and bottomBar sample body glass painted beneath them while
+    // sharing a single backdrop read with each other.
+    final Widget isolatedBodyContent = GlassBackdropGroupOptOut(
+      child: bodyContent,
+    );
+
     final stackChildren = <Widget>[
       // 1. Body (bottom of stack — always below bars).
       if (extendBody)
-        Positioned.fill(child: bodyContent)
+        Positioned.fill(child: isolatedBodyContent)
       else
         Positioned(
           top: appBar != null ? topPad + effectiveAppBarHeight : 0,
           left: 0,
           right: 0,
           bottom: bottomBar != null ? effectiveBottomBarHeight + botPad : 0,
-          child: bodyContent,
+          child: isolatedBodyContent,
         ),
 
       // 2. Body overlays (between body and bars — e.g. floating play pill).
-      if (bodyOverlays != null) ...bodyOverlays!,
+      // Uses GlassBackdropGroupOptOut (pure InheritedWidget, no RenderObject)
+      // so Positioned overlays keep their StackParentData directly on Stack.
+      if (bodyOverlays != null)
+        for (final overlay in bodyOverlays!)
+          GlassBackdropGroupOptOut(
+            key: overlay.key == null ? null : ValueKey<Key>(overlay.key!),
+            child: GlassIsolationScope(
+              isolated: true,
+              defaultQuality: GlassQuality.premium,
+              child: overlay,
+            ),
+          ),
+
+      // 2a. Under Reduce Transparency, the strip and the title row turn
+      // opaque behind the bars in iPhone Duo's vertical bar strip.
+      if ((appBarInStrip || bottomBarInStrip) &&
+          GlassAccessibilityData.of(context).reduceTransparency)
+        Positioned.fill(
+          key: const ValueKey('glass_scaffold_vertical_bar_background'),
+          child: VerticalBarBackground(
+            bar: verticalBar,
+            titleRow: appBarInStrip,
+            controller: appBarInStrip ? bar.largeTitleController : null,
+          ),
+        ),
 
       // 2b. Fixed header — fades on scroll (e.g. "Listen Now" in Apple Music).
       // IgnorePointer is only active when opacity == 0 (fully faded) so that
@@ -502,35 +614,38 @@ class GlassScaffold extends StatelessWidget {
           top: 0,
           left: 0,
           right: 0,
-          child: SafeArea(
-            bottom: false,
-            child: headerScrollController != null
-                ? AnimatedBuilder(
-                    animation: headerScrollController!,
-                    builder: (context, child) {
-                      // Guard: during AnimatedSwitcher cross-fades, both old
-                      // and new scroll views briefly share the same controller.
-                      // Reading .offset (or .positions.last) throws if there
-                      // are multiple positions. Falling back to 0.0 for that
-                      // brief ~300 ms window is correct UX — the header just
-                      // stays fully visible during the transition.
-                      final offset = headerScrollController!.hasClients &&
-                              headerScrollController!.positions.length == 1
-                          ? headerScrollController!.offset
-                          : 0.0;
-                      // Guard against divide-by-zero if headerFadeDistance == 0.
-                      final opacity = headerFadeDistance > 0
-                          ? (1.0 - offset / headerFadeDistance).clamp(0.0, 1.0)
-                          : (offset > 0 ? 0.0 : 1.0);
-                      return IgnorePointer(
-                        // Disable hit-testing only when fully invisible.
-                        ignoring: opacity == 0.0,
-                        child: Opacity(opacity: opacity, child: child),
-                      );
-                    },
-                    child: header!,
-                  )
-                : header!,
+          child: GlassBackdropGroupOptOut(
+            child: SafeArea(
+              bottom: false,
+              child: headerScrollController != null
+                  ? AnimatedBuilder(
+                      animation: headerScrollController!,
+                      builder: (context, child) {
+                        // Guard: during AnimatedSwitcher cross-fades, both old
+                        // and new scroll views briefly share the same controller.
+                        // Reading .offset (or .positions.last) throws if there
+                        // are multiple positions. Falling back to 0.0 for that
+                        // brief ~300 ms window is correct UX — the header just
+                        // stays fully visible during the transition.
+                        final offset = headerScrollController!.hasClients &&
+                                headerScrollController!.positions.length == 1
+                            ? headerScrollController!.offset
+                            : 0.0;
+                        // Guard against divide-by-zero if headerFadeDistance == 0.
+                        final opacity = headerFadeDistance > 0
+                            ? (1.0 - offset / headerFadeDistance)
+                                .clamp(0.0, 1.0)
+                            : (offset > 0 ? 0.0 : 1.0);
+                        return IgnorePointer(
+                          // Disable hit-testing only when fully invisible.
+                          ignoring: opacity == 0.0,
+                          child: Opacity(opacity: opacity, child: child),
+                        );
+                      },
+                      child: header!,
+                    )
+                  : header!,
+            ),
           ),
         ),
 
@@ -559,9 +674,14 @@ class GlassScaffold extends StatelessWidget {
       // 3. Bottom bar (above body — painted after body in Stack).
       // SafeArea ensures the bar is never obscured by the Android system
       // navigation bar or the iOS home indicator on any device.
+      //
+      // A bar in iPhone Duo's vertical bar strip gets the full height: it
+      // aligns itself to the bottom of the strip, and a searchable tab bar
+      // opens its field at the top of the content.
       if (bottomBar != null)
         Positioned(
           key: const ValueKey('glass_scaffold_bottom_bar'),
+          top: bottomBarInStrip ? 0 : null,
           left: 0,
           right: 0,
           bottom: 0,
@@ -583,6 +703,12 @@ class GlassScaffold extends StatelessWidget {
         ),
     ];
 
+    // Resolve brightness from the glass brightness cascade (issue #289):
+    // themeOverride.brightness → GlassThemeData.brightness → Cupertino pin →
+    // Material ThemeMode (via glassExternalBrightnessResolver) → system OS.
+    final Brightness resolvedBrightness =
+        themeOverride?.brightness ?? GlassTheme.brightnessOf(context);
+
     // Resolve the system UI overlay style for the AnnotatedRegion.
     // This ensures the status bar icons are correctly styled even on routes
     // pushed via CupertinoPageRoute (which manages its own AnnotatedRegion).
@@ -592,13 +718,22 @@ class GlassScaffold extends StatelessWidget {
     final bool useLightIcons = switch (statusBarStyle) {
       GlassStatusBarStyle.light => true,
       GlassStatusBarStyle.dark => false,
-      GlassStatusBarStyle.auto =>
-        MediaQuery.platformBrightnessOf(context) == Brightness.dark,
+      // Use the glass brightness cascade (issue #289): honours Material
+      // ThemeMode via the external resolver, not just the OS platform setting.
+      GlassStatusBarStyle.auto => resolvedBrightness == Brightness.dark,
       GlassStatusBarStyle.none => true, // doesn't matter — no region
     };
 
-    Widget stackWidget =
-        Stack(clipBehavior: Clip.none, children: stackChildren);
+    Widget stackWidget = GlassNavigationTitleScope(
+      // Enclosing GlassBackdropGroup lets non-overlapping chrome bars
+      // (GlassAppBar, GlassTabBar, GlassToolbar — all joinEnclosing: true)
+      // share a single full-screen backdrop read on Impeller while body and
+      // bodyOverlays explicitly opt out above.
+      child: GlassBackdropGroup(
+        enabled: appBar != null && bottomBar != null,
+        child: Stack(clipBehavior: Clip.none, children: stackChildren),
+      ),
+    );
 
     // Wrap in GlassContentAwareScope when content-aware brightness is on.
     // The scope must be an ancestor of both the sampled body
@@ -609,7 +744,7 @@ class GlassScaffold extends StatelessWidget {
     }
 
     // Resolve effective background: explicit widget > backgroundColor colour >
-    // null (Scaffold inherits Theme.scaffoldBackgroundColor).
+    // null.
     final Widget? effectiveBackground = background ??
         (backgroundColor != null
             ? SizedBox.expand(
@@ -617,15 +752,26 @@ class GlassScaffold extends StatelessWidget {
               )
             : null);
 
-    Widget scaffold = CupertinoPageScaffold(
-      // Only force transparent when GlassPage will render a background widget
-      // behind the scaffold. When no background is provided, null lets
-      // CupertinoPageScaffold use the CupertinoTheme default (opaque) so the
-      // page is not see-through during route transitions (issue #177).
-      backgroundColor:
-          effectiveBackground != null ? const Color(0x00000000) : null,
-      resizeToAvoidBottomInset: resizeToAvoidBottomInset ?? true,
-      child: stackWidget,
+    // Wrap in CupertinoTheme with resolved brightness so CupertinoPageScaffold
+    // and all child Cupertino widgets (GlassAppBar title, etc.) resolve their
+    // dynamic colours (like CupertinoColors.systemBackground) to the correct
+    // brightness in MaterialApp (issue #289).
+    // When no explicit background is provided, passing null for backgroundColor
+    // allows CupertinoPageScaffold to inherit CupertinoTheme.scaffoldBackgroundColor
+    // as an opaque background, preserving route transition opacity (issue #177)
+    // while adapting correctly to dark/light mode.
+    final CupertinoThemeData currentCupertinoTheme = CupertinoTheme.of(context);
+
+    Widget scaffold = CupertinoTheme(
+      data: currentCupertinoTheme.copyWith(
+        brightness: resolvedBrightness,
+      ),
+      child: CupertinoPageScaffold(
+        backgroundColor:
+            effectiveBackground != null ? const Color(0x00000000) : null,
+        resizeToAvoidBottomInset: resizeToAvoidBottomInset ?? true,
+        child: stackWidget,
+      ),
     );
 
     // Wrap in AnnotatedRegion so the status bar style sticks even on
@@ -648,6 +794,7 @@ class GlassScaffold extends StatelessWidget {
       edgeToEdge: edgeToEdge,
       themeOverride: themeOverride,
       enableBackgroundSampling: enableBackgroundSampling,
+      transitionCornerRadius: transitionCornerRadius,
       child: scaffold,
     );
   }

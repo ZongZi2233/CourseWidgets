@@ -57,12 +57,22 @@ uniform float uDpr;
 
 // 33: Meniscus rim darkening — Beer-Lambert absorption at the pill boundary.
 // Applied before specular highlights (physical ordering: light is absorbed
-// first, then reflected). Same formula as liquid_glass_final_render.frag.
+// first, then reflected). Same formula as liquid_glass_render.frag.
 // Range: 0.0 (flat, no absorption) → 1.0 (fully dark rim).
 // iOS 26 reference calibrated at ~0.15.
 uniform float uEdgeAbsorption;
 
+// 34..37: uRimConfig — (rimShade, rimLight, rimShadeEnds, backdropLuma)
+uniform vec4 uRimConfig;
+
+// 38: Grazing-angle Fresnel rim strength [0..∞].
+uniform float uFresnelStrength;
+
 out vec4 fragColor;
+
+float fastPowInd(float x, float n) {
+    return x <= 1e-4 ? 0.0 : exp2(n * log2(x));
+}
 
 // ── Manual Bilinear Filtering ─────────────────────────────────────────────
 // Impeller's explicit setImageSampler() binding may also default to
@@ -80,34 +90,14 @@ out vec4 fragColor;
 // logSize  — uBackgroundSize in logical pixels
 // physSize — uBackgroundSize * uDpr = actual pixel dimensions of the texture
 // invPhys  — 1.0 / physSize (precomputed for efficiency)
+// Hardware-filtered texture lookup with explicit half-texel edge clamping.
+// GlassEffect binds uTexture with FilterQuality.medium (hardware bilinear), so
+// a single texture() fetch replaces the legacy 4-tap manual bilinear gather
+// while preserving ClampToEdge semantics during jelly/stretch overshoot.
 vec4 textureBilinear(vec2 uv, vec2 physSize, vec2 invPhys) {
-    // Convert UV to physical texel coordinate, centre on the texel grid.
-    vec2 px = uv * physSize - 0.5;
-    vec2 f  = fract(px);
-    vec2 p0 = floor(px);
-    vec2 p1 = p0 + vec2(1.0, 0.0);
-    vec2 p2 = p0 + vec2(0.0, 1.0);
-    vec2 p3 = p0 + vec2(1.0, 1.0);
-
-    // Explicitly clamp to texture bounds. In Impeller, custom FragmentShader 
-    // samplers may not use ClampToEdge by default. When the indicator pill 
-    // expands outside the RepaintBoundary bounds (e.g. via jelly overshoot 
-    // or LiquidStretch scaling), out-of-bounds UVs cause extreme wrap-around 
-    // chromatic aliasing (jagged rainbows) on the pill's top/left edges.
-    vec2 maxPx = max(vec2(0.0), physSize - 1.0);
-    p0 = clamp(p0, vec2(0.0), maxPx);
-    p1 = clamp(p1, vec2(0.0), maxPx);
-    p2 = clamp(p2, vec2(0.0), maxPx);
-    p3 = clamp(p3, vec2(0.0), maxPx);
-
-    vec4 c0 = texture(uTexture, (p0 + 0.5) * invPhys);
-    vec4 c1 = texture(uTexture, (p1 + 0.5) * invPhys);
-    vec4 c2 = texture(uTexture, (p2 + 0.5) * invPhys);
-    vec4 c3 = texture(uTexture, (p3 + 0.5) * invPhys);
-
-    vec4 cTop = mix(c0, c1, f.x);
-    vec4 cBot = mix(c2, c3, f.x);
-    return mix(cTop, cBot, f.y);
+    vec2 halfTexel = 0.5 * invPhys;
+    vec2 clampedUV = clamp(uv, halfTexel, max(halfTexel, 1.0 - halfTexel));
+    return texture(uTexture, clampedUV);
 }
 
 void main() {
@@ -134,6 +124,10 @@ void main() {
   float uEdgeAlphaMultiplier = uData7.y;
   float uRimThickness = uData7.z;
   float uRimSmoothing = uData7.w;
+  float uRimShade = uRimConfig.x;
+  float uRimLight = uRimConfig.y;
+  float uRimShadeEnds = uRimConfig.z;
+  float uBackdropLuma = uRimConfig.w;
 
   // ==========================================================================
   // COORDINATE SETUP
@@ -163,11 +157,11 @@ void main() {
   float smoothing = 1.0 / uScale.x;
   float mask = 1.0 - smoothstep(-smoothing, smoothing, dist);
   
-  // Early exit if outside the shape
+  // Skip shading outside the shape without an early return (multiple returns
+  // in main() alongside samplers can fail Windows HLSL/FXC; flutter#190809).
   if (mask <= 0.0) {
     fragColor = vec4(0.0);
-    return;
-  }
+  } else {
   
   // ==========================================================================
   // SURFACE NORMAL
@@ -199,20 +193,29 @@ void main() {
   
   float distFromEdge = abs(dist);
   
-  // [v3.0.0-alpha25] 光学透镜倒角折射区：聚焦于圆角倒角边缘（避免整块卡片中心被非线性扭曲）
-  float edgeZone = max(6.0, min(uCornerRadius, 18.0));
-  float bevelT = clamp(distFromEdge / edgeZone, 0.0, 1.0);
+  // TWEAK: edgeZone - How far from the edge the distortion extends (logical px)
+  //   Smaller = sharper transition, concentrated at very edge
+  //   Larger = softer, more gradual effect spreading inward
+  float edgeZone = 14.0;
   
-  // 钟形双曲透镜剖面：外轮廓 edge = 0 时折射偏移平滑归零（消灭边缘断崖硬切与采样撕裂），
-  // 在倒角弧面处达到峰值光折射，在平整内部自然无缝过渡回零（消灭内部采样错位）
-  float edgeInfluence = sin(bevelT * 3.14159265);
-  edgeInfluence = pow(edgeInfluence, 1.4);
+  // Calculate influence: 1.0 at edge, 0.0 at edgeZone pixels inward
+  float edgeInfluence = smoothstep(edgeZone, 0.0, distFromEdge);
   
-  // 真实光学折射偏折位移（标定至 3.0 ~ 7.0 物理逻辑像素，高精度对齐采样大小）
-  float refractionDelta = max(uRefractiveIndex, 1.0) - 1.0;
-  float bendStrength = (0.55 + refractionDelta * 1.8) * (0.85 + uInteractionIntensity * 0.40);
+  // TWEAK: Quadratic falloff makes the bend gentler (less abrupt)
+  //   Use edgeInfluence directly for sharper edge effect
+  //   Use edgeInfluence * edgeInfluence for gentler, more natural curve
+  //   Use pow(edgeInfluence, 3.0) for even gentler effect
+  edgeInfluence = edgeInfluence * edgeInfluence;
   
-  vec2 edgeOffsetLogical = surfaceNormal * edgeInfluence * bendStrength * (clamp(uThickness, 8.0, 24.0) * 0.28);
+  // TWEAK: bendStrength - Overall refraction intensity
+  //   Base (0.9): stronger edge lens distortion, closer to Impeller volumetric warp
+  //   Range: 0.45 (rest) → 1.17 (fully pressed)
+  float bendStrength = 0.9 * (0.5 + uInteractionIntensity * 0.7);
+  
+  // TWEAK: The final multiplier (uSize.y * 0.35) scales by widget height
+  //   0.35 means max offset is 35% of widget height
+  //   Increase for more dramatic effect, decrease for subtler
+  vec2 edgeOffsetLogical = surfaceNormal * edgeInfluence * bendStrength * uSize.y * 0.35;
   vec2 edgeOffsetUV = edgeOffsetLogical / uBackgroundSize;
   
   // Apply refraction offset along the surface normal.
@@ -230,9 +233,12 @@ void main() {
   // --------------------------------------------------------------------------
   // CHROMATIC ABERRATION
   // --------------------------------------------------------------------------
-  // 边缘物理棱镜微色散：随折射率同步放大，仅靠微量色散与自然高光勾勒清澈边缘
+  // Separates RGB channels slightly at edges, creating a subtle prism effect.
+  // Red shifts one way, blue shifts the opposite, green stays centered.
+  
+  // TWEAK: (0.12) - subtle chromatic shift for "Apple style" refraction
   vec2 distort = surfaceNormal * edgeInfluence * uChromaticAberration;
-  vec2 chromaticShift = distort * 0.16 * (1.0 + refractionDelta * 1.5); 
+  vec2 chromaticShift = distort * 0.12; 
   
   vec3 bg;
   if (uHasBackground > 0.5) {
@@ -316,112 +322,168 @@ void main() {
   float bevelGradient = -surfaceNormal.y * kBevelStrength;
   // Blend the gradient in only where the border mask is visible to avoid
   // affecting the body of the pill.
-  // Clamp to 0.0: gradient dims the bottom rim to neutral, never to negative
-  // (negative values subtract from finalColor and cause dark jagged artefacts).
-  float modifiedRimBrightness = max(0.0, rimBrightness + bevelGradient * borderMask);
+  // Retain at least 65% of rimBrightness at the bottom edge so the bottom
+  // capsule arc never disappears against dark backdrops.
+  float modifiedRimBrightness = max(rimBrightness * 0.65, rimBrightness + bevelGradient * borderMask);
 
   // Scale rim brightness with ambientRim parameter
   vec3 rimColor = vec3(1.0) * modifiedRimBrightness * (uAmbientRim * 10.0);
-  
-  // ==========================================================================
-  // COMPOSITE FINAL COLOR
-  // ==========================================================================
-  
-  // Start with background — glass transmits and adds luminosity, not darkness.
-  float bgBoost = uSaturation;
-  vec3 finalColor = (uHasBackground > 0.5) ? (bg * bgBoost) : bg;
-  
-  // Rim highlight: primary + secondary bevel definition collapsed to one operation.
-  // 1.5× provides subtle physical glass specular catch without artificial white outline.
-  finalColor += rimColor * borderMask * 1.5;
 
-  // Add fresnel glow — uGlowIntensity controls how visible the glass-edge luminosity is.
-  finalColor += vec3(1.0) * fresnel * uGlowIntensity;
-  
-  // Interior light lift — matches Premium Impeller's internal SDF specular glow.
-  finalColor += vec3(uAmbientStrength);
-  
-  // Apply glass tint color
-  finalColor = mix(finalColor, finalColor + uGlassColor.rgb * 0.2, uGlassColor.a);
-
-  // ==========================================================================
-  // MENISCUS RIM DARKENING (Beer-Lambert absorption) — applied LAST
-  // ==========================================================================
-  // Three physics improvements over a naive isotropic absorption:
-  //
-  // [1] HEMISPHERE LENS PROFILE
-  //     A glass pill cross-section is a circular arc — thickest at the rim,
-  //     thinning toward the interior following a hemisphere curve:
-  //         thickness(r) = sqrt(1 - r²)  where r = distFromEdge / edgeZone
-  //     This gives a physically correct onset: slow in the middle of the zone,
-  //     sharper right at the boundary — matching a real curved glass edge.
-  //     Previously: sqrt(edgeInfluence) which is a polynomial convenience, not
-  //     a lens shape.
-  //
-  // [2] LIGHT-MODULATED ABSORPTION STRENGTH
-  //     The meniscus absorbs the same amount on all sides (Beer-Lambert), but
-  //     the PERCEIVED darkness differs by quadrant:
-  //       • Lit side:    specular highlight partially compensates → rim appears
-  //                      bright, absorption is perceptually hidden.
-  //       • Shadow side: no specular compensation → dark band fully exposed.
-  //     iOS 26 reference: the shadow-side meniscus is clearly darker than the
-  //     lit-side meniscus, not because more absorption occurs, but because the
-  //     specular energy on the lit side "fills in" the absorbed darkness.
-  //     We replicate this by weakening absorption on the lit side, where it is
-  //     masked anyway, and strengthening it on the shadow side, where it is the
-  //     dominant visual term.
-  //       dot(surfaceNormal, uLightDirection) = +1  → full facing light → litness=1
-  //       dot(surfaceNormal, uLightDirection) = -1  → shadow side      → litness=0
-  //     absorption scale: [0.6 × strength (lit)] … [1.4 × strength (shadow)]
-  //
-  // [3] CHROMATIC ABERRATION AT THE RIM
-  //     Already implemented in the background sampling section above (line ~246):
-  //       vec2 distort = surfaceNormal * edgeInfluence * uChromaticAberration;
-  //     edgeInfluence concentrates the RGB split at the SDF boundary. No change
-  //     needed here — this shader already has edge-weighted dispersion.
+  // Native iOS 26 / iOS 27 indicator rim light (soft cos³ lobe at ends of
+  // light axis with inset core + tail) and iOS 27 rim shade (directional dark
+  // hairline across light axis), calibrated to match liquid_glass_render.frag.
+  // Scaled by activeLens (uInteractionIntensity) so resting switch/slider knobs
+  // stay pure white at rest (matching Premium's activeIntensity gate).
+  float activeLens = clamp(uInteractionIntensity, 0.0, 1.0);
+  float isLightBackdrop = step(0.5, uBackdropLuma);
+  float effectiveRimShade = mix(
+      uRimShade,
+      max(uRimShade, uRimLight * 1.20) * 1.12,
+      isLightBackdrop);
+  float effectiveShadeEnds = mix(
+      uRimShadeEnds * 0.35,
+      max(uRimShadeEnds, 0.68),
+      isLightBackdrop);
+  float nativeRimLight = 0.0;
+  float nativeRimShade = 0.0;
+  float hairline = 1.0 - smoothstep(0.25, 1.10, distFromEdge);
+  if ((uRimLight > 0.001 || uRimShade > 0.001) && activeLens > 0.001 && distFromEdge < 12.0) {
+    float along = edgeLightCatch;
+    float lit   = max(along, 0.0);
+    float opp   = max(-along, 0.0);
+    // Indicator lens weights from liquid_glass_render.frag (isClearIndicator=1):
+    // litWeight = 0.84, oppWeight = 1.02, indicatorRimBoost = 1.32.
+    // On diagonal light angles (e.g. iOS 26 at 135°), cos³(45°) drops to 0.35
+    // on the flat top and bottom edges; vertArch ensures the top and bottom
+    // horizontal capsule arcs maintain a continuous specular rim.
+    float lobe  = 0.84 * lit * lit * lit + 1.02 * opp * opp * opp;
+    float vertArch = surfaceNormal.y * surfaceNormal.y * abs(uLightDirection.x);
+    float effectiveLobe = max(lobe, vertArch * mix(0.68, 0.54, isLightBackdrop));
+    if (uRimLight > 0.001) {
+      float inset = max(distFromEdge - 0.75, 0.0);
+      float core  = exp(-inset / 1.5);
+      float tail  = exp(-inset / 5.5);
+      float ease  = mix(0.56, 0.68, isLightBackdrop);
+      float hairlineGate = 1.0 - hairline * step(0.001, effectiveRimShade);
+      nativeRimLight = clamp(
+          uRimLight * 1.32 * effectiveLobe * ease * (0.165 * core + 0.042 * tail) * hairlineGate * activeLens,
+          0.0,
+          1.0);
+    }
+    if (effectiveRimShade > 0.001 && distFromEdge < 2.2) {
+      float acrossRaw = max(0.0, 1.0 - along * along);
+      float acrossSqrt = sqrt(acrossRaw);
+      float across = acrossRaw * acrossSqrt * sqrt(acrossSqrt);
+      nativeRimShade = clamp(
+          effectiveRimShade * 0.314 * mix(effectiveShadeEnds, 1.0, across) * hairline * activeLens,
+          0.0,
+          1.0);
+    }
+  }
 
   // [1] Hemisphere lens thickness profile
   float r_norm = clamp(distFromEdge / edgeZone, 0.0, 1.0);
   float lensThickness = sqrt(max(0.0, 1.0 - r_norm * r_norm)); // hemisphere arc
 
   // [2] Light-modulated strength: weaker on lit side (0.6×), stronger on shadow (1.4×)
-  float litness = dot(surfaceNormal, uLightDirection); // [-1, +1]
+  float litness = edgeLightCatch; // [-1, +1]
   float dirScale = mix(1.4, 0.6, litness * 0.5 + 0.5); // shadow → lit
   float modulatedAbsorption = uEdgeAbsorption * dirScale;
 
-  // Combined: hemisphere profile × light-modulated strength
-  float absorption = 1.0 - lensThickness * modulatedAbsorption;
-  finalColor *= max(0.0, absorption);
-
-  // Clamp to prevent over-bright pixels
-  finalColor = min(finalColor, vec3(1.2));
-  
   // ==========================================================================
-  // ALPHA / TRANSPARENCY
+  // COMPOSITE FINAL COLOR
   // ==========================================================================
-  
-  // TWEAK: baseAlpha - center transparency (lower = more see-through)
-  // Standard mode: Provide a solid glassy body even at rest (Intensity 0), 
-  // boosting it slightly when pressed.
   float standardBaseAlpha = uBaseAlphaMultiplier * mix(0.6, 1.0, uInteractionIntensity);
-  // Restore original 0.70 when background is enabled — clear glass is translucent, not frosted.
-  float baseAlpha = (uHasBackground > 0.5) ? 0.70 : standardBaseAlpha;
-  
-  // TWEAK: edgeAlpha - edge opacity (higher = more solid edges)
-  // Standard mode: Keep a strong structural rim at rest to match 3D bevel.
   float standardEdgeAlpha = uEdgeAlphaMultiplier * mix(0.6, 1.0, uInteractionIntensity);
-  float edgeAlpha = (uHasBackground > 0.5) ? 0.95 : standardEdgeAlpha;
-  
-  // Blend from center to edge
-  float glassAlpha = mix(baseAlpha, edgeAlpha, edgeInfluence);
-  float ringOpacity = borderMask * 0.9 * clamp(uAmbientRim * 10.0, 0.0, 1.0);
-  glassAlpha = max(glassAlpha, ringOpacity);
 
+  if (uHasBackground > 0.5) {
+    // PATH A: Captured background texture refraction
+    float bgBoost = uSaturation;
+    vec3 finalColor = bg * bgBoost;
+    finalColor += rimColor * borderMask * 1.5;
+    finalColor += vec3(1.0) * fresnel * (uGlowIntensity + 0.15 * uFresnelStrength);
+    finalColor += vec3(uAmbientStrength);
+    finalColor = mix(finalColor, finalColor + uGlassColor.rgb * 0.2, uGlassColor.a);
 
+    float absorption = 1.0 - lensThickness * modulatedAbsorption;
+    finalColor *= max(0.0, absorption);
+    if (nativeRimLight > 0.0) {
+      finalColor = mix(finalColor, vec3(1.0), nativeRimLight);
+    }
+    if (nativeRimShade > 0.0) {
+      finalColor *= (1.0 - nativeRimShade);
+    }
+    finalColor = min(finalColor, vec3(1.2));
 
-  
-  float alpha = glassAlpha * mask;
-  
-  // Premultiplied alpha output
-  fragColor = vec4(finalColor * alpha, alpha);
+    float glassAlpha = mix(0.70, 0.95, edgeInfluence);
+    float ringOpacity = borderMask * 0.9 * clamp(uAmbientRim * 10.0, 0.0, 1.0);
+    glassAlpha = max(glassAlpha, ringOpacity);
+    float alpha = glassAlpha * mask;
+    fragColor = vec4(finalColor * alpha, alpha);
+  } else {
+    // PATH B: Zero-capture synthetic indicator lens (composited via SrcOver).
+    // Uses proper premultiplied alpha compositing so meniscus absorption and
+    // iOS 27 rimShade genuinely darken the underlying platter at the curved
+    // edge, while specular highlights and cos³ rimLight lobes shine with
+    // independent specular alpha over a crystal-clear center.
+    float hasNativeRimF = step(0.001, uRimLight + uRimShade);
+    float bodyAlpha = mix(
+        standardBaseAlpha,
+        standardEdgeAlpha,
+        edgeInfluence * (1.0 - hasNativeRimF));
+    vec3 bodyColor  = (uGlassColor.a > 0.001) ? uGlassColor.rgb : vec3(1.0);
+    float effectiveBodyA = max(bodyAlpha, uGlassColor.a * mix(0.6, 1.0, uInteractionIntensity));
+    vec3 pmRgb = bodyColor * effectiveBodyA;
+    float pmA  = effectiveBodyA;
+
+    // 1. Curved meniscus bevel darkening (Beer-Lambert absorption + iOS 27 top keyShade)
+    float bevelZone = min(edgeZone, max(4.5, min(uSize.x, uSize.y) * 0.24));
+    float bevelNorm = clamp(distFromEdge / bevelZone, 0.0, 1.0);
+    float bevelBand = (1.0 - bevelNorm) * (1.0 - bevelNorm);
+    float normY = localLogical.y / max(uSize.y, 1.0);
+    float topTrough = smoothstep(0.04, 0.16, normY)
+                    * (1.0 - smoothstep(0.22, 0.52, normY))
+                    * smoothstep(1.5, 3.5, distFromEdge);
+    float keyShade = 0.025 * topTrough * isLightBackdrop * hasNativeRimF * (1.0 - hairline) * activeLens;
+    float effectiveAbsorption = max(modulatedAbsorption, 0.055 * isLightBackdrop * hasNativeRimF * dirScale);
+    float absorbDarken = clamp(
+        bevelBand * effectiveAbsorption * mix(0.55, 0.78, isLightBackdrop) * activeLens + keyShade,
+        0.0,
+        0.42);
+    pmRgb *= (1.0 - absorbDarken);
+    pmA    = pmA + absorbDarken * (1.0 - pmA);
+
+    // 2. Directional specular rim, top bevel gradient, and grazing Fresnel
+    float classicRingSpec = clamp(
+        modifiedRimBrightness * (0.85 + uAmbientRim * 3.5) * borderMask,
+        0.0,
+        0.85);
+    float nativePerimeterSpec = borderMask * 0.08 * (1.0 - step(0.001, effectiveRimShade));
+    float ringSpec = mix(
+        classicRingSpec,
+        max(nativePerimeterSpec, classicRingSpec * mix(0.15, 0.55, isLightBackdrop)) * activeLens,
+        hasNativeRimF);
+    float fresnelSpec = clamp(
+        fresnel * (uGlowIntensity * 0.5 + 0.16 * uFresnelStrength) * edgeInfluence * activeLens,
+        0.0,
+        0.45);
+    float totalSpec = clamp(ringSpec + fresnelSpec + uAmbientStrength * activeLens, 0.0, 0.90);
+    pmRgb = pmRgb * (1.0 - totalSpec) + vec3(totalSpec);
+    pmA   = pmA + totalSpec * (1.0 - pmA);
+
+    // 3. Native iOS 26 / iOS 27 cos³ rimLight lobe (core + tail)
+    if (nativeRimLight > 0.0) {
+      pmRgb = pmRgb * (1.0 - nativeRimLight) + vec3(nativeRimLight);
+      pmA   = pmA + nativeRimLight * (1.0 - pmA);
+    }
+
+    // 4. Native iOS 27 directional dark hairline contour (rimShade)
+    if (nativeRimShade > 0.0) {
+      pmRgb *= (1.0 - nativeRimShade);
+      pmA    = pmA + nativeRimShade * (1.0 - pmA);
+    }
+
+    fragColor = vec4(clamp(pmRgb, 0.0, 1.0) * mask, clamp(pmA, 0.0, 1.0) * mask);
+  }
+  } // end mask > 0.0
 }

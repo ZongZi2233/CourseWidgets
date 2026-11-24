@@ -3,7 +3,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart' hide GlassContextMenu;
 import '../../providers/schedule_provider.dart';
 import '../../constants/theme_constants.dart';
 import '../../constants/version.dart' show kSolidColorBackground;
@@ -470,7 +470,6 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
       quality: GlassQuality.premium,
       stretch: 0.20,
       interactionScale: 1.12,
-      showOverlayColor: false,
       ambientBaseLight: 0.0,
       onTap: () {
         HapticFeedback.selectionClick();

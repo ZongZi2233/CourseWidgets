@@ -181,15 +181,17 @@ class AppBackgroundLayer extends StatelessWidget {
             }
 
             if (effectiveTint.a <= 0.001) {
-              return bg;
+              return RepaintBoundary(child: bg);
             }
 
-            return Stack(
-              fit: StackFit.expand,
-              children: [
-                bg,
-                ColoredBox(color: effectiveTint),
-              ],
+            return RepaintBoundary(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  bg,
+                  ColoredBox(color: effectiveTint),
+                ],
+              ),
             );
           },
         );

@@ -18,7 +18,7 @@ import 'webview_import_screen.dart';
 import '../../services/app_logger.dart';
 import '../widgets/windows_desktop_title_bar.dart'
     show setWindowsDesktopTitle, clearWindowsDesktopTitle;
-import 'package:smooth_scroll_multiplatform/smooth_scroll_multiplatform.dart';
+import '../widgets/adaptive_smooth_scroll.dart';
 
 class SettingsDataScreen extends StatefulWidget {
   const SettingsDataScreen({super.key});
@@ -56,7 +56,7 @@ class _SettingsDataScreenState extends State<SettingsDataScreen> {
         children: [
           // 1. 全出血自由滑动内容区：穿透顶栏与状态栏，消除截断，满帧 120 FPS
           Positioned.fill(
-            child: DynMouseScroll(
+            child: AdaptiveSmoothScroll(
               durationMS: 250,
               scrollSpeed: 1.2,
               builder: (context, controller, physics) => ListView(

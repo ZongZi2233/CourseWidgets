@@ -299,13 +299,9 @@ class _MiuixPressableState extends State<MiuixPressable>
           child: IgnorePointer(
             child: AnimatedBuilder(
               animation: _overlayController,
-              builder: (context, child) {
+              builder: (context, _) {
                 final alpha = _overlayController.value;
-                if (alpha <= 0 ||
-                    overlayColor == Colors.transparent ||
-                    overlayColor.a <= 0.001) {
-                  return const SizedBox.shrink();
-                }
+                if (alpha <= 0) return const SizedBox.shrink();
                 final resolved =
                     overlayColor.withValues(alpha: alpha.clamp(0.0, 1.0));
                 if (shape != null) {

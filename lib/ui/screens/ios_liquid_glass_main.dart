@@ -142,25 +142,32 @@ class _IosLiquidGlassMainState extends State<IosLiquidGlassMain> {
         ],
       ),
       bottomNavigationBar: RepaintBoundary(
-        child: GlassBottomBar(
+        child: GlassTabBar.bottom(
           selectedIndex: _currentIndex,
           onTabSelected: (index) {
             HapticFeedback.selectionClick();
             setState(() => _currentIndex = index);
           },
-          glassSettings: LiquidGlassSettings(
+          quality: GlassQuality.premium,
+          settings: const LiquidGlassSettings(
             blur: 3.0,
             thickness: 30.0,
             refractiveIndex: 1.59,
           ),
           indicatorColor: AppThemeColors.babyPink.withValues(alpha: 0.3),
           tabs: const [
-            GlassBottomBarTab(
-              icon: CupertinoIcons.square_grid_2x2_fill,
+            GlassTab(
+              icon: Icon(CupertinoIcons.square_grid_2x2_fill),
               label: '课程',
             ),
-            GlassBottomBarTab(icon: CupertinoIcons.calendar, label: '日历'),
-            GlassBottomBarTab(icon: CupertinoIcons.settings_solid, label: '设置'),
+            GlassTab(
+              icon: Icon(CupertinoIcons.calendar),
+              label: '日历',
+            ),
+            GlassTab(
+              icon: Icon(CupertinoIcons.settings_solid),
+              label: '设置',
+            ),
           ],
         ),
       ),

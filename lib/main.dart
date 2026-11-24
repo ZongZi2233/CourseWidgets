@@ -197,8 +197,7 @@ void main() async {
   await ThemeService().initialize(deferMonetRefresh: isDesktop);
   AppLogger.ui('ThemeService 初始化完成');
 
-  // [v3.0.0-alpha18] 强制使用完整 3D 渲染着色器 (Premium)，杜绝高性能 2D 降级
-  GlassEffect.useHighPerformanceShader = false;
+  // [v3.0.0-alpha18 / v3.2.1] 全开旗舰高质量 (Premium) 3D 折射渲染管线
   AppLogger.render('🎨 着色器模式: 旗舰高质量 (Premium)');
 
   await loadGlobalBackground();
@@ -747,9 +746,18 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                       onPointerDown: (event) {
                         SharedElementSourceRegistry.recordPointerDown(event);
                       },
-                      child: LiquidGlassScope.stack(
-                        background: backgroundWidget,
-                        content: contentWidget,
+                      child: LiquidGlassScope(
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            Positioned.fill(
+                              child: GlassBackgroundSource(
+                                child: backgroundWidget,
+                              ),
+                            ),
+                            Positioned.fill(child: contentWidget),
+                          ],
+                        ),
                       ),
                     );
 

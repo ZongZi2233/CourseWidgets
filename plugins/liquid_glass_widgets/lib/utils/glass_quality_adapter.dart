@@ -113,14 +113,28 @@ class GlassQualityAdapter {
     this.warmupStandardThresholdMs = 28.0,
     void Function(GlassQuality settled, double p75Ms, int frames)?
         onWarmupComplete,
+    this.frostStep = false,
+    void Function(bool frostEnabled)? onFrostChanged,
   })  : _onQualityChanged = onQualityChanged,
         _onWarmupComplete = onWarmupComplete,
+        _onFrostChanged = onFrostChanged,
         _currentQuality = maxQuality;
 
   // ── Configuration ──────────────────────────────────────────────────────────
 
   /// The lowest quality tier the adapter may step down to.
   final GlassQuality minQuality;
+
+  /// Whether premium steps through premium without frost on its way to and
+  /// from standard.
+  ///
+  /// The iOS 27 frost ([LiquidGlassSettings.frost]) is the most expensive
+  /// part of premium glass. With this on, the first step down from premium
+  /// only switches the frost off ([frostEnabled] turns `false`) and keeps
+  /// the premium shader, rim and lens; the next one goes to standard. On the
+  /// way back up, standard steps to premium without frost first. Surfaces
+  /// without frost look the same in both premium steps.
+  final bool frostStep;
 
   /// The highest quality tier the adapter may step up to.
   final GlassQuality maxQuality;
@@ -195,13 +209,17 @@ class GlassQualityAdapter {
   /// cross-launch persistence should use [initialQuality] with a storage
   /// mechanism of their choice (e.g. `SharedPreferences`).
   static GlassQuality? _sessionSettledQuality;
+  static bool? _sessionSettledFrostEnabled;
 
   /// Clears the in-session quality cache.
   ///
   /// **For testing only.** Call between tests to prevent cache leakage across
   /// test cases.
   @visibleForTesting
-  static void clearSessionCache() => _sessionSettledQuality = null;
+  static void clearSessionCache() {
+    _sessionSettledQuality = null;
+    _sessionSettledFrostEnabled = null;
+  }
 
   /// The currently cached quality for this session, or `null` if Phase 2 has
   /// not yet completed on any adapter instance.
@@ -210,6 +228,10 @@ class GlassQualityAdapter {
   /// the first rendered frame matches the adapter's starting point, avoiding a
   /// one-frame flash from [maxQuality] to the cached lower value.
   static GlassQuality? get sessionSettledQuality => _sessionSettledQuality;
+
+  /// The currently cached frost-enabled state for this session, or `null` if
+  /// not yet settled.
+  static bool? get sessionSettledFrostEnabled => _sessionSettledFrostEnabled;
 
   /// Whether the adapter is using a previously settled quality (either from
   /// [initialQuality] or [_sessionSettledQuality]) and has skipped Phase 2.
@@ -222,16 +244,14 @@ class GlassQualityAdapter {
   /// data. This lets shader compilation, first-route transitions, and provider
   /// initialisation settle so they don't pollute the warmup benchmark.
   ///
-  /// Raised to 90 (≈ 1.5 s at 60 Hz) to give Android GPU clock-scaling and
-  /// shader-cache warm-up enough time to settle before benchmarking starts.
-  /// Community data (P75 ≈ 17–18 ms on capable mid-range Android devices)
-  /// showed that the original 60-frame skip was not long enough to clear
-  /// shader-compile inflation on the Android/Vulkan/Impeller path.
-  static int skipInitialFrames = 90;
+  /// Default: 30 (≈ 0.5 s at 60 Hz, 0.25 s at 120 Hz). Together with
+  /// [warmupFrames] (60), Phase 2 finishes in ~90 frames (~1.5 s at 60 Hz)
+  /// instead of holding struggling devices at full premium for 4.5 s.
+  static int skipInitialFrames = 30;
 
   /// Frames to collect in Phase 2 (warm-up) before making the initial quality
-  /// decision. Default: 180 ≈ 3 seconds at 60 Hz.
-  static int warmupFrames = 180;
+  /// decision. Default: 60 ≈ 1 second at 60 Hz.
+  static int warmupFrames = 60;
 
   /// Size of the rolling window used in Phase 3 for P95 calculation.
   /// Default: 120 ≈ 2 seconds at 60 Hz.
@@ -244,6 +264,65 @@ class GlassQualityAdapter {
   /// Number of consecutive under-budget windows that trigger a quality
   /// step-up (only when [allowStepUp] is `true`). Default: 10.
   static int upgradeWindowCount = 10;
+
+  // Raster time measures the glass only while nothing else competes for the
+  // device. Heavy app work — e.g. an on-device model loading or running on
+  // every big core — starves the raster thread, and frames measured then can
+  // demote a capable device. While any hold is open, every adapter drops the
+  // frames it is handed, in warm-up and at runtime alike; after the last hold
+  // closes it drops [settleFramesAfterHold] more, which covers the timings
+  // batch still on its way (the engine reports timings about once a second)
+  // and the tail of the work.
+
+  static int _holds = 0;
+  static int _settle = 0;
+
+  /// Frames dropped after the last hold is released. Default: 120 (about one
+  /// second at 120 Hz).
+  static int settleFramesAfterHold = 120;
+
+  /// Whether at least one [holdMeasurement] hold is open.
+  static bool get measurementHeld => _holds > 0;
+
+  /// Suspends frame measurement, for every adapter, until the returned hold
+  /// (and every other open hold) is released.
+  ///
+  /// Use it around heavy work of your own that competes with the glass for the
+  /// GPU/CPU, so the slowdown is not mistaken for a device that cannot render
+  /// the glass:
+  ///
+  /// ```dart
+  /// final hold = GlassAdaptiveScope.holdMeasurement();
+  /// try {
+  ///   await heavyWork();
+  /// } finally {
+  ///   hold.release();
+  /// }
+  /// ```
+  ///
+  /// Frames reported while a hold is open count toward neither the warm-up
+  /// benchmark nor runtime degradation. After the last hold is released,
+  /// [settleFramesAfterHold] further frames are dropped before measuring
+  /// resumes. Holds nest, and are safe to open when no adapter exists.
+  static GlassMeasurementHold holdMeasurement() {
+    _holds++;
+    return GlassMeasurementHold._();
+  }
+
+  static void _release() {
+    if (_holds == 0) return;
+    _holds--;
+    if (_holds == 0) {
+      _settle = settleFramesAfterHold > 0 ? settleFramesAfterHold : 0;
+    }
+  }
+
+  /// Clears every hold. For tests only.
+  @visibleForTesting
+  static void resetMeasurementHoldsForTesting() {
+    _holds = 0;
+    _settle = 0;
+  }
 
   /// Minimum time between consecutive quality changes.
   static Duration cooldownDuration = const Duration(seconds: 8);
@@ -331,6 +410,12 @@ class GlassQualityAdapter {
   /// The currently effective quality this adapter has decided on.
   GlassQuality get currentQuality => _currentQuality;
 
+  /// Whether premium glass may draw its frost. Only ever `false` with
+  /// [frostStep]; see there.
+  bool get frostEnabled => _frostEnabled;
+  bool _frostEnabled = true;
+  final void Function(bool frostEnabled)? _onFrostChanged;
+
   /// The current internal phase (probe → warmup → runtime).
   AdaptivePhase get phase => _phase;
 
@@ -375,6 +460,12 @@ class GlassQualityAdapter {
       // Keep it within [minQuality, maxQuality] in case the config changed.
       final clamped =
           _floorQuality(_capQuality(maxQuality, cached), minQuality);
+      if (frostStep &&
+          initialQuality == null &&
+          clamped == GlassQuality.premium &&
+          _sessionSettledFrostEnabled != null) {
+        _frostEnabled = _sessionSettledFrostEnabled!;
+      }
       _lastChangeReason = GlassQualityChangeReason.restoredFromCache;
       _lastP75Ms = null;
       _lastP95Ms = null;
@@ -451,14 +542,7 @@ class GlassQualityAdapter {
     if (_phase == AdaptivePhase.probe) {
       _phase = AdaptivePhase.warmup;
     }
-    for (final timing in timings) {
-      final rasterUs = timing.rasterDuration.inMicroseconds;
-      if (_phase == AdaptivePhase.warmup) {
-        _processWarmupFrame(rasterUs);
-      } else if (_phase == AdaptivePhase.runtime) {
-        _processRuntimeFrame(rasterUs);
-      }
-    }
+    _take(timings);
   }
 
   // ── Phase 1 — static probe ─────────────────────────────────────────────────
@@ -470,11 +554,6 @@ class GlassQualityAdapter {
         (defaultTargetPlatform == TargetPlatform.windows ||
             defaultTargetPlatform == TargetPlatform.macOS ||
             defaultTargetPlatform == TargetPlatform.linux);
-
-    // Desktop platforms (Windows / macOS / Linux) have dedicated GPU resources
-    // and run LightweightLiquidGlass via custom FragmentProgram shaders, completely
-    // independent of Impeller's ImageFilter.shader support.
-    // Never force minimal on desktop platforms due to !isShaderFilterSupported!
     if (isDesktop) {
       return null;
     }
@@ -485,10 +564,6 @@ class GlassQualityAdapter {
       return GlassQuality.minimal;
     }
 
-    // On Web and Linux: Impeller uses WebGL where runtime compilation can block.
-    // On Windows with modern Impeller (ANGLE backend), desktop GPUs have ample
-    // raster throughput. We allow Windows to proceed to the warm-up benchmark
-    // (Phase 2) instead of hard-capping at standard, enabling 120fps premium liquid glass.
     if (kIsWeb) {
       final capped = _capQuality(maxQuality, GlassQuality.standard);
       return capped == maxQuality ? null : capped;
@@ -533,17 +608,28 @@ class GlassQualityAdapter {
     //
     // Phase 3 runtime hysteresis will still step down quickly (2 windows,
     // ~4 s) if the device cannot actually sustain premium after warmup.
+    bool dropFrostInWarmup = false;
     final bool isDesktop = !kIsWeb &&
         (defaultTargetPlatform == TargetPlatform.windows ||
             defaultTargetPlatform == TargetPlatform.macOS ||
             defaultTargetPlatform == TargetPlatform.linux);
-
     if (isDesktop) {
       decided = _capQuality(maxQuality, maxQuality);
     } else if (p75Ms < warmupPremiumThresholdMs) {
       decided = _capQuality(maxQuality, maxQuality); // stay at ceiling
     } else if (p75Ms <= warmupStandardThresholdMs) {
-      decided = _capQuality(maxQuality, GlassQuality.standard);
+      if (frostStep &&
+          maxQuality == GlassQuality.premium &&
+          _currentQuality == GlassQuality.premium &&
+          _frostEnabled) {
+        // With frostStep enabled, drop frost first before giving up premium
+        // lens/rim/highlight. Phase 3 will still step down to standard if
+        // frost-free premium remains over budget.
+        decided = GlassQuality.premium;
+        dropFrostInWarmup = true;
+      } else {
+        decided = _capQuality(maxQuality, GlassQuality.standard);
+      }
     } else {
       decided = _capQuality(maxQuality, GlassQuality.minimal);
     }
@@ -558,14 +644,19 @@ class GlassQualityAdapter {
             minQuality,
           );
 
-    // Write to session cache so remounts within this app process skip Phase 2.
-    _sessionSettledQuality = effective;
-
-    // Record diagnostic data before applying quality.
+    // Record diagnostic data before applying quality / frost step.
     _lastChangeReason = GlassQualityChangeReason.warmupComplete;
     _lastP75Ms = p75Ms;
     _lastP95Ms = null;
     _lastFramesMeasured = _warmupDurations.length;
+
+    if (dropFrostInWarmup && effective == GlassQuality.premium) {
+      _setFrostEnabled(false);
+    }
+
+    // Write to session cache so remounts within this app process skip Phase 2.
+    _sessionSettledQuality = effective;
+    _sessionSettledFrostEnabled = _frostEnabled;
 
     _applyQuality(effective);
 
@@ -653,9 +744,17 @@ class GlassQualityAdapter {
         (defaultTargetPlatform == TargetPlatform.windows ||
             defaultTargetPlatform == TargetPlatform.macOS ||
             defaultTargetPlatform == TargetPlatform.linux);
-    if (isDesktop) return; // Desktop has abundant GPU power; do not downgrade.
+    if (isDesktop) return;
 
     if (!_canChange()) return;
+    if (frostStep && _currentQuality == GlassQuality.premium && _frostEnabled) {
+      _lastChangeReason = GlassQualityChangeReason.thermalDegradation;
+      _lastP75Ms = null;
+      _lastP95Ms = _lastComputedP95Ms;
+      _lastFramesMeasured = windowSize;
+      _setFrostEnabled(false);
+      return;
+    }
     final next = _stepDown(_currentQuality);
     if (next == _currentQuality) return; // already at minQuality
     _lastChangeReason = GlassQualityChangeReason.thermalDegradation;
@@ -667,13 +766,36 @@ class GlassQualityAdapter {
 
   void _tryStepUp() {
     if (!_canChange()) return;
+    if (frostStep &&
+        _currentQuality == GlassQuality.premium &&
+        !_frostEnabled) {
+      _lastChangeReason = GlassQualityChangeReason.thermalRecovery;
+      _lastP75Ms = null;
+      _lastP95Ms = _lastComputedP95Ms;
+      _lastFramesMeasured = windowSize;
+      _setFrostEnabled(true);
+      return;
+    }
     final next = _stepUp(_currentQuality);
     if (next == _currentQuality) return; // already at maxQuality
     _lastChangeReason = GlassQualityChangeReason.thermalRecovery;
     _lastP75Ms = null;
     _lastP95Ms = _lastComputedP95Ms;
     _lastFramesMeasured = windowSize;
+    // Back to premium without the frost first; it returns one step later.
+    if (frostStep && next == GlassQuality.premium) {
+      _frostEnabled = false;
+      _sessionSettledFrostEnabled = false;
+    }
     _applyQuality(next);
+  }
+
+  void _setFrostEnabled(bool enabled) {
+    if (_frostEnabled == enabled) return;
+    _frostEnabled = enabled;
+    _sessionSettledFrostEnabled = enabled;
+    _lastChangeAt = DateTime.now();
+    _onFrostChanged?.call(enabled);
   }
 
   bool _canChange() {
@@ -685,8 +807,17 @@ class GlassQualityAdapter {
 
   void _onFrameTimings(List<FrameTiming> timings) {
     if (!_running) return;
+    _take(timings);
+  }
 
-    for (final timing in timings) {
+  void _take(List<FrameTiming> timings) {
+    // Frames under a hold, or just after it, measure the other work, not the
+    // glass.
+    if (_holds > 0) return;
+    final skip = _settle < timings.length ? _settle : timings.length;
+    _settle -= skip;
+
+    for (final timing in timings.skip(skip)) {
       final rasterUs = timing.rasterDuration.inMicroseconds;
       if (_phase == AdaptivePhase.warmup) {
         _processWarmupFrame(rasterUs);
@@ -844,4 +975,20 @@ class GlassQualityAdapter {
   /// Visible for testing only: finds k-th smallest element using Quickselect.
   @visibleForTesting
   static int quickSelectForTesting(List<int> a, int k) => _quickSelect(a, k);
+}
+
+/// An open [GlassQualityAdapter.holdMeasurement] (also available as
+/// `GlassAdaptiveScope.holdMeasurement`). Call [release] when the heavy work
+/// ends.
+class GlassMeasurementHold {
+  GlassMeasurementHold._();
+
+  bool _released = false;
+
+  /// Closes this hold. Releasing more than once has no further effect.
+  void release() {
+    if (_released) return;
+    _released = true;
+    GlassQualityAdapter._release();
+  }
 }

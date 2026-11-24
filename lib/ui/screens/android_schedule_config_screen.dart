@@ -5,12 +5,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:provider/provider.dart';
-import 'package:smooth_scroll_multiplatform/smooth_scroll_multiplatform.dart';
 import '../../constants/theme_constants.dart';
 import '../../models/schedule_config.dart';
 import '../../providers/schedule_provider.dart';
+import '../../services/theme_service.dart';
 import '../../services/time_alignment_engine.dart';
 import '../../utils/glass_settings_helper.dart';
+import '../theme/squircle_geometry.dart';
+import '../widgets/adaptive_smooth_scroll.dart';
 import '../widgets/immersive_status_bar_backdrop.dart';
 import '../widgets/liquid_components.dart' as liquid;
 import '../widgets/liquid_glass_pickers.dart';
@@ -262,27 +264,47 @@ class AndroidScheduleConfigScreenState
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withValues(alpha: isDark ? 0.28 : 0.14),
       isScrollControlled: true,
-      builder: (sheetCtx) => Container(
-        padding: EdgeInsets.fromLTRB(
-          20,
-          14,
-          20,
-          MediaQuery.of(sheetCtx).padding.bottom + 24,
-        ),
-        decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF191C24) : const Color(0xFFF9FAFC),
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-          border: Border.all(
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.08)
-                : Colors.black.withValues(alpha: 0.06),
-          ),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+      builder: (sheetCtx) {
+        final sheetSettings = GlassSettingsHelper.getDialogSettings().copyWith(
+          glassColor: isDark
+              ? const Color(0xAD151822)
+              : const Color(0xACF7F9FE),
+          blur: 10.0,
+          thickness: 20.0,
+          refractiveIndex: 1.48,
+          saturation: 1.35,
+          ambientRim: 0.0,
+          fresnelStrength: 0.0,
+          edgeAbsorption: 0.0,
+          specularSharpness: GlassSpecularSharpness.sharp,
+        );
+        return SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: SquircleGeometry.smoothRadius(28),
+                boxShadow: liquid.HyperOSShadows.modal(isDark),
+              ),
+              child: GlassContainer(
+                useOwnLayer: true,
+                quality: ThemeService().glassQuality,
+                clipBehavior: Clip.antiAlias,
+                shape: const LiquidRoundedSuperellipse(borderRadius: 28),
+                padding: EdgeInsets.fromLTRB(
+                  20,
+                  14,
+                  20,
+                  MediaQuery.of(sheetCtx).padding.bottom + 20,
+                ),
+                settings: sheetSettings,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
             Center(
               child: Container(
                 width: 38,
@@ -407,8 +429,12 @@ class AndroidScheduleConfigScreenState
               ),
             ),
           ],
-        ),
-      ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -426,10 +452,10 @@ class AndroidScheduleConfigScreenState
       color: isDark
           ? Colors.white.withValues(alpha: 0.05)
           : Colors.black.withValues(alpha: 0.035),
-      borderRadius: BorderRadius.circular(18),
+      borderRadius: SquircleGeometry.smoothRadius(18),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: SquircleGeometry.smoothRadius(18),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           child: Row(
@@ -439,7 +465,7 @@ class AndroidScheduleConfigScreenState
                 height: 38,
                 decoration: BoxDecoration(
                   color: color.withValues(alpha: 0.16),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: SquircleGeometry.smoothRadius(12),
                 ),
                 child: Icon(icon, color: color, size: 20),
               ),
@@ -521,26 +547,27 @@ class AndroidScheduleConfigScreenState
     final startCtrl = TextEditingController(text: _formatMinutes(curStart));
     final durCtrl = TextEditingController(text: curDur.toString());
 
-    await showDialog<void>(
+    await liquid.showLiquidDialog<void>(
       context: context,
-      builder: (dialogCtx) => StatefulBuilder(
+      builder: StatefulBuilder(
         builder: (ctx, setDialogState) {
-          final textColor = GlassSettingsHelper.getTextColor(ctx);
-          final subColor = GlassSettingsHelper.getSecondaryTextColor(ctx);
-          final isDark = Theme.of(ctx).brightness == Brightness.dark;
+            final textColor = GlassSettingsHelper.getTextColor(ctx);
+            final subColor = GlassSettingsHelper.getSecondaryTextColor(ctx);
+            final isDark = Theme.of(ctx).brightness == Brightness.dark;
 
-          void applyStart(int m) {
-            draftStart = m.clamp(6 * 60, 23 * 60 + 30);
-            startCtrl.text = _formatMinutes(draftStart);
-          }
+            void applyStart(int m) {
+              draftStart = m.clamp(6 * 60, 23 * 60 + 30);
+              startCtrl.text = _formatMinutes(draftStart);
+            }
 
-          void applyDur(int d) {
-            draftDur = d.clamp(20, 120);
-            durCtrl.text = draftDur.toString();
-          }
+            void applyDur(int d) {
+              draftDur = d.clamp(20, 120);
+              durCtrl.text = draftDur.toString();
+            }
 
-          return liquid.LiquidGlassDialog(
-            title: '第 $section 节作息时间',
+            return liquid.LiquidGlassDialog(
+              maxWidth: 392,
+              title: '第 $section 节作息时间',
             content: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -580,7 +607,7 @@ class AndroidScheduleConfigScreenState
                           color: isDark
                               ? Colors.white.withValues(alpha: 0.08)
                               : Colors.black.withValues(alpha: 0.05),
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: SquircleGeometry.smoothRadius(12),
                           border: Border.all(
                             color: isDark
                                 ? Colors.white.withValues(alpha: 0.14)
@@ -642,7 +669,7 @@ class AndroidScheduleConfigScreenState
                             color: isDark
                                 ? Colors.white.withValues(alpha: 0.08)
                                 : Colors.black.withValues(alpha: 0.05),
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: SquircleGeometry.smoothRadius(12),
                             border: Border.all(
                               color: isDark
                                   ? Colors.white.withValues(alpha: 0.14)
@@ -702,7 +729,7 @@ class AndroidScheduleConfigScreenState
             actions: [
               GlassDialogAction(
                 label: '取消',
-                onPressed: () => Navigator.pop(dialogCtx),
+                onPressed: () => Navigator.pop(ctx),
               ),
               GlassDialogAction(
                 label: '应用',
@@ -711,7 +738,7 @@ class AndroidScheduleConfigScreenState
                   final finalStart = _parseTimeInput(startCtrl.text) ?? draftStart;
                   final finalDur =
                       (int.tryParse(durCtrl.text.trim()) ?? draftDur).clamp(20, 120);
-                  Navigator.pop(dialogCtx);
+                  Navigator.pop(ctx);
 
                   ScheduleConfigModel next;
                   if (section == 1 && cascadeFollowing) {
@@ -758,14 +785,14 @@ class AndroidScheduleConfigScreenState
                       useCustomConfig: true,
                     );
                   }
-                  await _commitConfig(next);
-                },
-              ),
-            ],
-          );
-        },
-      ),
-    );
+                    await _commitConfig(next);
+                  },
+                ),
+              ],
+            );
+          },
+        ),
+      );
     startCtrl.dispose();
     durCtrl.dispose();
   }
@@ -783,7 +810,7 @@ class AndroidScheduleConfigScreenState
           color: isDark
               ? Colors.white.withValues(alpha: 0.08)
               : Colors.black.withValues(alpha: 0.06),
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: SquircleGeometry.smoothRadius(12),
         ),
         child: Text(
           label,
@@ -906,71 +933,75 @@ class AndroidScheduleConfigScreenState
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: Stack(
-        children: [
-          Positioned.fill(
-            child: DynMouseScroll(
-              durationMS: 250,
-              scrollSpeed: 1.2,
-              builder: (context, controller, physics) => CustomScrollView(
-                controller: controller,
-                physics: physics,
-                slivers: [
-                  SliverPadding(
-                    padding: resolvedPadding,
-                    sliver: SliverList.builder(
-                      itemCount: scrollBlocks.length,
-                      itemBuilder: (context, idx) => Center(
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 860),
-                          child: scrollBlocks[idx],
+      body: BackdropGroup(
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: AdaptiveSmoothScroll(
+                durationMS: 250,
+                scrollSpeed: 1.2,
+                builder: (context, controller, physics) => CustomScrollView(
+                  controller: controller,
+                  physics: physics,
+                  slivers: [
+                    SliverPadding(
+                      padding: resolvedPadding,
+                      sliver: SliverList.builder(
+                        itemCount: scrollBlocks.length,
+                        itemBuilder: (context, idx) => Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 860),
+                            child: scrollBlocks[idx],
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          if (widget.showNavigation && !isDesktop)
-            const ImmersiveStatusBarBackdrop(),
-
-          if (widget.showNavigation)
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              child: SafeArea(
-                bottom: false,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  child: Row(
-                    children: [
-                      if (!isDesktop)
-                        const liquid.FloatingGlassHeaderButton(
-                          title: '课时配置',
-                        ),
-                      const Spacer(),
-                      liquid.LiquidButton(
-                        text: '保存',
-                        width: 76,
-                        height: 38,
-                        onTap: _saveAndPop,
-                        color: AppThemeColors.babyPink,
-                      ),
-                    ],
-                  ),
+                  ],
                 ),
               ),
             ),
 
-          if (widget.showNavigation && !isDesktop)
-            const liquid.FloatingLiquidBackButton(),
-        ],
+            if (widget.showNavigation && !isDesktop)
+              const ImmersiveStatusBarBackdrop(),
+
+            if (widget.showNavigation)
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: SafeArea(
+                  bottom: false,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    child: GlassBackdropGroup(
+                      child: Row(
+                        children: [
+                          if (!isDesktop)
+                            const liquid.FloatingGlassHeaderButton(
+                              title: '课时配置',
+                            ),
+                          const Spacer(),
+                          liquid.LiquidButton(
+                            text: '保存',
+                            width: 76,
+                            height: 38,
+                            onTap: _saveAndPop,
+                            color: AppThemeColors.babyPink,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+
+            if (widget.showNavigation && !isDesktop)
+              const liquid.FloatingLiquidBackButton(),
+          ],
+        ),
       ),
     );
   }
@@ -1537,7 +1568,7 @@ class _SectionScheduleTile extends StatelessWidget {
 
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: SquircleGeometry.smoothRadius(14),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 2),
         child: Row(
@@ -1548,7 +1579,7 @@ class _SectionScheduleTile extends StatelessWidget {
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: badgeColor.withValues(alpha: isDark ? 0.22 : 0.14),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: SquircleGeometry.smoothRadius(10),
               ),
               child: Text(
                 section.toString().padLeft(2, '0'),

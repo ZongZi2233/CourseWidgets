@@ -1,4 +1,6 @@
 import 'package:flutter/cupertino.dart';
+import '../../theme/glass_theme.dart';
+import '../../types/glass_style.dart';
 import '../shared/glass_focus_region.dart';
 import '../shared/glass_interaction_state_mixin.dart';
 
@@ -20,17 +22,31 @@ class GlassMenuItem extends StatefulWidget {
     this.subtitle,
     this.isPressed,
     this.isSelected = false,
+    this.semanticsSelected,
     this.enabled = true,
     this.titleStyle,
     this.subtitleStyle,
     this.iconColor,
     this.iconSize = 20.0,
+    this.semanticsChecked,
     this.maxLines = 1,
     this.enablePressScale = true,
+    this.closeDelay,
+    this.submenu,
+    this.semanticLabel,
   });
 
   /// The primary text of the item.
   final String title;
+
+  /// What screen readers announce for the row, in place of [title].
+  ///
+  /// The row is a single semantics node named by [title], and its children,
+  /// [trailing] included, are not read. Set this when the row shows more than
+  /// its title, for example a keyboard shortcut in [trailing]:
+  /// `semanticLabel: 'Save, Command S'`. [subtitle] is still announced as the
+  /// value. Null (the default) uses [title].
+  final String? semanticLabel;
 
   /// The icon widget displayed before the title.
   final Widget? icon;
@@ -60,6 +76,14 @@ class GlassMenuItem extends StatefulWidget {
   /// Whether the item is currently selected (e.g. by a sliding pill).
   final bool isSelected;
 
+  /// Whether this row is the menu's current choice, for assistive
+  /// technologies only; it does not change how the row is drawn.
+  ///
+  /// `true` or `false` report a selectable row in that state (give every row
+  /// of a single-selection menu a value); `null` (the default) reports no
+  /// selected state, as before.
+  final bool? semanticsSelected;
+
   /// Whether the item should handle its own interactions.
   final bool enabled;
 
@@ -80,6 +104,20 @@ class GlassMenuItem extends StatefulWidget {
   /// Defaults to 1. Set to 2 for longer labels like "Set Up Name & Photo".
   final int maxLines;
 
+  /// Whether this row is the menu's checked choice, reported as a radio
+  /// button that is checked or not, in place of the button role; for
+  /// assistive technologies only.
+  ///
+  /// macOS reports no selected state for any role (the bridge never answers
+  /// `isAccessibilitySelected`), so a selected flag on the row does not reach
+  /// VoiceOver there; a radio's checked state does, as `AXValue` 1 or 0.
+  /// iOS reads a checked node as a switch, so set this where the platform
+  /// reads it as a radio. `null` (the default) keeps the button.
+  ///
+  /// A radio's value is its checked state, so the [subtitle] is not
+  /// announced as the value; fold it into the [title] if it matters.
+  final bool? semanticsChecked;
+
   /// Whether to apply the subtle scale-down animation on press.
   ///
   /// When `true` (default), the item shrinks to 0.98× on touch-down, matching
@@ -89,6 +127,26 @@ class GlassMenuItem extends StatefulWidget {
   ///
   /// Defaults to `true`.
   final bool enablePressScale;
+
+  /// How long to wait after [onTap] fires before the menu begins closing.
+  ///
+  /// Defaults to `null` (close immediately). Set to a short duration such as
+  /// `Duration(milliseconds: 320)` when the item hosts an animated [trailing]
+  /// widget (e.g. a [GlassSwitch]) whose state transition should be visible
+  /// before the menu morphs away.
+  final Duration? closeDelay;
+
+  /// Child items shown when this item is activated inside a [GlassMenu].
+  ///
+  /// When non-null, activating the item (tap, slide-and-release, or
+  /// [GlassMenuController.endGlide]) does not call [onTap] or close the menu.
+  /// Instead a card opens over the parent, which remains visible but recedes
+  /// and dims. The card's header repeats this item's icon and title, in bold,
+  /// with a downward chevron. Activating the header collapses the card.
+  /// Submenus may nest; only the frontmost card's actions are interactive.
+  ///
+  /// When [trailing] is null a submenu item shows a chevron.
+  final List<Widget>? submenu;
 
   @override
   State<GlassMenuItem> createState() => _GlassMenuItemState();
@@ -116,10 +174,21 @@ class GlassMenuDivider extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = CupertinoTheme.of(context);
-    // Resolve from theme's label color, falling back to text color at 15%
-    final defaultLineColor =
-        (theme.textTheme.tabLabelTextStyle.color ?? CupertinoColors.label)
-            .withValues(alpha: 0.45);
+    final isDark = GlassTheme.brightnessOf(context) == Brightness.dark;
+    final style = GlassTheme.maybeOf(context)?.data.style ?? GlassStyle.ios27;
+    final Color defaultLineColor;
+    if (style == GlassStyle.classic) {
+      final resolvedBase = CupertinoDynamicColor.resolve(
+        theme.textTheme.tabLabelTextStyle.color ??
+            (isDark ? CupertinoColors.white : CupertinoColors.black),
+        context,
+      );
+      defaultLineColor = resolvedBase.withValues(alpha: 0.45);
+    } else {
+      defaultLineColor =
+          (isDark ? CupertinoColors.white : CupertinoColors.black)
+              .withValues(alpha: isDark ? 0.18 : 0.14);
+    }
     return SizedBox(
       height: height,
       child: Center(
@@ -155,6 +224,10 @@ class GlassMenuLabel extends StatelessWidget {
   /// Horizontal padding for the content. Only used if [child] is provided.
   final double horizontalPadding;
 
+  /// Optional alignment for the content. Defaults to [Alignment.centerLeft] if
+  /// [title] is provided, or null (filling parent constraints) if [child] is provided.
+  final AlignmentGeometry? alignment;
+
   /// Creates a glass menu label.
   const GlassMenuLabel({
     this.title,
@@ -162,6 +235,7 @@ class GlassMenuLabel extends StatelessWidget {
     this.style,
     this.height = 30.0,
     this.horizontalPadding = 16.0,
+    this.alignment,
     super.key,
   }) : assert(title != null || child != null,
             'Either title or child must be provided');
@@ -169,14 +243,27 @@ class GlassMenuLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = CupertinoTheme.of(context);
-    // Use the theme's secondary label color for muted captions
-    final defaultLabelColor = (theme.textTheme.tabLabelTextStyle.color ??
-            CupertinoColors.secondaryLabel)
-        .withValues(alpha: 0.45);
+    final isDark = GlassTheme.brightnessOf(context) == Brightness.dark;
+    final glassStyle =
+        GlassTheme.maybeOf(context)?.data.style ?? GlassStyle.ios27;
+    final Color defaultLabelColor;
+    if (glassStyle == GlassStyle.classic) {
+      final resolvedBase = CupertinoDynamicColor.resolve(
+        theme.textTheme.tabLabelTextStyle.color ??
+            (isDark ? CupertinoColors.white : CupertinoColors.black),
+        context,
+      );
+      defaultLabelColor = resolvedBase.withValues(alpha: 0.45);
+    } else {
+      defaultLabelColor = CupertinoDynamicColor.resolve(
+        CupertinoColors.secondaryLabel,
+        context,
+      );
+    }
     return Container(
       height: height,
       padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
-      alignment: Alignment.centerLeft,
+      alignment: alignment ?? (title != null ? Alignment.centerLeft : null),
       child: child ??
           Text(
             title!.toUpperCase(),
@@ -211,32 +298,45 @@ class _GlassMenuItemState extends State<GlassMenuItem>
     // Resolve foreground color from the current CupertinoTheme.
     // This automatically supports Light Mode, Dark Mode, and custom themes.
     final theme = CupertinoTheme.of(context);
-    final defaultForeground =
-        theme.textTheme.textStyle.color ?? CupertinoColors.label;
+    final isDark = GlassTheme.brightnessOf(context) == Brightness.dark;
+    final style = GlassTheme.maybeOf(context)?.data.style ?? GlassStyle.ios27;
+    final defaultForeground = CupertinoDynamicColor.resolve(
+      theme.textTheme.textStyle.color ??
+          (isDark ? CupertinoColors.white : CupertinoColors.black),
+      context,
+    );
+    final destructiveColor = CupertinoDynamicColor.resolve(
+      CupertinoColors.destructiveRed,
+      context,
+    );
 
     // Determine the base color of the item (inheritance logic)
     // Priority: iconColor > titleStyle.color > destructiveRed > theme foreground
     final Color baseColor = widget.iconColor ??
         widget.titleStyle?.color ??
-        (widget.isDestructive
-            ? CupertinoColors.destructiveRed
-            : defaultForeground);
+        (widget.isDestructive ? destructiveColor : defaultForeground);
 
     // Apply specific opacities based on original design specs:
     // Icon: 100% (enabled), 50% (disabled)
     // Text: 90% (static for enabled/disabled)
     final Color iconColor = widget.iconColor ??
         (widget.isDestructive
-            ? CupertinoColors.destructiveRed
+            ? destructiveColor
             : baseColor.withValues(alpha: widget.enabled ? 1.0 : 0.5));
 
     final Color textColor = widget.titleStyle?.color ??
         (widget.isDestructive
-            ? CupertinoColors.destructiveRed
+            ? destructiveColor
             : baseColor.withValues(alpha: 0.9));
 
+    final Color pressWash = (style == GlassStyle.classic || isDark)
+        ? const Color(0x26FFFFFF)
+        : const Color(0x14000000);
+    final Color hoverWash = (style == GlassStyle.classic || isDark)
+        ? const Color(0x1AFFFFFF)
+        : const Color(0x0D000000);
+
     // Dynamic background for hover/press states
-    // We use a subtle white overlay to "brighten" the glass
     final content = ListenableBuilder(
       listenable: allInteraction,
       builder: (context, _) {
@@ -250,9 +350,9 @@ class _GlassMenuItemState extends State<GlassMenuItem>
         final Color backgroundColor = effectiveSelected
             ? const Color(0x00000000) // Parent renders the sliding pill
             : effectivePressed
-                ? const Color(0x26FFFFFF) // Standalone press
+                ? pressWash // Standalone press
                 : (isHov || isFoc)
-                    ? const Color(0x1AFFFFFF)
+                    ? hoverWash
                     : const Color(0x00000000);
 
         // Scale effect on press (subtle squash like iOS buttons)
@@ -277,58 +377,89 @@ class _GlassMenuItemState extends State<GlassMenuItem>
                 color: backgroundColor,
                 borderRadius: BorderRadius.circular(24),
               ),
-              child: Opacity(
-                opacity: widget.enabled ? 1.0 : 0.4,
-                child: Row(
-                  children: [
-                    // Icon
-                    if (widget.icon != null) ...[
-                      IconTheme(
-                        data: IconThemeData(
-                          color: iconColor,
-                          size: widget.iconSize,
-                        ),
-                        child: widget.icon!,
-                      ),
-                      const SizedBox(width: 12),
-                    ],
-
-                    // Text Content (Title & Subtitle)
-                    Expanded(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            widget.title,
-                            maxLines: widget.maxLines,
-                            overflow: TextOverflow.ellipsis,
-                            style: widget.titleStyle ??
-                                TextStyle(
-                                  color: textColor,
-                                  fontSize: 17,
-                                  fontWeight: FontWeight.w400,
-                                ),
-                          ),
-                          if (widget.subtitle != null)
-                            Text(
-                              widget.subtitle!,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: widget.subtitleStyle ??
-                                  TextStyle(
-                                    color: textColor.withValues(alpha: 0.6),
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w400,
-                                  ),
+              child: _maybeDimDisabled(
+                enabled: widget.enabled,
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    // A submenu row shows a chevron unless the caller supplied
+                    // its own trailing widget.
+                    final Widget? trailing = widget.trailing ??
+                        (widget.submenu != null
+                            ? Icon(
+                                CupertinoIcons.chevron_right,
+                                size: 16,
+                                color: iconColor.withValues(alpha: 0.6),
+                              )
+                            : null);
+                    final row = Row(
+                      children: [
+                        // Icon
+                        if (widget.icon != null) ...[
+                          IconTheme(
+                            data: IconThemeData(
+                              color: iconColor,
+                              size: widget.iconSize,
                             ),
+                            child: widget.icon!,
+                          ),
+                          const SizedBox(width: 12),
                         ],
-                      ),
-                    ),
 
-                    // Trailing
-                    if (widget.trailing != null) widget.trailing!,
-                  ],
+                        // Text Content (Title & Subtitle)
+                        Expanded(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                widget.title,
+                                maxLines: widget.maxLines,
+                                overflow: TextOverflow.ellipsis,
+                                style: widget.titleStyle ??
+                                    TextStyle(
+                                      color: textColor,
+                                      fontSize: 17,
+                                      fontWeight: FontWeight.w400,
+                                    ),
+                              ),
+                              if (widget.subtitle != null)
+                                Text(
+                                  widget.subtitle!,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: widget.subtitleStyle ??
+                                      TextStyle(
+                                        color: textColor.withValues(alpha: 0.6),
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w400,
+                                      ),
+                                ),
+                            ],
+                          ),
+                        ),
+
+                        // Trailing
+                        if (trailing != null) trailing,
+                      ],
+                    );
+
+                    if (constraints.hasBoundedWidth) {
+                      final double minRequired = (widget.icon != null
+                              ? (widget.iconSize + 12.0)
+                              : 0.0) +
+                          (trailing != null ? 24.0 : 0.0);
+                      if (constraints.maxWidth < minRequired) {
+                        return OverflowBox(
+                          alignment: Alignment.centerLeft,
+                          minWidth: minRequired,
+                          maxWidth: minRequired,
+                          child: row,
+                        );
+                      }
+                    }
+
+                    return row;
+                  },
                 ),
               ),
             ),
@@ -341,11 +472,20 @@ class _GlassMenuItemState extends State<GlassMenuItem>
     return GlassFocusRegion(
       enabled: widget.enabled,
       isButton: true,
-      semanticLabel: widget.title,
+      semanticLabel: widget.semanticLabel ?? widget.title,
+      // The title label replaces the row's own text, so carry the subtitle
+      // as the value: announced after the title, on the same node.
+      semanticValue: widget.subtitle,
+      // Only the semantic choice is reported. The visual [isSelected] follows
+      // the glide pill, and announcing it would mark whichever row is hovered.
+      tracksSelection: widget.semanticsSelected != null,
+      isSelected: widget.semanticsSelected ?? false,
       isFocusedNotifier: isFocused,
       isHoveredNotifier: isHovered,
       onKeyboardActivate: _handleKeyboardActivate,
       semanticOnTap: widget.enabled ? widget.onTap : null,
+      // A non-null checked state reads as a radio in place of the button.
+      checked: widget.semanticsChecked,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       child: GestureDetector(
         onTapDown: widget.enabled ? (_) => isPressed.value = true : null,
@@ -353,8 +493,18 @@ class _GlassMenuItemState extends State<GlassMenuItem>
         onTapCancel: widget.enabled ? () => isPressed.value = false : null,
         onTap: widget.enabled ? widget.onTap : null,
         behavior: HitTestBehavior.opaque,
+        // The tap lives on the GlassFocusRegion node with the label (via
+        // semanticOnTap); a second one here landed on a separate, unnamed
+        // node, as GlassButton documents.
+        excludeFromSemantics: true,
         child: content,
       ),
     );
   }
+
+  static Widget _maybeDimDisabled({
+    required bool enabled,
+    required Widget child,
+  }) =>
+      enabled ? child : Opacity(opacity: 0.4, child: child);
 }

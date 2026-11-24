@@ -4,8 +4,12 @@ import '../../src/renderer/liquid_glass_renderer.dart';
 
 import '../../theme/glass_theme_data.dart';
 import '../../theme/glass_theme.dart';
+import '../../theme/glass_theme_helpers.dart';
 import '../../types/glass_quality.dart';
+import '../../types/glass_style.dart';
+import '../shared/adaptive_glass.dart';
 import '../shared/adaptive_liquid_glass_layer.dart';
+import '../shared/glass_accessibility_scope.dart';
 
 /// Position where the toast should appear on screen.
 enum GlassToastPosition {
@@ -208,6 +212,8 @@ class GlassToast extends StatefulWidget {
     GlassQuality? quality,
   }) {
     final overlayState = Overlay.of(context);
+    final capturedGlassTheme = GlassTheme.maybeOf(context)?.data;
+    final capturedCupertinoTheme = CupertinoTheme.of(context);
     late OverlayEntry overlayEntry;
 
     void removeEntry() {
@@ -215,18 +221,31 @@ class GlassToast extends StatefulWidget {
     }
 
     overlayEntry = OverlayEntry(
-      builder: (context) => _GlassToastOverlay(
-        message: message,
-        icon: icon,
-        type: type,
-        position: position,
-        duration: duration,
-        action: action,
-        dismissible: dismissible,
-        settings: settings,
-        quality: quality,
-        onDismissed: removeEntry,
-      ),
+      builder: (overlayContext) {
+        Widget toast = _GlassToastOverlay(
+          message: message,
+          icon: icon,
+          type: type,
+          position: position,
+          duration: duration,
+          action: action,
+          dismissible: dismissible,
+          settings: settings,
+          quality: quality,
+          onDismissed: removeEntry,
+        );
+        toast = CupertinoTheme(
+          data: capturedCupertinoTheme,
+          child: toast,
+        );
+        if (capturedGlassTheme != null) {
+          toast = GlassTheme(
+            data: capturedGlassTheme,
+            child: toast,
+          );
+        }
+        return toast;
+      },
     );
 
     overlayState.insert(overlayEntry);
@@ -237,6 +256,13 @@ class GlassToast extends StatefulWidget {
   @override
   State<GlassToast> createState() => _GlassToastState();
 }
+
+const _kDefaultToastSettings = LiquidGlassSettings(
+  thickness: 25.0,
+  blur: 6.0,
+  refractiveIndex: 1.15,
+  saturation: 1.3,
+);
 
 class _GlassToastState extends State<GlassToast> {
   @override
@@ -269,91 +295,113 @@ class _GlassToastState extends State<GlassToast> {
   Widget _buildToastContent(
       BuildContext context, Color semanticColor, Widget displayIcon) {
     final hasAction = widget.action != null;
+    final themeData = GlassThemeData.of(context);
     final isDark = GlassTheme.brightnessOf(context) == Brightness.dark;
-    final bgColor = isDark
-        ? CupertinoColors.black.withValues(alpha: 0.7)
-        : CupertinoColors.white.withValues(alpha: 0.7);
+    final bgColor = themeData.style == GlassStyle.classic
+        ? (isDark
+            ? CupertinoColors.black.withValues(alpha: 0.7)
+            : CupertinoColors.white.withValues(alpha: 0.7))
+        : null;
     final textColor = CupertinoColors.label.resolveFrom(context);
+    final effectiveSettings = GlassThemeHelpers.resolveSettings(
+      context,
+      explicit: widget.settings,
+      fallback: _kDefaultToastSettings,
+      isOverlayPlatter: true,
+    );
+    final effectiveQuality = GlassThemeHelpers.resolveQuality(
+      context,
+      widgetQuality: widget.quality,
+      fallback: GlassThemeHelpers.nativeStyleQuality(context),
+    );
 
     return AdaptiveLiquidGlassLayer(
-      settings: widget.settings ??
-          const LiquidGlassSettings(
-            thickness: 25.0,
-            blur: 6.0,
-            refractiveIndex: 1.15,
-            saturation: 1.3,
+      settings: effectiveSettings,
+      quality: effectiveQuality,
+      child: AdaptiveGlass(
+        shape: const LiquidRoundedSuperellipse(borderRadius: 24),
+        settings: effectiveSettings,
+        quality: effectiveQuality,
+        useOwnLayer: false,
+        child: Container(
+          constraints: const BoxConstraints(
+            minHeight: 48,
+            maxWidth: 400,
           ),
-      quality: widget.quality,
-      child: Container(
-        constraints: const BoxConstraints(
-          minHeight: 48,
-          maxWidth: 400,
-        ),
-        decoration: BoxDecoration(
-          color: bgColor,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(
-            color: semanticColor.withValues(alpha: 0.2),
-            width: 1,
+          decoration: BoxDecoration(
+            color: bgColor,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: semanticColor.withValues(alpha: 0.2),
+              width: 1,
+            ),
+            // The semantic glow is only drawn over `classic`'s opaque fill. On
+            // the glass styles the fill is transparent, so a box shadow would
+            // paint through the pill's interior and tint the whole surface.
+            boxShadow: themeData.style == GlassStyle.classic
+                ? [
+                    BoxShadow(
+                      color: semanticColor.withValues(alpha: 0.15),
+                      blurRadius: 20,
+                      spreadRadius: 2,
+                    ),
+                  ]
+                : null,
           ),
-          boxShadow: [
-            BoxShadow(
-              color: semanticColor.withValues(alpha: 0.15),
-              blurRadius: 20,
-              spreadRadius: 2,
-            ),
-          ],
-        ),
-        padding: EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: hasAction ? 8 : 12,
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Icon
-            IconTheme(
-              data: IconThemeData(color: semanticColor, size: 20),
-              child: displayIcon,
-            ),
-            const SizedBox(width: 12),
-
-            // Message
-            Flexible(
-              child: Text(
-                widget.message,
-                style: TextStyle(
-                  color: textColor,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w500,
-                  letterSpacing: -0.2,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
+          padding: EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: hasAction ? 8 : 12,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Icon
+              IconTheme(
+                data: IconThemeData(color: semanticColor, size: 20),
+                child: displayIcon,
               ),
-            ),
-
-            // Action button
-            if (hasAction) ...[
               const SizedBox(width: 12),
-              CupertinoButton(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                onPressed: widget.action!.onPressed,
-                minimumSize: Size(32, 32),
-                child: Text(
-                  widget.action!.label,
-                  style: TextStyle(
-                    color: semanticColor,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
+
+              // Message. Already the label of the live region above, so the
+              // text is kept out of semantics to be read once, not twice.
+              Flexible(
+                child: ExcludeSemantics(
+                  child: Text(
+                    widget.message,
+                    style: TextStyle(
+                      color: textColor,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                      letterSpacing: -0.2,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ),
+
+              // Action button
+              if (hasAction) ...[
+                const SizedBox(width: 12),
+                CupertinoButton(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  onPressed: widget.action!.onPressed,
+                  minimumSize: Size(32, 32),
+                  child: Text(
+                    widget.action!.label,
+                    style: TextStyle(
+                      color: semanticColor,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -408,9 +456,14 @@ class _GlassToastOverlay extends StatefulWidget {
 class _GlassToastOverlayState extends State<_GlassToastOverlay>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
+  late CurvedAnimation _slideCurve;
   late Animation<Offset> _slideAnimation;
+  late CurvedAnimation _fadeCurve;
   late Animation<double> _fadeAnimation;
   Timer? _dismissTimer;
+
+  static const Animation<Offset> _noSlide =
+      AlwaysStoppedAnimation<Offset>(Offset.zero);
 
   @override
   void initState() {
@@ -424,24 +477,26 @@ class _GlassToastOverlayState extends State<_GlassToastOverlay>
 
     // Slide animation based on position
     final Offset slideBegin = _getSlideOffset();
-    _slideAnimation = Tween<Offset>(
-      begin: slideBegin,
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
+    _slideCurve = CurvedAnimation(
       parent: _controller,
       curve: Curves.easeOutCubic,
       reverseCurve: Curves.easeInCubic,
-    ));
+    );
+    _slideAnimation = Tween<Offset>(
+      begin: slideBegin,
+      end: Offset.zero,
+    ).animate(_slideCurve);
 
     // Fade animation
-    _fadeAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
+    _fadeCurve = CurvedAnimation(
       parent: _controller,
       curve: const Interval(0.0, 0.5),
       reverseCurve: const Interval(0.5, 1.0),
-    ));
+    );
+    _fadeAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(_fadeCurve);
 
     // Start entrance animation
     _controller.forward();
@@ -472,14 +527,15 @@ class _GlassToastOverlayState extends State<_GlassToastOverlay>
   @override
   void dispose() {
     _dismissTimer?.cancel();
+    _slideCurve.dispose();
+    _fadeCurve.dispose();
     _controller.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final MediaQueryData mediaQuery = MediaQuery.of(context);
-    final EdgeInsets padding = mediaQuery.padding;
+    final EdgeInsets padding = MediaQuery.paddingOf(context);
 
     // Calculate vertical position
     final double verticalPosition = _calculateVerticalPosition(padding);
@@ -502,9 +558,14 @@ class _GlassToastOverlayState extends State<_GlassToastOverlay>
         key: const Key('glass_toast_dismissible'),
         direction: _getDismissDirection(),
         onDismissed: (_) => _dismiss(),
-        child: toast,
+        // The swipe has no meaning to a screen reader; the same dismissal is
+        // offered to it as a semantic action. Pointer users get the timer.
+        child: Semantics(container: true, onDismiss: _dismiss, child: toast),
       );
     }
+
+    // Reduce Motion: the toast fades in and out in place, without the slide.
+    final reduceMotion = GlassAccessibilityData.of(context).reduceMotion;
 
     return Positioned(
       top: widget.position == GlassToastPosition.top ? verticalPosition : null,
@@ -514,7 +575,7 @@ class _GlassToastOverlayState extends State<_GlassToastOverlay>
       left: 16,
       right: 16,
       child: SlideTransition(
-        position: _slideAnimation,
+        position: reduceMotion ? _noSlide : _slideAnimation,
         child: FadeTransition(
           opacity: _fadeAnimation,
           child: widget.position == GlassToastPosition.center

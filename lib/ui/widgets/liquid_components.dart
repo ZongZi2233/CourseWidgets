@@ -12,6 +12,7 @@ import '../../utils/glass_settings_helper.dart';
 import '../../services/theme_service.dart' as theme;
 import '../../services/static_blur_service.dart';
 import '../animations/app_motion.dart';
+import '../theme/squircle_geometry.dart';
 import '../../main.dart';
 
 enum LiquidStyleType { standard, micro, active }
@@ -379,11 +380,12 @@ class LiquidGlassDialog extends StatelessWidget {
     List<GlassDialogAction>? actions,
     double maxWidth = 320,
   }) {
+    final isDark = GlassSettingsHelper.isDark(context);
     return showGeneralDialog<T>(
       context: context,
       barrierDismissible: true,
       barrierLabel: 'Dismiss',
-      barrierColor: Colors.black.withValues(alpha: 0.38),
+      barrierColor: Colors.transparent,
       transitionDuration: const Duration(milliseconds: 320),
       pageBuilder: (dialogCtx, anim1, anim2) => LiquidGlassDialog(
         title: title,
@@ -400,16 +402,40 @@ class LiquidGlassDialog extends StatelessWidget {
           final curved = AppCurves.spring.transform(anim1.value);
           scale = (1.10 - 0.10 * curved).clamp(0.96, 1.12);
         }
-        return FadeTransition(
-          opacity: CurvedAnimation(
-            parent: anim1,
-            curve: AppCurves.easeDecel,
-            reverseCurve: AppCurves.easeAccel,
-          ),
-          child: Transform.scale(
-            scale: scale,
-            child: child,
-          ),
+        final fadeAnim = CurvedAnimation(
+          parent: anim1,
+          curve: AppCurves.easeDecel,
+          reverseCurve: AppCurves.easeAccel,
+        );
+        final fade = fadeAnim.value.clamp(0.0, 1.0);
+        final blurSigma = (6.5 * fade).clamp(0.0, 6.5);
+        final scrimColor = Colors.black.withValues(
+          alpha: (isDark ? 0.26 : 0.13) * fade,
+        );
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            Positioned.fill(
+              child: IgnorePointer(
+                child: blurSigma > 0.05
+                    ? BackdropFilter(
+                        filter: ImageFilter.blur(
+                          sigmaX: blurSigma,
+                          sigmaY: blurSigma,
+                        ),
+                        child: ColoredBox(color: scrimColor),
+                      )
+                    : ColoredBox(color: scrimColor),
+              ),
+            ),
+            FadeTransition(
+              opacity: fadeAnim,
+              child: Transform.scale(
+                scale: scale,
+                child: child,
+              ),
+            ),
+          ],
         );
       },
     );
@@ -426,70 +452,70 @@ class LiquidGlassDialog extends StatelessWidget {
       ),
     ];
 
+    final dialogGlassSettings = GlassSettingsHelper.getDialogSettings().copyWith(
+      glassColor: isDark
+          ? const Color(0x9E151822)
+          : const Color(0x9DF7F9FE),
+      blur: 10.0,
+      thickness: 22.0,
+      refractiveIndex: 1.48,
+      chromaticAberration: 0.08,
+      lightIntensity: 0.72,
+      ambientStrength: 0.34,
+      ambientRim: 0.0,
+      fresnelStrength: 0.0,
+      edgeAbsorption: 0.0,
+      saturation: 1.40,
+      specularSharpness: GlassSpecularSharpness.sharp,
+    );
+
     return Center(
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: maxWidth),
         child: Material(
           type: MaterialType.transparency,
-          child: Container(
+          child: DecoratedBox(
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(28),
+              borderRadius: SquircleGeometry.smoothRadius(28),
               boxShadow: HyperOSShadows.modal(isDark),
             ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(28),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 22),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: isDark
-                          ? const [
-                              Color(0xCC242936),
-                              Color(0xB8181B24),
-                            ]
-                          : const [
-                              Color(0xE0FFFFFF),
-                              Color(0xC8F2F6FC),
-                            ],
+            child: GlassContainer(
+              useOwnLayer: true,
+              quality: theme.ThemeService().glassQuality,
+              clipBehavior: Clip.antiAlias,
+              shape: const LiquidRoundedSuperellipse(borderRadius: 28),
+              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 22),
+              settings: dialogGlassSettings,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white : const Color(0xFF1E2128),
+                      letterSpacing: -0.2,
                     ),
-                    borderRadius: BorderRadius.circular(28),
+                    textAlign: TextAlign.center,
                   ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        title,
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: isDark ? Colors.white : const Color(0xFF1E2128),
-                          letterSpacing: -0.2,
-                        ),
-                        textAlign: TextAlign.center,
+                  const SizedBox(height: 12),
+                  Flexible(
+                    child: DefaultTextStyle(
+                      style: TextStyle(
+                        fontSize: 14.5,
+                        color: isDark
+                            ? Colors.white.withValues(alpha: 0.78)
+                            : const Color(0xFF4A5060),
+                        height: 1.45,
                       ),
-                      const SizedBox(height: 12),
-                      Flexible(
-                        child: DefaultTextStyle(
-                          style: TextStyle(
-                            fontSize: 14.5,
-                            color: isDark
-                                ? Colors.white.withValues(alpha: 0.78)
-                                : const Color(0xFF4A5060),
-                            height: 1.45,
-                          ),
-                          textAlign: TextAlign.center,
-                          child: content,
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      _buildActions(context, effectiveActions, isDark),
-                    ],
+                      textAlign: TextAlign.center,
+                      child: content,
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 20),
+                  _buildActions(context, effectiveActions, isDark),
+                ],
               ),
             ),
           ),
@@ -554,7 +580,7 @@ class LiquidGlassDialog extends StatelessWidget {
         height: 44,
         decoration: BoxDecoration(
           color: tintColor,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: SquircleGeometry.smoothRadius(16),
           border: Border.all(
             color: isPrimary || isDestructive
                 ? Colors.white.withValues(alpha: 0.35)
@@ -583,11 +609,12 @@ Future<T?> showLiquidDialog<T>({
   required BuildContext context,
   required Widget builder,
 }) {
+  final isDark = GlassSettingsHelper.isDark(context);
   return showGeneralDialog<T>(
     context: context,
     barrierDismissible: true,
     barrierLabel: 'Dismiss',
-    barrierColor: Colors.black.withValues(alpha: 0.38),
+    barrierColor: Colors.transparent,
     transitionDuration: const Duration(milliseconds: 300),
     pageBuilder: (ctx, anim1, anim2) => builder,
     transitionBuilder: (ctx, anim1, anim2, child) {
@@ -599,16 +626,40 @@ Future<T?> showLiquidDialog<T>({
         final curved = AppCurves.spring.transform(anim1.value);
         scale = (1.10 - 0.10 * curved).clamp(0.96, 1.12);
       }
-      return FadeTransition(
-        opacity: CurvedAnimation(
-          parent: anim1,
-          curve: AppCurves.easeDecel,
-          reverseCurve: AppCurves.easeAccel,
-        ),
-        child: Transform.scale(
-          scale: scale,
-          child: child,
-        ),
+      final fadeAnim = CurvedAnimation(
+        parent: anim1,
+        curve: AppCurves.easeDecel,
+        reverseCurve: AppCurves.easeAccel,
+      );
+      final fade = fadeAnim.value.clamp(0.0, 1.0);
+      final blurSigma = (6.5 * fade).clamp(0.0, 6.5);
+      final scrimColor = Colors.black.withValues(
+        alpha: (isDark ? 0.26 : 0.13) * fade,
+      );
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          Positioned.fill(
+            child: IgnorePointer(
+              child: blurSigma > 0.05
+                  ? BackdropFilter(
+                      filter: ImageFilter.blur(
+                        sigmaX: blurSigma,
+                        sigmaY: blurSigma,
+                      ),
+                      child: ColoredBox(color: scrimColor),
+                    )
+                  : ColoredBox(color: scrimColor),
+            ),
+          ),
+          FadeTransition(
+            opacity: fadeAnim,
+            child: Transform.scale(
+              scale: scale,
+              child: child,
+            ),
+          ),
+        ],
       );
     },
   );
@@ -758,7 +809,6 @@ class LiquidBackButton extends StatelessWidget {
       shape: GlassIconButtonShape.roundedSquare,
       borderRadius: 16,
       interactionScale: 1.10,
-      pressDarken: true,
       glowColor: primaryColor.withValues(alpha: isDark ? 0.42 : 0.32),
       glowRadius: 24,
       useOwnLayer: true,
@@ -800,10 +850,11 @@ class FloatingLiquidBackButton extends StatelessWidget {
     return Positioned(
       bottom: 24,
       right: 20,
-      child: SafeArea(
-        top: false,
-        left: false,
-        child: GlassButton.custom(
+      child: RepaintBoundary(
+        child: SafeArea(
+          top: false,
+          left: false,
+          child: GlassButton.custom(
           width: 52,
           height: 52,
           useOwnLayer: true,
@@ -811,8 +862,7 @@ class FloatingLiquidBackButton extends StatelessWidget {
           quality: theme.ThemeService().glassQuality,
           stretch: 0.25,
           interactionScale: 1.12,
-          showOverlayColor: false,
-          ambientBaseLight: 0.0,
+            ambientBaseLight: 0.0,
           onTap: () {
             HapticFeedback.lightImpact();
             if (onBack != null) {
@@ -854,6 +904,7 @@ class FloatingLiquidBackButton extends StatelessWidget {
           ),
         ),
       ),
+    ),
     );
   }
 }
@@ -884,42 +935,44 @@ class FloatingGlassHeaderButton extends StatelessWidget {
           Navigator.maybePop(context);
         }
       },
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            decoration: BoxDecoration(
-              color: isDark
-                  ? Colors.black.withValues(alpha: 0.35)
-                  : Colors.white.withValues(alpha: 0.65),
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: HyperOSShadows.pill(isDark),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  CupertinoIcons.chevron_left,
-                  size: 18,
-                  color: textColor.withValues(alpha: 0.9),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.bold,
-                    color: textColor,
-                    letterSpacing: 0.3,
+      child: RepaintBoundary(
+        child: ClipRSuperellipse(
+          borderRadius: SquircleGeometry.smoothRadius(22),
+          child: BackdropFilter.grouped(
+            filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? Colors.black.withValues(alpha: 0.35)
+                    : Colors.white.withValues(alpha: 0.65),
+                borderRadius: SquircleGeometry.smoothRadius(22),
+                boxShadow: HyperOSShadows.pill(isDark),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    CupertinoIcons.chevron_left,
+                    size: 18,
+                    color: textColor.withValues(alpha: 0.9),
                   ),
-                ),
-                if (trailing != null) ...[
-                  const SizedBox(width: 8),
-                  trailing!,
+                  const SizedBox(width: 6),
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.bold,
+                      color: textColor,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                  if (trailing != null) ...[
+                    const SizedBox(width: 8),
+                    trailing!,
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
         ),
@@ -1053,21 +1106,15 @@ class HyperOSShadows {
 
     return [
       BoxShadow(
-        color: Colors.black.withValues(alpha: 0.35),
-        blurRadius: 22.0,
+        color: Colors.black.withValues(alpha: 0.32),
+        blurRadius: 18.0,
         spreadRadius: -2.0,
-        offset: const Offset(0, 6),
-      ),
-      BoxShadow(
-        color: Colors.black.withValues(alpha: 0.20),
-        blurRadius: 8.0,
-        spreadRadius: 0,
-        offset: const Offset(0, 2),
+        offset: const Offset(0, 5),
       ),
       if (glowColor != null)
         BoxShadow(
-          color: glowColor.withValues(alpha: 0.25),
-          blurRadius: 14.0,
+          color: glowColor.withValues(alpha: 0.22),
+          blurRadius: 12.0,
           spreadRadius: -1.0,
           offset: const Offset(0, 2.5),
         ),
@@ -1203,9 +1250,11 @@ class HyperOSCard extends StatelessWidget {
             shape: shape,
             shadows: effectiveShadows,
             scrollPosition: scrollPosition,
-            child: Padding(
-              padding: padding,
-              child: child,
+            child: RepaintBoundary(
+              child: Padding(
+                padding: padding,
+                child: child,
+              ),
             ),
           );
         },
@@ -1219,9 +1268,11 @@ class HyperOSCard extends StatelessWidget {
         shape: shape,
         shadows: effectiveShadows,
         scrollPosition: null,
-        child: Padding(
-          padding: padding,
-          child: child,
+        child: RepaintBoundary(
+          child: Padding(
+            padding: padding,
+            child: child,
+          ),
         ),
       );
     }
@@ -1231,7 +1282,7 @@ class HyperOSCard extends StatelessWidget {
       child: cardBody,
     );
 
-    if (onTap != null || onLongPress != null || feedbackType != MiuixPressFeedbackType.none) {
+    if (onTap != null || onLongPress != null) {
       cardContent = MiuixPressable(
         onPressed: onTap != null
             ? () {
@@ -1323,16 +1374,15 @@ class _RenderSharedBlurStencil extends RenderProxyBox {
   List<BoxShadow> shadows;
   ScrollPosition? scrollPosition;
 
-  final Paint _shaderPaint = Paint()..isAntiAlias = true;
+  final Paint _samplePaint = Paint()
+    ..isAntiAlias = true
+    ..filterQuality = FilterQuality.medium;
   final Paint _bgPaint = Paint()..isAntiAlias = true;
+  final Paint _sheenPaint = Paint()
+    ..isAntiAlias = true
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = 0.6;
   double _lastScrollPixels = double.nan;
-
-  // [v3.1.3 FlClash 级渲染优化] 缓存 ImageShader 与变换参数，消除每帧重复创建 Matrix4 与引擎层 Shader 实例
-  ui.Image? _cachedShaderImage;
-  double _cachedTransX = double.nan;
-  double _cachedTransY = double.nan;
-  double _cachedScaleX = double.nan;
-  double _cachedScaleY = double.nan;
 
   _RenderSharedBlurStencil({
     required this.blurredImage,
@@ -1382,9 +1432,6 @@ class _RenderSharedBlurStencil extends RenderProxyBox {
         this.cornerRadius != cornerRadius ||
         this.shape != shape ||
         this.shadows != shadows) {
-      if (!identical(this.blurredImage, blurredImage)) {
-        _cachedShaderImage = null;
-      }
       this.blurredImage = blurredImage;
       this.screenSize = screenSize;
       this.backgroundColor = backgroundColor;
@@ -1500,7 +1547,7 @@ class _RenderSharedBlurStencil extends RenderProxyBox {
     canvas.save();
     canvas.clipRSuperellipse(rsuperellipse);
 
-    // 3. 屏幕物理绝对坐标视窗采样 (带 ImageShader 缓存)
+    // 3. [v3.2.1] 零分配画布直采 (drawImageRect 替代每帧 Matrix4 + ImageShader 构造)
     if (blurredImage != null) {
       final refSize =
           StaticBlurredWallpaperService.instance.bakedScreenSize ?? screenSize;
@@ -1508,47 +1555,80 @@ class _RenderSharedBlurStencil extends RenderProxyBox {
         final globalOffset = _resolvePageGlobalOffset(refSize);
         final imgW = blurredImage!.width.toDouble();
         final imgH = blurredImage!.height.toDouble();
-        final scaleX = refSize.width / imgW;
-        final scaleY = refSize.height / imgH;
+        final invScaleX = imgW / refSize.width;
+        final invScaleY = imgH / refSize.height;
 
-        final transX = offset.dx - globalOffset.dx;
-        final transY = offset.dy - globalOffset.dy;
+        final visibleScreen = Rect.fromLTRB(
+          globalOffset.dx.clamp(0.0, refSize.width),
+          globalOffset.dy.clamp(0.0, refSize.height),
+          (globalOffset.dx + size.width).clamp(0.0, refSize.width),
+          (globalOffset.dy + size.height).clamp(0.0, refSize.height),
+        );
 
-        if (!identical(_cachedShaderImage, blurredImage) ||
-            _shaderPaint.shader == null ||
-            (transX - _cachedTransX).abs() > 0.25 ||
-            (transY - _cachedTransY).abs() > 0.25 ||
-            (scaleX - _cachedScaleX).abs() > 0.001 ||
-            (scaleY - _cachedScaleY).abs() > 0.001) {
-          _cachedShaderImage = blurredImage;
-          _cachedTransX = transX;
-          _cachedTransY = transY;
-          _cachedScaleX = scaleX;
-          _cachedScaleY = scaleY;
-
-          final matrix = Matrix4.identity()
-            ..translate(transX, transY)
-            ..scale(scaleX, scaleY);
-
-          _shaderPaint.shader = ImageShader(
-            blurredImage!,
-            TileMode.clamp,
-            TileMode.clamp,
-            matrix.storage,
-            filterQuality: FilterQuality.medium,
+        if (visibleScreen.width > 0.0 && visibleScreen.height > 0.0) {
+          final dstLeft = rect.left + (visibleScreen.left - globalOffset.dx);
+          final dstTop = rect.top + (visibleScreen.top - globalOffset.dy);
+          final dstVisible = Rect.fromLTWH(
+            dstLeft,
+            dstTop,
+            visibleScreen.width,
+            visibleScreen.height,
           );
-        }
+          final srcVisible = Rect.fromLTWH(
+            visibleScreen.left * invScaleX,
+            visibleScreen.top * invScaleY,
+            visibleScreen.width * invScaleX,
+            visibleScreen.height * invScaleY,
+          );
 
-        canvas.drawRect(rect, _shaderPaint);
+          // 卡片超出版面上下沿时用 1px 边缘条带补齐，与 TileMode.clamp 像素等价且零挤压
+          if (visibleScreen.top > globalOffset.dy) {
+            canvas.drawImageRect(
+              blurredImage!,
+              Rect.fromLTWH(srcVisible.left, 0.0, srcVisible.width, 1.0),
+              Rect.fromLTRB(
+                dstVisible.left,
+                rect.top,
+                dstVisible.right,
+                dstVisible.top + 0.5,
+              ),
+              _samplePaint,
+            );
+          }
+          if (globalOffset.dy + size.height > refSize.height) {
+            canvas.drawImageRect(
+              blurredImage!,
+              Rect.fromLTWH(
+                srcVisible.left,
+                (imgH - 1.0).clamp(0.0, imgH),
+                srcVisible.width,
+                1.0,
+              ),
+              Rect.fromLTRB(
+                dstVisible.left,
+                dstVisible.bottom - 0.5,
+                dstVisible.right,
+                rect.bottom,
+              ),
+              _samplePaint,
+            );
+          }
+          canvas.drawImageRect(blurredImage!, srcVisible, dstVisible, _samplePaint);
+        }
       }
     }
 
-    // 4. 绘制表面混色半透层
+    // 4. 绘制表面混色半透层与 0.6px 柔和内高光描边
     canvas.drawRect(rect, _bgPaint);
 
-    // 5. 绘制边框 (若有显式传入边框)
+    // 5. 绘制边框 (若有显式边框则按外部边框绘制，否则附加微光质感斜切高光)
     if (shape is OutlinedBorder && (shape as OutlinedBorder).side != BorderSide.none) {
       shape.paint(canvas, rect);
+    } else {
+      _sheenPaint.color = backgroundColor.computeLuminance() < 0.5
+          ? const Color(0x18FFFFFF)
+          : const Color(0x28FFFFFF);
+      canvas.drawRSuperellipse(rsuperellipse, _sheenPaint);
     }
 
     canvas.restore();

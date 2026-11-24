@@ -1,13 +1,18 @@
 import 'package:flutter/widgets.dart';
 
+import '../../src/renderer/liquid_glass_renderer.dart';
 import '../overlays/glass_menu.dart';
+import '../overlays/glass_modal_sheet.dart';
+import 'glass_navigation_shell.dart';
+import 'glass_vertical_bar.dart';
 
 /// How an item's glass background is drawn.
 ///
 /// Mirrors the two booleans iOS 26 added to `UIBarButtonItem`:
 /// `sharesBackground` (default `YES`) and `hidesSharedBackground` (default
 /// `NO`). Their four combinations describe three distinct results, which are
-/// the three values here.
+/// the first three values here; [own] is [none] for content that is itself
+/// glass.
 ///
 /// Both are documented as being ignored for an item inside an explicit group
 /// of more than one; the equivalent here is that [GlassBarItemBackground.shared]
@@ -30,6 +35,43 @@ enum GlassBarItemBackground {
   /// a profile photo, a coloured badge — where a capsule behind it would read
   /// as a second, competing surface.
   none,
+
+  /// The item's content is itself a glass surface.
+  ///
+  /// `hidesSharedBackground = YES`, as [none] — but the pinned chrome fades
+  /// and blurs ordinary content under opacity and image-filter layers, and a
+  /// glass surface painted under either has no backdrop to sample. An [own]
+  /// item dissolves through its surface's own visibility instead, the channel
+  /// `GlassMaterialize` uses. Two such items matched across a route change
+  /// take turns rather than cross-fading, since each would sample the other.
+  /// For a capsule built from `GlassButton.custom`; plain content stays
+  /// [none].
+  own,
+}
+
+/// Whether an item moves into iPhone Duo's vertical bar strip.
+///
+/// Mirrors SwiftUI's `ToolbarItem.axisBehavior(_:)`. Only read where a
+/// [GlassNavigationShell] has resolved a strip; see [GlassVerticalBar].
+enum GlassBarItemAxisBehavior {
+  /// The system decides, as natively: icons go vertical, and custom content
+  /// stays behind in a horizontal capsule at the top-trailing corner of the
+  /// content, beside the title.
+  ///
+  /// [GlassBarItem.icon], [GlassBarItem.menu] and [GlassBarItem.sheet] go
+  /// vertical; [GlassBarItem.custom] stays horizontal.
+  automatic,
+
+  /// The item stays in the horizontal capsule even where its kind would go
+  /// vertical.
+  horizontalOnly,
+
+  /// The item goes vertical even where its kind would stay horizontal.
+  ///
+  /// For [GlassBarItem.custom] content that works squeezed to the strip's
+  /// 48pt width — an unread count, a small avatar. It is laid out at that
+  /// width and whatever height it asks for.
+  verticalPreferred,
 }
 
 /// A single item in a pinned navigation-bar cluster.
@@ -71,6 +113,8 @@ sealed class GlassBarItem {
     String? label,
     bool enabled,
     GlassBarItemBackground background,
+    Color? tintColor,
+    GlassBarItemAxisBehavior axisBehavior,
   }) = GlassBarIconItem;
 
   /// An arbitrary widget inside the pinned cluster.
@@ -85,14 +129,22 @@ sealed class GlassBarItem {
   ///
   /// [onTap] is optional here, unlike on [GlassBarItem.icon]: a custom view is
   /// as often a status readout as it is a button, and one that handles its own
-  /// gestures wants the cluster to stay out of the way.
+  /// gestures wants the cluster to stay out of the way. When [onTap] is
+  /// omitted (or `null`), the slot is passive — it adds no outer button
+  /// semantics, focus stop, or tap recognizer around [child], and is excluded
+  /// from the vertical strip's overflow menu. Leave [label] `null` when
+  /// [child] provides its own accessible semantics (such as a button or
+  /// tooltip); supply [label] to name a passive readout as a single semantic
+  /// node (replacing [child]'s own text semantics).
   const factory GlassBarItem.custom({
     required Widget child,
-    VoidCallback onTap,
+    VoidCallback? onTap,
     Object? id,
     String? label,
     bool enabled,
     GlassBarItemBackground background,
+    Color? tintColor,
+    GlassBarItemAxisBehavior axisBehavior,
   }) = GlassBarCustomItem;
 
   /// An icon that opens a [GlassMenu] pull-down, mirroring
@@ -106,24 +158,67 @@ sealed class GlassBarItem {
   /// [menuItems] takes [GlassMenuItem] and [GlassMenuDivider] widgets — the
   /// same contract as [GlassMenu.items]. An open menu is dismissed if
   /// navigation starts underneath it.
+  ///
+  /// [menuSettings] is the glass of the menu panel. When null, the menu takes
+  /// the glass of the capsule it morphs out of.
   const factory GlassBarItem.menu({
     required Widget icon,
     required List<Widget> menuItems,
     GlassMenuAlignment? menuAlignment,
     double menuWidth,
+    double? menuHeight,
+    LiquidGlassSettings? menuSettings,
     Object? id,
     String? label,
     GlassBarItemBackground background,
+    Color? tintColor,
+    GlassBarItemAxisBehavior axisBehavior,
   }) = GlassBarMenuItem;
+
+  /// An icon whose tap presents a `GlassModalSheet` that morphs out of the
+  /// capsule, mirroring the iOS 26 bar button that grows into a sheet.
+  ///
+  /// [onPresent] is handed the [GlassMorphAnchor] of the capsule this item
+  /// sits in; pass it to `GlassModalSheet.show(morphFrom:)` and the capsule
+  /// empties, stretches into the sheet, and is poured back on dismissal. It is
+  /// the capsule rather than the icon's own slot for the reason
+  /// [GlassBarItem.menu] morphs the whole capsule: on screen the cluster is one
+  /// control, and a droplet crawling out of a hole in it reads as a second
+  /// object arriving.
+  ///
+  /// The anchor is the capsule actually on screen: the route's own where the
+  /// bar draws in-route, and the hoisted copy under a `GlassNavigationShell`.
+  /// A presentation hands the chrome back to its route, but the shell keeps
+  /// this capsule through the sheet — the morph has emptied it, so nothing of
+  /// it is drawn above the sheet, and the droplet has somewhere to come home
+  /// to. It is the group's own box where the group draws no glass
+  /// ([GlassBarItemBackground.none] and [GlassBarItemBackground.own]).
+  ///
+  /// [onPresent] may take its time — measure the sheet's content, await a
+  /// fetch: the shell keeps the capsule on the strength of the tap until a
+  /// route is presented over this one, and lets go only if that presentation
+  /// arrives without the morph.
+  ///
+  /// Dismiss the sheet before navigating, as an open [GlassMenu] is dismissed
+  /// for you.
+  const factory GlassBarItem.sheet({
+    required Widget icon,
+    required void Function(GlassMorphAnchor? anchor) onPresent,
+    Object? id,
+    String? label,
+    bool enabled,
+    GlassBarItemBackground background,
+    Color? tintColor,
+    GlassBarItemAxisBehavior axisBehavior,
+  }) = GlassBarSheetItem;
 
   /// Splits the shared glass background, mirroring SwiftUI's
   /// `ToolbarSpacer(.fixed)` and UIKit's `UIBarButtonItem.fixedSpace`.
   ///
-  /// Items on either side of a spacer render in separate glass capsules.
-  ///
-  /// Currently parsed and validated but not yet rendered — a cluster
-  /// containing a spacer asserts in debug mode. Multi-capsule grouping is a
-  /// follow-up.
+  /// Items on either side of a spacer render in separate glass capsules, the
+  /// standard gap apart. Across a route transition each capsule follows its
+  /// items, matched by `id` where they have one, and a capsule that only one
+  /// route has buds out of the one beside it, or merges back into it.
   const factory GlassBarItem.spacer() = GlassBarSpacer;
 }
 
@@ -139,6 +234,8 @@ sealed class GlassBarActionItem extends GlassBarItem {
     this.label,
     this.enabled = true,
     this.background = GlassBarItemBackground.shared,
+    this.tintColor,
+    this.axisBehavior = GlassBarItemAxisBehavior.automatic,
   });
 
   /// The tap handler for items that do not want one, mirroring
@@ -160,6 +257,10 @@ sealed class GlassBarActionItem extends GlassBarItem {
   final Object? id;
 
   /// Optional semantic label.
+  ///
+  /// On passive [GlassBarItem.custom] items, a non-empty [label] names the
+  /// slot as a single semantic node (replacing the child's own text
+  /// semantics); leave it `null` when the child provides its own semantics.
   final String? label;
 
   /// Whether the item responds to taps. Disabled items render dimmed.
@@ -169,6 +270,45 @@ sealed class GlassBarActionItem extends GlassBarItem {
   ///
   /// Defaults to [GlassBarItemBackground.shared], so items form one capsule.
   final GlassBarItemBackground background;
+
+  /// Tints the entire glass capsule with this colour, matching iOS 26's
+  /// `.tint()` modifier on a prominent bar button.
+  ///
+  /// When non-null, the host widget fills the glass body with this colour
+  /// (using [GlassBodyMode.clear] for accurate on-screen hex fidelity) and
+  /// automatically adjusts the foreground icon/label to high-contrast white
+  /// or black based on the colour's luminance.
+  ///
+  /// **Only effective for [GlassBarItemBackground.separate] items.** A shared
+  /// capsule is a single glass mesh — tinting one slot while leaving others
+  /// clear is not supported. In debug mode, setting [tintColor] on a
+  /// [GlassBarItemBackground.shared] item asserts.
+  final Color? tintColor;
+
+  /// Whether this item moves into iPhone Duo's vertical bar strip.
+  ///
+  /// Defaults to [GlassBarItemAxisBehavior.automatic]. Only read where a
+  /// [GlassNavigationShell] has resolved a strip.
+  final GlassBarItemAxisBehavior axisBehavior;
+
+  /// Whether this item goes into the vertical strip where there is one.
+  ///
+  /// Resolves [GlassBarItemAxisBehavior.automatic] by kind: everything but
+  /// custom content does.
+  bool get goesVertical => switch (axisBehavior) {
+        GlassBarItemAxisBehavior.verticalPreferred => true,
+        GlassBarItemAxisBehavior.horizontalOnly => false,
+        GlassBarItemAxisBehavior.automatic => this is! GlassBarCustomItem,
+      };
+
+  /// Whether this item has an active tap action of its own.
+  ///
+  /// True for [GlassBarItem.icon], [GlassBarItem.menu], and
+  /// [GlassBarItem.sheet], as well as [GlassBarItem.custom] when an [onTap]
+  /// callback was supplied. False for a passive [GlassBarItem.custom], which
+  /// lets its child handle its own gestures and semantics without the cluster
+  /// wrapping it in a button.
+  bool get hasTap => this is! GlassBarCustomItem || !identical(onTap, _noOp);
 
   /// The widget rendered inside the cluster.
   Widget get content;
@@ -186,6 +326,8 @@ final class GlassBarIconItem extends GlassBarActionItem {
     super.label,
     super.enabled,
     super.background,
+    super.tintColor,
+    super.axisBehavior,
   });
 
   /// The icon widget, typically an [Icon].
@@ -204,12 +346,14 @@ final class GlassBarCustomItem extends GlassBarActionItem {
   /// Creates a custom item. Prefer [GlassBarItem.custom].
   const GlassBarCustomItem({
     required this.child,
-    super.onTap = GlassBarActionItem._noOp,
+    VoidCallback? onTap,
     super.id,
     super.label,
     super.enabled,
     super.background,
-  });
+    super.tintColor,
+    super.axisBehavior,
+  }) : super(onTap: onTap ?? GlassBarActionItem._noOp);
 
   /// The widget rendered inside the cluster, measured at its intrinsic width.
   final Widget child;
@@ -228,9 +372,13 @@ final class GlassBarMenuItem extends GlassBarActionItem {
     required this.menuItems,
     this.menuAlignment,
     this.menuWidth = 200,
+    this.menuHeight,
+    this.menuSettings,
     super.id,
     super.label,
     super.background,
+    super.tintColor,
+    super.axisBehavior,
   }) : super(onTap: GlassBarActionItem._noOp);
 
   /// The icon widget, typically an [Icon]. Conventionally an ellipsis.
@@ -248,6 +396,50 @@ final class GlassBarMenuItem extends GlassBarActionItem {
 
   /// Width of the expanded menu panel, in logical pixels.
   final double menuWidth;
+
+  /// Optional fixed height for the menu panel, in logical pixels.
+  final double? menuHeight;
+
+  /// Glass settings of the menu panel.
+  ///
+  /// Defaults to the glass of the capsule the menu morphs out of.
+  final LiquidGlassSettings? menuSettings;
+
+  @override
+  Widget get content => icon;
+}
+
+/// A sheet-presenting item in a pinned navigation-bar cluster.
+///
+/// Created via [GlassBarItem.sheet].
+final class GlassBarSheetItem extends GlassBarActionItem {
+  /// Creates a sheet item. Prefer [GlassBarItem.sheet].
+  const GlassBarSheetItem({
+    required this.icon,
+    required this.onPresent,
+    super.id,
+    super.label,
+    super.enabled,
+    super.background,
+    super.tintColor,
+    super.axisBehavior,
+  }) : super(onTap: GlassBarActionItem._noOp);
+
+  /// The icon widget, typically an [Icon].
+  ///
+  /// Size and colour are applied by the enclosing cluster.
+  final Widget icon;
+
+  /// Called on tap with the anchor of the capsule this item sits in.
+  ///
+  /// Read at tap time, so a bar that moves between the pinned chrome and its
+  /// route hands out the anchor that is actually on screen.
+  ///
+  /// Null when no capsule can be resolved — a bar that renders the items
+  /// itself and offers no anchor of its own. `GlassModalSheet.show` takes a
+  /// null `morphFrom` and presents the way it always did, so the tap still
+  /// does its job and only the morph is lost.
+  final void Function(GlassMorphAnchor? anchor) onPresent;
 
   @override
   Widget get content => icon;

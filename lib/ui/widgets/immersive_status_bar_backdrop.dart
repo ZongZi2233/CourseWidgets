@@ -33,52 +33,55 @@ class ImmersiveStatusBarBackdrop extends StatelessWidget {
       right: 0,
       height: totalHeight,
       child: IgnorePointer(
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            // 阶段 1: 硬件级无极渐变高斯模糊或多阶梯渐变模糊
-            if (ui.ImageFilter.isShaderFilterSupported)
-              const ProgressiveBlur(
-                maxSigma: 20,
-                direction: ProgressiveBlurDirection.topToBottom,
-                falloff: 1.2,
-              )
-            else
-              _buildStaggeredSlicesBlur(totalHeight),
+        child: RepaintBoundary(
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              // 阶段 1: 硬件级无极渐变高斯模糊或多阶梯渐变模糊
+              if (ui.ImageFilter.isShaderFilterSupported)
+                const ProgressiveBlur(
+                  maxSigma: 20,
+                  direction: ProgressiveBlurDirection.topToBottom,
+                  falloff: 1.2,
+                )
+              else
+                _buildStaggeredSlicesBlur(context, totalHeight),
 
-            // 阶段 2: 极微环境光防眩抗眩晕柔光层（极低饱和与透光，杜绝死黑与生硬色块）
-            DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  stops: const [0.0, 0.60, 1.0],
-                  colors: isDark
-                      ? const [
-                          Color(0x240E1015),
-                          Color(0x0A0E1015),
-                          Colors.transparent,
-                        ]
-                      : const [
-                          Color(0x20FFFFFF),
-                          Color(0x06FFFFFF),
-                          Colors.transparent,
-                        ],
+              // 阶段 2: 极微环境光防眩抗眩晕柔光层（极低饱和与透光，杜绝死黑与生硬色块）
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    stops: const [0.0, 0.60, 1.0],
+                    colors: isDark
+                        ? const [
+                            Color(0x240E1015),
+                            Color(0x0A0E1015),
+                            Colors.transparent,
+                          ]
+                        : const [
+                            Color(0x20FFFFFF),
+                            Color(0x06FFFFFF),
+                            Colors.transparent,
+                          ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 
-  /// 当平台着色器不可用时的多阶梯渐进衰减平滑模糊降级方案 (5阶平滑重叠衰减)
-  Widget _buildStaggeredSlicesBlur(double totalHeight) {
+  /// 当平台着色器不可用时的多阶梯渐进衰减平滑模糊降级方案 (5阶共享采样)
+  Widget _buildStaggeredSlicesBlur(BuildContext context, double totalHeight) {
     const sigmas = [20.0, 14.0, 9.0, 5.0, 2.5];
     const fractions = [0.35, 0.55, 0.75, 0.90, 1.0];
+    final hasGroup = BackdropGroup.of(context) != null;
 
-    return Stack(
+    final slices = Stack(
       children: List.generate(sigmas.length, (i) {
         final sliceHeight = totalHeight * fractions[i];
         return Positioned(
@@ -87,7 +90,7 @@ class ImmersiveStatusBarBackdrop extends StatelessWidget {
           right: 0,
           height: sliceHeight,
           child: ClipRect(
-            child: BackdropFilter(
+            child: BackdropFilter.grouped(
               filter: ui.ImageFilter.blur(
                 sigmaX: sigmas[i] * 0.45,
                 sigmaY: sigmas[i] * 0.45,
@@ -98,5 +101,10 @@ class ImmersiveStatusBarBackdrop extends StatelessWidget {
         );
       }),
     );
+
+    if (hasGroup) {
+      return slices;
+    }
+    return BackdropGroup(child: slices);
   }
 }

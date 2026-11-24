@@ -14,7 +14,7 @@ import '../widgets/liquid_toast.dart';
 import '../widgets/immersive_status_bar_backdrop.dart';
 import '../widgets/windows_desktop_title_bar.dart'
     show setWindowsDesktopTitle, clearWindowsDesktopTitle;
-import 'package:smooth_scroll_multiplatform/smooth_scroll_multiplatform.dart';
+import '../widgets/adaptive_smooth_scroll.dart';
 import '../../utils/responsive_utils.dart';
 
 class CourseEditScreen extends StatefulWidget {
@@ -96,7 +96,7 @@ class _CourseEditScreenState extends State<CourseEditScreen> {
           // 1. 全出血自由滑动内容区：穿透顶栏与状态栏，消除截断
           Positioned.fill(
             child: RepaintBoundary(
-              child: DynMouseScroll(
+              child: AdaptiveSmoothScroll(
                 durationMS: 250,
                 scrollSpeed: 1.2,
                 builder: (context, controller, physics) =>

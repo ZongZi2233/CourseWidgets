@@ -13,10 +13,13 @@ import '../../../widgets/shared/glass_focus_region.dart';
 import '../../../constants/glass_defaults.dart';
 import '../../renderer/liquid_glass_renderer.dart';
 import '../../../theme/glass_theme.dart';
+import '../../../theme/glass_theme_settings.dart';
 import '../../../types/glass_quality.dart';
+import '../../../types/glass_style.dart';
 import '../../../utils/draggable_indicator_physics.dart';
 import 'tab_bar_drag_gesture_mixin.dart';
 import '../../../utils/glass_spring.dart';
+import '../../../utils/indicator_jelly.dart';
 import '../../../widgets/interactive/glass_button.dart';
 import '../../../widgets/overlays/glass_menu.dart' show GlassMenu;
 import '../../../widgets/shared/adaptive_glass.dart';
@@ -32,32 +35,50 @@ import '../../../widgets/surfaces/glass_tab_bar.dart' show GlassTab;
 // kBottomBarGlassDefaults — shared glass preset
 // =============================================================================
 
-/// Default [LiquidGlassSettings] for both [GlassTabBar.bottom] and
+/// Classic `v1.x` default [LiquidGlassSettings] for both [GlassTabBar.bottom]
+/// and [GlassTabBar.searchable].
+///
+/// Alias for [LiquidGlassSettings.classicTabBar].
+const kBottomBarGlassDefaults = LiquidGlassSettings.classicTabBar;
+
+/// Resolves the default [LiquidGlassSettings] for [GlassTabBar.bottom] and
 /// [GlassTabBar.searchable].
 ///
-/// Centralised here so that both bars are guaranteed to produce visually
-/// identical glass when placed on the same screen — there is no risk of
-/// the two copies drifting apart during maintenance.
-///
-/// Values are tuned to the iOS 26 Apple News / Safari tab bar aesthetic:
-/// - `thickness: 30` — deep refraction without over-distorting icons.
-/// - `blur: 3` — subtle frosted back-blur.
-/// - `refractiveIndex: 1.59` — polycarbonate-grade refraction.
-/// - `lightAngle: 0.75π` (135°) — Apple standard upper-left key light.
-const kBottomBarGlassDefaults = LiquidGlassSettings(
-  thickness: 20,
-  blur: 4.5,
-  chromaticAberration: 0.0,
-  lightIntensity: 0.35,
-  refractiveIndex: 1.35,
-  saturation: 1.0,
-  ambientStrength: 0.20,
-  ambientRim: 0.0,
-  fresnelStrength: 0.0,
-  edgeAbsorption: 0.06,
-  lightAngle: 0.75 * math.pi,
-  glassColor: Color(0x3DFFFFFF),
-);
+/// Follows the merge cascade:
+/// 1. Explicit widget [settings] (highest priority)
+/// 2. Ambient [GlassTheme] partial override (field delta from the active
+///    [GlassStyle]'s surface variant) applied onto the active [GlassStyle]
+///    tab-bar platter preset ([LiquidGlassSettings.classicTabBar] for
+///    [GlassStyle.classic]; [LiquidGlassSettings.ios27Light] /
+///    [LiquidGlassSettings.ios27Dark] for [GlassStyle.ios27])
+/// 3. Built-in tab-bar platter preset for the active [GlassStyle]
+LiquidGlassSettings resolveBarGlassSettings(
+  BuildContext context,
+  LiquidGlassSettings? explicit,
+) {
+  if (explicit != null) return explicit;
+  final isDark = GlassTheme.brightnessOf(context) == Brightness.dark;
+  final theme = GlassTheme.maybeOf(context)?.data;
+  final style = theme?.style ?? GlassStyle.ios27;
+  final base = switch (style) {
+    GlassStyle.classic => kBottomBarGlassDefaults,
+    GlassStyle.ios26 =>
+      isDark ? LiquidGlassSettings.ios26Dark : LiquidGlassSettings.ios26Light,
+    GlassStyle.ios27 =>
+      isDark ? LiquidGlassSettings.ios27Dark : LiquidGlassSettings.ios27Light,
+  };
+  final themeOverride = theme?.settingsFor(context);
+  if (themeOverride == null) return base;
+  final surfaceBaseline = switch (style) {
+    GlassStyle.classic =>
+      isDark ? GlassThemeSettings.classicDark : GlassThemeSettings.classicLight,
+    GlassStyle.ios26 =>
+      isDark ? GlassThemeSettings.ios26Dark : GlassThemeSettings.ios26Light,
+    GlassStyle.ios27 =>
+      isDark ? GlassThemeSettings.ios27Dark : GlassThemeSettings.ios27Light,
+  };
+  return themeOverride.applyDeltaTo(base, surfaceBaseline);
+}
 
 // =============================================================================
 // resolveBarLabelColor — shared icon/label color resolution
@@ -93,6 +114,78 @@ Color resolveBarLabelColor(BuildContext context, double? darkAmount) {
         : labelColor.color;
   }
   return labelColor;
+}
+
+// =============================================================================
+// resolveActiveLensTabColors — active-lens foreground contrast for solid pills
+// =============================================================================
+
+/// Resolves the selected tab's foreground icon and label colors as the solid
+/// resting indicator dissolves into the clear refractive glass droplet
+/// (`intensity`: `0.0 → 0.15`).
+///
+/// Mirrors `GlassSegmentedControl`'s active-lens contrast behavior: when a
+/// consumer configures an opaque luminance-inverted resting pill (e.g. a dark
+/// `#121316` obsidian pill in Light Mode with white `#FFFFFF` selected glyphs,
+/// or a `#FFFFFF` white pill in Dark Mode with dark `#121316` selected glyphs)
+/// while keeping the active indicator lens clear (`indicatorSettings == null`
+/// or `indicatorSettings.glassColor.a < 0.5`), the selected glyphs smoothly
+/// cross-fade toward [dynamicLabelColor] over `glassPhase = (intensity / 0.15)`
+/// in exact lockstep with [AnimatedGlassIndicator]'s `backgroundOpacity` ramp.
+///
+/// Non-inverted brand/accent tint colors (or custom opaque `indicatorSettings`)
+/// pass through untouched.
+({Color iconColor, Color? labelColor}) resolveActiveLensTabColors({
+  required BuildContext context,
+  required bool isLight,
+  required double intensity,
+  required Color? indicatorColor,
+  required LiquidGlassSettings? indicatorSettings,
+  required Color restingIconColor,
+  required Color? restingLabelColor,
+  required Color dynamicLabelColor,
+  Color? fallbackLabelColor,
+}) {
+  if (intensity <= 0.0 ||
+      indicatorColor == null ||
+      (indicatorSettings != null && indicatorSettings.glassColor.a >= 0.5)) {
+    return (iconColor: restingIconColor, labelColor: restingLabelColor);
+  }
+  final resolvedIndicator =
+      CupertinoDynamicColor.resolve(indicatorColor, context);
+  if (resolvedIndicator.a < 0.5) {
+    return (iconColor: restingIconColor, labelColor: restingLabelColor);
+  }
+  final isIndicatorInverted = isLight
+      ? resolvedIndicator.computeLuminance() < 0.5
+      : resolvedIndicator.computeLuminance() > 0.5;
+  if (!isIndicatorInverted) {
+    return (iconColor: restingIconColor, labelColor: restingLabelColor);
+  }
+
+  final glassPhase = (intensity / 0.15).clamp(0.0, 1.0);
+  final resolvedIcon = CupertinoDynamicColor.resolve(restingIconColor, context);
+  final isIconInverted = isLight
+      ? resolvedIcon.computeLuminance() > 0.5
+      : resolvedIcon.computeLuminance() < 0.5;
+  final effectiveIconColor = isIconInverted
+      ? Color.lerp(resolvedIcon, dynamicLabelColor, glassPhase)!
+      : restingIconColor;
+
+  Color? effectiveLabelColor = restingLabelColor;
+  final candidateLabelColor = restingLabelColor ?? fallbackLabelColor;
+  if (candidateLabelColor != null) {
+    final resolvedLabel =
+        CupertinoDynamicColor.resolve(candidateLabelColor, context);
+    final isLabelInverted = isLight
+        ? resolvedLabel.computeLuminance() > 0.5
+        : resolvedLabel.computeLuminance() < 0.5;
+    if (isLabelInverted) {
+      effectiveLabelColor =
+          Color.lerp(resolvedLabel, dynamicLabelColor, glassPhase);
+    }
+  }
+  return (iconColor: effectiveIconColor, labelColor: effectiveLabelColor);
 }
 
 // =============================================================================
@@ -156,6 +249,7 @@ class BottomBarTabItem extends StatelessWidget {
     required this.glowSpreadRadius,
     required this.glowOpacity,
     required this.onTap,
+    this.semanticOnTap,
     super.key,
   });
 
@@ -191,6 +285,20 @@ class BottomBarTabItem extends StatelessWidget {
   // Pass null in contexts where the outer TabIndicator owns selection via
   // onTapDown, and accessibility is handled by the indicator's own Semantics.
   final VoidCallback? onTap;
+
+  /// Activation for assistive technology and the keyboard, independent of the
+  /// pointer path.
+  ///
+  /// The bottom and searchable bars own selection on the indicator's own
+  /// `onTapDown`, so every tab is built with a null [onTap] and the
+  /// [GestureDetector] here is excluded from semantics. Without this the tab's
+  /// node is a button with a selected state and no [SemanticsAction.tap]:
+  /// TalkBack and VoiceOver read every destination and can activate none, and
+  /// a focused tab does not answer Enter or Space either.
+  ///
+  /// The layout passes `() => onTabSelected(i)`. It never takes pointer input,
+  /// so the bar's own drag gesture is untouched.
+  final VoidCallback? semanticOnTap;
 
   @override
   Widget build(BuildContext context) {
@@ -231,7 +339,10 @@ class BottomBarTabItem extends StatelessWidget {
       tracksSelection: true,
       isSelected: semanticsSelected ?? selected,
       semanticLabel: tab.semanticLabel ?? tab.label ?? 'Tab',
-      onKeyboardActivate: onTap,
+      onKeyboardActivate: onTap ?? semanticOnTap,
+      // The GestureDetector below is excluded from semantics, so the tap
+      // action has to be declared here or the node carries none at all.
+      semanticOnTap: onTap ?? semanticOnTap,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: GestureDetector(
         // onTap may be null when selection is owned by the outer TabIndicator
@@ -405,6 +516,7 @@ class BottomBarExtraBtn extends StatelessWidget {
         // See: https://github.com/sdegenaar/liquid_glass_widgets/issues/203
         isStationary: true,
         enabled: config.enabled,
+        isSelected: config.selected,
       );
     }
 
@@ -412,7 +524,9 @@ class BottomBarExtraBtn extends StatelessWidget {
       return GlassMenu(
         menuAlignment: config.menuAlignment,
         menuWidth: config.menuWidth,
+        menuHeight: config.menuHeight,
         autoAdjustToScreen: true,
+        platformViewBackdrop: platformViewBackdrop,
         items: config.menuItems!,
         triggerBuilder: (context, toggleMenu) => buildButton(toggleMenu),
       );
@@ -466,13 +580,21 @@ class TabIndicator extends StatefulWidget {
     this.interactionGlowOpacity = 1,
     this.interactionScale = 1.0,
     this.platformViewBackdrop = false,
+    this.showDuringDragWhenHidden = false,
     this.springDescription,
+    this.indicatorJelly,
     super.key,
   });
 
   final int tabIndex;
   final int tabCount;
   final bool visible;
+
+  /// When `true` and [visible] is `false` (for example because
+  /// `extraButton.selected == true`), the glass indicator lens still inflates
+  /// while the user actively drags across the tab pill so they can scrub onto
+  /// a tab natively.
+  final bool showDuringDragWhenHidden;
   final Widget childUnselected;
   final Widget Function(BuildContext, double, Alignment) selectedTabBuilder;
   final Color? indicatorColor;
@@ -489,6 +611,14 @@ class TabIndicator extends StatefulWidget {
   final MaskingQuality maskingQuality;
   final SpringDescription? springDescription;
   final GlobalKey? backgroundKey;
+
+  /// Physics of the native iOS jelly that stretches the indicator while it
+  /// travels and squishes it when it lands.
+  ///
+  /// Defaults to [IndicatorJellyPhysics.native], measured from UIKit. Change
+  /// single values with [IndicatorJellyPhysics.copyWith], or pass
+  /// [IndicatorJellyPhysics.disabled] for the classic velocity squash.
+  final IndicatorJellyPhysics? indicatorJelly;
 
   /// How far the jelly indicator's leading and trailing edges expand
   /// past the tab boundary as the indicator translates. Higher values
@@ -525,6 +655,8 @@ class TabIndicator extends StatefulWidget {
 @visibleForTesting
 class TabIndicatorState extends State<TabIndicator>
     with TabDragGestureMixin<TabIndicator> {
+  static final Matrix4 _noVelocitySquash = Matrix4.identity();
+
   // ── Mixin interface ────────────────────────────────────────────────────────
   @override
   int get tabCount => widget.tabCount;
@@ -533,13 +665,12 @@ class TabIndicatorState extends State<TabIndicator>
   @override
   bool get isPlatformViewBackdrop => widget.platformViewBackdrop;
   @override
+  bool get enableBarPlatterMotion => widget.interactionScale != 1.0;
+  @override
   void notifyTabChanged(int index) => widget.onTabChanged(index);
 
-  // Cache fallback indicator color to avoid allocations
-  static const _fallbackIndicatorColor =
-      Color(0x1AFFFFFF); // white.withValues(alpha: 0.1)
-
   final GlobalKey _iconLayerKey = GlobalKey();
+  final GlobalKey _unselectedTabsKey = GlobalKey();
 
   // Cached shape to avoid recreation on every animation frame
   late LiquidRoundedRectangle _barShape =
@@ -558,10 +689,11 @@ class TabIndicatorState extends State<TabIndicator>
 
   @override
   Widget build(BuildContext context) {
-    final theme = CupertinoTheme.of(context);
+    final brightness = GlassTheme.brightnessOf(context);
     final indicatorColor = widget.indicatorColor ??
-        theme.textTheme.textStyle.color?.withValues(alpha: .1) ??
-        _fallbackIndicatorColor;
+        (brightness == Brightness.dark
+            ? CupertinoColors.white.withValues(alpha: .1)
+            : CupertinoColors.black.withValues(alpha: .1));
     final targetAlignment = computeTabAlignment(widget.tabIndex);
 
     // Nested-arc default: if the outer bar is a capsule sentinel (≥ 9999),
@@ -580,13 +712,17 @@ class TabIndicatorState extends State<TabIndicator>
                 GlassDefaults.capsuleRadius,
               ));
 
-    // Lateral sway: the bar body subtly follows the interactive pill during
-    // horizontal drags, mimicking iOS 26 bottom bar physics. The SpringBuilder
-    // animates the offset back to 0.0 when the drag ends.
+    final enablePlatterMotion = enableBarPlatterMotion;
+
+    // Outer platter physics calibrated against iOS 27 UITabBar (_UIFlexInteraction):
+    // - Press scale (1.04×) with 320 ms snappy rise and 360 ms bouncy release.
+    // - Position-damped in-bounds horizontal drift (~0.9–2.6 pt) via LiquidStretch,
+    //   held steady while the finger stays down.
+    // - Rubber-band edge overdrag past [0, width] via barSwayOffset.
     return SpringBuilder(
-      spring: GlassSpring.smooth(
-        duration: const Duration(milliseconds: 250),
-      ),
+      spring: tabIsDragging
+          ? TabDragGestureMixin.kPlatterTrackingSpring
+          : TabDragGestureMixin.kPlatterReleaseSpring,
       value: barSwayOffset,
       builder: (context, swayValue, _) {
         return Transform.translate(
@@ -594,9 +730,11 @@ class TabIndicatorState extends State<TabIndicator>
           child: LiquidStretch(
             interactionScale: widget.interactionScale,
             stretch:
-                0.0, // stretch disabled on platformViewBackdrop to prevent BackdropFilter pixel-snap jitter
-            resistance: 0.08,
-            anchorStretch: false, // Tab bars use jelly-follow, not anchored
+                enablePlatterMotion ? TabDragGestureMixin.kPlatterStretch : 0.0,
+            resistance: TabDragGestureMixin.kPlatterResistance,
+            anchorStretch: false,
+            pressSpring: TabDragGestureMixin.kPlatterPressSpring,
+            releaseSpring: TabDragGestureMixin.kPlatterReleaseSpring,
             child: Listener(
               // Raw pointer events fire BEFORE gesture recognizers and never compete
               // in the gesture arena, so tabIsDown is always set on the very first event.
@@ -606,6 +744,7 @@ class TabIndicatorState extends State<TabIndicator>
               child: GestureDetector(
                 key: ValueKey(gestureEpoch),
                 behavior: HitTestBehavior.opaque,
+                excludeFromSemantics: true,
                 onHorizontalDragDown: onBarDragDown,
                 onHorizontalDragStart: onBarDragStart,
                 onHorizontalDragUpdate: onBarDragUpdate,
@@ -631,85 +770,102 @@ class TabIndicatorState extends State<TabIndicator>
                     // AlignmentDirectional) so that Flutter does not re-apply
                     // the RTL flip and land the pill on the mirror-image tab.
                     final alignment = Alignment(value, 0);
+                    final effectiveVisible = widget.visible ||
+                        (widget.showDuringDragWhenHidden && tabIsDragging);
 
-                    return SpringBuilder(
-                      spring: GlassSpring.snappy(
-                        duration: const Duration(milliseconds: 300),
-                      ),
-                      // Keep thickness active while:
-                      //  - tabIsDown (tap pressed, 420 ms window for spring travel), OR
-                      //  - tabIsDragging (finger is physically moving — keep glass alive
-                      //    even when passing back over the selected tab), OR
-                      //  - the spring still has meaningful separation from target.
-                      // Threshold 0.05 (was 0.10) catches the full deceleration tail.
-                      value: widget.visible &&
-                              (tabIsDown ||
-                                  tabIsDragging ||
-                                  (value - targetAlignment).abs() > 0.05)
-                          ? 1.0
-                          : 0.0,
-                      builder: (context, thickness, child) {
-                        // Lazy evaluation optimization: skip expensive calculations when hidden
-                        if (thickness < 0.01 &&
-                            !widget.visible &&
-                            widget.maskingQuality == MaskingQuality.high) {
-                          // Fast path: indicator is hidden, render simple layout
-                          return Container(
-                            height: widget.barHeight,
-                            decoration: ShapeDecoration(
-                              shape: _barShape,
-                            ),
-                            child: AdaptiveGlass.grouped(
-                              quality:
-                                  widget.backgroundQuality ?? widget.quality,
-                              platformViewBackdrop: widget.platformViewBackdrop,
-                              shape: _barShape,
-                              child: Container(
-                                padding: widget.tabPadding,
-                                child: widget.childUnselected,
-                              ),
-                            ),
-                          );
-                        }
+                    // Native iOS jelly: travel stretch, landing squish and
+                    // settle, driven alongside the position spring.
+                    final jellyPhysics =
+                        widget.indicatorJelly ?? IndicatorJellyPhysics.native;
+                    return IndicatorJellyBuilder(
+                      target: tabXAlign,
+                      lead: value,
+                      itemCount: widget.tabCount,
+                      dragging: tabIsDragging,
+                      physics: jellyPhysics,
+                      builder: (context, nativeJelly, _) {
+                        final jelly = jellyPhysics.enabled ? nativeJelly : null;
+                        return SpringBuilder(
+                          spring: GlassSpring.snappy(
+                            duration: const Duration(milliseconds: 300),
+                          ),
+                          // Keep thickness active while:
+                          //  - tabIsDown (tap pressed, 420 ms window for spring travel), OR
+                          //  - tabIsDragging (finger is physically moving — keep glass alive
+                          //    even when passing back over the selected tab), OR
+                          //  - the spring still has meaningful separation from target.
+                          // Threshold 0.05 (was 0.10) catches the full deceleration tail.
+                          value: effectiveVisible &&
+                                  (tabIsDown ||
+                                      tabIsDragging ||
+                                      (value - targetAlignment).abs() > 0.05)
+                              ? 1.0
+                              : 0.0,
+                          builder: (context, thickness, child) {
+                            // Lazy evaluation optimization: skip dual-layer masking and
+                            // jelly clipper allocations when hidden, while preserving the
+                            // outer glass background and keyed unselected tab subtree so
+                            // toggling `visible` (e.g. `extraButton.selected`) never
+                            // unmounts tab FocusNodes or re-rasterizes the track blur.
+                            if (thickness < 0.01 &&
+                                !effectiveVisible &&
+                                widget.maskingQuality == MaskingQuality.high) {
+                              return _buildSimpleMode(
+                                alignment: alignment,
+                                targetAlignment: Alignment(targetAlignment, 0),
+                                thickness: 0.0,
+                                velocity: 0.0,
+                                indicatorRadius: indicatorRadius,
+                                indicatorColor: indicatorColor,
+                                effectiveVisible: false,
+                              );
+                            }
 
-                        // Calculate jelly transform for the clipper (only when needed)
-                        final jellyTransform =
-                            DraggableIndicatorPhysics.buildJellyTransform(
-                          velocity: Offset(velocity, 0),
-                          maxDistortion: 0.8,
-                          velocityScale: 10,
-                        );
+                            // Calculate jelly transform for the clipper (only when needed)
+                            final jellyTransform = jelly != null
+                                ? _noVelocitySquash
+                                : DraggableIndicatorPhysics.buildJellyTransform(
+                                    velocity: Offset(velocity, 0),
+                                    maxDistortion: 0.8,
+                                    velocityScale: 10,
+                                  );
 
-                        final isInteracting = tabIsDown || tabIsDragging;
+                            // Switch rendering mode based on masking quality
+                            switch (widget.maskingQuality) {
+                              case MaskingQuality.off:
+                                return _buildSimpleMode(
+                                  alignment: alignment,
+                                  // Same physical-coordinate reasoning as above:
+                                  // targetAlignment is a physical x-value.
+                                  targetAlignment:
+                                      Alignment(targetAlignment, 0),
+                                  thickness: thickness,
+                                  velocity: velocity,
+                                  jelly: jelly,
+                                  indicatorRadius: indicatorRadius,
+                                  indicatorColor: indicatorColor,
+                                  effectiveVisible: effectiveVisible,
+                                );
 
-                        // Switch rendering mode based on masking quality
-                        switch (widget.maskingQuality) {
-                          case MaskingQuality.off:
-                            return _buildSimpleMode(
-                              alignment: alignment,
-                              // Same physical-coordinate reasoning as above:
-                              // targetAlignment is a physical x-value.
-                              targetAlignment: Alignment(targetAlignment, 0),
-                              thickness: thickness,
-                              velocity: velocity,
-                              isInteracting: isInteracting,
-                              indicatorRadius: indicatorRadius,
-                              indicatorColor: indicatorColor,
-                            );
-
-                          case MaskingQuality.high:
-                            return _buildHighQualityMode(
-                              alignment: alignment,
-                              thickness: thickness,
-                              velocity: velocity,
-                              isInteracting: isInteracting,
-                              jellyTransform: jellyTransform,
-                              indicatorRadius: indicatorRadius,
-                              indicatorColor: indicatorColor,
-                            );
-                        }
-                      },
-                    ); // SpringBuilder (thickness)
+                              case MaskingQuality.high:
+                                return _buildHighQualityMode(
+                                  alignment: alignment,
+                                  thickness: thickness,
+                                  velocity: velocity,
+                                  jelly: jelly,
+                                  jellyTransform: jellyTransform,
+                                  indicatorRadius: indicatorRadius,
+                                  indicatorColor: indicatorColor,
+                                  effectiveVisible: effectiveVisible,
+                                  isResting: thickness < 0.01 &&
+                                      (value - targetAlignment).abs() < 0.001 &&
+                                      (jelly == null || jelly.isIdentity),
+                                );
+                            }
+                          },
+                        ); // SpringBuilder (thickness)
+                      }, // IndicatorJellyBuilder builder
+                    ); // IndicatorJellyBuilder
                   }, // VelocitySpringBuilder builder
                 ), // VelocitySpringBuilder
               ), // GestureDetector
@@ -741,7 +897,8 @@ class TabIndicatorState extends State<TabIndicator>
         clipper: _InverseBarClipper(_barShape),
         child: DecoratedBox(
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(widget.barBorderRadius),
+            borderRadius:
+                GlassDefaults.safeBorderRadius(widget.barBorderRadius),
             boxShadow: shadows,
           ),
         ),
@@ -776,9 +933,10 @@ class TabIndicatorState extends State<TabIndicator>
     required AlignmentGeometry targetAlignment,
     required double thickness,
     required double velocity,
-    required bool isInteracting,
+    IndicatorJelly? jelly,
     required double indicatorRadius,
     required Color indicatorColor,
+    required bool effectiveVisible,
   }) {
     return SizedBox(
       height: widget.barHeight,
@@ -807,7 +965,10 @@ class TabIndicatorState extends State<TabIndicator>
                   Positioned.fill(
                     child: Container(
                       padding: widget.tabPadding,
-                      child: widget.childUnselected,
+                      child: KeyedSubtree(
+                        key: _unselectedTabsKey,
+                        child: widget.childUnselected,
+                      ),
                     ),
                   ),
                 ],
@@ -816,16 +977,16 @@ class TabIndicatorState extends State<TabIndicator>
           ),
 
           // Glass indicator — on top so it refracts the icon layer AND the glow beneath.
-          if (widget.visible && (thickness > 0.01 || isInteracting))
+          if (effectiveVisible && thickness > 0.05)
             AnimatedGlassIndicator(
               velocity: velocity,
+              jelly: jelly,
               itemCount: widget.tabCount,
               alignment: alignment,
               thickness: thickness,
               quality: widget.quality,
               indicatorColor: indicatorColor,
               isBackgroundIndicator: false,
-              isInteracting: isInteracting,
               innerBlur: widget.innerBlur,
               padding: const EdgeInsets.all(4),
               expansion: widget.indicatorExpansion,
@@ -841,7 +1002,7 @@ class TabIndicatorState extends State<TabIndicator>
           // (settled) tab position regardless of spring thickness. This ensures
           // the selected icon stays vibrant (selected style) at rest, not washed
           // out by the unselected-style icons in the layer below.
-          if (widget.visible)
+          if (effectiveVisible)
             Positioned.fill(
               child: Align(
                 alignment: targetAlignment,
@@ -868,11 +1029,71 @@ class TabIndicatorState extends State<TabIndicator>
     required AlignmentGeometry alignment,
     required double thickness,
     required double velocity,
-    required bool isInteracting,
+    IndicatorJelly? jelly,
     required Matrix4 jellyTransform,
     required double indicatorRadius,
     required Color indicatorColor,
+    required bool effectiveVisible,
+    required bool isResting,
   }) {
+    // At rest the pill sits cleanly centered on the selected tab, so the
+    // forward/inverse clip boundary falls in empty inter-tab space where
+    // Clip.antiAlias produces identical pixels without two offscreen
+    // saveLayer passes per frame.
+    final clipBehavior =
+        isResting ? Clip.antiAlias : Clip.antiAliasWithSaveLayer;
+    final textDirection = Directionality.of(context);
+    final resolvedAlignment = alignment.resolve(textDirection);
+    final resolvedExpansion = widget.indicatorExpansion.resolve(textDirection);
+    final iconStack = Stack(
+      children: [
+        // Unselected (inverse clipped — visible OUTSIDE pill)
+        ClipPath(
+          clipBehavior: clipBehavior,
+          clipper: JellyClipper(
+            itemCount: widget.tabCount,
+            alignment: resolvedAlignment,
+            thickness: thickness,
+            expansion: resolvedExpansion,
+            transform: jellyTransform,
+            jelly: jelly,
+            borderRadius: indicatorRadius * 2,
+            inverse: true,
+          ),
+          child: Container(
+            padding: widget.tabPadding,
+            height: widget.barHeight,
+            child: KeyedSubtree(
+              key: _unselectedTabsKey,
+              child: widget.childUnselected,
+            ),
+          ),
+        ),
+        // Selected (forward clipped — visible INSIDE pill)
+        ClipPath(
+          clipBehavior: clipBehavior,
+          clipper: JellyClipper(
+            itemCount: widget.tabCount,
+            alignment: resolvedAlignment,
+            thickness: thickness,
+            expansion: resolvedExpansion,
+            transform: jellyTransform,
+            jelly: jelly,
+            borderRadius: indicatorRadius * 2,
+          ),
+          child: Container(
+            padding: widget.tabPadding,
+            height: widget.barHeight,
+            child: widget.selectedTabBuilder(
+              context,
+              thickness,
+              resolvedAlignment,
+            ),
+          ),
+        ),
+      ],
+    );
+
     return SizedBox(
       height: widget.barHeight,
       child: Stack(
@@ -898,14 +1119,14 @@ class TabIndicatorState extends State<TabIndicator>
                   // 1.5. Solid Indicator Background (drawn below icons so selected icons are vibrant)
                   AnimatedGlassIndicator(
                     velocity: velocity,
+                    jelly: jelly,
                     itemCount: widget.tabCount,
                     alignment: alignment,
                     thickness: thickness,
                     quality: widget.quality,
                     indicatorColor: indicatorColor,
                     isBackgroundIndicator: false,
-                    isInteracting: isInteracting,
-                    paintBackground: true,
+                    paintBackground: effectiveVisible,
                     paintGlass: false,
                     innerBlur: widget.innerBlur,
                     padding: const EdgeInsets.all(4),
@@ -928,101 +1149,9 @@ class TabIndicatorState extends State<TabIndicator>
                     child: widget.platformViewBackdrop
                         ? RepaintBoundary(
                             key: _iconLayerKey,
-                            child: Stack(
-                              children: [
-                                // Unselected (inverse clipped — visible OUTSIDE pill)
-                                ClipPath(
-                                  clipBehavior: Clip.antiAliasWithSaveLayer,
-                                  clipper: JellyClipper(
-                                    itemCount: widget.tabCount,
-                                    alignment: alignment
-                                        .resolve(Directionality.of(context)),
-                                    thickness: thickness,
-                                    expansion: widget.indicatorExpansion
-                                        .resolve(Directionality.of(context)),
-                                    transform: jellyTransform,
-                                    borderRadius: indicatorRadius * 2,
-                                    inverse: true,
-                                  ),
-                                  child: Container(
-                                    padding: widget.tabPadding,
-                                    height: widget.barHeight,
-                                    child: widget.childUnselected,
-                                  ),
-                                ),
-                                // Selected (forward clipped — visible INSIDE pill)
-                                ClipPath(
-                                  clipBehavior: Clip.antiAliasWithSaveLayer,
-                                  clipper: JellyClipper(
-                                    itemCount: widget.tabCount,
-                                    alignment: alignment
-                                        .resolve(Directionality.of(context)),
-                                    thickness: thickness,
-                                    expansion: widget.indicatorExpansion
-                                        .resolve(Directionality.of(context)),
-                                    transform: jellyTransform,
-                                    borderRadius: indicatorRadius * 2,
-                                  ),
-                                  child: Container(
-                                    padding: widget.tabPadding,
-                                    height: widget.barHeight,
-                                    child: widget.selectedTabBuilder(
-                                        context,
-                                        thickness,
-                                        alignment.resolve(
-                                            Directionality.of(context))),
-                                  ),
-                                ),
-                              ],
-                            ),
+                            child: iconStack,
                           )
-                        : Stack(
-                            children: [
-                              // Unselected (inverse clipped — visible OUTSIDE pill)
-                              ClipPath(
-                                clipBehavior: Clip.antiAliasWithSaveLayer,
-                                clipper: JellyClipper(
-                                  itemCount: widget.tabCount,
-                                  alignment: alignment
-                                      .resolve(Directionality.of(context)),
-                                  thickness: thickness,
-                                  expansion: widget.indicatorExpansion
-                                      .resolve(Directionality.of(context)),
-                                  transform: jellyTransform,
-                                  borderRadius: indicatorRadius * 2,
-                                  inverse: true,
-                                ),
-                                child: Container(
-                                  padding: widget.tabPadding,
-                                  height: widget.barHeight,
-                                  child: widget.childUnselected,
-                                ),
-                              ),
-                              // Selected (forward clipped — visible INSIDE pill)
-                              ClipPath(
-                                clipBehavior: Clip.antiAliasWithSaveLayer,
-                                clipper: JellyClipper(
-                                  itemCount: widget.tabCount,
-                                  alignment: alignment
-                                      .resolve(Directionality.of(context)),
-                                  thickness: thickness,
-                                  expansion: widget.indicatorExpansion
-                                      .resolve(Directionality.of(context)),
-                                  transform: jellyTransform,
-                                  borderRadius: indicatorRadius * 2,
-                                ),
-                                child: Container(
-                                  padding: widget.tabPadding,
-                                  height: widget.barHeight,
-                                  child: widget.selectedTabBuilder(
-                                      context,
-                                      thickness,
-                                      alignment
-                                          .resolve(Directionality.of(context))),
-                                ),
-                              ),
-                            ],
-                          ),
+                        : iconStack,
                   ),
                 ],
               ),
@@ -1033,13 +1162,13 @@ class TabIndicatorState extends State<TabIndicator>
           // the merged icon RepaintBoundary AND the glow beneath it.
           AnimatedGlassIndicator(
             velocity: velocity,
+            jelly: jelly,
             itemCount: widget.tabCount,
             alignment: alignment,
             thickness: thickness,
             quality: widget.quality,
             indicatorColor: indicatorColor,
             isBackgroundIndicator: false,
-            isInteracting: isInteracting,
             paintBackground: false,
             paintGlass: true,
             padding: const EdgeInsets.all(4),

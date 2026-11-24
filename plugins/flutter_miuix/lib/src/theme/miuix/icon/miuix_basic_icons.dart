@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 
 import '../foundation/miuix_vector_icon.dart';
 import 'miuix_extended_icons.dart';
+import 'miuix_os4_icons.dart';
 
 /// Miuix 内置图标集合入口。对应 Kotlin `object MiuixIcons`。
 ///
@@ -15,6 +16,9 @@ import 'miuix_extended_icons.dart';
 /// 156 个图标 × 5 种字重）。
 class MiuixIcons {
   const MiuixIcons._();
+
+  /// OS4 符号图标（176 个 × 5 字重），不替换原图标。
+  static const MiuixOs4Icons os4 = MiuixOs4Icons.internal();
 
   /// 组件内部使用的基础矢量图标。对应 Kotlin `MiuixIcons.Basic`。
   static const MiuixBasicIcons basic = MiuixBasicIcons._();

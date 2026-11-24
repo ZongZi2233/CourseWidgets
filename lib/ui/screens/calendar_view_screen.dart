@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
-import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart' hide GlassContextMenu;
 import '../../providers/schedule_provider.dart';
 import '../../models/course_event.dart';
 import '../../constants/theme_constants.dart';

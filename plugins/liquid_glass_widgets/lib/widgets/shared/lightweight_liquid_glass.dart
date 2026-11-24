@@ -7,7 +7,9 @@ import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
-import '../../src/renderer/internal/transform_tracking_repaint_boundary_mixin.dart';
+import '../../constants/glass_defaults.dart';
+import '../../src/engine/internal/transform_tracking_repaint_boundary_mixin.dart';
+import '../../src/renderer/glass_backdrop_group.dart';
 import '../../src/renderer/liquid_glass_renderer.dart';
 import '../../theme/glass_theme.dart';
 
@@ -193,23 +195,32 @@ class _LightweightLiquidGlassState extends State<LightweightLiquidGlass>
   bool _loggedCreation = false;
   ui.Image? _backgroundImage;
 
-  // Ticker-driven background refresh (same proven pattern as GlassEffect).
-  // Fires every frame while a backgroundKey is active; stops automatically
-  // when no key is present — zero overhead for glass widgets without a background.
-  late final Ticker _ticker;
+  // Lazily allocated only when backgroundKey is non-null so the common case
+  // (backgroundKey == null) allocates 0 Tickers and registers 0 observers.
+  Ticker? _ticker;
+  bool _observingLifecycle = false;
   Size? _lastCaptureSize;
   Offset? _lastCapturePosition;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
     _initShader();
-    _ticker = createTicker(_handleTick);
-    // Defer ticker start until after first frame so the RepaintBoundary is laid out.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _updateTicker();
-    });
+    if (widget.backgroundKey != null) {
+      _ensureCaptureLifecycle();
+      // Defer ticker start until after first frame so the RepaintBoundary is laid out.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _updateTicker();
+      });
+    }
+  }
+
+  void _ensureCaptureLifecycle() {
+    if (!_observingLifecycle) {
+      WidgetsBinding.instance.addObserver(this);
+      _observingLifecycle = true;
+    }
+    _ticker ??= createTicker(_handleTick);
   }
 
   /// Start the ticker if a live RepaintBoundary is available for sampling.
@@ -221,11 +232,14 @@ class _LightweightLiquidGlassState extends State<LightweightLiquidGlass>
     // must not start the ticker — treat it the same as a null key.
     final bool hasBoundary = _safeGetBoundary(widget.backgroundKey) != null;
 
-    if (hasBoundary && !_ticker.isActive) {
-      _stableFrameCount = 0; // Reset so auto-suspend counts from scratch.
-      _ticker.start();
-    } else if (!hasBoundary && _ticker.isActive) {
-      _ticker.stop();
+    if (hasBoundary) {
+      _ensureCaptureLifecycle();
+      if (!_ticker!.isActive) {
+        _stableFrameCount = 0; // Reset so auto-suspend counts from scratch.
+        _ticker!.start();
+      }
+    } else if (_ticker?.isActive ?? false) {
+      _ticker!.stop();
       _stableFrameCount = 0;
       _backgroundImage?.dispose();
       _backgroundImage = null;
@@ -261,8 +275,8 @@ class _LightweightLiquidGlassState extends State<LightweightLiquidGlass>
     if (renderObject == null) {
       // The boundary was removed (e.g. background sampling was disabled at
       // runtime). Stop the ticker immediately — zero cost from this point on.
-      if (_ticker.isActive) {
-        _ticker.stop();
+      if (_ticker?.isActive ?? false) {
+        _ticker!.stop();
         _backgroundImage?.dispose();
         _backgroundImage = null;
         _stableFrameCount = 0;
@@ -302,8 +316,9 @@ class _LightweightLiquidGlassState extends State<LightweightLiquidGlass>
       // ticker. This saves battery on static surfaces (bottom bars, app bars)
       // where the background never changes after initial capture.
       _stableFrameCount++;
-      if (_stableFrameCount >= _kStableFrameThreshold && _ticker.isActive) {
-        _ticker.stop();
+      if (_stableFrameCount >= _kStableFrameThreshold &&
+          (_ticker?.isActive ?? false)) {
+        _ticker!.stop();
       }
     }
   }
@@ -350,7 +365,7 @@ class _LightweightLiquidGlassState extends State<LightweightLiquidGlass>
     if (widget.backgroundKey != oldWidget.backgroundKey) {
       // Key object changed — update immediately.
       _updateTicker();
-    } else if (widget.backgroundKey != null && !_ticker.isActive) {
+    } else if (widget.backgroundKey != null && !(_ticker?.isActive ?? false)) {
       // Same key object but ticker is stopped. The RepaintBoundary may have
       // been re-added to the tree (e.g. GlassBackgroundSource re-enabled via
       // the BG Sample toggle). Schedule a post-frame check so the boundary
@@ -375,7 +390,7 @@ class _LightweightLiquidGlassState extends State<LightweightLiquidGlass>
       case AppLifecycleState.inactive:
       case AppLifecycleState.paused:
       case AppLifecycleState.hidden:
-        if (_ticker.isActive) _ticker.stop();
+        if (_ticker?.isActive ?? false) _ticker!.stop();
         break;
       case AppLifecycleState.resumed:
         // Restart one frame after resume so surfaceChanged has completed
@@ -413,8 +428,12 @@ class _LightweightLiquidGlassState extends State<LightweightLiquidGlass>
   @override
   void dispose() {
     _isDisposed = true;
-    WidgetsBinding.instance.removeObserver(this);
-    _ticker.dispose();
+    if (_observingLifecycle) {
+      WidgetsBinding.instance.removeObserver(this);
+      _observingLifecycle = false;
+    }
+    _ticker?.dispose();
+    _ticker = null;
     // Null backgroundImage BEFORE disposing the shader to break the GPU
     // texture retention chain during isolate shutdown on Mali GPUs.
     _backgroundImage?.dispose();
@@ -469,48 +488,6 @@ class _LightweightLiquidGlassState extends State<LightweightLiquidGlass>
     // instead of the full glass effect — visually identical to the old fallback
     // but with a stable Element identity.
 
-    // clipShape drives both the ClipPath fallback and the fast-path
-    // ClipRRect / ClipRSuperellipse wrappers below.
-    // - LiquidRoundedRectangle    → RoundedRectangleBorder  → ClipRRect
-    // - LiquidRoundedSuperellipse → RoundedSuperellipseBorder → ClipRSuperellipse
-    // - Everything else           → widget.shape             → ClipPath
-    //
-    // ClipRRect/ClipRSuperellipse are preferred over ClipPath because Flutter
-    // PR #177551 (3.41+) forwards these clip types to the iOS PlatformView
-    // mutator stack, letting BackdropFilter clip correctly over PlatformViews.
-    final ShapeBorder clipShape;
-    if (widget.shape is LiquidVerticalRoundedSuperellipse) {
-      final s = widget.shape as LiquidVerticalRoundedSuperellipse;
-      clipShape = RoundedSuperellipseBorder(
-        borderRadius: BorderRadius.vertical(
-          top: Radius.circular(s.topRadius),
-          bottom: Radius.circular(s.bottomRadius),
-        ),
-      );
-    } else if (widget.shape is LiquidRoundedSuperellipse) {
-      final s = widget.shape as LiquidRoundedSuperellipse;
-      clipShape = RoundedSuperellipseBorder(
-        borderRadius: BorderRadius.all(Radius.circular(s.borderRadius)),
-      );
-    } else if (widget.shape is LiquidRoundedRectangle) {
-      final s = widget.shape as LiquidRoundedRectangle;
-      clipShape = RoundedRectangleBorder(
-        borderRadius: BorderRadius.all(Radius.circular(s.borderRadius)),
-      );
-    } else {
-      clipShape = widget.shape;
-    }
-
-    final BorderRadius? roundedRectRadius =
-        (clipShape is RoundedRectangleBorder &&
-                clipShape.borderRadius is BorderRadius)
-            ? clipShape.borderRadius as BorderRadius
-            : null;
-    final BorderRadius? superellipseRadius =
-        (clipShape is RoundedSuperellipseBorder &&
-                clipShape.borderRadius is BorderRadius)
-            ? clipShape.borderRadius as BorderRadius
-            : null;
     final Widget effect = _LightweightGlassEffect(
       shader: shader,
       settings: settings,
@@ -522,16 +499,28 @@ class _LightweightLiquidGlassState extends State<LightweightLiquidGlass>
       backdropLuma: backdropLuma,
       backgroundImage: _backgroundImage,
       backgroundKey: widget.backgroundKey,
-      child: widget.child,
+      backdropKey: GlassBackdropGroup.keyOf(context),
+      // Always keep GlassControlledOpacity mounted so element identity stays
+      // stable across visibility transitions (1.0 ↔ <1.0) with zero compositing
+      // flag overhead at 1.0 or 0.0, and inside BackdropFilterLayer when
+      // 0.0 < alpha < 1.0.
+      child: GlassControlledOpacity(
+        opacity: settings.visibility,
+        child: widget.child,
+      ),
     );
-    if (roundedRectRadius != null) {
-      return ClipRRect(borderRadius: roundedRectRadius, child: effect);
-    }
-    if (superellipseRadius != null) {
-      return ClipRSuperellipse(borderRadius: superellipseRadius, child: effect);
+
+    // ClipRRect matches lightweight_glass.frag's circular-arc RRect SDF
+    // boundary identically (eliminating the corner-shoulder clip/shader
+    // mismatch that occurs when a superellipse clip slices into a circular-arc
+    // SDF rim), and Flutter PR #177551 (3.41+) forwards ClipRRect to the iOS
+    // PlatformView mutator stack so BackdropFilter clips over PlatformViews.
+    final shapeRadius = widget.shape.toBorderRadius();
+    if (shapeRadius != null) {
+      return ClipRRect(borderRadius: shapeRadius, child: effect);
     }
     return ClipPath(
-      clipper: ShapeBorderClipper(shape: clipShape),
+      clipper: ShapeBorderClipper(shape: widget.shape.toOutlinedBorder()),
       child: effect,
     );
   }
@@ -549,6 +538,7 @@ class _LightweightGlassEffect extends SingleChildRenderObjectWidget {
     required this.backdropLuma,
     this.backgroundImage,
     this.backgroundKey,
+    this.backdropKey,
     required super.child,
   });
 
@@ -562,6 +552,7 @@ class _LightweightGlassEffect extends SingleChildRenderObjectWidget {
   final double backdropLuma;
   final ui.Image? backgroundImage;
   final GlobalKey? backgroundKey;
+  final BackdropKey? backdropKey;
 
   @override
   RenderObject createRenderObject(BuildContext context) {
@@ -576,6 +567,7 @@ class _LightweightGlassEffect extends SingleChildRenderObjectWidget {
       backdropLuma: backdropLuma,
       backgroundImage: backgroundImage,
       backgroundKey: backgroundKey,
+      backdropKey: backdropKey,
     );
   }
 
@@ -594,7 +586,8 @@ class _LightweightGlassEffect extends SingleChildRenderObjectWidget {
       ..indicatorWeight = indicatorWeight
       ..backdropLuma = backdropLuma
       ..backgroundImage = backgroundImage
-      ..backgroundKey = backgroundKey;
+      ..backgroundKey = backgroundKey
+      ..backdropKey = backdropKey;
   }
 }
 
@@ -611,6 +604,7 @@ class _RenderLightweightGlass extends RenderProxyBox
     required double backdropLuma,
     ui.Image? backgroundImage,
     GlobalKey? backgroundKey,
+    BackdropKey? backdropKey,
   })  : _shader = shader,
         _settings = settings,
         _shape = shape,
@@ -621,6 +615,7 @@ class _RenderLightweightGlass extends RenderProxyBox
         _backdropLuma = backdropLuma,
         _backgroundImage = backgroundImage,
         _backgroundKey = backgroundKey,
+        _backdropKey = backdropKey,
         _cachedLightCos = math.cos(settings.lightAngle),
         _cachedLightSin = -math.sin(settings.lightAngle);
 
@@ -736,6 +731,23 @@ class _RenderLightweightGlass extends RenderProxyBox
     markNeedsPaint();
   }
 
+  BackdropKey? _backdropKey;
+  set backdropKey(BackdropKey? value) {
+    if (identical(_backdropKey, value)) return;
+    _backdropKey = value;
+    markNeedsPaint();
+  }
+
+  final LayerHandle<BackdropFilterLayer> _backdropLayerHandle =
+      LayerHandle<BackdropFilterLayer>();
+
+  @override
+  void dispose() {
+    _backdropLayerHandle.layer = null;
+    _cachedBlurFilter = null;
+    super.dispose();
+  }
+
   // ── Cached light direction (Task 1.3) ─────────────────────────────────────
   // Matches the caching pattern in LiquidGlassRenderObject._cachedLightDir.
   // Avoids recomputing cos/sin on every _updateShaderUniforms call.
@@ -759,7 +771,17 @@ class _RenderLightweightGlass extends RenderProxyBox
       return _cachedBlurFilter!;
     }
 
-    // Standard saturation ColorFilter matrix (ITU-R BT.601 luminance weights).
+    if ((sat - 1.0).abs() <= 0.01) {
+      _cachedBlurFilter = ui.ImageFilter.blur(
+        sigmaX: blurSigma,
+        sigmaY: blurSigma,
+      );
+      _cachedFilterBlur = blurSigma;
+      _cachedFilterSat = sat;
+      return _cachedBlurFilter!;
+    }
+
+    // Standard saturation ColorFilter matrix (ITU-R BT.709 luminance weights).
     const double rw = 0.2126, gw = 0.7152, bw = 0.0722;
     final ui.ColorFilter satFilter = ui.ColorFilter.matrix(<double>[
       rw + (1 - rw) * sat,
@@ -804,11 +826,13 @@ class _RenderLightweightGlass extends RenderProxyBox
 
   @override
   void paint(PaintingContext context, Offset offset) {
-    if (child == null) return;
+    if (child == null || _settings.visibility <= 0.0) return;
 
     if (_shader == null) {
       final paint = Paint()
-        ..color = _settings.effectiveGlassColor.withValues(alpha: 0.15);
+        ..color = _settings.glassColor.withValues(
+          alpha: (0.15 * _settings.visibility).clamp(0.0, 1.0),
+        );
       context.canvas.drawRect(offset & size, paint);
       super.paint(context, offset);
       return;
@@ -830,14 +854,19 @@ class _RenderLightweightGlass extends RenderProxyBox
         _settings.effectiveSaturation,
       );
 
+      final backdropLayer = (_backdropLayerHandle.layer ??=
+          BackdropFilterLayer())
+        ..filter = filter
+        ..backdropKey = _backdropKey;
       context.pushLayer(
-        BackdropFilterLayer(filter: filter),
+        backdropLayer,
         (context, offset) {
           _paintGlassContent(context, offset);
         },
         offset,
       );
     } else {
+      _backdropLayerHandle.layer = null;
       _paintGlassContent(context, offset);
     }
   }
@@ -927,23 +956,28 @@ class _RenderLightweightGlass extends RenderProxyBox
     // also works over platform views, where BackdropFilter color ops don't
     // apply. The gain calibrates the veil so a single whitenStrength value
     // reads close to the Premium path's gated whiten at the same value.
+    // Material uniforms are uploaded at their resting strength and scaled once
+    // as a premultiplied output in lightweight_glass.frag via uRimConfig.w
+    // (uVisibility). Passing effective* values here as well would fade body
+    // alpha, rim, and specular quadratically (t²), while constant frost/darken
+    // floors in the shader would never reach zero without uVisibility.
     final double whitenStrength =
-        _settings.effectiveWhitenStrength.clamp(0.0, 1.0).toDouble();
+        _settings.whitenStrength.clamp(0.0, 1.0).toDouble();
     const double kWhitenVeilGain = 1.5;
     final double whitenVeil =
         (whitenStrength * kWhitenVeilGain).clamp(0.0, 1.0).toDouble();
     final color = whitenVeil <= 0.0
-        ? _settings.effectiveGlassColor
+        ? _settings.glassColor
         // Whitelisted: Used in Color.lerp for glass veil tint math anchor, not a theme color.
-        : Color.lerp(_settings.effectiveGlassColor, const Color(0xFFFFFFFF),
-            whitenVeil)!;
+        : Color.lerp(
+            _settings.glassColor, const Color(0xFFFFFFFF), whitenVeil)!;
     shader.setFloat(index++, (color.r * 255.0).round().clamp(0, 255) / 255.0);
     shader.setFloat(index++, (color.g * 255.0).round().clamp(0, 255) / 255.0);
     shader.setFloat(index++, (color.b * 255.0).round().clamp(0, 255) / 255.0);
     shader.setFloat(index++, color.a.clamp(0.0, 1.0));
 
     // 8: uThickness (float)
-    shader.setFloat(index++, _settings.effectiveThickness);
+    shader.setFloat(index++, _settings.thickness);
 
     // 9, 10: uLightDirection (vec2) - [cos(angle), -sin(angle)]
     // lightAngle is in radians (per LiquidGlassSettings API).
@@ -952,7 +986,7 @@ class _RenderLightweightGlass extends RenderProxyBox
     shader.setFloat(index++, _cachedLightSin);
 
     // 11: uLightIntensity (float)
-    shader.setFloat(index++, _settings.effectiveLightIntensity);
+    shader.setFloat(index++, _settings.lightIntensity);
 
     // 12: uAmbientStrength (float)
     //
@@ -976,54 +1010,64 @@ class _RenderLightweightGlass extends RenderProxyBox
     //
     // This only affects the Skia/Web lightweight shader path.
     // Impeller uses a different physical model and is completely unaffected.
-    final gc = _settings.effectiveGlassColor;
-    final glassLuminance = 0.299 * gc.r + 0.587 * gc.g + 0.114 * gc.b;
+    final gc = _settings.glassColor;
+    final glassLuminance =
+        0.2126 * gc.r + 0.7152 * gc.g + 0.0722 * gc.b; // ITU-R Rec.709
     final brightnessIntent = gc.a * glassLuminance * 0.6;
     final effectiveAmbient = math.max(
-      _settings.effectiveAmbientStrength,
+      _settings.ambientStrength,
       brightnessIntent,
     );
     shader.setFloat(index++, effectiveAmbient);
 
     // 13: uSaturation (float)
-    shader.setFloat(index++, _settings.effectiveSaturation);
+    shader.setFloat(index++, _settings.saturation);
 
     // 14: uRefractiveIndex (float)
-    shader.setFloat(index++, _settings.effectiveRefractiveIndex);
+    shader.setFloat(index++, _settings.refractiveIndex);
 
     // 15: uChromaticAberration (float)
     shader.setFloat(index++, (_settings.chromaticAberration).clamp(0.0, 1.0));
 
     // 16: uCornerRadius (float) - Logical
-    // For LiquidVerticalRoundedSuperellipse: write -1.0 to signal asymmetric mode.
+    // For vertically asymmetric shapes, -1.0 selects per-corner radii.
     // Slots 24-27 (uData6) will carry the four per-corner radii in that case.
-    double? cornerRadius;
+    final maxRadius = math.min(size.width, size.height) / 2.0;
+    double cornerRadius = 0.0;
     double topLeftR = 0.0;
     double topRightR = 0.0;
     double bottomRightR = 0.0;
     double bottomLeftR = 0.0;
     bool isAsymmetric = false;
 
-    if (_shape is LiquidVerticalRoundedSuperellipse) {
-      // Asymmetric mode: each pair of corners has a different radius.
-      // topLeft == topRight == topRadius; bottomLeft == bottomRight == bottomRadius.
-      final s = _shape as LiquidVerticalRoundedSuperellipse;
-      final maxTop = math.min(size.width, size.height) / 2.0;
-      final maxBot = math.min(size.width, size.height) / 2.0;
-      topLeftR = s.topRadius.clamp(0.0, maxTop);
-      topRightR = s.topRadius.clamp(0.0, maxTop);
-      bottomRightR = s.bottomRadius.clamp(0.0, maxBot);
-      bottomLeftR = s.bottomRadius.clamp(0.0, maxBot);
-      isAsymmetric = true;
-    } else {
-      // effectiveRadius is obfuscation-safe: typed virtual dispatch on the
-      // sealed LiquidShape hierarchy — not a dynamic property lookup or a
-      // runtimeType.toString() heuristic (both break under --obfuscate).
-      final maxRadius = math.min(size.width, size.height) / 2.0;
-      cornerRadius = _shape.effectiveRadius.clamp(0.0, maxRadius);
+    switch (_shape) {
+      case LiquidVerticalRoundedRectangle(
+          :final topRadius,
+          :final bottomRadius
+        ):
+      case LiquidVerticalRoundedSuperellipse(
+          :final topRadius,
+          :final bottomRadius
+        ):
+        // Match the clip for both circular and superellipse vertical shapes.
+        // Using effectiveRadius here would apply the larger radius to all corners.
+        final topR = GlassDefaults.safeRadius(topRadius).clamp(0.0, maxRadius);
+        final botR =
+            GlassDefaults.safeRadius(bottomRadius).clamp(0.0, maxRadius);
+        topLeftR = topR;
+        topRightR = topR;
+        bottomRightR = botR;
+        bottomLeftR = botR;
+        isAsymmetric = true;
+      case LiquidRoundedRectangle(:final borderRadius):
+      case LiquidRoundedSuperellipse(:final borderRadius):
+        cornerRadius =
+            GlassDefaults.safeRadius(borderRadius).clamp(0.0, maxRadius);
+      case LiquidOval():
+        cornerRadius = maxRadius;
     }
 
-    shader.setFloat(index++, isAsymmetric ? -1.0 : cornerRadius!);
+    shader.setFloat(index++, isAsymmetric ? -1.0 : cornerRadius);
 
     // 17, 18: uScale (vec2) - Physical Scale (Includes DPR + Transforms)
     shader.setFloat(index++, physicalScale.dx);
@@ -1069,12 +1113,18 @@ class _RenderLightweightGlass extends RenderProxyBox
     shader.setFloat(index++, _settings.edgeAbsorption.clamp(0.0, 1.0));
 
     // 33: uFresnelStrength — grazing-angle Fresnel rim scale [0..∞].
-    // Matches the uniform wired in liquid_glass_final_render.frag via uEdgeConfig.y.
+    // Matches the uniform wired in liquid_glass_render.frag via uEdgeConfig.y.
     // Default 1.0 = calibrated iOS 26 baseline (0.10 * adaptiveStrength in shader).
     shader.setFloat(index++, _settings.fresnelStrength.clamp(0.0, 4.0));
 
     // 34: uBodyMode — 0.0 = adaptive, 1.0 = clear.
     shader.setFloat(
         index++, _settings.bodyMode == GlassBodyMode.clear ? 1.0 : 0.0);
+
+    // 35..38 (uRimConfig): (rimShade, rimLight, rimShadeEnds, visibility)
+    shader.setFloat(index++, _settings.rimShade.clamp(0.0, 4.0));
+    shader.setFloat(index++, _settings.rimLight.clamp(0.0, 4.0));
+    shader.setFloat(index++, _settings.rimShadeEnds.clamp(0.0, 1.0));
+    shader.setFloat(index++, _settings.visibility.clamp(0.0, 1.0));
   }
 }

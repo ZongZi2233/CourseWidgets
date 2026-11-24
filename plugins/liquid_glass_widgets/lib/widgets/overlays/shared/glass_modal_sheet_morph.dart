@@ -26,11 +26,12 @@ part of '../glass_modal_sheet.dart';
 /// The widget a [GlassModalSheet] morphs out of, and the channel that empties
 /// it while the morph is in flight.
 ///
-/// An opaque token: it carries no members a caller can use. [GlassMorphTrigger]
-/// creates one, hands it to its builder, and disposes it; callers pass it
-/// straight to [GlassModalSheet.show] as `morphFrom` and never touch it
-/// otherwise. The constructor is private so one cannot be made by hand — an
-/// anchor with no trigger behind it has nothing to empty.
+/// Close to an opaque token: [GlassMorphTrigger] creates one, hands it to its
+/// builder, and disposes it; callers pass it straight to [GlassModalSheet.show]
+/// as `morphFrom` and never touch it otherwise. All it reports back is
+/// [isPresenting], for chrome that has to know whether the trigger it drew is
+/// currently standing in for a sheet. The constructor is private so one cannot
+/// be made by hand — an anchor with no trigger behind it has nothing to empty.
 ///
 /// ## Why a token rather than a bare [GlobalKey]
 ///
@@ -62,6 +63,20 @@ class GlassMorphAnchor {
   _MorphHandback? _handback;
   bool _disposed = false;
 
+  /// Whether the trigger is currently emptied for a presented sheet.
+  ///
+  /// True from the frame the sheet's morph starts until the droplet is caught
+  /// on dismissal — or, if the route is torn down without the closing morph,
+  /// until the trigger is restored. What the pinned chrome reads to keep a
+  /// hoisted capsule through the sheet presented out of it.
+  bool get isPresenting => _emptied;
+
+  /// Notifies when [isPresenting] changes.
+  ///
+  /// Deferred past a build in progress exactly as the owning trigger is
+  /// notified, so a listener may rebuild from it.
+  Listenable get presentationChanges => _notifier;
+
   /// The trigger's rect in global coordinates, or null when it is not currently
   /// laid out.
   Rect? get _rect {
@@ -80,23 +95,24 @@ class GlassMorphAnchor {
   }
 
   /// Hands the trigger back at the moment the droplet is caught, passing the
-  /// spring's live state so the trigger can carry the bounce the rest of the
-  /// way itself.
-  ///
-  /// The presented route is torn down as soon as the droplet lands — otherwise
-  /// its modal barrier would keep swallowing taps on a button that is visibly
-  /// back — so the tail of the bounce cannot be driven from there. [travel] is
-  /// the trigger-centre → sheet-centre vector the droplet came home along;
-  /// [value] and [velocity] are the closing spring's state at the catch, so the
-  /// trigger's own simulation continues it without a seam.
+  /// parallel recoil and width-splash phase state so the trigger continues
+  /// smoothly without a seam after the modal route unmounts.
   void _handBack({
     required Offset travel,
-    required double value,
-    required double velocity,
+    required double elapsedSeconds,
+    required double speedMultiplier,
+    required double startWidthProgress,
+    required bool disableAnimations,
   }) {
     if (_disposed || !_emptied) return;
     _emptied = false;
-    _handback = _MorphHandback(travel, value, velocity);
+    _handback = _MorphHandback(
+      travel: travel,
+      elapsedSeconds: elapsedSeconds,
+      speedMultiplier: speedMultiplier,
+      startWidthProgress: startWidthProgress,
+      disableAnimations: disableAnimations,
+    );
     _notify();
   }
 
@@ -147,18 +163,33 @@ class _AnchorNotifier extends ChangeNotifier {
   void notify() => notifyListeners();
 }
 
-/// The closing spring's state at the instant the trigger catches the droplet.
+/// The closing morph's phase clock and trigger state at the instant the trigger
+/// catches the returning droplet (~284 ms at [MorphSpeed.normal]).
 class _MorphHandback {
-  const _MorphHandback(this.travel, this.value, this.velocity);
+  const _MorphHandback({
+    required this.travel,
+    required this.elapsedSeconds,
+    required this.speedMultiplier,
+    required this.startWidthProgress,
+    required this.disableAnimations,
+  });
 
-  /// Trigger centre → sheet centre. The bounce is along this vector.
+  /// Trigger centre → sheet centre. Recoil is bounded along this vector.
   final Offset travel;
 
-  /// Spring position at the catch — near zero, heading into the undershoot.
-  final double value;
+  /// Speed-scaled elapsed seconds in the close phase when the droplet landed.
+  final double elapsedSeconds;
 
-  /// Spring velocity at the catch, so the trigger's simulation continues it.
-  final double velocity;
+  /// Active [MorphSpeed] multiplier (`0.65` slow, `1.0` normal, `1.35` fast,
+  /// `2.5` instant) so the post-route tail matches the morph speed.
+  final double speedMultiplier;
+
+  /// Trigger width progress at the start of the close phase (`0.0` when settled
+  /// open, `> 0.0` on an interrupted open).
+  final double startWidthProgress;
+
+  /// Whether Reduce Motion is active (suppresses post-handoff recoil/splash).
+  final bool disableAnimations;
 }
 
 /// Wraps the widget a [GlassModalSheet] morphs out of, so the trigger can empty
@@ -204,20 +235,26 @@ class GlassMorphTrigger extends StatefulWidget {
 
 class _GlassMorphTriggerState extends State<GlassMorphTrigger>
     with SingleTickerProviderStateMixin {
+  /// Speed-scaled seconds by which both the parallel close recoil (`_recoilPulse`)
+  /// and the wide-trigger splash (`closeTriggerWidthForElapsed`) have settled.
+  static const double _tailEndScaledSeconds = 0.56;
+
   final GlassMorphAnchor _anchor = GlassMorphAnchor._();
 
-  /// Drives the tail of the closing bounce, after the presented route — and the
-  /// controller that started the spring — has been torn down.
-  late final AnimationController _bounce =
-      AnimationController.unbounded(vsync: this);
+  /// Drives the post-handoff tail of the parallel close recoil and wide-trigger
+  /// horizontal splash after the presented route is torn down.
+  late final AnimationController _bounce = AnimationController(vsync: this);
 
   /// Built once, not per build: [AnimatedBuilder] compares listenables by
   /// identity, so merging inline would resubscribe on every rebuild.
   late final Listenable _repaint =
       Listenable.merge([_anchor._notifier, _bounce]);
 
-  /// Vector the current bounce swings along; zero when nothing is bouncing.
+  /// Vector the current recoil settles along; zero when nothing is bouncing.
   Offset _travel = Offset.zero;
+  double _handbackElapsedSeconds = 0.0;
+  double _startWidthProgress = 0.0;
+  Size? _triggerSize;
 
   @override
   void initState() {
@@ -238,28 +275,34 @@ class _GlassMorphTriggerState extends State<GlassMorphTrigger>
     final handback = _anchor._handback;
     if (_anchor._emptied ||
         handback == null ||
-        handback.travel == Offset.zero) {
+        handback.disableAnimations ||
+        handback.travel == Offset.zero ||
+        handback.elapsedSeconds >= _tailEndScaledSeconds) {
       // A fresh open cancels any bounce still running — including one the user
       // interrupted by tapping the button mid-swing — and so does a plain
-      // restore, which carries no momentum to continue.
+      // restore or Reduce Motion presentation.
       _bounce.stop();
       if (_travel != Offset.zero) setState(() => _travel = Offset.zero);
       return;
     }
 
-    // Continue the closing spring from exactly where the presenter left it, so
-    // the catch has no seam. The tail always runs the native-parity profile;
-    // across the speed profiles this is a sub-pixel difference over a bounce
-    // this small, and it keeps the trigger from having to know the speed.
-    setState(() => _travel = handback.travel);
-    _bounce.animateWith(
-      SpringSimulation(
-        LiquidMorphPhysics.closeSpring,
-        handback.value,
-        0.0,
-        handback.velocity,
-      ),
-    );
+    final remainingScaled = _tailEndScaledSeconds - handback.elapsedSeconds;
+    final remainingWallSeconds =
+        remainingScaled / math.max(0.1, handback.speedMultiplier);
+
+    setState(() {
+      _travel = handback.travel;
+      _handbackElapsedSeconds = handback.elapsedSeconds;
+      _startWidthProgress = handback.startWidthProgress;
+      _triggerSize = _anchor._rect?.size;
+    });
+
+    _bounce
+      ..duration = Duration(
+        microseconds:
+            (remainingWallSeconds * Duration.microsecondsPerSecond).round(),
+      )
+      ..forward(from: 0.0);
   }
 
   @override
@@ -277,12 +320,64 @@ class _GlassMorphTriggerState extends State<GlassMorphTrigger>
         // surface's backdrop pass renders fully or not at all, so a partial
         // fade pops. The morph's anchor blob covers the visual transition.
         final emptied = _anchor._emptied;
+        final bool tailActive = !emptied && _bounce.isAnimating;
+
+        Offset offset = Offset.zero;
+        double scaleX = 1.0;
+        double scaleY = 1.0;
+
+        if (tailActive && _travel != Offset.zero) {
+          final scaledElapsed = _handbackElapsedSeconds +
+              (_tailEndScaledSeconds - _handbackElapsedSeconds) * _bounce.value;
+          offset = LiquidMorphPhysics.recoilOffsetForElapsed(
+            travel: _travel,
+            elapsedSeconds: scaledElapsed,
+          );
+          final impactScale = LiquidMorphPhysics.impactScaleForElapsed(
+            travel: _travel,
+            elapsedSeconds: scaledElapsed,
+          );
+          final size = _triggerSize;
+          final bool isWide = size != null && size.width > size.height * 1.15;
+          final double widthRatio;
+          if (isWide) {
+            final widthProgress =
+                LiquidMorphPhysics.closeTriggerWidthForElapsed(
+              scaledElapsed,
+              startWidthProgress: _startWidthProgress,
+            );
+            final compact = size.shortestSide;
+            widthRatio = ((compact + (size.width - compact) * widthProgress) /
+                    size.width)
+                .clamp(0.90, 1.04);
+          } else {
+            widthRatio = 1.0;
+          }
+          // Never affine-squash wide trigger text below 0.90 even when an
+          // interrupted open reverses early with small startWidthProgress.
+          scaleX = isWide
+              ? (impactScale * widthRatio).clamp(0.90, 1.04)
+              : impactScale * widthRatio;
+          scaleY = impactScale;
+        }
+
+        Widget content = Opacity(
+          opacity: emptied ? 0.0 : 1.0,
+          child: IgnorePointer(ignoring: emptied, child: child),
+        );
+
+        if (scaleX != 1.0 || scaleY != 1.0) {
+          content = Transform.scale(
+            scaleX: scaleX,
+            scaleY: scaleY,
+            alignment: Alignment.center,
+            child: content,
+          );
+        }
+
         return Transform.translate(
-          offset: _travel * _bounce.value,
-          child: Opacity(
-            opacity: emptied ? 0.0 : 1.0,
-            child: IgnorePointer(ignoring: emptied, child: child),
-          ),
+          offset: offset,
+          child: content,
         );
       },
     );
@@ -320,6 +415,11 @@ class SheetMorphGeometry {
   ///     to the base margins; [peekWidth] centres a fixed-width floor.
   ///   • [GlassSheetState.hidden] — collapses to a zero-height line at the
   ///     bottom edge; never a morph destination, but kept total for callers.
+  ///
+  /// [stripPlacement] is the sheet's placement in iPhone Duo's vertical bar
+  /// strip layout, and null elsewhere. There the large detent keeps its
+  /// margins, and in a [regularWidth] every detent is a card placed as the
+  /// sheet places itself.
   static Rect restingRect({
     required GlassSheetState state,
     required SheetGeometry geometry,
@@ -331,6 +431,9 @@ class SheetMorphGeometry {
     double? peekHorizontalMargin,
     double? peekBottomMargin,
     double? peekWidth,
+    GlassSheetPlacement? stripPlacement,
+    bool regularWidth = false,
+    TextDirection textDirection = TextDirection.ltr,
   }) {
     final screenHeight = screenSize.height;
     final screenWidth = screenSize.width;
@@ -348,7 +451,7 @@ class SheetMorphGeometry {
       case GlassSheetState.full:
         // Expanded: margins are gone and the sheet sinks by `extraHeight` so
         // its bottom corners run off screen instead of floating.
-        hPad = 0.0;
+        hPad = stripPlacement == null ? 0.0 : horizontalMargin;
         bottom = -(bottomInset + bottomRadius);
         break;
       case GlassSheetState.peek:
@@ -370,10 +473,19 @@ class SheetMorphGeometry {
     // A sheet narrower than its own margins (tiny test surfaces, extreme
     // margins) would invert the rect; clamp so the frame stays well-formed.
     final safeHPad = hPad.clamp(0.0, screenWidth / 2.0);
+    final insets = stripPlacement == null
+        ? EdgeInsets.symmetric(horizontal: safeHPad)
+        : _stripSheetInsets(
+            screenSize: screenSize,
+            regularWidth: regularWidth,
+            margin: safeHPad,
+            placement: stripPlacement,
+            textDirection: textDirection,
+          );
     return Rect.fromLTRB(
-      safeHPad,
+      insets.left,
       top,
-      screenWidth - safeHPad,
+      screenWidth - insets.right,
       math.max(top, screenHeight - bottom),
     );
   }
@@ -417,14 +529,16 @@ class SheetMorphGeometry {
   /// The detent a swipe-to-dismiss drag falls away from.
   ///
   /// Mirrors the pivot `_calculateMetrics` drags from: the peek floor when
-  /// there is one, the half detent otherwise.
+  /// there is one, otherwise the lowest enabled visible detent.
   ///
   /// Deliberately *not* [SheetGeometry.minState], which is
   /// [GlassSheetState.hidden] for the common dismissible peek-less sheet —
   /// hidden is the position a swipe drags the sheet *to*, and measuring travel
   /// from it would read every drag as zero.
   static GlassSheetState dismissPivotState(SheetGeometry geometry) =>
-      geometry.enablePeek ? GlassSheetState.peek : GlassSheetState.half;
+      geometry.orderedStates.firstWhere(
+        (state) => state != GlassSheetState.hidden,
+      );
 
   /// How far the sheet has been dragged below its lowest detent, as a fraction
   /// of screen height.
@@ -592,24 +706,62 @@ class SheetMorphGeometry {
   ///
   /// Size follows [LiquidMorphState.sizeT] and position follows
   /// [LiquidMorphState.pathT]; keeping them on separate curves is what opens
-  /// the gap the metaball neck stretches across. Both are clamped to a
-  /// non-negative size because the closing undershoot drives `sizeT` slightly
-  /// below zero, which would otherwise trip a negative-constraint assert.
+  /// the gap the metaball neck stretches across.
+  ///
+  /// Center displacement is driven by [sizeT] with anchor-drift clamped to at
+  /// most 8 px (`rawAnchorDrift.clamp(-8, 8)`), pinning the base of the expanding
+  /// blob to the trigger button during flight. This achieves [GlassMenu]'s
+  /// cohesive "one animated blob" feel that grows and shrinks smoothly.
+  ///
+  /// On close undershoot (`sizeT <= 0.0`), the droplet squeezes relative to
+  /// the trigger's own dimensions rather than subtracting destination delta,
+  /// preventing 0 px collapse.
   static Rect blobRect({
     required Rect trigger,
     required Rect destination,
     required double pathT,
     required double sizeT,
+    double scaleDelta = 1.0,
+    bool isClosing = false,
+    double travelDx = 0.0,
+    double travelDy = 0.0,
   }) {
-    final width =
-        lerpDouble(trigger.width, destination.width, sizeT)!.clamp(0.0, 1e6);
-    final height =
-        lerpDouble(trigger.height, destination.height, sizeT)!.clamp(0.0, 1e6);
+    // Wide/pill triggers (tw > th) launch from and collapse back into a
+    // centered compact circular core (`shortestSide × shortestSide` at
+    // `trigger.center`), matching native iOS 27 MagicMorphView. Square triggers
+    // keep `originSide == trigger.width == trigger.height` unchanged.
+    final double originSide = trigger.shortestSide;
+    final double width;
+    final double height;
 
-    final centerX =
-        lerpDouble(trigger.center.dx, destination.center.dx, pathT)!;
-    final centerY =
-        lerpDouble(trigger.center.dy, destination.center.dy, pathT)!;
+    if (sizeT <= 0.0) {
+      // Close undershoot bounce: droplet is at the trigger, squeeze relative
+      // to the compact trigger core — never subtract destination delta!
+      final squeeze = (1.0 + sizeT * 0.25).clamp(0.5, 1.0);
+      width = originSide * squeeze;
+      height = originSide * squeeze;
+    } else {
+      width = lerpDouble(originSide, destination.width, sizeT)!.clamp(0.0, 1e6);
+      height =
+          lerpDouble(originSide, destination.height, sizeT)!.clamp(0.0, 1e6);
+    }
+
+    const double maxAnchorDrift = 8.0;
+    final double finalDx = destination.center.dx - trigger.center.dx;
+    final double finalDy = destination.center.dy - trigger.center.dy;
+
+    final double rawAnchorDriftX = finalDx * (pathT - sizeT);
+    final double anchorDriftX =
+        rawAnchorDriftX.clamp(-maxAnchorDrift, maxAnchorDrift);
+    final double effectiveDx = finalDx * sizeT + anchorDriftX;
+
+    final double rawAnchorDriftY = finalDy * (pathT - sizeT);
+    final double anchorDriftY =
+        rawAnchorDriftY.clamp(-maxAnchorDrift, maxAnchorDrift);
+    final double effectiveDy = finalDy * sizeT + anchorDriftY;
+
+    final double centerX = trigger.center.dx + effectiveDx;
+    final double centerY = trigger.center.dy + effectiveDy;
 
     return Rect.fromLTWH(
       centerX - width / 2.0,
@@ -621,18 +773,22 @@ class SheetMorphGeometry {
 
   /// Corner radius of the droplet as it inflates from [trigger] into the sheet.
   ///
-  /// Starts fully rounded (a pill/circle the size of the trigger) and resolves
-  /// to [target] late — `easeInExpo` holds the droplet round through the travel
-  /// and only squares it off as it lands, which is what reads as *liquid*
-  /// rather than a rectangle growing. The same curve GlassMenu uses.
+  /// Starts fully rounded (clamped by `maxRadius = shortestSide / 2` so a
+  /// trigger-sized droplet is a circle) and scales proportionally from 65% of
+  /// [target] up to [target] as [sizeT] progresses from `0.0` to `1.0`. Never
+  /// balloons above [target] mid-flight (which would turn a mid-morph sheet
+  /// into a giant semicircle pill and clip the sheet's top navigation bar
+  /// controls), matching native iOS 27 `.navigationTransition(.zoom)` captures.
   static double blobRadius({
     required Size blobSize,
     required double target,
     required double sizeT,
   }) {
-    final maxRadius = math.min(blobSize.width, blobSize.height) / 2.0;
-    final t = Curves.easeInExpo.transform(sizeT.clamp(0.0, 1.0));
-    return lerpDouble(maxRadius, math.min(target, maxRadius), t)!;
+    final maxRadius =
+        math.max(0.0, math.min(blobSize.width, blobSize.height) / 2.0);
+    final double s = sizeT.clamp(0.0, 1.0);
+    final scaledTarget = target * (0.65 + 0.35 * s);
+    return math.min(maxRadius, scaledTarget);
   }
 
   /// Opacity of the droplet's solid fill, ramping in over the last 30 % of the
@@ -645,6 +801,117 @@ class SheetMorphGeometry {
   /// whole morph and only this plain colour layer crossfades.
   static double fillReveal(double sizeT) =>
       ((sizeT - 0.7) / 0.3).clamp(0.0, 1.0);
+
+  /// Point on the size curve where the sheet's content starts to show inside
+  /// the opening droplet (measured from iOS 27 `.navigationTransition(.zoom)`
+  /// simulator recordings).
+  static const double contentRevealStart = 0.15;
+
+  /// Point on the size curve where the opening content reaches full opacity
+  /// (measured from iOS 27 `.navigationTransition(.zoom)` simulator recordings).
+  static const double contentRevealEnd = 0.55;
+
+  /// Point on the size curve where the closing content begins fading out.
+  ///
+  /// Above this threshold the shrinking sheet keeps its content at full opacity
+  /// so the initial contraction reads as the sheet itself zooming down.
+  static const double contentConcealStart = 0.75;
+
+  /// Point on the size curve by which the closing content is fully gone,
+  /// leaving a clean liquid droplet for the final catch into the trigger.
+  static const double contentConcealEnd = 0.25;
+
+  /// Opacity of the sheet's content inside the travelling droplet.
+  ///
+  /// Opening fades in across [contentRevealStart]..[contentRevealEnd] with an
+  /// ease-out, so the content is legible while the droplet is still growing
+  /// rather than popping in at the handoff (issue #446). Closing holds full
+  /// opacity down to [contentConcealStart] and fades out linearly to
+  /// [contentConcealEnd], matching native iOS 27 zoom-dismissal recordings.
+  static double contentReveal(double sizeT, {required bool isClosing}) {
+    if (isClosing) {
+      return ((sizeT - contentConcealEnd) /
+              (contentConcealStart - contentConcealEnd))
+          .clamp(0.0, 1.0);
+    }
+    final t =
+        ((sizeT - contentRevealStart) / (contentRevealEnd - contentRevealStart))
+            .clamp(0.0, 1.0);
+    return Curves.easeOut.transform(t);
+  }
+
+  /// The matrix that draws the real sheet — laid out at [sheet], its own
+  /// frame — inside the droplet's frame [blob].
+  ///
+  /// The sheet is never re-laid-out at the droplet's size: text would reflow
+  /// on every frame. Instead its top-centre is pinned to the droplet's
+  /// top-centre and, with [scaleContent], the whole sheet is scaled uniformly
+  /// by the width ratio — the zoom-transition look, where the header grows out
+  /// of the droplet. Without [scaleContent] the sheet stays 1:1 and the droplet
+  /// acts as a window that widens over it.
+  ///
+  /// Identity once [blob] equals [sheet], so the handoff to the resting sheet
+  /// cannot move a pixel.
+  static Matrix4 contentPortal({
+    required Rect sheet,
+    required Rect blob,
+    bool scaleContent = true,
+  }) {
+    final scale =
+        scaleContent && sheet.width > 0.0 ? blob.width / sheet.width : 1.0;
+    return Matrix4.translationValues(
+      blob.center.dx - sheet.center.dx * scale,
+      blob.top - sheet.top * scale,
+      0.0,
+    )..scaleByDouble(scale, scale, 1.0, 1.0);
+  }
+
+  /// [settings] with every visible contribution of the glass switched off,
+  /// while [LiquidGlassSettings.visibility] — and therefore the widget tree —
+  /// is left alone.
+  ///
+  /// The sheet's own surface has to vanish while the droplet stands in for it,
+  /// yet its content has to stay visible inside the droplet. Neither of the
+  /// usual channels can do that: `visibility` fades the glass *child* along
+  /// with the glass on the premium path, and at exactly zero `AdaptiveGlass`
+  /// swaps to a different subtree, remounting every widget in the sheet. So
+  /// the surface is neutralised term by term instead — no tint, refraction,
+  /// blur, lighting, rim, shadow, veil or backer — leaving a pass that copies
+  /// its backdrop through unchanged.
+  ///
+  /// Blur and frost are zeroed along with thickness so `LiquidGlassRenderObject`
+  /// takes its no-op fast-path and skips opening an offscreen `BackdropFilter`
+  /// pass; descendant glass controls inside the sheet then sample the droplet
+  /// and page backdrop directly during the morph.
+  static LiquidGlassSettings dormantSurface(LiquidGlassSettings settings) {
+    final existingShadows = settings.effectiveShadow;
+    final existingBacker = settings.effectiveBackerColor;
+    return settings.copyWith(
+      glassColor: settings.glassColor.withValues(alpha: 0.0),
+      thickness: 0.0,
+      blur: 0.0,
+      frost: 0.0,
+      chromaticAberration: 0.0,
+      lightIntensity: 0.0,
+      ambientStrength: 0.0,
+      ambientRim: 0.0,
+      fresnelStrength: 0.0,
+      refractiveIndex: 1.0,
+      saturation: 1.0,
+      glowIntensity: 0.0,
+      shadow: existingShadows.isEmpty
+          ? const <BoxShadow>[]
+          : const <BoxShadow>[BoxShadow(color: Color(0x00000000))],
+      whitenStrength: 0.0,
+      edgeAbsorption: 0.0,
+      rimShade: 0.0,
+      rimLight: 0.0,
+      bodyShade: 0.0,
+      backerColor: existingBacker != null && existingBacker.a > 0.0
+          ? existingBacker.withValues(alpha: 1e-6)
+          : const Color(0x00000000),
+    );
+  }
 
   /// Opacity the sheet's solid fill rests at in [state].
   ///
@@ -665,6 +932,8 @@ class SheetMorphGeometry {
     final sHalf = halfSettings ?? baseSettings;
     final sFull = fullSettings ?? baseSettings;
 
+    bool isSolid(LiquidGlassSettings s) => s.blur == 0 && s.frost == 0;
+
     switch (state) {
       case GlassSheetState.full:
         // t == 1: the crossfade is complete whichever route got us here, so
@@ -674,13 +943,13 @@ class SheetMorphGeometry {
       case GlassSheetState.half:
         // t == 0: the half→full crossfade hasn't started. Without explicit
         // full settings the sheet is opaque only when its own surface has no
-        // blur to show through.
+        // blur or frost to show through.
         if (fullSettings == null) {
-          return (sHalf.blur == 0 || baseSettings.blur == 0) ? 1.0 : 0.0;
+          return (isSolid(sHalf) || isSolid(baseSettings)) ? 1.0 : 0.0;
         }
         return _fillFor(from: sHalf, to: sFull, t: 0.0);
       case GlassSheetState.peek:
-        if (!enablePeek) return sHalf.blur == 0 ? 1.0 : 0.0;
+        if (!enablePeek) return isSolid(sHalf) ? 1.0 : 0.0;
         return _fillFor(from: sPeek, to: sHalf, t: 0.0);
       case GlassSheetState.hidden:
         return 0.0;
@@ -689,16 +958,18 @@ class SheetMorphGeometry {
 
   /// Resolves the fill opacity for a crossfade between two surfaces at [t].
   ///
-  /// A surface with `blur == 0` is a solid colour, so the fill is whichever
-  /// side of the crossfade is currently solid.
+  /// A surface with `blur == 0 && frost == 0` is a solid colour, so the fill is
+  /// whichever side of the crossfade is currently solid.
   static double _fillFor({
     required LiquidGlassSettings from,
     required LiquidGlassSettings to,
     required double t,
   }) {
-    if (from.blur > 0 && to.blur == 0) return t;
-    if (from.blur == 0 && to.blur > 0) return 1.0 - t;
-    if (from.blur == 0 && to.blur == 0) return 1.0;
+    final fromSolid = from.blur == 0 && from.frost == 0;
+    final toSolid = to.blur == 0 && to.frost == 0;
+    if (!fromSolid && toSolid) return t;
+    if (fromSolid && !toSolid) return 1.0 - t;
+    if (fromSolid && toSolid) return 1.0;
     return 0.0;
   }
 
@@ -767,8 +1038,12 @@ class GlassSheetMorphPresenter extends StatefulWidget {
     required this.peekBottomMargin,
     required this.peekWidth,
     required this.peekTopBorderRadius,
+    this.peekBottomRadius,
     required this.platformViewBackdrop,
     required this.child,
+    this.expandedDarkColor,
+    this.barrierColor,
+    this.placement = GlassSheetPlacement.automatic,
   });
 
   /// The presenting route's animation. Watched for [AnimationStatus.reverse]
@@ -808,6 +1083,9 @@ class GlassSheetMorphPresenter extends StatefulWidget {
   /// See [GlassModalSheet.bottomMargin].
   final double bottomMargin;
 
+  /// See [GlassModalSheet.placement].
+  final GlassSheetPlacement placement;
+
   /// See [GlassModalSheet.topBorderRadius].
   final double? topBorderRadius;
 
@@ -835,6 +1113,9 @@ class GlassSheetMorphPresenter extends StatefulWidget {
   /// See [GlassModalSheet.expandedColor].
   final Color? expandedColor;
 
+  /// See [GlassModalSheet.expandedDarkColor].
+  final Color? expandedDarkColor;
+
   /// See [GlassModalSheet.quality].
   final GlassQuality? quality;
 
@@ -850,6 +1131,9 @@ class GlassSheetMorphPresenter extends StatefulWidget {
   /// See [GlassModalSheet.peekTopBorderRadius].
   final double? peekTopBorderRadius;
 
+  /// See [GlassModalSheet.peekBottomRadius].
+  final double? peekBottomRadius;
+
   /// See [GlassModalSheet.platformViewBackdrop]. Suppresses the metaball blend
   /// group, exactly as it does in the sheet and in `GlassMenu`.
   final bool platformViewBackdrop;
@@ -858,6 +1142,15 @@ class GlassSheetMorphPresenter extends StatefulWidget {
   /// handoff — so its glass layers and springs are already seeded when it is
   /// revealed.
   final Widget child;
+
+  /// The colour of the modal scrim that appears behind the sheet during the
+  /// morph. When non-null, the presenter drives this scrim itself via the
+  /// liquid spring so it is in lockstep with the blob — identical to how
+  /// [GlassMenu] has no independently-animating route barrier.
+  ///
+  /// Callers should pass [Colors.transparent] as `barrierColor` to their
+  /// dialog route and route the actual barrier colour through here instead.
+  final Color? barrierColor;
 
   @override
   State<GlassSheetMorphPresenter> createState() =>
@@ -878,6 +1171,16 @@ class _GlassSheetMorphPresenterState extends State<GlassSheetMorphPresenter>
   /// settle latch don't fight over the same transition.
   bool _isClosing = false;
 
+  /// Guards blob A from painting before the trigger widget has hidden itself.
+  ///
+  /// [GlassMorphAnchor._empty] notifies the trigger via a post-frame callback
+  /// when called mid-build, costing the trigger one frame before it vanishes.
+  /// If blob A paints on that same frame, the two overlapping glass circles
+  /// produce an additive specular — a bright white ring around the button.
+  /// Setting this flag in a sibling post-frame callback guarantees blob A only
+  /// appears once the trigger has painted itself invisible.
+  bool _triggerHidden = false;
+
   /// Whether the pointer that is dismissing the sheet dragged it first.
   ///
   /// A dragged dismissal releases the sheet mid-swipe, so the morph starts
@@ -893,6 +1196,17 @@ class _GlassSheetMorphPresenterState extends State<GlassSheetMorphPresenter>
   /// reading it live would chase a sheet that is no longer the thing on
   /// screen. Null for every dismissal that leaves the sheet at rest.
   Rect? _dismissFrom;
+
+  /// The detent the closing morph starts from, captured once in
+  /// [_onRouteStatus] when the route begins reversing.
+  ///
+  /// Null while opening or settled at rest (so the open morph always targets
+  /// [GlassSheetMorphPresenter.restingState]). On an at-rest dismissal after
+  /// the sheet moved to another detent (e.g. `half` → `full` or `half` →
+  /// `peek`), this holds that live detent so frame 1 of the close droplet
+  /// matches the sheet's actual margins, bottom offset, corner radii, and
+  /// fill opacity instead of snapping back to the initial detent.
+  GlassSheetState? _closeState;
 
   /// Where the active pointer went down, for the slop comparison above.
   Offset? _dragOrigin;
@@ -936,7 +1250,14 @@ class _GlassSheetMorphPresenterState extends State<GlassSheetMorphPresenter>
   /// Integrated by hand on [_horizontalTicker]: `animateWith` restarts its
   /// clock on every call, so a chase retargeted per pointer move would freeze
   /// while the finger keeps moving.
-  double _horizontalOffset = 0.0;
+  /// Driven through a [ValueNotifier] so 120 Hz horizontal swipe-chase ticks
+  /// only update the sheet's [Transform] wrapper without rebuilding the
+  /// morph presenter, barrier, droplet, or sheet child tree.
+  final ValueNotifier<double> _horizontalOffsetNotifier =
+      ValueNotifier<double>(0.0);
+  double get _horizontalOffset => _horizontalOffsetNotifier.value;
+  set _horizontalOffset(double value) =>
+      _horizontalOffsetNotifier.value = value;
 
   /// The chase's current velocity, in pixels per second.
   double _horizontalVelocity = 0.0;
@@ -992,6 +1313,10 @@ class _GlassSheetMorphPresenterState extends State<GlassSheetMorphPresenter>
   /// exactly once per close.
   bool _handedBackToTrigger = false;
 
+  /// Trigger width progress captured right before `_morph.close()` starts so
+  /// interrupted mid-open dismissals transfer continuous width state.
+  double _closeStartWidthProgress = 0.0;
+
   @override
   void initState() {
     super.initState();
@@ -1009,7 +1334,8 @@ class _GlassSheetMorphPresenterState extends State<GlassSheetMorphPresenter>
     // opens the moment it mounts, so the flag has to land BEFORE the spring
     // starts — otherwise the first presentation of every session animates at
     // full length with Reduce Motion on.
-    _morph.setDisableAnimations(MediaQuery.of(context).disableAnimations);
+    _morph
+        .setDisableAnimations(GlassAccessibilityData.of(context).reduceMotion);
     // The sheet mounts as this presenter's child, so it has not attached to
     // the controller yet on the first pass — bind once the frame is up, and
     // re-check on morph ticks in case the sheet's state is ever rebuilt.
@@ -1019,6 +1345,12 @@ class _GlassSheetMorphPresenterState extends State<GlassSheetMorphPresenter>
       // Empty the trigger before the first morph frame paints, so the button
       // and the anchor blob standing in for it are never both on screen.
       widget.anchor?._empty();
+      // The anchor's _empty notification is deferred by one frame when called
+      // mid-build, so the trigger widget is still visible for exactly one more
+      // paint. Defer blob A by the same amount so the two never overlap.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() => _triggerHidden = true);
+      });
       _morph.open();
     }
   }
@@ -1029,6 +1361,7 @@ class _GlassSheetMorphPresenterState extends State<GlassSheetMorphPresenter>
     _morph.removeListener(_onMorphTick);
     _morph.dispose();
     _horizontalTicker.dispose();
+    _horizontalOffsetNotifier.dispose();
     _sheetProgress?.removeListener(_onSheetProgress);
     // The route can be torn down without the closing morph ever running (a
     // Navigator reset, a hot restart). Leaving the trigger emptied would erase
@@ -1091,21 +1424,45 @@ class _GlassSheetMorphPresenterState extends State<GlassSheetMorphPresenter>
     _handedBackToTrigger = true;
     anchor._handBack(
       travel: _finalDelta,
-      value: _morph.value,
-      velocity: _morph.velocity,
+      elapsedSeconds: _morph.phaseElapsedSeconds,
+      speedMultiplier: _morph.speedMultiplier,
+      startWidthProgress: _closeStartWidthProgress,
+      disableAnimations: _morph.disableAnimations,
     );
+  }
+
+  GlassSheetState _resolveCloseState() {
+    final current = widget.controller.currentState;
+    if (current != GlassSheetState.hidden) return current;
+    final lastVisible = widget.controller._lastVisibleState;
+    if (lastVisible != null && lastVisible != GlassSheetState.hidden) {
+      return lastVisible;
+    }
+    return widget.restingState;
   }
 
   void _onRouteStatus(AnimationStatus status) {
     if (status != AnimationStatus.reverse || _isClosing) return;
+    widget.controller._freezeForMorphClose();
+    _horizontalTicker.stop();
+    final currentWidthProgress = _morph
+        .computeState(finalDx: 0.0, finalDy: 0.0)
+        .triggerWidthProgress
+        .clamp(0.0, 1.0);
+    // Safe to read the sheet's position here: the dismissal pops the route
+    // synchronously from `_snapToState`, before the spring toward hidden has
+    // ticked, so the controller still reports the release position.
+    final dismissFrom = _draggedSincePointerDown ? _releaseRect() : null;
+    final closeState = dismissFrom != null
+        ? SheetMorphGeometry.dismissPivotState(widget.geometry)
+        : _resolveCloseState();
     setState(() {
       _isClosing = true;
       _handedOffToSheet = false;
       _handedBackToTrigger = false;
-      // Safe to read the sheet's position here: the dismissal pops the route
-      // synchronously from `_snapToState`, before the spring toward hidden has
-      // ticked, so the controller still reports the release position.
-      _dismissFrom = _draggedSincePointerDown ? _releaseRect() : null;
+      _closeStartWidthProgress = currentWidthProgress;
+      _dismissFrom = dismissFrom;
+      _closeState = closeState;
     });
     _morph.close();
   }
@@ -1168,7 +1525,11 @@ class _GlassSheetMorphPresenterState extends State<GlassSheetMorphPresenter>
   /// is whatever uniform scale-and-translate maps one onto the other. The
   /// rendered frame and the frame a release hands to the morph therefore
   /// cannot disagree — they are the same computation.
-  Widget _dragTransform(Size screenSize, Widget child) {
+  Widget _dragTransform(
+    Size screenSize,
+    Widget child, {
+    required bool inMorph,
+  }) {
     final travel = _dismissTravel();
     final pivotRect = _pivotRect(screenSize);
     final cardFraction =
@@ -1202,16 +1563,18 @@ class _GlassSheetMorphPresenterState extends State<GlassSheetMorphPresenter>
       )..scaleByDouble(scale, scale, 1.0, 1.0),
       // The premium renderer freezes its shader UVs under a uniform scale-down,
       // for the CupertinoSheet push-back — where the sampled page shrinks along
-      // with the glass. A swipe is the other arrangement: the page behind holds
-      // still, and freezing strands the surface's rim and rounded corners at
-      // the size the sheet had when the drag began. Always present, so the
-      // sheet's depth in the element tree never changes; only the flag moves.
+      // with the glass. A swipe (and the morph portal) is the other
+      // arrangement: the page behind holds still, and freezing strands the
+      // surface's rim and rounded corners at the size the sheet had when the
+      // drag began. Always present, so the sheet's depth in the element tree
+      // never changes; only the flag moves.
       child: LiquidGlassSelfScaleScope(
         // The renderer's own threshold, not an invented one: the flag is set
         // exactly when the freeze would otherwise fire. A sheet at its detent
         // sits a hair under 1.0 (its live position lags its layout by a sub-
         // pixel), which must not read as a swipe.
-        selfScaled: scale < LiquidGlassSelfScaleScope.freezeScaleThreshold,
+        selfScaled:
+            inMorph || scale < LiquidGlassSelfScaleScope.freezeScaleThreshold,
         child: child,
       ),
     );
@@ -1356,7 +1719,6 @@ class _GlassSheetMorphPresenterState extends State<GlassSheetMorphPresenter>
       _horizontalVelocity = 0.0;
       _horizontalTicker.stop();
     }
-    setState(() {});
   }
 
   void _onPointerRelease(PointerEvent event) {
@@ -1369,7 +1731,9 @@ class _GlassSheetMorphPresenterState extends State<GlassSheetMorphPresenter>
     // own snap spring, keeping the position and velocity it already has — so
     // the card returns to the detent along both axes at once and a fling's
     // momentum carries into the spring-back.
-    _retargetHorizontal(0.0, _returnSpring);
+    if (!_isClosing) {
+      _retargetHorizontal(0.0, _returnSpring);
+    }
     // Cleared after the frame, not during it: a drag that ends in a dismissal
     // pops the route synchronously from this same pointer-up, and the flag has
     // to still be set when [_onRouteStatus] reads it. By the next frame the
@@ -1395,6 +1759,10 @@ class _GlassSheetMorphPresenterState extends State<GlassSheetMorphPresenter>
       peekHorizontalMargin: widget.peekHorizontalMargin,
       peekBottomMargin: widget.peekBottomMargin,
       peekWidth: widget.peekWidth,
+      stripPlacement:
+          GlassVerticalBar.maybeOf(context) == null ? null : widget.placement,
+      regularWidth: VerticalBarTitleRow.regularWidth(context),
+      textDirection: Directionality.of(context),
     );
   }
 
@@ -1406,63 +1774,14 @@ class _GlassSheetMorphPresenterState extends State<GlassSheetMorphPresenter>
     final topRadiusBase = widget.topBorderRadius ?? adaptiveRadius;
     final bottomRadiusBase = widget.bottomBorderRadius ?? adaptiveRadius;
 
-    // A swipe left the sheet somewhere other than its detent; every other way
-    // of closing left it at rest.
-    final destination = _dismissFrom ?? _restingRect(screenSize);
+    // While opening, target the initial detent; while closing, start from the
+    // live detent captured when the route began reversing (or the swipe-release
+    // frame for an interactive drag dismissal).
+    final activeState =
+        _isClosing ? (_closeState ?? widget.restingState) : widget.restingState;
+    final destination =
+        _dismissFrom ?? _restingRect(screenSize, state: activeState);
 
-    // The real sheet stays mounted underneath for the whole morph so its
-    // post-frame snap, glass layers and springs are already settled by the time
-    // it is revealed; only painting and hit-testing are gated.
-    final Widget sheet = Visibility(
-      visible: _handedOffToSheet,
-      maintainState: true,
-      maintainAnimation: true,
-      maintainSize: true,
-      child: Listener(
-        behavior: HitTestBehavior.translucent,
-        onPointerDown: _onPointerDown,
-        onPointerMove: _onPointerMove,
-        onPointerUp: _onPointerRelease,
-        onPointerCancel: _onPointerRelease,
-        child: widget.child,
-      ),
-    );
-
-    // The swipe-away transform lives here rather than in the sheet: it belongs
-    // to the presentation, the way iOS hangs its interactive dismissal off the
-    // zoom transition rather than off the sheet's detents (a sheet detent
-    // "resizes from one edge while the other three remain fixed" — it cannot
-    // express this). A sheet presented without a morph keeps the plain
-    // slide-away it always had.
-    final Widget draggableSheet = _dragTransform(screenSize, sheet);
-
-    // The sheet is always slot 0 of the same Stack, whether the droplet is
-    // present or not. Returning `sheet` bare at the handoff would change its
-    // depth in the element tree, and Flutter answers a depth change by tearing
-    // the subtree down and rebuilding it — remounting every glass layer and
-    // re-seeding every spring inside the sheet, at the exact moment the morph
-    // is trying to look seamless.
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        draggableSheet,
-        if (!_handedOffToSheet)
-          _buildDroplet(
-            context: context,
-            destination: destination,
-            topRadiusBase: topRadiusBase,
-            bottomRadiusBase: bottomRadiusBase,
-          ),
-      ],
-    );
-  }
-
-  Widget _buildDroplet({
-    required BuildContext context,
-    required Rect destination,
-    required double topRadiusBase,
-    required double bottomRadiusBase,
-  }) {
     final trigger = widget.triggerRect;
 
     // The anchor blob only earns its place when the real trigger is hidden.
@@ -1479,63 +1798,55 @@ class _GlassSheetMorphPresenterState extends State<GlassSheetMorphPresenter>
     // The engine works in displacement-from-trigger-centre terms; the sheet's
     // destination is an absolute rect, so hand it the delta between centres.
     _finalDelta = destination.center - trigger.center;
+
+    // Scale delta drives adaptive damping (J-curve amplitude) and 3-phase
+    // blobRect expansion. Only relevant when a real trigger is visible;
+    // morphFromZero (source = zero-size rect) has no meaningful scale ratio.
+    final compactSide = trigger.shortestSide;
+    final scaleDelta = showAnchorBlob
+        ? LiquidMorphPhysics.computeScaleDelta(
+            sourceSize: Size(compactSide, compactSide),
+            targetSize: destination.size,
+          )
+        : 1.0;
+
     final state = _morph.computeState(
       finalDx: _finalDelta.dx,
       finalDy: _finalDelta.dy,
+      scaleDelta: scaleDelta,
+      adaptiveDamping: true,
     );
 
-    final blob = SheetMorphGeometry.blobRect(
+    final baseBlob = SheetMorphGeometry.blobRect(
       trigger: source,
       destination: destination,
       pathT: state.pathT,
       sizeT: state.sizeT,
+      scaleDelta: scaleDelta,
+      isClosing: _morph.isClosing,
+      travelDx: _finalDelta.dx,
+      travelDy: _finalDelta.dy,
     );
-
-    final enablePeek = widget.geometry.enablePeek;
-    final baseSettings = GlassThemeHelpers.resolveSettings(
-      context,
-      explicit: widget.settings,
-      fallback: kDefaultSheetSettings,
-    );
-    final dropletSettings = SheetMorphGeometry.restingSettings(
-      state: widget.restingState,
-      baseSettings: baseSettings,
-      enablePeek: enablePeek,
-      peekSettings: widget.peekSettings,
-      halfSettings: widget.halfSettings,
-      fullSettings: widget.fullSettings,
-    );
-    final fillOpacity = SheetMorphGeometry.restingFillOpacity(
-          state: widget.restingState,
-          baseSettings: baseSettings,
-          enablePeek: enablePeek,
-          peekSettings: widget.peekSettings,
-          halfSettings: widget.halfSettings,
-          fullSettings: widget.fullSettings,
-        ) *
-        SheetMorphGeometry.fillReveal(state.sizeT);
-
-    final quality = GlassThemeHelpers.resolveQuality(
-      context,
-      widgetQuality: widget.quality,
-      fallback: GlassQuality.premium,
-    );
-
-    final isDark = GlassTheme.brightnessOf(context) == Brightness.dark;
-    final fillColor = widget.expandedColor ??
-        (isDark ? const Color(0xFF1C1C1E) : CupertinoColors.white);
+    final rawBlob = (showAnchorBlob && _morph.isClosing)
+        ? baseBlob.shift(
+            Offset(state.triggerPushDx, state.triggerPushDy) *
+                (1.0 - _morph.value.clamp(0.0, 1.0)),
+          )
+        : baseBlob;
 
     // Radii the droplet resolves to: the sheet's own resting corners.
-    final targetTopRadius = switch (widget.restingState) {
+    final targetTopRadius = switch (activeState) {
       GlassSheetState.full => widget.fullTopBorderRadius ?? topRadiusBase,
       GlassSheetState.peek => widget.peekTopBorderRadius ?? topRadiusBase,
       _ => topRadiusBase,
     };
-    final targetBottomRadius = widget.restingState == GlassSheetState.full
-        ? (widget.fullBottomBorderRadius ?? bottomRadiusBase)
-        : bottomRadiusBase;
+    final targetBottomRadius = switch (activeState) {
+      GlassSheetState.full => widget.fullBottomBorderRadius ?? bottomRadiusBase,
+      GlassSheetState.peek => widget.peekBottomRadius ?? bottomRadiusBase,
+      _ => bottomRadiusBase,
+    };
 
-    final blobSize = blob.size;
+    final blobSize = rawBlob.size;
     final topRadius = SheetMorphGeometry.blobRadius(
       blobSize: blobSize,
       target: targetTopRadius,
@@ -1547,30 +1858,278 @@ class _GlassSheetMorphPresenterState extends State<GlassSheetMorphPresenter>
       sizeT: state.sizeT,
     );
 
+    // Effective screen-space bounds of blob B after its containerScale pulse.
+    final scaledBlob = Rect.fromCenter(
+      center: rawBlob.center,
+      width: blobSize.width * state.containerScale,
+      height: blobSize.height * state.containerScale,
+    );
+
+    final bool inMorph = !_handedOffToSheet;
+    // Gate the droplet on _triggerHidden when an anchor is present.
+    // On frame N the trigger widget is still at Opacity(1.0) — its _empty()
+    // notification is deferred. Blob B starts at the trigger's size and
+    // position (sizeT=0), so the two independent glass layers overlap and
+    // their combined specular produces a bright white ring.
+    // Suppressing the whole droplet for that one frame (16 ms) lets the
+    // trigger paint itself invisible before any morph glass appears.
+    // On close _triggerHidden is already true, so the full return journey
+    // is unaffected.
+    final bool showDroplet =
+        !_handedOffToSheet && (widget.anchor == null || _triggerHidden);
+    final double contentOpacity = inMorph
+        ? (showDroplet
+            ? SheetMorphGeometry.contentReveal(
+                state.sizeT,
+                isClosing: _morph.isClosing,
+              )
+            : 0.0)
+        : 1.0;
+
+    // The real sheet stays mounted for the whole morph so its post-frame snap,
+    // glass layers, and springs are never remounted at handoff. While [inMorph]
+    // is true, [_SheetMorphScope] suppresses the sheet's own glass shell, solid
+    // fill, and glow (since [_buildDroplet] renders them on the metaball path)
+    // and fades the inner content + drag handle by [contentOpacity].
+    //
+    // Hit-testing and semantics stay gated by [inMorph] until the spring has
+    // settled (`_handedOffToSheet`), while [Visibility] turns on as soon as
+    // [contentOpacity] > 0 so the sheet's content emerges and scales inside the
+    // expanding droplet (matching iOS zoom transition + GlassMenu parity).
+    final Widget sheet = _SheetMorphScope(
+      inMorph: inMorph,
+      contentOpacity: contentOpacity,
+      child: ExcludeSemantics(
+        excluding: inMorph,
+        child: IgnorePointer(
+          ignoring: inMorph,
+          child: Visibility(
+            visible: _handedOffToSheet || contentOpacity > 0.0,
+            maintainState: true,
+            maintainAnimation: true,
+            maintainSize: true,
+            child: Listener(
+              behavior: HitTestBehavior.translucent,
+              onPointerDown: _onPointerDown,
+              onPointerMove: _onPointerMove,
+              onPointerUp: _onPointerRelease,
+              onPointerCancel: _onPointerRelease,
+              child: widget.child,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    // The swipe-away transform lives here rather than in the sheet: it belongs
+    // to the presentation, the way iOS hangs its interactive dismissal off the
+    // zoom transition rather than off the sheet's detents (a sheet detent
+    // "resizes from one edge while the other three remain fixed" — it cannot
+    // express this). A sheet presented without a morph keeps the plain
+    // slide-away it always had.
+    final Widget draggableSheet = ValueListenableBuilder<double>(
+      valueListenable: _horizontalOffsetNotifier,
+      child: sheet,
+      builder: (context, _, child) =>
+          _dragTransform(screenSize, child!, inMorph: inMorph),
+    );
+
+    // During the morph, transform [draggableSheet] from its resting/dismissed
+    // [destination] rect into [scaledBlob] and clip it to blob B's superellipse
+    // contour. Once handed off, both the transform and the clip become no-ops
+    // without changing element depth.
+    final Widget portalSheet = ClipPath(
+      clipBehavior: inMorph ? Clip.antiAlias : Clip.none,
+      // No clipper once handed off: `Clip.none` only stops the painting, and
+      // `RenderClipPath` still hit-tests against its clip. A sheet opened at
+      // half and dragged to full would lose every touch above its half-height
+      // frame.
+      clipper: inMorph
+          ? _MorphBlobClipper(
+              rect: scaledBlob,
+              topRadius: topRadius * state.containerScale,
+              bottomRadius: bottomRadius * state.containerScale,
+            )
+          : null,
+      child: Transform(
+        transform: inMorph
+            ? SheetMorphGeometry.contentPortal(
+                sheet: destination,
+                blob: scaledBlob,
+              )
+            : Matrix4.identity(),
+        child: draggableSheet,
+      ),
+    );
+
+    // Both the droplet slot and `portalSheet` occupy fixed positions in the
+    // same Stack across the entire lifecycle so the sheet's element depth never
+    // changes at handoff. The droplet sits BEHIND `portalSheet` so blob B's
+    // backdrop glass and opaque fill render underneath the emerging content.
+    //
+    // The spring-driven barrier sits at slot 0. It follows _morph.value so
+    // that the dim is in lockstep with the blob physics — matching GlassMenu's
+    // single-unified-motion feel — rather than a decoupled linear route fade.
+    final Color? barrier = widget.barrierColor;
+    final double barrierT = _morph.value.clamp(0.0, 1.0);
+    // Opening: easeOut → barrier rushes in with the initial blob growth, then
+    // holds steady once the sheet is large. Closing: easeIn → barrier stays
+    // near full opacity while the blob is still substantial, only clearing
+    // quickly at the end when the blob has nearly returned to the trigger.
+    // This prevents the background from "revealing too early" on dismiss.
+    final Curve barrierCurve =
+        _morph.isClosing ? Curves.easeIn : Curves.easeOut;
+    final Widget? barrierWidget = barrier == null || barrier.a == 0.0
+        ? null
+        : Positioned.fill(
+            child: IgnorePointer(
+              child: ColoredBox(
+                color: barrier.withValues(
+                  alpha: barrier.a * barrierCurve.transform(barrierT),
+                ),
+              ),
+            ),
+          );
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        if (barrierWidget != null) barrierWidget,
+        if (showDroplet)
+          _buildDroplet(
+            context: context,
+            state: state,
+            activeState: activeState,
+            blob: rawBlob,
+            topRadius: topRadius,
+            bottomRadius: bottomRadius,
+            showAnchorBlob: showAnchorBlob,
+            contentOpacity: contentOpacity,
+          )
+        else
+          const SizedBox.shrink(),
+        portalSheet,
+      ],
+    );
+  }
+
+  Widget _buildDroplet({
+    required BuildContext context,
+    required LiquidMorphState state,
+    required GlassSheetState activeState,
+    required Rect blob,
+    required double topRadius,
+    required double bottomRadius,
+    required bool showAnchorBlob,
+    required double contentOpacity,
+  }) {
+    final trigger = widget.triggerRect;
+    final blobSize = blob.size;
+
+    final enablePeek = widget.geometry.enablePeek;
+    final baseSettings = GlassThemeHelpers.resolveSettings(
+      context,
+      explicit: widget.settings,
+      fallback: kDefaultSheetSettings,
+      isOverlayPlatter: true,
+    );
+    final dropletSettings = SheetMorphGeometry.restingSettings(
+      state: activeState,
+      baseSettings: baseSettings,
+      enablePeek: enablePeek,
+      peekSettings: widget.peekSettings,
+      halfSettings: widget.halfSettings,
+      fullSettings: widget.fullSettings,
+    );
+    final fillOpacity = SheetMorphGeometry.restingFillOpacity(
+          state: activeState,
+          baseSettings: baseSettings,
+          enablePeek: enablePeek,
+          peekSettings: widget.peekSettings,
+          halfSettings: widget.halfSettings,
+          fullSettings: widget.fullSettings,
+        ) *
+        math.max(SheetMorphGeometry.fillReveal(state.sizeT), contentOpacity);
+
+    final quality = GlassThemeHelpers.resolveQuality(
+      context,
+      widgetQuality: widget.quality,
+      fallback: GlassQuality.premium,
+    );
+
+    final isDark = GlassTheme.brightnessOf(context) == Brightness.dark;
+    final style = GlassThemeHelpers.resolveStyle(context);
+    final fillColor = (isDark ? widget.expandedDarkColor : null) ??
+        widget.expandedColor ??
+        (isDark
+            ? const Color(0xFF1C1C1E)
+            : (style == GlassStyle.classic
+                ? CupertinoColors.white
+                : const Color(0xFFF2F2F7)));
+
     // Blob A — the trigger ghost. Shrinks to nothing over the first 40 % of the
     // opening so the liquid bridge snaps, and grows back on close so the real
     // button "catches" the returning droplet.
-    final anchorRadius = trigger.shortestSide / 2.0;
-    final Widget? blobA = !showAnchorBlob
+    //
+    // Only shown once _triggerHidden is true: the trigger's _empty notification
+    // arrives one frame late, so without this guard the two glass circles
+    // overlap on the first frame and their combined specular reads as a white
+    // ring. On close the trigger is already hidden, so _triggerHidden stays true
+    // for the whole reverse journey.
+    final compactSide = trigger.shortestSide;
+    final isWideTrigger = trigger.width > trigger.height * 1.15;
+    final blobAWidth = math.max(
+      1.0,
+      compactSide + (trigger.width - compactSide) * state.triggerWidthProgress,
+    );
+    final blobAHeight = isWideTrigger
+        ? math.max(1.0, trigger.height)
+        : math.max(
+            1.0,
+            compactSide +
+                (trigger.height - compactSide) * state.triggerWidthProgress,
+          );
+    final anchorRadius = math.min(
+      compactSide * 0.5,
+      math.min(blobAWidth, blobAHeight) * 0.5,
+    );
+    final clampedMorphValue = _morph.value.clamp(0.0, 1.0);
+    final double blobAScale;
+    if (_morph.isClosing) {
+      blobAScale = isWideTrigger
+          ? state.triggerImpactScale
+          : state.anchorScale * state.triggerImpactScale;
+    } else {
+      final openAnchorScale = isWideTrigger
+          ? (1.0 - ((clampedMorphValue - 0.25) / 0.35).clamp(0.0, 1.0))
+          : state.anchorScale;
+      blobAScale = openAnchorScale * state.triggerImpactScale;
+    }
+    final Widget? blobA = !showAnchorBlob ||
+            !_triggerHidden ||
+            blobAScale <= 0.01
         ? null
         : Positioned(
-            left: trigger.left + state.pushDx,
-            top: trigger.top + state.pushDy,
+            left: trigger.center.dx - blobAWidth * 0.5 + state.triggerPushDx,
+            top: trigger.center.dy - blobAHeight * 0.5 + state.triggerPushDy,
             child: Transform.scale(
-              scale: state.anchorScale,
+              scale: blobAScale,
+              alignment: Alignment.center,
               child: AdaptiveGlass(
-                shape: LiquidRoundedRectangle(borderRadius: anchorRadius),
+                shape: LiquidRoundedSuperellipse(borderRadius: anchorRadius),
                 settings: dropletSettings,
                 quality: quality,
                 platformViewBackdrop: widget.platformViewBackdrop,
                 useOwnLayer: false,
-                child: SizedBox(width: trigger.width, height: trigger.height),
+                child: SizedBox(width: blobAWidth, height: blobAHeight),
               ),
             ),
           );
 
     // Blob B — the travelling body. Scaled by the engine's squeeze pulse so the
     // closing undershoot reads as a physical compression rather than a slide.
+    final safeBlobWidth = math.max(1.0, blobSize.width);
+    final safeBlobHeight = math.max(1.0, blobSize.height);
     final blobB = Positioned(
       left: blob.left,
       top: blob.top,
@@ -1584,10 +2143,11 @@ class _GlassSheetMorphPresenterState extends State<GlassSheetMorphPresenter>
             ),
             settings: dropletSettings,
             quality: quality,
+            platformViewBackdrop: widget.platformViewBackdrop,
             useOwnLayer: false,
             child: SizedBox(
-              width: blobSize.width,
-              height: blobSize.height,
+              width: safeBlobWidth,
+              height: safeBlobHeight,
               child: fillOpacity <= 0.0
                   ? null
                   : ColoredBox(
@@ -1604,12 +2164,10 @@ class _GlassSheetMorphPresenterState extends State<GlassSheetMorphPresenter>
       children: [if (blobA != null) blobA, blobB],
     );
 
-    // LiquidGlassBlendGroup needs the InheritedGeometryRenderLink that only a
-    // full LiquidGlassLayer provides. AdaptiveLiquidGlassLayer skips that layer
-    // in minimal quality and in platformViewBackdrop mode, so the blend group
-    // has to be skipped in exactly those cases too (issue #214).
+    // LiquidGlassBlendGroup requires a LiquidGlassLayer ancestor, which
+    // AdaptiveLiquidGlassLayer only mounts for GlassQuality.premium.
     final useBlendGroup =
-        quality != GlassQuality.minimal && !widget.platformViewBackdrop;
+        quality == GlassQuality.premium && !widget.platformViewBackdrop;
 
     // Once the droplet has been caught, the real trigger is back on screen and
     // the droplet is standing in front of a button that is already there — two
@@ -1631,12 +2189,82 @@ class _GlassSheetMorphPresenterState extends State<GlassSheetMorphPresenter>
             quality: quality,
             blendAmount: state.blend,
             platformViewBackdrop: widget.platformViewBackdrop,
-            child: useBlendGroup
-                ? LiquidGlassBlendGroup(blend: state.blend, child: blobs)
-                : blobs,
+            child: Builder(
+              builder: (context) {
+                final needsInnerBlendGroup = useBlendGroup &&
+                    LiquidGlassBlendGroup.maybeOf(context) == null;
+                return needsInnerBlendGroup
+                    ? LiquidGlassBlendGroup(blend: state.blend, child: blobs)
+                    : blobs;
+              },
+            ),
           ),
         ),
       ),
     );
+  }
+}
+
+// =============================================================================
+// Morph Portal Helpers
+// =============================================================================
+
+/// Communicates the active morph state from [GlassSheetMorphPresenter] down to
+/// [_SheetLayout] so the sheet can neutralize its own outer glass shell, solid
+/// fill, and glow while revealing its inner content inside the morph droplet.
+class _SheetMorphScope extends InheritedWidget {
+  const _SheetMorphScope({
+    required this.inMorph,
+    required this.contentOpacity,
+    required super.child,
+  });
+
+  /// Whether the morph droplet currently owns the sheet's outer glass shell.
+  final bool inMorph;
+
+  /// Opacity (`0.0` → `1.0`) applied to the sheet's inner content and drag
+  /// handle while [inMorph] is `true`.
+  final double contentOpacity;
+
+  static _SheetMorphScope? maybeOf(BuildContext context) {
+    return context.dependOnInheritedWidgetOfExactType<_SheetMorphScope>();
+  }
+
+  @override
+  bool updateShouldNotify(_SheetMorphScope oldWidget) {
+    return inMorph != oldWidget.inMorph ||
+        contentOpacity != oldWidget.contentOpacity;
+  }
+}
+
+/// Clips the portal-transformed sheet to blob B's screen-space superellipse
+/// contour while the morph is in flight.
+class _MorphBlobClipper extends CustomClipper<Path> {
+  const _MorphBlobClipper({
+    required this.rect,
+    required this.topRadius,
+    required this.bottomRadius,
+  });
+
+  final Rect rect;
+  final double topRadius;
+  final double bottomRadius;
+
+  @override
+  Path getClip(Size size) {
+    if (rect.width <= 0.0 || rect.height <= 0.0) {
+      return Path();
+    }
+    return LiquidVerticalRoundedSuperellipse(
+      topRadius: topRadius,
+      bottomRadius: bottomRadius,
+    ).getOuterPath(rect);
+  }
+
+  @override
+  bool shouldReclip(_MorphBlobClipper oldClipper) {
+    return rect != oldClipper.rect ||
+        topRadius != oldClipper.topRadius ||
+        bottomRadius != oldClipper.bottomRadius;
   }
 }

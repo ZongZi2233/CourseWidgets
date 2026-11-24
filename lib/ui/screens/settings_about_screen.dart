@@ -13,7 +13,7 @@ import '../widgets/immersive_status_bar_backdrop.dart';
 import '../widgets/windows_desktop_title_bar.dart'
     show setWindowsDesktopTitle, clearWindowsDesktopTitle;
 import '../../utils/glass_settings_helper.dart';
-import 'package:smooth_scroll_multiplatform/smooth_scroll_multiplatform.dart';
+import '../widgets/adaptive_smooth_scroll.dart';
 
 /// [修复7] iOS 26 液态玻璃风格关于软件页面
 class SettingsAboutScreen extends StatefulWidget {
@@ -72,7 +72,7 @@ class _SettingsAboutScreenState extends State<SettingsAboutScreen> {
         children: [
           // 1. 全出血自由滑动内容区
           Positioned.fill(
-            child: DynMouseScroll(
+            child: AdaptiveSmoothScroll(
               durationMS: 250,
               scrollSpeed: 1.2,
               builder: (context, controller, physics) => ListView(

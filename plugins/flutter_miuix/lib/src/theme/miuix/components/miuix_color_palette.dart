@@ -313,6 +313,10 @@ class _PaletteCanvasState extends State<_PaletteCanvas> {
     return Semantics(
       label: '颜色调色板',
       value: value,
+      increasedValue:
+          '第 ${widget.selectedRow + 1} 行，第 ${(widget.selectedCol + 2).clamp(1, widget.totalColumns)} 列',
+      decreasedValue:
+          '第 ${widget.selectedRow + 1} 行，第 ${widget.selectedCol.clamp(1, widget.totalColumns)} 列',
       hint: '拖动选择颜色',
       onIncrease: () => _moveSelection(0, 1),
       onDecrease: () => _moveSelection(0, -1),

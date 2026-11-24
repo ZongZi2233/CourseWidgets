@@ -1,17 +1,22 @@
 import 'dart:math' as math;
 import 'dart:ui';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/scheduler.dart';
+import '../../src/utils/glass_localizations.dart';
 import '../../utils/glass_morph_controller.dart';
-import '../../src/renderer/internal/glass_materialize_scope.dart';
+import '../../utils/liquid_morph_physics.dart';
 import '../../src/renderer/liquid_glass_renderer.dart';
+import '../../src/widgets/surfaces/vertical_bar_presentation.dart';
 
 import '../../constants/glass_defaults.dart';
 import '../../types/glass_quality.dart';
 import '../containers/glass_container.dart';
-import '../shared/inherited_liquid_glass.dart';
+import '../shared/adaptive_liquid_glass_layer.dart';
 import 'glass_menu.dart' show GlassMenuAlignment;
 import '../../theme/glass_theme_helpers.dart';
 import '../../theme/glass_theme.dart';
+import '../shared/glass_accessibility_scope.dart';
+import '../../src/widgets/overlays/overlay_semantics_host.dart';
 
 part 'shared/glass_popover_internal.dart';
 
@@ -105,6 +110,8 @@ class GlassPopover extends StatefulWidget {
     this.screenPadding = const EdgeInsets.all(12),
     this.settings,
     this.quality,
+    this.morphSpeed = MorphSpeed.normal,
+    this.platformViewBackdrop = false,
     this.stretch = 0.3,
     this.interactionScale = 1.02,
     this.stretchResistance = 0.08,
@@ -123,6 +130,8 @@ class GlassPopover extends StatefulWidget {
     this.barrierDismissible = true,
     this.blurRampDuration = const Duration(milliseconds: 260),
     this.blurRampCurve = Curves.easeOut,
+    this.semanticLabel,
+    this.controller,
   }) : assert(trigger != null || triggerBuilder != null,
             'Either trigger or triggerBuilder must be provided');
 
@@ -134,6 +143,14 @@ class GlassPopover extends StatefulWidget {
   /// If your trigger is interactive (like a [GlassButton]), use
   /// [triggerBuilder] instead to manually handle the tap event.
   final Widget? trigger;
+
+  /// What the [trigger] opens, announced by screen readers (for example
+  /// "More actions").
+  ///
+  /// The [trigger] is exposed as a button. A text trigger names itself, so
+  /// this matters most for an icon. Not used with [triggerBuilder], whose
+  /// widget carries its own semantics.
+  final String? semanticLabel;
 
   /// A builder for the trigger widget that provides access to the popover
   /// toggle callback.
@@ -201,7 +218,7 @@ class GlassPopover extends StatefulWidget {
 
   /// Custom glass settings for the popover container.
   ///
-  /// If null, inherits from parent [InheritedLiquidGlass] or uses subtle
+  /// If null, inherits from parent [AdaptiveLiquidGlassLayer] or uses subtle
   /// overlay defaults.
   final LiquidGlassSettings? settings;
 
@@ -210,6 +227,19 @@ class GlassPopover extends StatefulWidget {
   /// If null, inherits from parent quality or defaults via
   /// [GlassThemeHelpers.resolveQuality].
   final GlassQuality? quality;
+
+  /// Speed profile of the liquid glass morph animation.
+  ///
+  /// Defaults to [MorphSpeed.normal], matching the calibrated iOS 27 open and
+  /// close spring profiles.
+  final MorphSpeed morphSpeed;
+
+  /// Whether the popover sits over a platform view (e.g. a native map or video
+  /// player) whose pixels Impeller's shader capture cannot read.
+  ///
+  /// When `true`, routes the glass surface to the live [BackdropFilter] path so
+  /// the platform view beneath is blurred cleanly. Defaults to `false`.
+  final bool platformViewBackdrop;
 
   /// Liquid stretch factor.
   ///
@@ -271,8 +301,8 @@ class GlassPopover extends StatefulWidget {
   /// Called when the popover begins closing.
   ///
   /// Fires immediately when a close is triggered — tap outside the barrier,
-  /// re-tapping the trigger, or calling the `close` callback — **before** the
-  /// close animation completes.
+  /// re-tapping the trigger, calling the `close` callback, or calling
+  /// [GlassPopoverController.close] — **before** the close animation completes.
   final VoidCallback? onClose;
 
   /// Called when the popover begins opening.
@@ -317,6 +347,57 @@ class GlassPopover extends StatefulWidget {
   /// [blurRampDuration] is [Duration.zero].
   final Curve blurRampCurve;
 
+  /// Opens and closes the popover from outside its trigger
+  /// ([GlassPopoverController.open] / [GlassPopoverController.close] /
+  /// [GlassPopoverController.toggle]) — the same seam `GlassMenu.controller`
+  /// gives a menu, for a popover whose host decides when it appears
+  /// (state-driven UI, a guided tour, a section opened from elsewhere).
+  ///
+  /// For a purely controller-driven anchor that should not intercept taps or
+  /// announce button semantics on its own, pass `triggerBuilder: (_, _) => anchor`
+  /// instead of [trigger].
+  ///
+  /// One controller drives one mounted [GlassPopover] at a time.
+  final GlassPopoverController? controller;
+
   @override
   State<GlassPopover> createState() => _GlassPopoverState();
+}
+
+/// Commands a [GlassPopover] to open, close, or toggle from outside its
+/// trigger.
+///
+/// [open] morphs from the trigger's current position exactly as a trigger tap
+/// does; [close] runs the rubber-band collapse and fires [GlassPopover.onClose].
+class GlassPopoverController {
+  _GlassPopoverState? _state;
+
+  void _attach(_GlassPopoverState state) => _state = state;
+
+  void _detach(_GlassPopoverState state) {
+    if (identical(_state, state)) _state = null;
+  }
+
+  /// Whether the popover's overlay is shown (open, or animating closed).
+  bool get isOpen => _state?._overlayController.isShowing ?? false;
+
+  /// Opens the popover, as a tap on its trigger does.
+  ///
+  /// Safe no-op if the popover is already open/opening, detached, or has not
+  /// yet been laid out (for mount-time opens, call from
+  /// `WidgetsBinding.instance.addPostFrameCallback`). When called while a close
+  /// morph is in progress, reverses cleanly back to open.
+  void open() => _state?._openPopover();
+
+  /// Closes the popover, as a tap outside it does.
+  ///
+  /// Safe no-op if the popover is already closed, closing, or detached.
+  void close() => _state?._closePopover();
+
+  /// Toggles the popover, matching a tap on its trigger.
+  ///
+  /// Unlike checking [isOpen] manually (which stays `true` until the close
+  /// animation finishes), [toggle] reverses cleanly back to open when called
+  /// mid-close.
+  void toggle() => _state?._togglePopover();
 }

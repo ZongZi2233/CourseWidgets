@@ -30,6 +30,17 @@ class MiuixBottomSheetDefaults {
   ).colors.onSurfaceVariantSummary.withValues(alpha: 0.2);
 }
 
+/// 底部抽屉自定义表面构建器（如 [miuixGlassBottomSheetSurface]）。
+/// 对应 Kotlin `OverlayBottomSheet` 的 `surface: @Composable BottomSheetSurfaceScope.() -> Modifier`。
+typedef MiuixBottomSheetSurfaceBuilder =
+    Widget Function(
+      BuildContext context,
+      double cornerRadius,
+      Color scrimColor,
+      bool isOverscroll,
+      Widget child,
+    );
+
 /// Scaffold 内底部抽屉。对应 Kotlin `OverlayBottomSheet`。
 class MiuixOverlayBottomSheet extends StatelessWidget {
   const MiuixOverlayBottomSheet({
@@ -40,6 +51,8 @@ class MiuixOverlayBottomSheet extends StatelessWidget {
     this.endAction,
     this.backgroundColor,
     this.enableWindowDim = true,
+    this.dimColor,
+    this.surfaceBuilder,
     this.cornerRadius = MiuixBottomSheetDefaults.cornerRadius,
     this.sheetMaxWidth = MiuixBottomSheetDefaults.maxWidth,
     this.onDismissRequest,
@@ -60,6 +73,8 @@ class MiuixOverlayBottomSheet extends StatelessWidget {
   final Widget? endAction;
   final Color? backgroundColor;
   final bool enableWindowDim;
+  final Color? dimColor;
+  final MiuixBottomSheetSurfaceBuilder? surfaceBuilder;
   final double cornerRadius;
   final double sheetMaxWidth;
   final VoidCallback? onDismissRequest;
@@ -81,6 +96,8 @@ class MiuixOverlayBottomSheet extends StatelessWidget {
     endAction: endAction,
     backgroundColor: backgroundColor,
     enableWindowDim: enableWindowDim,
+    dimColor: dimColor,
+    surfaceBuilder: surfaceBuilder,
     cornerRadius: cornerRadius,
     sheetMaxWidth: sheetMaxWidth,
     onDismissRequest: onDismissRequest,
@@ -107,6 +124,8 @@ class MiuixWindowBottomSheet extends StatelessWidget {
     this.endAction,
     this.backgroundColor,
     this.enableWindowDim = true,
+    this.dimColor,
+    this.surfaceBuilder,
     this.cornerRadius = MiuixBottomSheetDefaults.cornerRadius,
     this.sheetMaxWidth = MiuixBottomSheetDefaults.maxWidth,
     this.onDismissRequest,
@@ -126,6 +145,8 @@ class MiuixWindowBottomSheet extends StatelessWidget {
   final Widget? endAction;
   final Color? backgroundColor;
   final bool enableWindowDim;
+  final Color? dimColor;
+  final MiuixBottomSheetSurfaceBuilder? surfaceBuilder;
   final double cornerRadius;
   final double sheetMaxWidth;
   final VoidCallback? onDismissRequest;
@@ -146,6 +167,8 @@ class MiuixWindowBottomSheet extends StatelessWidget {
     endAction: endAction,
     backgroundColor: backgroundColor,
     enableWindowDim: enableWindowDim,
+    dimColor: dimColor,
+    surfaceBuilder: surfaceBuilder,
     cornerRadius: cornerRadius,
     sheetMaxWidth: sheetMaxWidth,
     onDismissRequest: onDismissRequest,
@@ -170,6 +193,8 @@ class _MiuixBottomSheetLayout extends StatefulWidget {
     required this.endAction,
     required this.backgroundColor,
     required this.enableWindowDim,
+    required this.dimColor,
+    required this.surfaceBuilder,
     required this.cornerRadius,
     required this.sheetMaxWidth,
     required this.onDismissRequest,
@@ -191,6 +216,8 @@ class _MiuixBottomSheetLayout extends StatefulWidget {
   final Widget? endAction;
   final Color? backgroundColor;
   final bool enableWindowDim;
+  final Color? dimColor;
+  final MiuixBottomSheetSurfaceBuilder? surfaceBuilder;
   final double cornerRadius;
   final double sheetMaxWidth;
   final VoidCallback? onDismissRequest;
@@ -272,10 +299,7 @@ class _MiuixBottomSheetLayoutState extends State<_MiuixBottomSheetLayout>
       // AnimationStatus.dismissed 判定退出完成（那样永远等不到，遮罩层会残留
       // 并吞掉所有点击）。改为在 TickerFuture 完成时收尾；若期间被重新打开，
       // animateWith 会取消上一条 ticker，orCancel 抛错，onError 里忽略即可。
-      _springTo(0).orCancel.then(
-        (_) => _finishDismiss(),
-        onError: (_) {},
-      );
+      _springTo(0).orCancel.then((_) => _finishDismiss(), onError: (_) {});
     }
   }
 
@@ -341,7 +365,7 @@ class _MiuixBottomSheetLayoutState extends State<_MiuixBottomSheetLayout>
 
   Widget _hosted(BuildContext sourceContext) {
     final MiuixThemeData theme = MiuixTheme.of(sourceContext);
-    final Color dim = theme.colors.windowDimming;
+    final Color dim = widget.dimColor ?? theme.colors.windowDimming;
     return PopScope<Object?>(
       canPop: !widget.allowDismiss,
       onPopInvokedWithResult: (didPop, result) {
@@ -353,17 +377,16 @@ class _MiuixBottomSheetLayoutState extends State<_MiuixBottomSheetLayout>
           final double progress = _progress.value.clamp(0.0, 1.0);
           final double dragAlpha =
               1 - (_dragOffset / _sheetHeight).clamp(0.0, 1.0);
+          final Color currentScrim = widget.enableWindowDim
+              ? dim.withValues(alpha: dim.a * progress * dragAlpha)
+              : const Color(0x00000000);
           return Stack(
             fit: StackFit.expand,
             children: <Widget>[
               GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTap: _requestDismiss,
-                child: ColoredBox(
-                  color: widget.enableWindowDim
-                      ? dim.withValues(alpha: dim.a * progress * dragAlpha)
-                      : const Color(0x00000000),
-                ),
+                child: ColoredBox(color: currentScrim),
               ),
               Align(
                 alignment: Alignment.bottomCenter,
@@ -372,7 +395,7 @@ class _MiuixBottomSheetLayoutState extends State<_MiuixBottomSheetLayout>
                     0,
                     _sheetHeight * (1 - progress) + _dragOffset,
                   ),
-                  child: _sheet(sourceContext),
+                  child: _sheet(sourceContext, currentScrim),
                 ),
               ),
             ],
@@ -382,10 +405,51 @@ class _MiuixBottomSheetLayoutState extends State<_MiuixBottomSheetLayout>
     );
   }
 
-  Widget _sheet(BuildContext context) {
+  Widget _sheet(BuildContext context, Color currentScrim) {
     final EdgeInsets media = widget.defaultWindowInsetsPadding
         ? MediaQuery.viewInsetsOf(context)
         : EdgeInsets.zero;
+    final Widget body = Padding(
+      padding: EdgeInsets.only(
+        bottom: media.bottom + widget.insideMargin.height,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          _dragHandle(context),
+          _titleRow(context),
+          Flexible(
+            child: Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: widget.insideMargin.width,
+              ),
+              child: MiuixDismissScope(
+                onDismissRequest: widget.onDismissRequest ?? () {},
+                child: widget.content,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    final Widget surface = widget.surfaceBuilder != null
+        ? widget.surfaceBuilder!(
+            context,
+            widget.cornerRadius,
+            currentScrim,
+            false,
+            body,
+          )
+        : DecoratedBox(
+            decoration: ShapeDecoration(
+              color:
+                  widget.backgroundColor ??
+                  MiuixBottomSheetDefaults.backgroundColor(context),
+              shape: _TopSquircleBorder(cornerRadius: widget.cornerRadius),
+            ),
+            child: body,
+          );
+    final double overscrollHeight = _dragOffset < 0 ? -_dragOffset : 0;
     return ConstrainedBox(
       constraints: BoxConstraints(
         maxWidth: widget.sheetMaxWidth,
@@ -395,39 +459,34 @@ class _MiuixBottomSheetLayoutState extends State<_MiuixBottomSheetLayout>
       ),
       child: Padding(
         padding: EdgeInsets.symmetric(horizontal: widget.outsideMargin.width),
-        child: _SheetSizeReporter(
-          onSize: (size) => _sheetHeight = size.height,
-          child: DecoratedBox(
-            decoration: ShapeDecoration(
-              color:
-                  widget.backgroundColor ??
-                  MiuixBottomSheetDefaults.backgroundColor(context),
-              shape: _TopSquircleBorder(cornerRadius: widget.cornerRadius),
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: <Widget>[
+            _SheetSizeReporter(
+              onSize: (size) => _sheetHeight = size.height,
+              child: surface,
             ),
-            child: Padding(
-              padding: EdgeInsets.only(
-                bottom: media.bottom + widget.insideMargin.height,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  _dragHandle(context),
-                  _titleRow(context),
-                  Flexible(
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: widget.insideMargin.width,
+            if (overscrollHeight > 0)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: -overscrollHeight,
+                height: overscrollHeight,
+                child: widget.surfaceBuilder != null
+                    ? widget.surfaceBuilder!(
+                        context,
+                        0,
+                        currentScrim,
+                        true,
+                        const SizedBox.expand(),
+                      )
+                    : ColoredBox(
+                        color:
+                            widget.backgroundColor ??
+                            MiuixBottomSheetDefaults.backgroundColor(context),
                       ),
-                      child: MiuixDismissScope(
-                        onDismissRequest: widget.onDismissRequest ?? () {},
-                        child: widget.content,
-                      ),
-                    ),
-                  ),
-                ],
               ),
-            ),
-          ),
+          ],
         ),
       ),
     );
@@ -517,10 +576,12 @@ class _MiuixBottomSheetLayoutState extends State<_MiuixBottomSheetLayout>
             Text(
               widget.title!,
               textAlign: TextAlign.center,
-              style: MiuixTheme.of(context).textStyles.title4.copyWith(
-                fontWeight: FontWeight.w500,
-                color: MiuixTheme.of(context).colors.onSurface,
-              ).withMiuixWeight(MiuixTheme.of(context).fontWeightAdjustment),
+              style: MiuixTheme.of(context).textStyles.title4
+                  .copyWith(
+                    fontWeight: FontWeight.w500,
+                    color: MiuixTheme.of(context).colors.onSurface,
+                  )
+                  .withMiuixWeight(MiuixTheme.of(context).fontWeightAdjustment),
             ),
           Align(
             alignment: AlignmentDirectional.centerStart,

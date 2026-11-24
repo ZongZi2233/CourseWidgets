@@ -162,7 +162,7 @@ class _RenderTextureBlur extends RenderProxyBox {
       return;
     }
 
-    final dpr = _devicePixelRatio;
+    final dpr = _backdrop.pixelRatio;
     // 本区域左上角在快照像素坐标中的偏移。
     final selfGlobal = localToGlobal(Offset.zero);
     final offX = (selfGlobal.dx - backdropGlobal.dx) * dpr;

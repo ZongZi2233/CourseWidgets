@@ -61,6 +61,7 @@ class MiuixVectorIcon {
     required this.viewport,
     required this.intrinsicSize,
     required this.paths,
+    this.autoMirror = false,
   });
 
   /// 图标名（对应 `ImageVector.Builder(name = ...)`），用于调试与语义回退。
@@ -74,6 +75,9 @@ class MiuixVectorIcon {
 
   /// 组成该图标的所有路径（按绘制顺序）。
   final List<MiuixVectorPath> paths;
+
+  /// 对应 ImageVector.autoMirror；只有方向性图标在 RTL 下镜像。
+  final bool autoMirror;
 }
 
 /// 将 [MiuixVectorIcon] 绘制到 **视口尺寸** 的画布上；外层缩放交给 [FittedBox]。
@@ -83,13 +87,23 @@ class MiuixVectorIcon {
 /// 各子路径先按各自 alpha 合成，再被 tint 统一着色（保留分层透明度）。
 /// [tint] 为空时按矢量原始颜色绘制（多色/不上色场景）。
 class MiuixVectorIconPainter extends CustomPainter {
-  const MiuixVectorIconPainter(this.icon, {this.tint});
+  const MiuixVectorIconPainter(
+    this.icon, {
+    this.tint,
+    this.textDirection = TextDirection.ltr,
+  });
 
   final MiuixVectorIcon icon;
   final Color? tint;
+  final TextDirection textDirection;
 
   @override
   void paint(Canvas canvas, Size size) {
+    canvas.save();
+    if (icon.autoMirror && textDirection == TextDirection.rtl) {
+      canvas.translate(icon.viewport.width, 0);
+      canvas.scale(-1, 1);
+    }
     final bool tinted = tint != null;
     final Rect bounds = Offset.zero & icon.viewport;
 
@@ -120,11 +134,14 @@ class MiuixVectorIconPainter extends CustomPainter {
     }
 
     if (tinted) canvas.restore();
+    canvas.restore();
   }
 
   @override
   bool shouldRepaint(MiuixVectorIconPainter oldDelegate) =>
-      !identical(oldDelegate.icon, icon) || oldDelegate.tint != tint;
+      !identical(oldDelegate.icon, icon) ||
+      oldDelegate.tint != tint ||
+      oldDelegate.textDirection != textDirection;
 }
 
 /// 构造一个带偶数-奇数填充规则的空 [Path]。便于图标定义处链式 `..moveTo(...)`。
@@ -141,7 +158,10 @@ Path miuixEvenOddPath() => Path()..fillType = PathFillType.evenOdd;
 ///
 /// 注意：Compose 的 `HorizontalTo`/`VerticalTo` 在生成阶段已被展开为完整的 `L x y`
 /// （生成器跟踪当前点），因此这里无需处理 H/V。[fillType] 默认非零环绕（NonZero）。
-Path miuixParsePath(String data, {PathFillType fillType = PathFillType.nonZero}) {
+Path miuixParsePath(
+  String data, {
+  PathFillType fillType = PathFillType.nonZero,
+}) {
   final path = Path()..fillType = fillType;
   final tokens = data.split(RegExp(r'\s+')).where((t) => t.isNotEmpty).toList();
   int i = 0;

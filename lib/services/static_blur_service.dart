@@ -132,7 +132,8 @@ class StaticBlurredWallpaperService extends ChangeNotifier with WidgetsBindingOb
 
     try {
       // 静态高斯模糊目标尺寸：适度降采样（宽度约 540），显存极小 (~1.2MB)，解码与 GPU 模糊一次性完成
-      final targetW = math.min(540.0, screenSize.width);
+      // [v3.2.1] 提升离屏毛玻璃基准采样宽度至 640px，消弭高分屏卡片内轻微色块感
+      final targetW = math.min(640.0, screenSize.width);
       final targetH = (targetW / screenSize.width) * screenSize.height;
 
       final provider = _resolveImageProvider(isDark, bgPath, targetWidth: targetW.round());
@@ -159,13 +160,25 @@ class StaticBlurredWallpaperService extends ChangeNotifier with WidgetsBindingOb
         sampleSrcRect = Rect.fromLTWH(0, top, rawImage.width.toDouble(), sampleH);
       }
 
-      // [v3.0.0-alpha22] 对低分辨率 mipmap 进行彻底的一次性离屏高斯模糊处理 (sigma: 18.0)，
-      // 彻底消除低分辨率 mipmap 未经模糊直接展示产生的锯齿与噪点，呈现纯正温润的磨砂毛玻璃底板
+      // [v3.2.1] 双阶段复合高斯模糊 + 轻微色彩提振矩阵，呈现更细腻真实的高阶光学磨砂质感
+      const vibrancyMatrix = <double>[
+        1.05, -0.02, -0.02, 0, 2.0,
+        -0.02, 1.05, -0.02, 0, 2.0,
+        -0.02, -0.02, 1.05, 0, 2.0,
+        0, 0, 0, 1, 0,
+      ];
       final blurPaint = Paint()
-        ..imageFilter = ui.ImageFilter.blur(
-          sigmaX: 18.0,
-          sigmaY: 18.0,
-          tileMode: TileMode.clamp,
+        ..imageFilter = ui.ImageFilter.compose(
+          outer: ui.ImageFilter.blur(
+            sigmaX: 11.5,
+            sigmaY: 11.5,
+            tileMode: TileMode.clamp,
+          ),
+          inner: ui.ImageFilter.blur(
+            sigmaX: 13.0,
+            sigmaY: 13.0,
+            tileMode: TileMode.clamp,
+          ),
         );
 
       canvas.saveLayer(dstRect, blurPaint);
@@ -173,7 +186,9 @@ class StaticBlurredWallpaperService extends ChangeNotifier with WidgetsBindingOb
         rawImage,
         sampleSrcRect,
         dstRect,
-        Paint()..filterQuality = FilterQuality.medium,
+        Paint()
+          ..filterQuality = FilterQuality.high
+          ..colorFilter = const ui.ColorFilter.matrix(vibrancyMatrix),
       );
       canvas.restore();
 

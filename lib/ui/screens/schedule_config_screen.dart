@@ -7,7 +7,7 @@ import '../../providers/schedule_provider.dart';
 import '../../constants/theme_constants.dart';
 import '../widgets/liquid_glass_pickers.dart';
 import '../widgets/liquid_components.dart' as liquid;
-import 'package:smooth_scroll_multiplatform/smooth_scroll_multiplatform.dart';
+import '../widgets/adaptive_smooth_scroll.dart';
 
 /// 课时配置界面 - 液态玻璃版本
 class ScheduleConfigScreen extends StatefulWidget {
@@ -197,7 +197,7 @@ class _ScheduleConfigScreenState extends State<ScheduleConfigScreen> {
 
                   // 内容区域
                   Expanded(
-                    child: DynMouseScroll(
+                    child: AdaptiveSmoothScroll(
                       durationMS: 250,
                       scrollSpeed: 1.2,
                       builder: (context, controller, physics) =>
@@ -254,7 +254,8 @@ class _ScheduleConfigScreenState extends State<ScheduleConfigScreen> {
   }
 
   Widget _buildGeneralSettings() {
-    return FakeGlass(
+    return AdaptiveGlass(
+      quality: GlassQuality.minimal,
       shape: LiquidRoundedSuperellipse(
         borderRadius: LiquidGlassTheme.largeRadius,
       ),
@@ -386,7 +387,8 @@ class _ScheduleConfigScreenState extends State<ScheduleConfigScreen> {
   }
 
   Widget _buildSectionSettings() {
-    return FakeGlass(
+    return AdaptiveGlass(
+      quality: GlassQuality.minimal,
       shape: LiquidRoundedSuperellipse(
         borderRadius: LiquidGlassTheme.largeRadius,
       ),
@@ -526,7 +528,8 @@ class _ScheduleConfigScreenState extends State<ScheduleConfigScreen> {
   }
 
   Widget _buildPresetButtons() {
-    return FakeGlass(
+    return AdaptiveGlass(
+      quality: GlassQuality.minimal,
       shape: LiquidRoundedSuperellipse(
         borderRadius: LiquidGlassTheme.largeRadius,
       ),
@@ -568,7 +571,9 @@ class _ScheduleConfigScreenState extends State<ScheduleConfigScreen> {
   }
 
   Widget _buildPresetButton(String label, VoidCallback onPressed, Color color) {
-    return LiquidGlass(
+    return GlassContainer(
+      useOwnLayer: true,
+      quality: GlassQuality.standard,
       shape: LiquidRoundedSuperellipse(
         borderRadius: LiquidGlassTheme.mediumRadius,
       ),

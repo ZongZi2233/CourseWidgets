@@ -2,6 +2,25 @@
 
 本文档记录 CourseWidgets 各版本更新的动态活动演进，重点关注架构改进、渲染优化、故障诊断与教务抓取能力提升。
 
+## [v3.2.1] - 2026-11-24 (Build 3210 正式版)
+
+### 1. Android 16 实况通知导视视觉重构与按课程智能分色 (`LiveUpdateNotificationManager.kt` & `live_notification_service_v2.dart`)
+- **按课程独立色彩区分**：为 `CourseColorPalette` 新增 12 色高对比度实况强调色表并序列化下发至原生层；Android 16 实况通知主题色、右侧 `52dp` 超椭圆教室徽章以及「居中圆点 / 按时长分段」双模式进度条的每一个节点和分段（含 `ScheduleGlanceWidget` 桌面小组件）均随对应课程自动上色；
+- **智能教室解析与防截断分层排版**：新增 `ClassroomDisplayInfo`（及原生对等实现 `parseClassroomInfo`），自动拆分 `中1203室（信工学院基础实验室）`、`A101逸夫楼` 等复合教室名为 **主题色圆角教室号胶囊（如 `中1203`、`A101`）+ 中性色附属场馆说明**；课程名称独立成行且保持无主题色高亮，彻底杜绝超长教室名遮挡课程名称；
+- **无进度条等高多行排版与顶栏精简**：还原 `AndroidManifest.xml` 应用显示名为 `CourseWidgets`，彻底移除通知副标题与设置页预览中的 `课表 ·` / 应用名冗长前缀；当「今日无课 / 已结课 / 距开课超过 45 分钟」自动隐藏进度条时，切为多行 `BigTextStyle` 与固定最小高度预览卡片，确保完整显示信息且卡片高度不缩水；
+- **1:1 交互式预览升级**：通知设置页预览新增「正在上课 / 长教室名 / 今日无课」三态场景切换器，支持超长场馆说明平滑跑马灯滚动（短文本零动画零开销）。
+
+### 2. 120Hz 全链路帧率优化、毛玻璃渲染升级与 FlClash 液态玻璃弹窗 (`liquid_components.dart` & `static_blur_service.dart`)
+- **消除滚动掉帧核心瓶颈**：
+  - `HyperOSCard` 为卡片内容外层包裹 `RepaintBoundary`，使 `_RenderSharedBlurStencil` 随滚动偏移重绘背景时不再连带重绘内部文本、开关与节次列表；仅在卡片显式传入 `onTap` / `onLongPress` 时挂载 `MiuixPressable` 交互包装，大幅减轻静置多卡页面（如课时配置 5 卡滚动）的构建与动画开销；
+  - 重写 `_RenderSharedBlurStencil.paint`，用零堆分配的 `canvas.drawImageRect` 视口坐标直采（含视口边缘 1px 延伸防拉伸与 `0.6px` 柔和内高光描边）替代每帧构造 `Matrix4` 与 `ImageShader` 实例；简化深色模式阴影层数为单通低开销高斯阴影视效；
+  - 新增 `AdaptiveSmoothScroll`，桌面端保留鼠标滚轮平滑阻尼，Android/iOS 移动端直连原生 `ScrollController` + 弹簧物理特性，消除 `DynMouseScroll` `ChangeNotifierProvider` + `Listener` 逐帧调度损耗；
+- **共享背景读数与离屏双阶高精度磨砂**：将页面顶部 `ImmersiveStatusBarBackdrop` 与 `FloatingGlassHeaderButton` 统一纳入 `BackdropGroup` + `GlassBackdropGroup` 与 `ClipRSuperellipse`（大超椭圆曲率）渲染，并将 `StaticBlurredWallpaperService` 离线纹理升级至 `640px` 基准宽度与 `11.5 + 13.0` 双阶段复合高斯模糊 + 微量色彩提振，结合 `AppBackgroundLayer` 独立 `RepaintBoundary` 隔离，实现更细腻顺滑的高斯模糊与更低帧耗时；
+- **FlClash 风格液态玻璃对话框升级**：重构 `LiquidGlassDialog`、`showLiquidDialog`、课时配置页「第 X 节作息时间」弹窗、「智慧推算」底部面板与周次选择器，统一采用 `GlassContainer(useOwnLayer: true, LiquidRoundedSuperellipse(28))` 实时折射材质、轻量适度全屏背景模糊（`sigma 6.5`）及大超椭圆圆角规范。
+
+### 3. 上游组件与工具链依赖升级
+- 升级内置组件库 `liquid_glass_widgets` 至 **`1.20.0`**（集成 `GlassBackdropGroup` 背景读数共享与 `GlassEffect` 静止自动跳过采样优化，完整保留桌面端不降级与 Impeller 实时优化补丁）与 `flutter_miuix` 至 **`1.4.0`**，并同步升级 `nativeapi 0.6.2`、`sqlite3 3.9.2`、`tray_manager 0.9.1`、`window_manager 0.7.1`、`flutter_local_notifications 23.0.4` 等依赖包。
+
 ## [v3.2.0] - 2026-11-24 (Build 3200 正式版)
 
 ### 1. 智能教务系统导入全面加固与表述优化 (`EduScheduleExtractor` & `WebviewImportScreen`)

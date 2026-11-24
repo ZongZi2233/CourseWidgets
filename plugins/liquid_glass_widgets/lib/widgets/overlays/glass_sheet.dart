@@ -1,8 +1,9 @@
 import 'dart:ui';
 import '../../src/renderer/liquid_glass_renderer.dart';
-import '../../src/renderer/internal/interaction_notification.dart';
+import '../../types/interaction_notification.dart';
 
 import '../../types/glass_quality.dart';
+import '../../types/glass_style.dart';
 import '../shared/adaptive_glass.dart';
 import '../../theme/glass_theme_helpers.dart';
 import '../../theme/glass_theme.dart';
@@ -105,7 +106,7 @@ class GlassSheet extends StatefulWidget {
     this.quality,
     this.showDragIndicator = true,
     this.dragIndicatorColor,
-    this.topBorderRadius = 32.0,
+    this.topBorderRadius = 38.0,
     this.bottomBorderRadius,
     this.padding,
     this.margin = const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
@@ -273,7 +274,8 @@ class GlassSheet extends StatefulWidget {
   /// - [enableDrag]: Whether the sheet can be dragged down to dismiss (default: true)
   /// - [barrierColor]: Color of the modal barrier (defaults to black54)
   /// - [useRootNavigator]: Whether to show the sheet in the root navigator (default: false)
-  /// - [useSafeArea]: Whether to wrap the content in a safe area (default: true)
+  /// - [useSafeArea]: Whether to keep the sheet above the bottom inset
+  ///   (default: true); the top inset always bounds a tall sheet
   ///
   /// Example:
   /// ```dart
@@ -290,7 +292,7 @@ class GlassSheet extends StatefulWidget {
     bool showDragIndicator = true,
     Color? dragIndicatorColor,
     EdgeInsetsGeometry? padding,
-    double topBorderRadius = 32.0,
+    double topBorderRadius = 38.0,
     double? bottomBorderRadius,
     EdgeInsets margin = const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
     bool isScrollable = true,
@@ -311,11 +313,19 @@ class GlassSheet extends StatefulWidget {
     bool useSafeArea = true,
     bool enableSaturationGlow = true,
   }) {
+    final capturedGlassTheme = GlassTheme.maybeOf(context)?.data;
+    final capturedCupertinoTheme = CupertinoTheme.of(context);
+    final capturedStyle = GlassThemeHelpers.resolveStyle(context);
+    final effectiveBarrierColor = barrierColor ??
+        (capturedStyle == GlassStyle.classic
+            ? GlassDefaults.barrierColor
+            : const Color(0x24000000));
+
     return showGeneralDialog<T>(
       context: context,
       barrierDismissible: isDismissible,
       barrierLabel: 'Dismiss',
-      barrierColor: barrierColor ?? GlassDefaults.barrierColor,
+      barrierColor: effectiveBarrierColor,
       useRootNavigator: useRootNavigator,
       transitionDuration: const Duration(milliseconds: 350),
       transitionBuilder: (context, animation, secondaryAnimation, child) {
@@ -332,9 +342,12 @@ class GlassSheet extends StatefulWidget {
         );
       },
       pageBuilder: (context, animation, secondaryAnimation) {
-        return SafeArea(
+        Widget dialog = SafeArea(
           bottom: useSafeArea,
-          top: false,
+          // The top inset bounds the sheet's height, so a long sheet stops
+          // below the status bar and its content scrolls. Always on: it is a
+          // limit, not padding, so it never adds space to a short sheet.
+          top: true,
           left: false,
           right: false,
           child: Align(
@@ -362,11 +375,22 @@ class GlassSheet extends StatefulWidget {
                 glowRadius: glowRadius,
                 enableSaturationGlow: enableSaturationGlow,
                 suppressInteractionOnChildren: suppressInteractionOnChildren,
-                child: builder(context),
+                child: Builder(builder: builder),
               ),
             ),
           ),
         );
+        dialog = CupertinoTheme(
+          data: capturedCupertinoTheme,
+          child: dialog,
+        );
+        if (capturedGlassTheme != null) {
+          dialog = GlassTheme(
+            data: capturedGlassTheme,
+            child: dialog,
+          );
+        }
+        return dialog;
       },
     );
   }
@@ -445,6 +469,7 @@ class _DismissibleSheetWrapperState extends State<_DismissibleSheetWrapper> {
 
 class _GlassSheetState extends State<GlassSheet> with TickerProviderStateMixin {
   late AnimationController _saturationController;
+  late CurvedAnimation _saturationCurve;
   late Animation<double> _saturationAnimation;
   bool _isInteractingWithChild = false;
 
@@ -455,14 +480,16 @@ class _GlassSheetState extends State<GlassSheet> with TickerProviderStateMixin {
       duration: const Duration(milliseconds: 100),
       vsync: this,
     );
-    _saturationAnimation = CurvedAnimation(
+    _saturationCurve = CurvedAnimation(
       parent: _saturationController,
       curve: Curves.easeOut,
-    ).drive(Tween(begin: 0.0, end: 1.0));
+    );
+    _saturationAnimation = _saturationCurve.drive(Tween(begin: 0.0, end: 1.0));
   }
 
   @override
   void dispose() {
+    _saturationCurve.dispose();
     _saturationController.dispose();
     super.dispose();
   }
@@ -506,6 +533,7 @@ class _GlassSheetState extends State<GlassSheet> with TickerProviderStateMixin {
       context,
       explicit: widget.settings,
       fallback: kDefaultSheetSettings,
+      isOverlayPlatter: true,
     );
 
     final effectiveTopRadius = widget.topBorderRadius;
@@ -522,6 +550,7 @@ class _GlassSheetState extends State<GlassSheet> with TickerProviderStateMixin {
       animation: _saturationAnimation,
       builder: (context, child) {
         final t = _saturationAnimation.value;
+        final style = GlassThemeHelpers.resolveStyle(context);
         final currentTopRadius =
             lerpDouble(effectiveTopRadius, effectiveTopRadius * 0.98, t)!;
         final currentBottomRadius =
@@ -532,48 +561,48 @@ class _GlassSheetState extends State<GlassSheet> with TickerProviderStateMixin {
           bottomRadius: currentBottomRadius,
         );
 
-        final pulsedSettings = effectiveSettings.copyWith(
-          lightIntensity: lerpDouble(effectiveSettings.lightIntensity, 0.8, t)!,
-          saturation: lerpDouble(effectiveSettings.saturation, 2.2, t)!,
-        );
+        final pulsedSettings = style == GlassStyle.classic
+            ? effectiveSettings.copyWith(
+                lightIntensity:
+                    lerpDouble(effectiveSettings.lightIntensity, 0.8, t)!,
+                saturation: lerpDouble(effectiveSettings.saturation, 2.2, t)!,
+              )
+            : effectiveSettings;
 
         // The core inner content of the sheet
-        Widget innerContent = SafeArea(
-          bottom: true,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _SheetHeader(
-                showIndicator: widget.showDragIndicator,
-                color: widget.dragIndicatorColor,
-                onDismiss: () => Navigator.maybePop(context),
-              ),
-              if (widget.isScrollable)
-                Flexible(
-                  child: NotificationListener<ScrollNotification>(
-                    onNotification: (notification) {
-                      if (notification is ScrollStartNotification &&
-                          notification.dragDetails != null) {
-                        GlassGlowLayer.maybeOf(context)?.removeTouch();
-                      }
-                      return false;
-                    },
-                    child: SingleChildScrollView(
-                      physics: const BouncingScrollPhysics(),
-                      padding: widget.padding,
-                      child: RepaintBoundary(child: widget.child),
-                    ),
+        Widget innerContent = Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _SheetHeader(
+              showIndicator: widget.showDragIndicator,
+              color: widget.dragIndicatorColor,
+              onDismiss: () => Navigator.maybePop(context),
+            ),
+            if (widget.isScrollable)
+              Flexible(
+                child: NotificationListener<ScrollNotification>(
+                  onNotification: (notification) {
+                    if (notification is ScrollStartNotification &&
+                        notification.dragDetails != null) {
+                      GlassGlowLayer.maybeOf(context)?.removeTouch();
+                    }
+                    return false;
+                  },
+                  child: SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    padding: widget.padding,
+                    child: RepaintBoundary(child: widget.child),
                   ),
-                )
-              else
-                Padding(
-                  padding: widget.padding ?? EdgeInsets.zero,
-                  child: RepaintBoundary(child: widget.child),
                 ),
-              const SizedBox(height: 24),
-            ],
-          ),
+              )
+            else
+              Padding(
+                padding: widget.padding ?? EdgeInsets.zero,
+                child: RepaintBoundary(child: widget.child),
+              ),
+            const SizedBox(height: 24),
+          ],
         );
 
         Widget result = AdaptiveGlass(
@@ -584,7 +613,8 @@ class _GlassSheetState extends State<GlassSheet> with TickerProviderStateMixin {
           child: RepaintBoundary(child: innerContent),
         );
 
-        if (widget.enableInteractionGlow && effectiveSettings.blur > 0.05) {
+        if (widget.enableInteractionGlow &&
+            (effectiveSettings.blur > 0.05 || effectiveSettings.frost > 0.05)) {
           final isDark = GlassTheme.brightnessOf(context) == Brightness.dark;
           result = GlassGlow(
             glowColor: widget.glowColor ??
@@ -651,10 +681,12 @@ class _SheetHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (showIndicator) {
+      final style = GlassThemeHelpers.resolveStyle(context);
+      final topPadding = style == GlassStyle.classic ? 8.0 : 5.0;
       return Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const SizedBox(height: 8),
+          SizedBox(height: topPadding),
           Center(
               child: _GlassDragIndicator(color: color, onDismiss: onDismiss)),
           const SizedBox(height: 8),
@@ -668,8 +700,9 @@ class _SheetHeader extends StatelessWidget {
 /// Drag indicator / grab handle widget for glass sheets.
 ///
 /// A small pill-shaped bar that indicates the sheet can be dragged,
-/// precisely matching iOS 26's `UISheetPresentationController` grabber:
-/// 36×4dp, white at ~35% opacity.
+/// precisely matching iOS 26/27's `UISheetPresentationController` grabber:
+/// 36×5dp (4dp in classic mode), white at ~35% opacity in dark mode or black
+/// at 20% in light mode.
 class _GlassDragIndicator extends StatelessWidget {
   const _GlassDragIndicator({
     this.color,
@@ -682,7 +715,9 @@ class _GlassDragIndicator extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = GlassTheme.brightnessOf(context) == Brightness.dark;
-    // iOS 26: white at 35% in dark mode, black at 20% in light mode
+    final style = GlassThemeHelpers.resolveStyle(context);
+    final height = style == GlassStyle.classic ? 4.0 : 5.0;
+    // iOS 26/27: white at 35% in dark mode, black at 20% in light mode
     final defaultColor =
         isDark ? const Color(0x59FFFFFF) : const Color(0x33000000);
 
@@ -694,10 +729,10 @@ class _GlassDragIndicator extends StatelessWidget {
       onTap: onDismiss ?? () => Navigator.maybePop(context),
       child: Container(
         width: 36,
-        height: 4, // iOS 26 spec: 4dp (not 5dp)
+        height: height,
         decoration: BoxDecoration(
           color: color ?? defaultColor,
-          borderRadius: BorderRadius.circular(2),
+          borderRadius: BorderRadius.circular(height / 2),
         ),
       ),
     );

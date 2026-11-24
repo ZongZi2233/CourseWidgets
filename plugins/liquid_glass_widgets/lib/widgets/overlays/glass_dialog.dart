@@ -3,20 +3,22 @@ import 'package:flutter/cupertino.dart';
 import '../../src/renderer/liquid_glass_renderer.dart';
 
 import '../../types/glass_quality.dart';
-import '../containers/glass_card.dart';
+import '../../types/glass_style.dart';
+import '../../src/widgets/overlays/glass_alert_platter.dart';
+import '../containers/glass_container.dart';
 import '../interactive/glass_button.dart';
-import '../shared/adaptive_liquid_glass_layer.dart';
+import '../../theme/glass_theme.dart';
 import '../../theme/glass_theme_helpers.dart';
 
 /// A glass morphism alert dialog following Apple's iOS design patterns.
 ///
 /// [GlassDialog] provides a modal dialog with liquid glass effect,
-/// composing [GlassCard] and [GlassButton] as building blocks.
+/// composing [GlassContainer.card] and [GlassButton] as building blocks.
 ///
 /// ## Key Features
 ///
 /// - Liquid glass backdrop with blur effect
-/// - Composable design using GlassCard + GlassButton
+/// - Composable design using GlassContainer.card + GlassButton
 /// - iOS-style alert layout
 /// - 1-3 action buttons with smart layout
 /// - Customizable glass settings
@@ -144,13 +146,18 @@ class GlassDialog extends StatelessWidget {
     this.content,
     this.settings,
     this.quality,
-    this.maxWidth = 280,
+    this.maxWidth,
+    this.shape,
+    this.actionShape,
+    this.actionTextStyle,
   }) : assert(
           actions.length > 0 && actions.length <= 3,
           'GlassDialog must have 1-3 actions',
         );
 
-  static const _actionButtonShape = LiquidRoundedSuperellipse(borderRadius: 14);
+  static const double _classicWidth = 280;
+
+  static const _actionButtonShape = LiquidRoundedSuperellipse(borderRadius: 12);
 
   // Cache default colors to avoid allocations
   static const _defaultGlowColor =
@@ -186,8 +193,10 @@ class GlassDialog extends StatelessWidget {
 
   /// Maximum width of the dialog in logical pixels.
   ///
-  /// Defaults to 300.
-  final double maxWidth;
+  /// If null, follows the active [GlassStyle]: 320 for [GlassStyle.ios26] and
+  /// [GlassStyle.ios27] (the native iOS 26/27 alert width) and 280 for
+  /// [GlassStyle.classic] (the original iOS alert width).
+  final double? maxWidth;
 
   // ===========================================================================
   // Action Properties
@@ -212,16 +221,82 @@ class GlassDialog extends StatelessWidget {
   /// If null, uses [LiquidGlassSettings] defaults.
   final LiquidGlassSettings? settings;
 
+  /// The dialog's shape.
+  ///
+  /// Null keeps the style's default: 34 pt continuous corners on the `ios26`
+  /// and `ios27` alert platter, a 12 pt superellipse on `classic`.
+  final LiquidShape? shape;
+
+  /// The action buttons' shape.
+  ///
+  /// Null keeps the style's default: the native capsule on `ios26` / `ios27`
+  /// (32 pt corners when an accessibility text size wraps the label) and a
+  /// 12 pt superellipse on `classic`. A given shape is kept at every text
+  /// size.
+  final LiquidShape? actionShape;
+
+  /// Merged over the action labels' text style (size, weight, family).
+  ///
+  /// The label's color still follows its role (default, destructive, or
+  /// disabled). On `ios26` / `ios27`, `isPrimary` is distinguished by
+  /// `FontWeight.w600` (and `FontWeight.bold` on `classic`), so leaving
+  /// [TextStyle.fontWeight] null preserves the primary action's emphasis.
+  final TextStyle? actionTextStyle;
+
   /// Rendering quality for the glass effect.
   ///
-  /// Defaults to [GlassQuality.standard], which uses backdrop filter rendering.
+  /// Defaults to [GlassQuality.premium] on [GlassStyle.ios27] and
+  /// [GlassStyle.ios26] ([GlassStyle.classic] defaults to
+  /// [GlassQuality.standard]).
   final GlassQuality? quality;
 
   // ===========================================================================
   // Static Show Method
   // ===========================================================================
 
-  /// Shows a liquid glass dialog with snappy spring entrance animation.
+  /// Shows a glass dialog.
+  ///
+  /// Returns a [Future] that resolves to the value (if any) passed to
+  /// [Navigator.pop] when the dialog is dismissed.
+  ///
+  /// Parameters:
+  /// - [context]: Build context for showing the dialog
+  /// - [title]: Title text (optional)
+  /// - [message]: Message text (optional)
+  /// - [content]: Custom content widget (optional)
+  /// - [actions]: Action buttons (required, 1-3 actions)
+  /// - [settings]: Glass effect settings (null uses defaults)
+  /// - [quality]: Rendering quality (null inherits from the ambient layer or
+  ///   [GlassTheme], falling back to standard)
+  /// - [barrierDismissible]: Whether tapping outside dismisses (default: false)
+  /// - [barrierColor]: Color of the modal barrier (defaults to the native
+  ///   dimming on `ios26`/`ios27`, and the Cupertino modal barrier color on
+  ///   `classic`)
+  /// - [maxWidth]: Maximum width of dialog (null follows the active style:
+  ///   320 on `ios26`/`ios27`, 280 on `classic`)
+  /// - [shape]: Custom dialog shape (null uses the style default)
+  /// - [actionShape]: Custom action button shape (null uses the style default)
+  /// - [actionTextStyle]: Merged over action label styles (role colors still
+  ///   apply)
+  ///
+  /// Example:
+  /// ```dart
+  /// final result = await GlassDialog.show<bool>(
+  ///   context: context,
+  ///   title: 'Confirm',
+  ///   message: 'Are you sure?',
+  ///   actions: [
+  ///     GlassDialogAction(
+  ///       label: 'Cancel',
+  ///       onPressed: () => Navigator.pop(context, false),
+  ///     ),
+  ///     GlassDialogAction(
+  ///       label: 'Confirm',
+  ///       onPressed: () => Navigator.pop(context, true),
+  ///     ),
+  ///   ],
+  /// );
+  /// ```
   static Future<T?> show<T>({
     required BuildContext context,
     required List<GlassDialogAction> actions,
@@ -229,56 +304,110 @@ class GlassDialog extends StatelessWidget {
     String? message,
     Widget? content,
     LiquidGlassSettings? settings,
-    GlassQuality quality = GlassQuality.standard,
+    GlassQuality? quality,
     bool barrierDismissible = false,
     Color? barrierColor,
-    double maxWidth = 300,
+    double? maxWidth,
+    LiquidShape? shape,
+    LiquidShape? actionShape,
+    TextStyle? actionTextStyle,
   }) {
-    return showGeneralDialog<T>(
+    final capturedGlassTheme = GlassTheme.maybeOf(context)?.data;
+    final capturedCupertinoTheme = CupertinoTheme.of(context);
+    final isNative =
+        GlassThemeHelpers.resolveStyle(context) != GlassStyle.classic;
+    final isDark = GlassTheme.brightnessOf(context) == Brightness.dark;
+    final resolvedBarrierColor = barrierColor != null
+        ? CupertinoDynamicColor.resolve(barrierColor, context)
+        : (isNative
+            ? glassAlertBarrierColor(isDark: isDark)
+            : CupertinoDynamicColor.resolve(
+                kCupertinoModalBarrierColor,
+                context,
+              ));
+    return pushGlassAlertRoute<T>(
       context: context,
       barrierDismissible: barrierDismissible,
-      barrierLabel: 'Dismiss',
-      barrierColor: barrierColor ?? CupertinoColors.black.withValues(alpha: 0.35),
-      transitionDuration: const Duration(milliseconds: 320),
-      transitionBuilder: (dialogCtx, anim1, anim2, child) {
-        final curved = const Cubic(0.20, 1.18, 0.38, 1.0).transform(anim1.value);
-        return Transform.scale(
-          scale: 0.88 + 0.12 * curved,
-          child: Opacity(
-            opacity: anim1.value.clamp(0.0, 1.0),
-            child: child,
-          ),
+      barrierColor: resolvedBarrierColor,
+      builder: (dialogContext) {
+        Widget dialog = GlassDialog(
+          title: title,
+          message: message,
+          content: content,
+          actions: actions,
+          settings: settings,
+          quality: quality,
+          maxWidth: maxWidth,
+          shape: shape,
+          actionShape: actionShape,
+          actionTextStyle: actionTextStyle,
         );
+        dialog = CupertinoTheme(
+          data: capturedCupertinoTheme,
+          child: dialog,
+        );
+        if (capturedGlassTheme != null) {
+          dialog = GlassTheme(
+            data: capturedGlassTheme,
+            child: dialog,
+          );
+        }
+        return dialog;
       },
-      pageBuilder: (dialogCtx, anim1, anim2) => GlassDialog(
-        title: title,
-        message: message,
-        content: content,
-        actions: actions,
-        settings: settings,
-        quality: quality,
-        maxWidth: maxWidth,
-      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    if (GlassThemeHelpers.resolveStyle(context) != GlassStyle.classic) {
+      // ios26 / ios27: the native alert platter.
+      return GlassAlertPlatter(
+        title: title,
+        message: message,
+        content: content,
+        settings: settings,
+        quality: quality,
+        maxWidth: maxWidth,
+        shape: shape,
+        actionShape: actionShape,
+        actionTextStyle: actionTextStyle,
+        actions: [
+          for (final action in actions)
+            GlassAlertPlatterAction(
+              label: action.label,
+              onPressed: action.onPressed,
+              isPrimary: action.isPrimary,
+              isDestructive: action.isDestructive,
+            ),
+        ],
+      );
+    }
+
     // Inherit quality from parent layer if not explicitly set
     final effectiveQuality = GlassThemeHelpers.resolveQuality(
       context,
       widgetQuality: quality,
     );
+    final platterSettings = GlassThemeHelpers.resolveSettings(
+      context,
+      explicit: settings,
+      isOverlayPlatter: true,
+    );
+    // The action buttons sit flat on the platter, so they resolve the ambient
+    // surface optics minus the surface's exterior shadow.
+    final buttonSettings = settings ??
+        GlassThemeHelpers.resolveSettings(context)
+            .copyWith(shadow: const [], shadowElevation: 0);
 
     return Center(
       child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: maxWidth),
-        child: GlassCard(
+        constraints: BoxConstraints(maxWidth: maxWidth ?? _classicWidth),
+        child: GlassContainer.card(
           useOwnLayer: true,
-          shape: const LiquidRoundedSuperellipse(borderRadius: 24),
-          settings: settings,
+          settings: platterSettings,
           quality: effectiveQuality,
-          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 20),
+          shape: shape,
+          padding: const EdgeInsets.all(20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -302,8 +431,7 @@ class GlassDialog extends StatelessWidget {
                   message!,
                   style: TextStyle(
                     fontSize: 14,
-                    color:
-                        CupertinoColors.secondaryLabel.resolveFrom(context),
+                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
                     height: 1.4,
                   ),
                   textAlign: TextAlign.center,
@@ -317,10 +445,10 @@ class GlassDialog extends StatelessWidget {
                 const SizedBox(height: 8),
               ],
 
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
 
               // Actions
-              _buildActions(context),
+              _buildActions(context, buttonSettings, effectiveQuality),
             ],
           ),
         ),
@@ -328,9 +456,59 @@ class GlassDialog extends StatelessWidget {
     );
   }
 
-  Widget _buildActions(BuildContext context) {
-    // 1-2 actions: Horizontal layout
-    if (actions.length <= 2) {
+  /// Whether every label fits on one line in half the dialog's width.
+  ///
+  /// Mirrors iOS: two actions whose labels would wrap are stacked instead.
+  bool _labelsFitSideBySide(BuildContext context, double width) {
+    if (actions.length < 2) return true;
+    // Two buttons and the 8 pt gap between them; the label keeps clear of
+    // the button's 12 pt corners on both sides.
+    final labelWidth = (width - 8) / 2 - 2 * 12;
+    final baseStyle = DefaultTextStyle.of(context).style;
+    for (final action in actions) {
+      final painter = TextPainter(
+        text: TextSpan(
+          text: action.label,
+          style: baseStyle.merge(_labelStyle(action)),
+        ),
+        maxLines: 1,
+        textDirection: Directionality.of(context),
+        textScaler: MediaQuery.textScalerOf(context),
+      )..layout();
+      final fits = painter.width <= labelWidth;
+      painter.dispose();
+      if (!fits) return false;
+    }
+    return true;
+  }
+
+  TextStyle _labelStyle(GlassDialogAction action) => TextStyle(
+        fontSize: 16,
+        fontWeight: action.isPrimary ? FontWeight.bold : FontWeight.w600,
+      ).merge(actionTextStyle);
+
+  Widget _buildActions(
+    BuildContext context,
+    LiquidGlassSettings buttonSettings,
+    GlassQuality effectiveQuality,
+  ) =>
+      LayoutBuilder(
+        builder: (context, constraints) => _buildActionsIn(
+          context,
+          constraints.maxWidth,
+          buttonSettings,
+          effectiveQuality,
+        ),
+      );
+
+  Widget _buildActionsIn(
+    BuildContext context,
+    double width,
+    LiquidGlassSettings buttonSettings,
+    GlassQuality effectiveQuality,
+  ) {
+    // 1-2 actions: Horizontal layout, unless a label does not fit
+    if (actions.length <= 2 && _labelsFitSideBySide(context, width)) {
       return Row(
         children: actions.asMap().entries.map((entry) {
           final index = entry.key;
@@ -340,14 +518,19 @@ class GlassDialog extends StatelessWidget {
               padding: EdgeInsetsDirectional.only(
                 start: index > 0 ? 8 : 0,
               ),
-              child: _buildActionButton(action, context),
+              child: _buildActionButton(
+                action,
+                context,
+                buttonSettings,
+                effectiveQuality,
+              ),
             ),
           );
         }).toList(),
       );
     }
 
-    // 3 actions: Vertical layout (iOS pattern)
+    // 3 actions, or labels too long for a row: Vertical layout (iOS pattern)
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: actions.asMap().entries.map((entry) {
@@ -357,13 +540,23 @@ class GlassDialog extends StatelessWidget {
           padding: EdgeInsets.only(
             top: index > 0 ? 8 : 0,
           ),
-          child: _buildActionButton(action, context),
+          child: _buildActionButton(
+            action,
+            context,
+            buttonSettings,
+            effectiveQuality,
+          ),
         );
       }).toList(),
     );
   }
 
-  Widget _buildActionButton(GlassDialogAction action, BuildContext context) {
+  Widget _buildActionButton(
+    GlassDialogAction action,
+    BuildContext context,
+    LiquidGlassSettings buttonSettings,
+    GlassQuality effectiveQuality,
+  ) {
     // Determine button styling based on action type
     var glowColor = _defaultGlowColor;
     if (action.isDestructive) {
@@ -373,15 +566,16 @@ class GlassDialog extends StatelessWidget {
     }
 
     return GlassButton.custom(
-      onTap: action.onPressed,
+      onTap: action.onPressed ?? () {},
+      enabled: action.onPressed != null,
       height: 44,
-      shape: _actionButtonShape,
+      shape: actionShape ?? _actionButtonShape,
+      settings: buttonSettings,
+      quality: effectiveQuality,
       glowColor: glowColor,
       child: Text(
         action.label,
-        style: TextStyle(
-          fontSize: 16,
-          fontWeight: action.isPrimary ? FontWeight.bold : FontWeight.w600,
+        style: _labelStyle(action).copyWith(
           color: action.isDestructive
               ? CupertinoColors.destructiveRed
               : CupertinoColors.label.resolveFrom(context),
@@ -407,7 +601,13 @@ class GlassDialogAction {
   final String label;
 
   /// Callback when the button is pressed.
-  final VoidCallback onPressed;
+  ///
+  /// If null, the action is disabled: it stays in place, ignores taps, and is
+  /// reported as disabled to assistive technology. On [GlassStyle.ios27] and
+  /// [GlassStyle.ios26] its title is drawn in [CupertinoColors.tertiaryLabel],
+  /// as a disabled `UIAlertAction` is; on [GlassStyle.classic] the button is
+  /// dimmed like any disabled [GlassButton].
+  final VoidCallback? onPressed;
 
   /// Whether this is the primary (recommended) action.
   ///

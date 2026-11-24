@@ -9,12 +9,38 @@ import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
 import 'package:flutter/scheduler.dart';
 
+/// 对应上游 surface：仅替换面板材质，保留内容与交互。
+typedef MiuixPopupSurfaceBuilder =
+    Widget Function(BuildContext context, ShapeBorder shape, Widget child);
+
+/// 宿主向弹窗内容暴露的进入/退出动画进度（供玻璃对话框同步遮罩与缩放采样）。
+class MiuixPopupTransitionScope extends InheritedWidget {
+  const MiuixPopupTransitionScope({
+    super.key,
+    required this.dimAnimation,
+    required this.contentAnimation,
+    required super.child,
+  });
+
+  final Animation<double> dimAnimation;
+  final Animation<double> contentAnimation;
+
+  static MiuixPopupTransitionScope? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<MiuixPopupTransitionScope>();
+
+  @override
+  bool updateShouldNotify(MiuixPopupTransitionScope oldWidget) =>
+      dimAnimation != oldWidget.dimAnimation ||
+      contentAnimation != oldWidget.contentAnimation;
+}
+
 /// 弹窗内容过渡的构建器。
-typedef MiuixPopupTransitionBuilder = Widget Function(
-  BuildContext context,
-  Animation<double> animation,
-  Widget child,
-);
+typedef MiuixPopupTransitionBuilder =
+    Widget Function(
+      BuildContext context,
+      Animation<double> animation,
+      Widget child,
+    );
 
 /// 描述一次进入或退出过渡。
 ///
@@ -71,57 +97,43 @@ class MiuixPopupDefaults {
   static const Curve _sinOut = _SinOutCurve();
 
   static final SpringDescription _largeDialogSpring =
-      SpringDescription.withDampingRatio(
-        mass: 1,
-        stiffness: 438.6,
-        ratio: 0.9,
-      );
+      SpringDescription.withDampingRatio(mass: 1, stiffness: 438.6, ratio: 0.9);
   static final SpringDescription _smallDialogSpring =
-      SpringDescription.withDampingRatio(
-        mass: 1,
-        stiffness: 450,
-        ratio: 0.88,
-      );
+      SpringDescription.withDampingRatio(mass: 1, stiffness: 450, ratio: 0.88);
 
   /// 对话框遮罩进入：300ms、减速曲线。
-  static final MiuixPopupTransition dialogDimEnter =
-      MiuixPopupTransition.fade(
-        duration: const Duration(milliseconds: 300),
-        curve: _decelerate15,
-      );
+  static final MiuixPopupTransition dialogDimEnter = MiuixPopupTransition.fade(
+    duration: const Duration(milliseconds: 300),
+    curve: _decelerate15,
+  );
 
   /// 对话框遮罩退出：250ms、减速曲线。
-  static final MiuixPopupTransition dialogDimExit =
-      MiuixPopupTransition.fade(
-        duration: const Duration(milliseconds: 250),
-        curve: _decelerate15,
-      );
+  static final MiuixPopupTransition dialogDimExit = MiuixPopupTransition.fade(
+    duration: const Duration(milliseconds: 250),
+    curve: _decelerate15,
+  );
 
   /// 普通弹窗遮罩进入：300ms、正弦缓出。
-  static final MiuixPopupTransition popupDimEnter =
-      MiuixPopupTransition.fade(
-        duration: const Duration(milliseconds: 300),
-        curve: _sinOut,
-      );
+  static final MiuixPopupTransition popupDimEnter = MiuixPopupTransition.fade(
+    duration: const Duration(milliseconds: 300),
+    curve: _sinOut,
+  );
 
   /// 普通弹窗遮罩退出：150ms、正弦缓出。
-  static final MiuixPopupTransition popupDimExit =
-      MiuixPopupTransition.fade(
-        duration: const Duration(milliseconds: 150),
-        curve: _sinOut,
-      );
+  static final MiuixPopupTransition popupDimExit = MiuixPopupTransition.fade(
+    duration: const Duration(milliseconds: 150),
+    curve: _sinOut,
+  );
 
   /// 普通弹窗内容进入：200ms 淡入。
-  static final MiuixPopupTransition popupEnter =
-      MiuixPopupTransition.fade(
-        duration: const Duration(milliseconds: 200),
-      );
+  static final MiuixPopupTransition popupEnter = MiuixPopupTransition.fade(
+    duration: const Duration(milliseconds: 200),
+  );
 
   /// 普通弹窗内容退出：150ms 淡出。
-  static final MiuixPopupTransition popupExit =
-      MiuixPopupTransition.fade(
-        duration: const Duration(milliseconds: 150),
-      );
+  static final MiuixPopupTransition popupExit = MiuixPopupTransition.fade(
+    duration: const Duration(milliseconds: 150),
+  );
 
   /// 大屏对话框内容以淡入和 0.8→1 缩放弹簧进入。
   static final MiuixPopupTransition largeDialogEnter = MiuixPopupTransition(
@@ -227,6 +239,7 @@ abstract class MiuixPopupEntry extends ChangeNotifier {
     this.enterTransition,
     this.exitTransition,
     this.enableWindowDim = true,
+    this.dimColor,
     this.dimEnterTransition,
     this.dimExitTransition,
   });
@@ -237,6 +250,7 @@ abstract class MiuixPopupEntry extends ChangeNotifier {
   MiuixPopupTransition? enterTransition;
   MiuixPopupTransition? exitTransition;
   bool enableWindowDim;
+  Color? dimColor;
   MiuixPopupTransition? dimEnterTransition;
   MiuixPopupTransition? dimExitTransition;
 
@@ -269,6 +283,7 @@ abstract class MiuixPopupEntry extends ChangeNotifier {
     required MiuixPopupTransition? enterTransition,
     required MiuixPopupTransition? exitTransition,
     required bool enableWindowDim,
+    Color? dimColor,
     required MiuixPopupTransition? dimEnterTransition,
     required MiuixPopupTransition? dimExitTransition,
   }) {
@@ -276,6 +291,7 @@ abstract class MiuixPopupEntry extends ChangeNotifier {
     this.enterTransition = enterTransition;
     this.exitTransition = exitTransition;
     this.enableWindowDim = enableWindowDim;
+    this.dimColor = dimColor;
     this.dimEnterTransition = dimEnterTransition;
     this.dimExitTransition = dimExitTransition;
     notifyListeners();
@@ -290,6 +306,7 @@ class MiuixDialogEntry extends MiuixPopupEntry {
     super.enterTransition,
     super.exitTransition,
     super.enableWindowDim,
+    super.dimColor,
     super.dimEnterTransition,
     super.dimExitTransition,
     this.enableAutoLargeScreen = true,
@@ -357,10 +374,9 @@ class MiuixPopupRegistry extends ChangeNotifier {
       List<MiuixPlainPopupEntry>.unmodifiable(_popups);
   bool get isEmpty => _dialogs.isEmpty && _popups.isEmpty;
 
-  bool contains(MiuixPopupEntry entry) =>
-      entry is MiuixDialogEntry
-          ? _dialogs.contains(entry)
-          : _popups.contains(entry);
+  bool contains(MiuixPopupEntry entry) => entry is MiuixDialogEntry
+      ? _dialogs.contains(entry)
+      : _popups.contains(entry);
 
   void add(MiuixPopupEntry entry) {
     if (contains(entry)) return;
@@ -410,10 +426,7 @@ class MiuixPopupScope extends StatefulWidget {
   final MiuixPopupRegistry? registry;
   final bool establishRoot;
 
-  static MiuixPopupRegistry of(
-    BuildContext context, {
-    bool root = false,
-  }) {
+  static MiuixPopupRegistry of(BuildContext context, {bool root = false}) {
     final data = context
         .dependOnInheritedWidgetOfExactType<_MiuixPopupScopeData>();
     if (data == null) return MiuixPopupRegistry.fallback;
@@ -448,9 +461,7 @@ class _MiuixPopupScopeState extends State<MiuixPopupScope> {
     final local = widget.registry ?? _ownedRegistry;
     final parent = context
         .dependOnInheritedWidgetOfExactType<_MiuixPopupScopeData>();
-    final root = widget.establishRoot
-        ? local
-        : (parent?.rootRegistry ?? local);
+    final root = widget.establishRoot ? local : (parent?.rootRegistry ?? local);
     return _MiuixPopupScopeData(
       localRegistry: local,
       rootRegistry: root,
@@ -485,6 +496,7 @@ class MiuixDialogLayout extends StatefulWidget {
     this.enterTransition,
     this.exitTransition,
     this.enableWindowDim = true,
+    this.dimColor,
     this.enableAutoLargeScreen = true,
     this.dimEnterTransition,
     this.dimExitTransition,
@@ -498,6 +510,7 @@ class MiuixDialogLayout extends StatefulWidget {
   final MiuixPopupTransition? enterTransition;
   final MiuixPopupTransition? exitTransition;
   final bool enableWindowDim;
+  final Color? dimColor;
   final bool enableAutoLargeScreen;
   final MiuixPopupTransition? dimEnterTransition;
   final MiuixPopupTransition? dimExitTransition;
@@ -526,6 +539,7 @@ class _MiuixDialogLayoutState extends State<MiuixDialogLayout> {
     enterTransition: widget.enterTransition,
     exitTransition: widget.exitTransition,
     enableWindowDim: widget.enableWindowDim,
+    dimColor: widget.dimColor,
     dimEnterTransition: widget.dimEnterTransition,
     dimExitTransition: widget.dimExitTransition,
     enableAutoLargeScreen: widget.enableAutoLargeScreen,
@@ -554,6 +568,7 @@ class _MiuixDialogLayoutState extends State<MiuixDialogLayout> {
       enterTransition: widget.enterTransition,
       exitTransition: widget.exitTransition,
       enableWindowDim: widget.enableWindowDim,
+      dimColor: widget.dimColor,
       dimEnterTransition: widget.dimEnterTransition,
       dimExitTransition: widget.dimExitTransition,
     );
@@ -922,7 +937,15 @@ class _MiuixHostedEntryState extends State<_MiuixHostedEntry>
       if (!_deactivated &&
           mounted &&
           widget.entry is MiuixDialogEntry &&
-          (MediaQuery.maybeOf(context)?.viewInsets.bottom ?? 0) > 0) {
+          // 回调里只读一次：getInheritedWidgetOfExactType 不登记依赖，否则
+          // 本条目会在此后键盘动画的每一帧都跟着重建。
+          (context
+                      .getInheritedWidgetOfExactType<MediaQuery>()
+                      ?.data
+                      .viewInsets
+                      .bottom ??
+                  0) >
+              0) {
         FocusManager.instance.primaryFocus?.unfocus();
       }
       _close();
@@ -1085,8 +1108,7 @@ class _MiuixHostedEntryState extends State<_MiuixHostedEntry>
     // 仅当宿主（MiuixDialogLayout/MiuixPopupLayout）已 dispose、把 entry 标记为
     // orphaned 时才由 HostedEntry 接管 dispose。否则 entry 仍归宿主所有，宿主可能
     // 再次 show 对话框并复用该 entry。
-    if (widget.entry.orphaned &&
-        !widget.registry.contains(widget.entry)) {
+    if (widget.entry.orphaned && !widget.registry.contains(widget.entry)) {
       widget.entry.dispose();
     }
     super.dispose();
@@ -1114,7 +1136,7 @@ class _MiuixHostedEntryState extends State<_MiuixHostedEntry>
       child: entry.enableWindowDim
           ? _DimLayer(
               entry: entry,
-              color: widget.windowDimmingColor,
+              color: entry.dimColor ?? widget.windowDimmingColor,
             )
           : const SizedBox.expand(),
     );
@@ -1132,7 +1154,11 @@ class _MiuixHostedEntryState extends State<_MiuixHostedEntry>
           SizedBox.expand(
             child: Material(
               type: MaterialType.transparency,
-              child: Builder(builder: entry.content),
+              child: MiuixPopupTransitionScope(
+                dimAnimation: _dimController,
+                contentAnimation: _contentController,
+                child: Builder(builder: entry.content),
+              ),
             ),
           ),
         ),

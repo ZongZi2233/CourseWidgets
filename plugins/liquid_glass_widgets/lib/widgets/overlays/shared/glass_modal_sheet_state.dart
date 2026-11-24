@@ -5,13 +5,22 @@ class _GlassModalSheetState extends State<GlassModalSheet>
   // ── Animation Controllers ─────────────────────────────────────────────────
   late AnimationController _animationController;
   late AnimationController _saturationController;
-  late Animation<double> _saturationAnimation;
+  late CurvedAnimation _saturationAnimation;
+  late final Listenable _sheetAnimation;
+  final GlobalKey _focusBridgeKey = GlobalKey();
+  final GlobalKey _contentZoneKey = GlobalKey();
   final _progressNotifier = _ProgressNotifier();
 
   // ── State ─────────────────────────────────────────────────────────────────
   late final ValueNotifier<GlassSheetState> _currentStateNotifier;
+  late GlassSheetState _lastVisibleState;
   GlassSheetState get _currentState => _currentStateNotifier.value;
-  set _currentState(GlassSheetState v) => _currentStateNotifier.value = v;
+  set _currentState(GlassSheetState v) {
+    _currentStateNotifier.value = v;
+    if (v != GlassSheetState.hidden) {
+      _lastVisibleState = v;
+    }
+  }
 
   /// The state most recently published to consumers via
   /// [GlassModalSheet.onStateChanged] (and from which haptics and
@@ -51,18 +60,30 @@ class _GlassModalSheetState extends State<GlassModalSheet>
   // ── Geometry & Metrics ────────────────────────────────────────────────────
   late SheetGeometry _geometry;
 
-  /// The view size the drag math divides by, cached because pointer moves
-  /// arrive faster than an inherited lookup is worth. Read it through
-  /// [_screenSize], which refreshes a cache still holding the zero it was
-  /// born with: a sheet built before the window has a size — an app the
-  /// system launched in the background for a push, a test on a zero-size
-  /// view — would otherwise keep that zero for life and divide every drag
-  /// by it.
-  Size _cachedScreenSize = Size.zero;
-  Size get _screenSize {
-    if (_cachedScreenSize.isEmpty && mounted) _updateScreenSize();
-    return _cachedScreenSize;
-  }
+  /// The vertical bar strip the sheet is presented over, or null where bars
+  /// are horizontal. See [GlassVerticalBar].
+  GlassVerticalBarData? _verticalBar;
+
+  /// The large detent's height in the strip layout, which the strip's
+  /// absence leaves to the default. See [GlassModalSheet._stripFullSize].
+  double? _stripFullSize;
+
+  /// The size the sheet lays out in: its [MediaQuery]'s, which [build]
+  /// positions it by. Every detent position, and every progress, snap target
+  /// and resistance bound measured between them, divides by this one height,
+  /// so the sheet is judged by the same height it rests at — even where an
+  /// ancestor's MediaQuery isn't the window's size (one side of a half-folded
+  /// display, a page laid out at one width and scaled to the screen). Cached
+  /// in [didChangeDependencies] because pointer moves arrive faster than an
+  /// inherited lookup is worth.
+  Size _layoutSize = Size.zero;
+
+  /// The sheet's layout pixels per pointer pixel along a drag: 1 unless an
+  /// ancestor scales the sheet. Pointer positions arrive in the window's
+  /// pixels and the sheet's position is a fraction of [_layoutSize]; this is
+  /// the conversion that keeps the sheet under the finger. Read from each
+  /// touch's hit-test transform in [_onPointerDown].
+  double _layoutPerPointer = 1.0;
 
   @override
   void initState() {
@@ -79,6 +100,7 @@ class _GlassModalSheetState extends State<GlassModalSheet>
     );
 
     _currentStateNotifier = ValueNotifier(resolvedInitial);
+    _lastVisibleState = resolvedInitial;
     _settledState = resolvedInitial;
     _geometry = _buildGeometry();
 
@@ -90,16 +112,39 @@ class _GlassModalSheetState extends State<GlassModalSheet>
     );
     _saturationAnimation =
         CurvedAnimation(parent: _saturationController, curve: Curves.easeOut);
+    _sheetAnimation =
+        Listenable.merge([_animationController, _saturationController]);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        _updateScreenSize();
         _lastPhysicalSize = View.of(context).physicalSize;
         _snapToState(_currentState, animate: false);
       }
     });
 
     widget.controller?._attach(this);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final prevLayoutSize = _layoutSize;
+    _layoutSize = MediaQuery.sizeOf(context);
+    _verticalBar = GlassVerticalBar.maybeOf(context);
+    final stripFullSize = GlassModalSheet._stripFullSize(context);
+    if (stripFullSize != _stripFullSize) {
+      _stripFullSize = stripFullSize;
+      _geometry = _buildGeometry();
+    }
+    if (prevLayoutSize != Size.zero && prevLayoutSize != _layoutSize) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted &&
+            _gestureArena.phase == GesturePhase.idle &&
+            _currentState != GlassSheetState.hidden) {
+          _snapToState(_currentState, animate: true);
+        }
+      });
+    }
   }
 
   @override
@@ -139,6 +184,7 @@ class _GlassModalSheetState extends State<GlassModalSheet>
     _animationController.removeListener(_onPositionTick);
     _animationController.dispose();
     _progressNotifier.dispose();
+    _saturationAnimation.dispose();
     _saturationController.dispose();
     _scrollController.dispose();
     _currentStateNotifier.dispose();
@@ -154,11 +200,10 @@ class _GlassModalSheetState extends State<GlassModalSheet>
     // Filter system call spam: the spring only jitters if the window size
     // actually changes.
     if (_lastPhysicalSize != view.physicalSize) {
-      _updateScreenSize();
       // A window that had no size is being sized for the first time (an app
       // launched in the background, coming to the foreground), not resized:
-      // there is nothing to re-settle, and the size cache above is all that
-      // first size has to update.
+      // there is nothing to re-settle, and the layout size arrives with the
+      // MediaQuery's next build.
       if (_lastPhysicalSize != Size.zero) {
         _snapToState(_currentState, animate: true);
       }
@@ -169,7 +214,7 @@ class _GlassModalSheetState extends State<GlassModalSheet>
   SheetGeometry _buildGeometry() => SheetGeometry(
         mode: widget.mode,
         halfSize: widget.halfSize,
-        fullSize: widget.fullSize,
+        fullSize: widget.fullSize ?? _stripFullSize,
         peekSize: widget.peekSize,
         enablePeek: SheetGeometry.resolvePeek(
           detents: widget.detents,
@@ -201,11 +246,6 @@ class _GlassModalSheetState extends State<GlassModalSheet>
     return requested;
   }
 
-  void _updateScreenSize() {
-    final view = View.of(context);
-    _cachedScreenSize = view.physicalSize / view.devicePixelRatio;
-  }
-
   // ════════════════════════════════════════════════════════════════════════
   // Snap & State Management
   // ════════════════════════════════════════════════════════════════════════
@@ -219,15 +259,15 @@ class _GlassModalSheetState extends State<GlassModalSheet>
       state = GlassSheetState.peek;
     }
 
-    final screenHeight = MediaQuery.sizeOf(context).height;
-    final targetPosition = _geometry.positionForState(state, screenHeight);
+    final layoutHeight = _layoutSize.height;
+    final targetPosition = _geometry.positionForState(state, layoutHeight);
 
     if (animate) {
       final simulation = SpringSimulation(
         const SpringDescription(mass: 1.0, stiffness: 220.0, damping: 30.0),
         _currentPosition,
         targetPosition,
-        velocity / screenHeight,
+        layoutHeight > 0 ? velocity / layoutHeight : 0.0,
       );
       _animationController.animateWith(simulation);
     } else {
@@ -287,7 +327,7 @@ class _GlassModalSheetState extends State<GlassModalSheet>
     final snapshot = SheetSnapshot(
       state: _currentState,
       position: value,
-      screenSize: _screenSize,
+      screenSize: _layoutSize,
     );
     final target = _geometry.resolveTarget(
       snapshot,
@@ -335,6 +375,8 @@ class _GlassModalSheetState extends State<GlassModalSheet>
   // ════════════════════════════════════════════════════════════════════════
 
   void _onPointerDown(PointerDownEvent event) {
+    _layoutPerPointer = _layoutPixelsPerPointerPixel(event);
+
     // ALWAYS initialize the gesture arena so swipes can start from anywhere,
     // even from buttons or interactive children.
     _gestureArena.beginPointer(
@@ -372,6 +414,17 @@ class _GlassModalSheetState extends State<GlassModalSheet>
     }
 
     _frozenState = null;
+  }
+
+  /// How many of the sheet's layout pixels a vertical pointer pixel covers:
+  /// the vertical scale of the transform [event] was hit-tested with, which
+  /// maps window pixels into the receiving Listener's. That is the scale of
+  /// whatever ancestors transform the sheet, and exactly 1 where none do
+  /// (offsets don't enter it). The Listener sits outside the sheet's own
+  /// press scaling, so that scaling never does either.
+  static double _layoutPixelsPerPointerPixel(PointerEvent event) {
+    final scale = event.transform?.entry(1, 1) ?? 1.0;
+    return scale.isFinite && scale > 0 ? scale : 1.0;
   }
 
   void _recordContentMetrics(ScrollMetrics metrics) {
@@ -483,7 +536,7 @@ class _GlassModalSheetState extends State<GlassModalSheet>
       state: _currentState,
       position: _currentPosition,
       velocity: velocity,
-      screenSize: _screenSize,
+      screenSize: _layoutSize,
     );
     final target = _geometry.resolveTarget(
       snapshot,
@@ -491,7 +544,9 @@ class _GlassModalSheetState extends State<GlassModalSheet>
       velocityThreshold: widget.velocityThreshold,
     );
 
-    _snapToState(target, velocity: velocity);
+    // The flick is judged by the finger's speed; the spring carries on at
+    // the sheet's, in its own layout pixels.
+    _snapToState(target, velocity: velocity * _layoutPerPointer);
   }
 
   void _onPointerCancel(PointerCancelEvent event) {
@@ -507,15 +562,16 @@ class _GlassModalSheetState extends State<GlassModalSheet>
   // ════════════════════════════════════════════════════════════════════════
 
   void _applyDrag(double currentY) {
-    final screenHeight = _screenSize.height;
-    // No sized window means nothing visible is being dragged; dividing by
+    final layoutHeight = _layoutSize.height;
+    // No sized layout means nothing visible is being dragged; dividing by
     // zero here would park the sheet at infinity for good.
-    if (screenHeight <= 0) return;
-    final delta = currentY - _gestureArena.dragStartY;
+    if (layoutHeight <= 0) return;
+    // The finger's travel in the sheet's layout pixels.
+    final delta = (currentY - _gestureArena.dragStartY) * _layoutPerPointer;
     double newPosition =
-        _gestureArena.dragStartSheetPosition - delta / screenHeight;
+        _gestureArena.dragStartSheetPosition - delta / layoutHeight;
 
-    newPosition = _geometry.applyResistance(newPosition, screenHeight,
+    newPosition = _geometry.applyResistance(newPosition, layoutHeight,
         resistance: widget.resistance);
     _animationController.value = newPosition;
 
@@ -523,7 +579,7 @@ class _GlassModalSheetState extends State<GlassModalSheet>
       state: _currentState,
       position: newPosition,
       velocity: 0,
-      screenSize: _screenSize,
+      screenSize: _layoutSize,
     );
     final target = _geometry.resolveTarget(
       snapshot,
@@ -547,9 +603,9 @@ class _GlassModalSheetState extends State<GlassModalSheet>
     // over-drag above half just rubber-bands; it isn't an expansion).
     if (!_geometry.enableFull) return 0.0;
     final halfPos =
-        _geometry.positionForState(GlassSheetState.half, _screenSize.height);
+        _geometry.positionForState(GlassSheetState.half, _layoutSize.height);
     final fullPos =
-        _geometry.positionForState(GlassSheetState.full, _screenSize.height);
+        _geometry.positionForState(GlassSheetState.full, _layoutSize.height);
     if (fullPos <= halfPos) return 0.0;
     return ((_currentPosition - halfPos) / (fullPos - halfPos)).clamp(0.0, 1.0);
   }
@@ -568,9 +624,9 @@ class _GlassModalSheetState extends State<GlassModalSheet>
     // content as immediately scrollable rather than gating on a transition
     // that can never happen.
     if (states.length < 2) return 1.0;
-    final maxPos = _geometry.positionForState(states.last, _screenSize.height);
+    final maxPos = _geometry.positionForState(states.last, _layoutSize.height);
     final prevPos = _geometry.positionForState(
-        states[states.length - 2], _screenSize.height);
+        states[states.length - 2], _layoutSize.height);
     if (maxPos <= prevPos) return 0.0;
     return ((_currentPosition - prevPos) / (maxPos - prevPos)).clamp(0.0, 1.0);
   }
@@ -589,7 +645,25 @@ class _GlassModalSheetState extends State<GlassModalSheet>
     required double topRadiusFull,
     required double bottomRadiusFull,
     required double fullPos,
+    required GlassStyle style,
   }) {
+    // Without a peek detent, dismissal translates the lowest enabled frame.
+    // Do not interpolate through disabled half/peek geometry on the way out:
+    // peekWidth and peek margins may describe a completely different surface.
+    double dismissOffset = 0.0;
+    if (widget.mode == GlassSheetMode.dismissible && !_geometry.enablePeek) {
+      final pivotPos = _geometry.positionForState(
+          SheetMorphGeometry.dismissPivotState(_geometry), mqHeight);
+      if (pos < pivotPos) {
+        dismissOffset = (pivotPos - pos) * mqHeight;
+        pos = pivotPos;
+        final expansionRange = fullPos - halfPos;
+        t = expansionRange > 0.0001
+            ? ((pos - halfPos) / expansionRange).clamp(0.0, 1.0)
+            : 1.0;
+      }
+    }
+
     late LiquidGlassSettings effectiveSettings;
     // Disable scaling in full state by lerping effective interactionScale to 1.0
     // Also disable scaling if we are interacting with a child (Smart Silence)
@@ -627,11 +701,13 @@ class _GlassModalSheetState extends State<GlassModalSheet>
     final sHalf = widget.halfSettings ?? baseSettings;
     final sFull = widget.fullSettings ?? baseSettings;
 
+    bool isSolid(LiquidGlassSettings s) => s.blur == 0 && s.frost == 0;
+
     // Determine target expanded colors for each state
-    // If blur is 0, the state itself provides the solid color
-    final cPeek = sPeek.blur == 0 ? sPeek.glassColor : effectiveExpandedColor;
-    final cHalf = sHalf.blur == 0 ? sHalf.glassColor : effectiveExpandedColor;
-    final cFull = sFull.blur == 0 ? sFull.glassColor : effectiveExpandedColor;
+    // If blur and frost are 0, the state itself provides the solid color
+    final cPeek = isSolid(sPeek) ? sPeek.glassColor : effectiveExpandedColor;
+    final cHalf = isSolid(sHalf) ? sHalf.glassColor : effectiveExpandedColor;
+    final cFull = isSolid(sFull) ? sFull.glassColor : effectiveExpandedColor;
 
     Color currentExpandedColor;
 
@@ -640,29 +716,12 @@ class _GlassModalSheetState extends State<GlassModalSheet>
       final tProgress =
           range > 0.0001 ? ((pos - peekPos) / range).clamp(0.0, 1.0) : 1.0;
 
-      if (!_geometry.enablePeek) {
-        // Peek-less: below half is the dismiss slide, not a peek morph. Hold
-        // the half state's own surface so the sheet slides away solid (Apple
-        // keeps the surface opaque and just translates it off — only the
-        // background dim fades) rather than fading toward a peek that doesn't
-        // exist. Solid glass stays glass; a solid-fill half stays filled.
-        effectiveSettings = sHalf;
-        currentExpandedColor = cHalf;
-        colorOpacity = sHalf.blur == 0 ? 1.0 : 0.0;
-      } else {
-        effectiveSettings = LiquidGlassSettings.lerp(sPeek, sHalf, tProgress);
-        currentExpandedColor = Color.lerp(cPeek, cHalf, tProgress)!;
+      effectiveSettings = LiquidGlassSettings.lerp(sPeek, sHalf, tProgress);
+      currentExpandedColor = Color.lerp(cPeek, cHalf, tProgress)!;
 
-        if (sPeek.blur > 0 && sHalf.blur == 0) {
-          colorOpacity = tProgress;
-        } else if (sPeek.blur == 0 && sHalf.blur > 0) {
-          colorOpacity = 1.0 - tProgress;
-        } else if (sPeek.blur == 0 && sHalf.blur == 0) {
-          colorOpacity = 1.0;
-        } else {
-          colorOpacity = 0.0;
-        }
-      }
+      final peekSolid = isSolid(sPeek) ? 1.0 : 0.0;
+      final halfSolid = isSolid(sHalf) ? 1.0 : 0.0;
+      colorOpacity = peekSolid + (halfSolid - peekSolid) * tProgress;
       glassOpacity = 1.0 - colorOpacity;
     } else {
       final range = fullPos - halfPos;
@@ -674,20 +733,20 @@ class _GlassModalSheetState extends State<GlassModalSheet>
 
       if (widget.fullSettings != null) {
         // Use explicit state settings for opacity transition
-        if (sHalf.blur > 0 && sFull.blur == 0) {
+        if (!isSolid(sHalf) && isSolid(sFull)) {
           colorOpacity = tProgress;
-        } else if (sHalf.blur == 0 && sFull.blur > 0) {
+        } else if (isSolid(sHalf) && !isSolid(sFull)) {
           colorOpacity = 1.0 - tProgress;
-        } else if (sHalf.blur == 0 && sFull.blur == 0) {
+        } else if (isSolid(sHalf) && isSolid(sFull)) {
           colorOpacity = 1.0;
         } else {
           colorOpacity = 0.0;
         }
       } else {
         // Fallback to classic threshold logic OR maintain solid if half was solid
-        if (sHalf.blur == 0) {
+        if (isSolid(sHalf)) {
           colorOpacity = 1.0;
-        } else if (baseSettings.blur == 0) {
+        } else if (isSolid(baseSettings)) {
           colorOpacity = 1.0;
         } else {
           final fadeRange = (1.0 - widget.fillThreshold).clamp(0.01, 1.0);
@@ -708,8 +767,11 @@ class _GlassModalSheetState extends State<GlassModalSheet>
       glassOpacity = 1.0 - colorOpacity;
     }
 
-    // Apply saturation glow pulse if enabled
-    if (widget.enableSaturationGlow && _saturationAnimation.value > 0) {
+    // Apply saturation glow pulse if enabled (classic style only; ios26/ios27
+    // keep calibrated refraction and neutral rim without directional light injection)
+    if (widget.enableSaturationGlow &&
+        _saturationAnimation.value > 0 &&
+        style == GlassStyle.classic) {
       effectiveSettings = effectiveSettings.copyWith(
         saturation: effectiveSettings.saturation *
             (1.0 + _saturationAnimation.value * 0.25),
@@ -741,8 +803,8 @@ class _GlassModalSheetState extends State<GlassModalSheet>
       // 2. Resolve Peek-specific width (hPad)
       double peekHPad = peekHMargin;
       if (widget.peekWidth != null && mqHeight > 0) {
-        peekHPad = ((_screenSize.width - widget.peekWidth!) / 2.0)
-            .clamp(0.0, _screenSize.width / 2.0);
+        peekHPad = ((_layoutSize.width - widget.peekWidth!) / 2.0)
+            .clamp(0.0, _layoutSize.width / 2.0);
       }
 
       if (widget.mode == GlassSheetMode.persistent) {
@@ -843,8 +905,13 @@ class _GlassModalSheetState extends State<GlassModalSheet>
       // Physical height adjusts so the top edge always stays at targetVisualHeight
       effectiveHeight = targetVisualHeight - effectiveBottom;
 
-      hPad =
-          lerpDouble(widget.horizontalMargin, 0.0, (t / 0.92).clamp(0.0, 1.0))!;
+      // Edge to edge at the large detent, except in the strip layout, where
+      // natively the sheet keeps its margins.
+      hPad = lerpDouble(
+        widget.horizontalMargin,
+        _verticalBar == null ? 0.0 : widget.horizontalMargin,
+        (t / 0.92).clamp(0.0, 1.0),
+      )!;
       // Independent lerp for top and bottom radii
       final baseRadiusTop = lerpDouble(
           topRadiusBase,
@@ -864,7 +931,7 @@ class _GlassModalSheetState extends State<GlassModalSheet>
     return _RenderMetrics(
       stretchT: stretchT,
       effectiveHeight: effectiveHeight,
-      effectiveBottom: effectiveBottom,
+      effectiveBottom: effectiveBottom - dismissOffset,
       topRadius: topRadius,
       bottomRadius: bottomRadius,
       hPad: hPad,
@@ -884,10 +951,14 @@ class _GlassModalSheetState extends State<GlassModalSheet>
   @override
   Widget build(BuildContext context) {
     final isDark = GlassTheme.brightnessOf(context) == Brightness.dark;
-    final effectiveExpandedColor = widget.expandedColor ??
+    final style = GlassThemeHelpers.resolveStyle(context);
+    final effectiveExpandedColor = (isDark ? widget.expandedDarkColor : null) ??
+        widget.expandedColor ??
         (isDark
             ? const Color(0xFF1C1C1E)
-            : CupertinoColors.white); // 0xFF1C1C1E is systemGray6 in dark mode
+            : (style == GlassStyle.classic
+                ? CupertinoColors.white
+                : const Color(0xFFF2F2F7)));
     final effectiveQuality = GlassThemeHelpers.resolveQuality(
       context,
       widgetQuality: widget.quality,
@@ -912,6 +983,7 @@ class _GlassModalSheetState extends State<GlassModalSheet>
       context,
       explicit: widget.settings,
       fallback: kDefaultSheetSettings,
+      isOverlayPlatter: true,
     );
 
     // Focus listener that snaps the sheet to full whenever a focusable
@@ -927,19 +999,70 @@ class _GlassModalSheetState extends State<GlassModalSheet>
     // as scroll position resets, re-initialised controllers, re-fired fetches,
     // etc. The FocusNode is owned internally by the Focus widget's Element and
     // persists correctly without an external key.
-    final focusBridge = Focus(
-      onFocusChange: (hasFocus) {
-        if (hasFocus && _currentState != _geometry.maxState) {
-          _snapToState(_geometry.maxState);
-        }
-      },
-      child: widget.child,
+    final focusBridge = KeyedSubtree(
+      key: _focusBridgeKey,
+      child: Focus(
+        onFocusChange: (hasFocus) {
+          if (hasFocus && _currentState != _geometry.maxState) {
+            _snapToState(_geometry.maxState);
+          }
+        },
+        child: widget.child,
+      ),
+    );
+
+    // Pre-build the content wrapper once outside AnimatedBuilder and pass it
+    // via AnimatedBuilder.child so 120 Hz drag ticks never rebuild or copy
+    // MediaQuery for the sheet's child subtree.
+    final verticalBar = _verticalBar;
+    final textDirection = Directionality.of(context);
+    final bool regularWidth =
+        verticalBar != null && VerticalBarTitleRow.regularWidth(context);
+    final restingInsets = verticalBar == null
+        ? EdgeInsets.zero
+        : _stripSheetInsets(
+            screenSize: mqSize,
+            regularWidth: regularWidth,
+            margin: widget.horizontalMargin,
+            placement: widget.placement,
+            textDirection: textDirection,
+          );
+    final side = _SheetSubScreen.maybeOf(context);
+    Widget contentChild = focusBridge;
+    if (restingInsets != EdgeInsets.zero) {
+      final mediaQuery = MediaQuery.of(context);
+      EdgeInsets inset(EdgeInsets padding) => padding.copyWith(
+            left: math.max(0.0, padding.left - restingInsets.left),
+            right: math.max(0.0, padding.right - restingInsets.right),
+          );
+      contentChild = MediaQuery(
+        data: mediaQuery.copyWith(
+          padding: inset(mediaQuery.padding),
+          viewPadding: inset(mediaQuery.viewPadding),
+        ),
+        child: contentChild,
+      );
+    }
+    final content = GlassVerticalBar(
+      data: _sheetVerticalBar(
+        bar: verticalBar,
+        frame: Rect.fromLTRB(
+          restingInsets.left,
+          (1.0 - _geometry.positionForState(_currentState, mqHeight)) *
+              mqHeight,
+          mqSize.width - restingInsets.right,
+          mqHeight,
+        ).shift(side?.rect.topLeft ?? Offset.zero),
+        screenSize: side?.screenSize ?? mqSize,
+        textDirection: textDirection,
+      ),
+      child: contentChild,
     );
 
     return AnimatedBuilder(
-      animation:
-          Listenable.merge([_animationController, _saturationController]),
-      builder: (context, _) {
+      animation: _sheetAnimation,
+      child: content,
+      builder: (context, cachedContent) {
         final fullPos =
             _geometry.positionForState(GlassSheetState.full, mqHeight);
         final halfPos =
@@ -972,19 +1095,37 @@ class _GlassModalSheetState extends State<GlassModalSheet>
           topRadiusFull: topRadiusFull,
           bottomRadiusFull: bottomRadiusFull,
           fullPos: fullPos,
+          style: style,
         );
 
         _currentEffectiveHeight = metrics.effectiveHeight;
+
+        // In the strip layout the sheet is a card no wider than the display's
+        // shorter side, placed across the rest, and it takes the strip's
+        // place where it covers it.
+        final frameInsets = verticalBar == null
+            ? null
+            : _stripSheetInsets(
+                screenSize: mqSize,
+                regularWidth: regularWidth,
+                margin: metrics.hPad,
+                placement: widget.placement,
+                textDirection: textDirection,
+              );
 
         final fadedSettings = metrics.effectiveSettings.copyWith(
           glassColor: metrics.effectiveSettings.glassColor.withValues(
               alpha: metrics.effectiveSettings.glassColor.a *
                   metrics.glassOpacity),
           blur: metrics.effectiveSettings.blur * metrics.glassOpacity,
+          frost: metrics.effectiveSettings.frost * metrics.glassOpacity,
           lightIntensity:
               metrics.effectiveSettings.lightIntensity * metrics.glassOpacity,
           ambientStrength:
               metrics.effectiveSettings.ambientStrength * metrics.glassOpacity,
+          rimLight: metrics.effectiveSettings.rimLight * metrics.glassOpacity,
+          rimShade: metrics.effectiveSettings.rimShade * metrics.glassOpacity,
+          bodyShade: metrics.effectiveSettings.bodyShade * metrics.glassOpacity,
         );
 
         Widget result = _SheetLayout(
@@ -996,7 +1137,8 @@ class _GlassModalSheetState extends State<GlassModalSheet>
           stretch: widget.stretch,
           interactionStretch: metrics.interactionStretch,
           resistance: widget.resistance,
-          hPad: metrics.hPad,
+          left: frameInsets?.left ?? metrics.hPad,
+          right: frameInsets?.right ?? metrics.hPad,
           effectiveBottom: metrics.effectiveBottom,
           effectiveHeight: metrics.effectiveHeight,
           topRadius: metrics.topRadius,
@@ -1009,6 +1151,7 @@ class _GlassModalSheetState extends State<GlassModalSheet>
           colorOpacity: metrics.colorOpacity,
           glassOpacity: metrics.glassOpacity,
           effectiveExpandedColor: metrics.effectiveExpandedColor,
+          effectiveSettings: metrics.effectiveSettings,
           fadedSettings: fadedSettings,
           effectiveQuality: effectiveQuality,
           saturationAnimation: _saturationAnimation,
@@ -1029,7 +1172,8 @@ class _GlassModalSheetState extends State<GlassModalSheet>
           topFadeHeight: widget.topFadeHeight,
           onDismiss: () => _snapToState(GlassSheetState.hidden),
           suppressInteractionOnChildren: widget.suppressInteractionOnChildren,
-          child: focusBridge,
+          contentZoneKey: _contentZoneKey,
+          child: cachedContent!,
         );
 
         // ScrollMetricsNotification covers content that has not been dragged

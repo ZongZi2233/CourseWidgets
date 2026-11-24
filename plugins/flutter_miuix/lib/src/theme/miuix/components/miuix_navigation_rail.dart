@@ -127,8 +127,7 @@ class MiuixNavigationRail extends StatefulWidget {
         MiuixNavigationRailDefaults.collapseContentDescription,
     this.scrollController,
     this.iconSize = MiuixNavigationRailDefaults.iconSize,
-    this.itemVerticalPadding =
-        MiuixNavigationRailDefaults.itemVerticalPadding,
+    this.itemVerticalPadding = MiuixNavigationRailDefaults.itemVerticalPadding,
     this.expandedItemVerticalPadding =
         MiuixNavigationRailDefaults.expandedItemContentVerticalPadding,
     this.labelFontSize = MiuixNavigationRailDefaults.labelFontSize,
@@ -214,18 +213,14 @@ class _MiuixNavigationRailState extends State<MiuixNavigationRail>
   @override
   Widget build(BuildContext context) {
     final colors = widget.colors ?? MiuixNavigationRailDefaults.colors(context);
-    final media = MediaQuery.of(context);
+    final padding = MediaQuery.paddingOf(context);
     final direction = Directionality.of(context);
     final startInset = widget.defaultWindowInsetsPadding
-        ? (direction == TextDirection.ltr
-              ? media.padding.left
-              : media.padding.right)
+        ? (direction == TextDirection.ltr ? padding.left : padding.right)
         : 0.0;
-    final topInset = widget.defaultWindowInsetsPadding
-        ? media.padding.top
-        : 0.0;
+    final topInset = widget.defaultWindowInsetsPadding ? padding.top : 0.0;
     final bottomInset = widget.defaultWindowInsetsPadding
-        ? media.padding.bottom
+        ? padding.bottom
         : 0.0;
 
     return ColoredBox(
@@ -621,14 +616,16 @@ class _RailItemLayoutDelegate extends MultiChildLayoutDelegate {
         ? constraints.maxWidth
         : collapsedWidth;
     // 折叠态：上下 pad + 图标 + 指示器上下 pad(4*2) + 图标文字间距(4) + 标签行高。
-    final collapsedHeight = collapsedPad +
+    final collapsedHeight =
+        collapsedPad +
         iconSize +
         MiuixNavigationRailDefaults.collapsedIndicatorVerticalPadding * 2 +
         MiuixNavigationRailDefaults.iconTextSpacing +
         collapsedFontSize * _fontHeightFactor +
         collapsedPad;
     // 展开态：上下 pad + max(图标, 标签行高)。
-    final expandedHeight = expandedPad * 2 +
+    final expandedHeight =
+        expandedPad * 2 +
         math.max(iconSize, expandedFontSize * _fontHeightFactor);
     return constraints.constrain(
       Size(width, lerpDouble(collapsedHeight, expandedHeight, fraction)!),
