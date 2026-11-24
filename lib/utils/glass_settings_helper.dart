@@ -1,64 +1,90 @@
 import 'package:flutter/material.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import '../main.dart';
+import '../services/glass_appearance_service.dart';
 
-/// [v2.2.8] 全局液态玻璃透明度系统
-/// 统一管理所有玻璃效果，根据深色模式自动调整
-/// 深色模式：半透明黑色玻璃（像晚上的玻璃窗）
-/// 浅色模式：半透明白色玻璃
+/// [v2.2.8 / v3.2.4] 全局液态玻璃透明度系统
+/// 统一接入 [GlassAppearanceService]，根据深色模式、玻璃白值与玻璃模糊度自动调节
 class GlassSettingsHelper {
+  /// 统一将全局玻璃透明度（白值）与玻璃高斯模糊度作用于任意 [LiquidGlassSettings]
+  static LiquidGlassSettings applyAppearance(
+    LiquidGlassSettings base, {
+    bool? isDark,
+    double? defaultAlpha,
+    double? defaultBlur,
+    Color? opaqueColorOverride,
+    double maxBlur = GlassAppearanceService.maxGlassBlur,
+    double maxUltraLightBlur = 8.0,
+  }) {
+    return GlassAppearanceService.instance.applyToSettings(
+      base,
+      isDark: isDark ?? globalDarkModeNotifier.value,
+      defaultAlpha: defaultAlpha,
+      defaultBlur: defaultBlur,
+      opaqueColorOverride: opaqueColorOverride,
+      maxBlur: maxBlur,
+      maxUltraLightBlur: maxUltraLightBlur,
+    );
+  }
+
   /// 默认设置快捷 Getter
   static LiquidGlassSettings get defaultSettings => getStandardSettings();
 
   /// 面板设置快捷 Getter
   static LiquidGlassSettings get panelSettings => getCardSettings();
 
-  /// 获取标准玻璃设置（根据深色模式自动调整）
+  /// 获取标准玻璃设置（根据深色模式与材质参数自动调整）
   static LiquidGlassSettings getStandardSettings({
     double? blur,
     double? thickness,
   }) {
-    // [v3.0.0-alpha20] 极低 blur 几乎完全通透，只靠 3D 光学折射与微色散勾勒边缘
-    final glassColor = globalDarkModeNotifier.value
+    final isDark = globalDarkModeNotifier.value;
+    final glassColor = isDark
         ? Colors.black.withValues(alpha: 0.22)
         : Colors.white.withValues(alpha: 0.06);
 
-    return LiquidGlassSettings(
-      glassColor: glassColor,
-      blur: blur ?? 0.3,
-      thickness: thickness ?? 20.0,
-      refractiveIndex: 1.48,
-      chromaticAberration: 0.08,
-      lightIntensity: 0.70,
-      ambientStrength: 0.30,
-      ambientRim: 0.0, // 彻底消除人造白边描边
-      fresnelStrength: 0.0, // 消除掠射角人造白边描边
-      edgeAbsorption: 0.0,
-      saturation: 1.15,
-      specularSharpness: GlassSpecularSharpness.sharp,
+    return applyAppearance(
+      LiquidGlassSettings(
+        glassColor: glassColor,
+        blur: blur ?? 0.3,
+        thickness: thickness ?? 20.0,
+        refractiveIndex: 1.48,
+        chromaticAberration: 0.08,
+        lightIntensity: 0.70,
+        ambientStrength: 0.30,
+        ambientRim: 0.0,
+        fresnelStrength: 0.0,
+        edgeAbsorption: 0.0,
+        saturation: 1.15,
+        specularSharpness: GlassSpecularSharpness.sharp,
+      ),
+      isDark: isDark,
     );
   }
 
   /// 获取卡片玻璃设置
   static LiquidGlassSettings getCardSettings({double? alpha}) {
-    // 极其通透清澈的 Apple iOS 26/27 顶级全透玻璃质感
-    final glassColor = globalDarkModeNotifier.value
+    final isDark = globalDarkModeNotifier.value;
+    final glassColor = isDark
         ? Colors.black.withValues(alpha: alpha ?? 0.16)
         : Colors.white.withValues(alpha: alpha ?? 0.06);
 
-    return LiquidGlassSettings(
-      glassColor: glassColor,
-      blur: 0.3,
-      thickness: 18.0,
-      refractiveIndex: 1.48,
-      chromaticAberration: 0.08,
-      lightIntensity: 0.70,
-      ambientStrength: 0.30,
-      ambientRim: 0.0,
-      fresnelStrength: 0.0,
-      edgeAbsorption: 0.0,
-      saturation: 1.15,
-      specularSharpness: GlassSpecularSharpness.sharp,
+    return applyAppearance(
+      LiquidGlassSettings(
+        glassColor: glassColor,
+        blur: 0.3,
+        thickness: 18.0,
+        refractiveIndex: 1.48,
+        chromaticAberration: 0.08,
+        lightIntensity: 0.70,
+        ambientStrength: 0.30,
+        ambientRim: 0.0,
+        fresnelStrength: 0.0,
+        edgeAbsorption: 0.0,
+        saturation: 1.15,
+        specularSharpness: GlassSpecularSharpness.sharp,
+      ),
+      isDark: isDark,
     );
   }
 
@@ -67,116 +93,134 @@ class GlassSettingsHelper {
     bool isSelected = false,
     Color? selectedColor,
   }) {
+    final isDark = globalDarkModeNotifier.value;
     Color glassColor;
 
     if (isSelected) {
-      // 选中状态：使用主题色
       final baseColor = selectedColor ?? Colors.blue;
-      glassColor = globalDarkModeNotifier.value
+      glassColor = isDark
           ? baseColor.withValues(alpha: 0.40)
           : baseColor.withValues(alpha: 0.25);
     } else {
-      // 未选中状态
-      glassColor = globalDarkModeNotifier.value
+      glassColor = isDark
           ? Colors.white.withValues(alpha: 0.08)
           : Colors.white.withValues(alpha: 0.04);
     }
 
-    return LiquidGlassSettings(
-      glassColor: glassColor,
-      blur: 0.2,
-      thickness: 16.0,
-      refractiveIndex: 1.48,
-      chromaticAberration: 0.08,
-      lightIntensity: 0.70,
-      ambientStrength: 0.30,
-      ambientRim: 0.0,
-      fresnelStrength: 0.0,
-      edgeAbsorption: 0.0,
-      specularSharpness: GlassSpecularSharpness.sharp,
+    return applyAppearance(
+      LiquidGlassSettings(
+        glassColor: glassColor,
+        blur: 0.2,
+        thickness: 16.0,
+        refractiveIndex: 1.48,
+        chromaticAberration: 0.08,
+        lightIntensity: 0.70,
+        ambientStrength: 0.30,
+        ambientRim: 0.0,
+        fresnelStrength: 0.0,
+        edgeAbsorption: 0.0,
+        specularSharpness: GlassSpecularSharpness.sharp,
+      ),
+      isDark: isDark,
     );
   }
 
   /// 获取对话框玻璃设置
   static LiquidGlassSettings getDialogSettings() {
-    final glassColor = globalDarkModeNotifier.value
+    final isDark = globalDarkModeNotifier.value;
+    final glassColor = isDark
         ? Colors.black.withValues(alpha: 0.35)
         : Colors.white.withValues(alpha: 0.08);
 
-    return LiquidGlassSettings(
-      glassColor: glassColor,
-      blur: 0.5,
-      thickness: 22.0,
-      refractiveIndex: 1.48,
-      chromaticAberration: 0.08,
-      lightIntensity: 0.70,
-      ambientStrength: 0.30,
-      ambientRim: 0.0,
-      fresnelStrength: 0.0,
-      edgeAbsorption: 0.0,
-      specularSharpness: GlassSpecularSharpness.sharp,
+    return applyAppearance(
+      LiquidGlassSettings(
+        glassColor: glassColor,
+        blur: 0.5,
+        thickness: 22.0,
+        refractiveIndex: 1.48,
+        chromaticAberration: 0.08,
+        lightIntensity: 0.70,
+        ambientStrength: 0.30,
+        ambientRim: 0.0,
+        fresnelStrength: 0.0,
+        edgeAbsorption: 0.0,
+        specularSharpness: GlassSpecularSharpness.sharp,
+      ),
+      isDark: isDark,
     );
   }
 
   /// 获取输入框玻璃设置
   static LiquidGlassSettings getInputSettings() {
-    final glassColor = globalDarkModeNotifier.value
+    final isDark = globalDarkModeNotifier.value;
+    final glassColor = isDark
         ? Colors.white.withValues(alpha: 0.10)
         : Colors.white.withValues(alpha: 0.04);
 
-    return LiquidGlassSettings(
-      glassColor: glassColor,
-      blur: 0.2,
-      thickness: 10.0,
-      refractiveIndex: 1.42,
-      chromaticAberration: 0.06,
-      lightIntensity: 0.65,
-      ambientStrength: 0.25,
-      ambientRim: 0.0,
-      fresnelStrength: 0.0,
-      edgeAbsorption: 0.0,
+    return applyAppearance(
+      LiquidGlassSettings(
+        glassColor: glassColor,
+        blur: 0.2,
+        thickness: 10.0,
+        refractiveIndex: 1.42,
+        chromaticAberration: 0.06,
+        lightIntensity: 0.65,
+        ambientStrength: 0.25,
+        ambientRim: 0.0,
+        fresnelStrength: 0.0,
+        edgeAbsorption: 0.0,
+      ),
+      isDark: isDark,
     );
   }
 
   /// 获取底部导航栏玻璃设置
   static LiquidGlassSettings getBottomBarSettings() {
-    final glassColor = globalDarkModeNotifier.value
+    final isDark = globalDarkModeNotifier.value;
+    final glassColor = isDark
         ? Colors.black.withValues(alpha: 0.35)
         : Colors.black.withValues(alpha: 0.20);
 
-    return LiquidGlassSettings(
-      glassColor: glassColor,
-      blur: 0.3,
-      thickness: 24.0,
-      refractiveIndex: 1.50,
-      chromaticAberration: 0.10,
-      lightIntensity: 0.75,
-      ambientStrength: 0.35,
-      ambientRim: 0.0,
-      fresnelStrength: 0.0,
-      edgeAbsorption: 0.0,
-      specularSharpness: GlassSpecularSharpness.sharp,
+    return applyAppearance(
+      LiquidGlassSettings(
+        glassColor: glassColor,
+        blur: 0.3,
+        thickness: 24.0,
+        refractiveIndex: 1.50,
+        chromaticAberration: 0.10,
+        lightIntensity: 0.75,
+        ambientStrength: 0.35,
+        ambientRim: 0.0,
+        fresnelStrength: 0.0,
+        edgeAbsorption: 0.0,
+        specularSharpness: GlassSpecularSharpness.sharp,
+      ),
+      isDark: isDark,
     );
   }
 
   /// 获取侧边栏玻璃设置
   static LiquidGlassSettings getSidebarSettings() {
-    final glassColor = globalDarkModeNotifier.value
+    final isDark = globalDarkModeNotifier.value;
+    final glassColor = isDark
         ? Colors.black.withValues(alpha: 0.30)
         : Colors.white.withValues(alpha: 0.05);
 
-    return LiquidGlassSettings(
-      glassColor: glassColor,
-      blur: 0.3,
-      thickness: 22.0,
-      refractiveIndex: 1.48,
-      chromaticAberration: 0.08,
-      lightIntensity: 0.70,
-      ambientStrength: 0.30,
-      ambientRim: 0.0,
-      fresnelStrength: 0.0,
-      edgeAbsorption: 0.0,
-      specularSharpness: GlassSpecularSharpness.sharp,
+    return applyAppearance(
+      LiquidGlassSettings(
+        glassColor: glassColor,
+        blur: 0.3,
+        thickness: 22.0,
+        refractiveIndex: 1.48,
+        chromaticAberration: 0.08,
+        lightIntensity: 0.70,
+        ambientStrength: 0.30,
+        ambientRim: 0.0,
+        fresnelStrength: 0.0,
+        edgeAbsorption: 0.0,
+        specularSharpness: GlassSpecularSharpness.sharp,
+      ),
+      isDark: isDark,
     );
   }
 

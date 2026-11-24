@@ -364,7 +364,7 @@ class _SettingsNotificationScreenState
     final String badgeSecondary;
     final String largeTimeText;
     final String? timeMiddleText;
-    final String timeSuffixText;
+    final String? timeSuffixText;
     final String? thirdMetaLine;
     final List<String> barCourses;
     final int barActiveIdx;
@@ -380,8 +380,8 @@ class _SettingsNotificationScreenState
       badgeSecondary = '3门';
       largeTimeText = '18:30–20:05';
       timeMiddleText = null;
-      timeSuffixText = '  ·  第 9-10 节';
-      thirdMetaLine = '今日无课 · 龚鸣敏 · 下次上课预告';
+      timeSuffixText = null;
+      thirdMetaLine = '第 9-10 节 · 今日无课 · 龚鸣敏';
       barCourses = const [];
       barActiveIdx = 0;
     } else if (isWaiting) {
@@ -395,8 +395,8 @@ class _SettingsNotificationScreenState
       badgeSecondary = '节';
       largeTimeText = '10:00–11:40';
       timeMiddleText = null;
-      timeSuffixText = '  ·  距开课 15分钟';
-      thirdMetaLine = '今日余 3 门 · 李教授';
+      timeSuffixText = null;
+      thirdMetaLine = '距开课 15分钟 · 今日余 3 门 · 李教授';
       barCourses = const ['嵌入式系统原理与应用'];
       barActiveIdx = 0;
     } else {
@@ -409,8 +409,8 @@ class _SettingsNotificationScreenState
       badgePrimary = '1-2';
       badgeSecondary = '节';
       largeTimeText = '09:40';
-      timeMiddleText = ' 下课  ·  ';
-      timeSuffixText = '下节 C302 数据结构';
+      timeMiddleText = ' 下课';
+      timeSuffixText = ' · 下节 C302 数据结构';
       thirdMetaLine = null;
       barCourses = const ['早读', '高等数学', '嵌入式系统原理与应用', '数据结构'];
       barActiveIdx = 1;
@@ -531,7 +531,7 @@ class _SettingsNotificationScreenState
               ),
               const SizedBox(height: 9),
 
-              // 2. 独立课程标题 + 醒目大号教室底块(搭配小号场地说明) + 大号时间标识 + 右侧独立节次/星期徽章
+              // 2. 原生大字号 Title 槽（超大对比教室底块 + 核心时间）> 次行中等字号课程名 > 小号场地与详情 > 右侧 56dp 独立节次/星期徽章
               Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
@@ -539,98 +539,122 @@ class _SettingsNotificationScreenState
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            if (!roomInfo.isEmpty &&
+                                roomInfo.code.isNotEmpty) ...[
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 2.5,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: badgeBg,
+                                  borderRadius: BorderRadius.circular(5),
+                                ),
+                                child: Text(
+                                  roomInfo.code,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 18.5,
+                                    fontWeight: FontWeight.w800,
+                                    height: 1.08,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                            ],
+                            Expanded(
+                              child: Text.rich(
+                                TextSpan(
+                                  children: [
+                                    TextSpan(
+                                      text: largeTimeText,
+                                      style: TextStyle(
+                                        color: themeColor,
+                                        fontSize: 17,
+                                        fontWeight: FontWeight.w800,
+                                        fontFeatures: const [
+                                          FontFeature.tabularFigures(),
+                                        ],
+                                      ),
+                                    ),
+                                    if (timeMiddleText != null)
+                                      TextSpan(
+                                        text: timeMiddleText,
+                                        style: TextStyle(
+                                          color: themeColor,
+                                          fontSize: 13.5,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
                         Text(
                           courseTitle,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
                             color: Colors.white,
-                            fontSize: 15.5,
-                            fontWeight: FontWeight.w800,
-                            height: 1.2,
+                            fontSize: 14.0,
+                            fontWeight: FontWeight.w700,
+                            height: 1.22,
                           ),
                         ),
-                        const SizedBox(height: 6),
-                        if (!roomInfo.isEmpty) ...[
+                        if (roomInfo.hasVenue || timeSuffixText != null) ...[
+                          const SizedBox(height: 3.5),
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 7,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: badgeBg,
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(
-                                  roomInfo.code,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w800,
-                                    height: 1.08,
+                              if (roomInfo.hasVenue && timeSuffixText != null)
+                                ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    maxWidth: 120,
                                   ),
-                                ),
-                              ),
-                              if (roomInfo.hasVenue) ...[
-                                const SizedBox(width: 7),
+                                  child: _MarqueeVenueText(
+                                    text: roomInfo.venue,
+                                    style: const TextStyle(
+                                      color: Color(0xFF94A3B8),
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                )
+                              else if (roomInfo.hasVenue)
                                 Expanded(
                                   child: _MarqueeVenueText(
                                     text: roomInfo.venue,
                                     style: const TextStyle(
                                       color: Color(0xFF94A3B8),
-                                      fontSize: 11,
+                                      fontSize: 11.5,
                                       fontWeight: FontWeight.w500,
                                     ),
                                   ),
                                 ),
-                              ],
-                            ],
-                          ),
-                          const SizedBox(height: 5),
-                        ],
-                        Text.rich(
-                          TextSpan(
-                            children: [
-                              TextSpan(
-                                text: largeTimeText,
-                                style: TextStyle(
-                                  color: themeColor,
-                                  fontSize: 17,
-                                  fontWeight: FontWeight.w800,
-                                  fontFeatures: const [
-                                    FontFeature.tabularFigures(),
-                                  ],
-                                ),
-                              ),
-                              if (timeMiddleText != null)
-                                TextSpan(
-                                  text: timeMiddleText,
-                                  style: const TextStyle(
-                                    color: Color(0xFF94A3B8),
-                                    fontSize: 11.5,
-                                    fontWeight: FontWeight.w500,
+                              if (timeSuffixText != null)
+                                Expanded(
+                                  child: Text(
+                                    timeSuffixText,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Color(0xFFCBD5E1),
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w600,
+                                    ),
                                   ),
                                 ),
-                              TextSpan(
-                                text: timeSuffixText,
-                                style: TextStyle(
-                                  color: timeMiddleText != null
-                                      ? const Color(0xFFE2E8F0)
-                                      : const Color(0xFFCBD5E1),
-                                  fontSize: 11.5,
-                                  fontWeight: timeMiddleText != null
-                                      ? FontWeight.w600
-                                      : FontWeight.w500,
-                                ),
-                              ),
                             ],
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                        ],
                         if (thirdMetaLine != null) ...[
                           const SizedBox(height: 3),
                           Text(
@@ -649,12 +673,12 @@ class _SettingsNotificationScreenState
                   ),
                   const SizedBox(width: 12),
                   Container(
-                    width: 52,
-                    height: 52,
+                    width: 56,
+                    height: 56,
                     padding: const EdgeInsets.symmetric(horizontal: 4),
                     decoration: BoxDecoration(
                       color: badgeBg,
-                      borderRadius: SquircleGeometry.smoothRadius(15),
+                      borderRadius: SquircleGeometry.smoothRadius(16),
                       border: Border.all(
                         color: Colors.white.withValues(alpha: 0.2),
                         width: 1,
@@ -670,7 +694,7 @@ class _SettingsNotificationScreenState
                             maxLines: 1,
                             style: const TextStyle(
                               color: Colors.white,
-                              fontSize: 14,
+                              fontSize: 15,
                               fontWeight: FontWeight.w800,
                               height: 1.08,
                             ),
@@ -682,7 +706,7 @@ class _SettingsNotificationScreenState
                           maxLines: 1,
                           style: TextStyle(
                             color: Colors.white.withValues(alpha: 0.9),
-                            fontSize: 9.8,
+                            fontSize: 10,
                             fontWeight: FontWeight.w600,
                             height: 1.1,
                           ),

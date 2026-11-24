@@ -5,6 +5,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:provider/provider.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import '../../services/desktop_window_service.dart';
+import '../../services/glass_appearance_service.dart';
 import '../../services/windows_tray_service.dart';
 import '../../providers/schedule_provider.dart';
 import '../animations/app_motion.dart';
@@ -199,74 +200,91 @@ class _WindowsCustomWindowState extends State<WindowsCustomWindow> {
     return SizedBox(
       width: 180.0,
       height: 52.0,
-      child: GlassTabBar.bottom(
-        selectedIndex: _selectedIndex == 2 ? 0 : _selectedIndex,
-        showIndicator: _selectedIndex != 2,
-        onTabSelected: (index) {
-          HapticFeedback.selectionClick();
-          setState(() => _selectedIndex = index);
-        },
-        quality: GlassQuality.premium,
-        backgroundQuality: GlassQuality.premium,
-        maskingQuality: MaskingQuality.high,
-        barBorderRadius: 999.0,
-        indicatorBorderRadius: 999.0,
-        adaptiveBrightness: false,
-        barHeight: 52.0,
-        horizontalPadding: 0.0,
-        verticalPadding: 0.0,
-        magnification: 1.15,
-        innerBlur: 0.0,
-        interactionBehavior: GlassInteractionBehavior.full,
-        settings: const LiquidGlassSettings(
-          thickness: 24.0,
-          blur: 0.3,
-          chromaticAberration: 0.12,
-          lightIntensity: 0.75,
-          refractiveIndex: 1.48,
-          saturation: 1.15,
-          ambientStrength: 0.35,
-          ambientRim: 0.0,
-          fresnelStrength: 0.0,
-          glassColor: Color(0x10FFFFFF),
-        ),
-        indicatorColor: isDark
-            ? primaryColor.withValues(alpha: 0.24)
-            : primaryColor.withValues(alpha: 0.16),
-        indicatorSettings: LiquidGlassSettings(
-          thickness: 28.0,
-          blur: 0.0,
-          refractiveIndex: 1.50,
-          lightIntensity: 0.70,
-          ambientStrength: 0.25,
-          ambientRim: 0.0,
-          fresnelStrength: 0.0,
-          chromaticAberration: 0.10,
-          edgeAbsorption: 0.0,
-          glassColor: isDark
-              ? primaryColor.withValues(alpha: 0.08)
-              : primaryColor.withValues(alpha: 0.05),
-          shadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: isDark ? 0.38 : 0.16),
-              blurRadius: 22.0,
-              spreadRadius: -1.0,
-              offset: const Offset(0, 4.0),
+      child: ListenableBuilder(
+        listenable: GlassAppearanceService.instance,
+        builder: (context, _) {
+          final glass = GlassAppearanceService.instance;
+          final barSettings = glass.applyToSettings(
+            const LiquidGlassSettings(
+              thickness: 24.0,
+              blur: 0.3,
+              chromaticAberration: 0.12,
+              lightIntensity: 0.75,
+              refractiveIndex: 1.48,
+              saturation: 1.15,
+              ambientStrength: 0.35,
+              ambientRim: 0.0,
+              fresnelStrength: 0.0,
+              glassColor: Color(0x10FFFFFF),
             ),
-          ],
-        ),
-        tabs: const [
-          GlassTab(
-            icon: Icon(CupertinoIcons.square_grid_2x2),
-            activeIcon: Icon(CupertinoIcons.square_grid_2x2_fill),
-            label: '课程',
-          ),
-          GlassTab(
-            icon: Icon(CupertinoIcons.calendar),
-            activeIcon: Icon(CupertinoIcons.calendar_today),
-            label: '日历',
-          ),
-        ],
+            isDark: isDark,
+          );
+          final indicatorSettings = glass.applyToSettings(
+            LiquidGlassSettings(
+              thickness: 28.0,
+              blur: 0.0,
+              refractiveIndex: 1.50,
+              lightIntensity: 0.70,
+              ambientStrength: 0.25,
+              ambientRim: 0.0,
+              fresnelStrength: 0.0,
+              chromaticAberration: 0.10,
+              edgeAbsorption: 0.0,
+              glassColor: isDark
+                  ? primaryColor.withValues(alpha: 0.08)
+                  : primaryColor.withValues(alpha: 0.05),
+              shadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.38 : 0.16),
+                  blurRadius: 22.0,
+                  spreadRadius: -1.0,
+                  offset: const Offset(0, 4.0),
+                ),
+              ],
+            ),
+            isDark: isDark,
+          );
+
+          return GlassTabBar.bottom(
+            selectedIndex: _selectedIndex == 2 ? 0 : _selectedIndex,
+            showIndicator: _selectedIndex != 2,
+            onTabSelected: (index) {
+              HapticFeedback.selectionClick();
+              setState(() => _selectedIndex = index);
+            },
+            quality: GlassQuality.premium,
+            backgroundQuality: GlassQuality.premium,
+            maskingQuality: MaskingQuality.high,
+            barBorderRadius: 999.0,
+            indicatorBorderRadius: 999.0,
+            adaptiveBrightness: false,
+            barHeight: 52.0,
+            horizontalPadding: 0.0,
+            verticalPadding: 0.0,
+            magnification: 1.15,
+            innerBlur: 0.0,
+            interactionBehavior: GlassInteractionBehavior.full,
+            settings: barSettings,
+            indicatorColor: primaryColor.withValues(
+              alpha: glass.isGlassOpaque
+                  ? (isDark ? 0.34 : 0.22)
+                  : glass.resolveSurfaceAlpha(isDark ? 0.24 : 0.16),
+            ),
+            indicatorSettings: indicatorSettings,
+            tabs: const [
+              GlassTab(
+                icon: Icon(CupertinoIcons.square_grid_2x2),
+                activeIcon: Icon(CupertinoIcons.square_grid_2x2_fill),
+                label: '课程',
+              ),
+              GlassTab(
+                icon: Icon(CupertinoIcons.calendar),
+                activeIcon: Icon(CupertinoIcons.calendar_today),
+                label: '日历',
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -277,48 +295,66 @@ class _WindowsCustomWindowState extends State<WindowsCustomWindow> {
     final primaryColor = Theme.of(context).primaryColor;
     final isSelected = _selectedIndex == 2;
 
-    return GlassButton.custom(
-      width: 52.0,
-      height: 52.0,
-      useOwnLayer: true,
-      shape: const LiquidOval(),
-      quality: GlassQuality.premium,
-      stretch: 0.20,
-      interactionScale: 1.12,
-      ambientBaseLight: 0.0,
-      onTap: () {
-        HapticFeedback.selectionClick();
-        setState(() {
-          if (_selectedIndex == 2) {
-            _selectedIndex = 0;
-          } else {
-            _selectedIndex = 2;
-          }
-        });
-      },
-      settings: LiquidGlassSettings(
-        thickness: 16.0,
-        blur: 0.3,
-        refractiveIndex: 1.44,
-        edgeAbsorption: 0.10,
-        chromaticAberration: 0.12,
-        lightIntensity: 0.75,
-        ambientStrength: 0.35,
-        ambientRim: 0.0,
-        fresnelStrength: 0.0,
-        saturation: 1.15,
-        glassColor: isSelected
-            ? primaryColor.withValues(alpha: isDark ? 0.32 : 0.22)
-            : (isDark ? const Color(0x28101216) : const Color(0x25FFFFFF)),
-        shadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.38 : 0.14),
-            blurRadius: 18.0,
-            spreadRadius: -1.0,
-            offset: const Offset(0, 4.0),
+    return ListenableBuilder(
+      listenable: GlassAppearanceService.instance,
+      builder: (context, iconChild) {
+        final glass = GlassAppearanceService.instance;
+        final effectiveSettings = glass.applyToSettings(
+          LiquidGlassSettings(
+            thickness: 16.0,
+            blur: 0.3,
+            refractiveIndex: 1.44,
+            edgeAbsorption: 0.10,
+            chromaticAberration: 0.12,
+            lightIntensity: 0.75,
+            ambientStrength: 0.35,
+            ambientRim: 0.0,
+            fresnelStrength: 0.0,
+            saturation: 1.15,
+            glassColor: isSelected
+                ? primaryColor.withValues(alpha: isDark ? 0.32 : 0.22)
+                : (isDark ? const Color(0x28101216) : const Color(0x25FFFFFF)),
+            shadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.38 : 0.14),
+                blurRadius: 18.0,
+                spreadRadius: -1.0,
+                offset: const Offset(0, 4.0),
+              ),
+            ],
           ),
-        ],
-      ),
+          isDark: isDark,
+          opaqueColorOverride: isSelected
+              ? Color.alphaBlend(
+                  primaryColor.withValues(alpha: isDark ? 0.32 : 0.22),
+                  glass.defaultOpaqueSurfaceColor(isDark),
+                )
+              : null,
+        );
+
+        return GlassButton.custom(
+          width: 52.0,
+          height: 52.0,
+          useOwnLayer: true,
+          shape: const LiquidOval(),
+          quality: GlassQuality.premium,
+          stretch: 0.20,
+          interactionScale: 1.12,
+          ambientBaseLight: 0.0,
+          onTap: () {
+            HapticFeedback.selectionClick();
+            setState(() {
+              if (_selectedIndex == 2) {
+                _selectedIndex = 0;
+              } else {
+                _selectedIndex = 2;
+              }
+            });
+          },
+          settings: effectiveSettings,
+          child: iconChild!,
+        );
+      },
       child: Center(
         child: AnimatedSwitcher(
           duration: const Duration(milliseconds: 200),

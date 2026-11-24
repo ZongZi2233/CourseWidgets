@@ -21,6 +21,7 @@ import '../widgets/weekly_schedule_grid.dart';
 import '../widgets/immersive_status_bar_backdrop.dart';
 import '../theme/squircle_geometry.dart';
 import '../animations/app_motion.dart';
+import '../../services/glass_appearance_service.dart';
 import '../../services/theme_service.dart' as theme;
 class AndroidLiquidGlassMain extends StatefulWidget {
   const AndroidLiquidGlassMain({super.key});
@@ -263,80 +264,103 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                   child: Stack(
                     clipBehavior: Clip.none,
                     children: [
-                      GlassTabBar.bottom(
-                        selectedIndex: _currentIndex,
-                        onTabSelected: (index) {
-                          HapticFeedback.selectionClick();
-                          _onTabSelected(index);
+                      ListenableBuilder(
+                        listenable: GlassAppearanceService.instance,
+                        builder: (context, _) {
+                          final glass = GlassAppearanceService.instance;
+                          final primaryColor = Theme.of(context).primaryColor;
+                          final barSettings = glass.applyToSettings(
+                            const LiquidGlassSettings(
+                              thickness: 24.0,
+                              blur: 0.3,
+                              chromaticAberration: 0.12,
+                              lightIntensity: 0.75,
+                              refractiveIndex: 1.48,
+                              saturation: 1.15,
+                              ambientStrength: 0.35,
+                              ambientRim: 0.0,
+                              fresnelStrength: 0.0,
+                              glassColor: Color(0x10FFFFFF),
+                            ),
+                            isDark: isDark,
+                          );
+                          final indicatorSettings = glass.applyToSettings(
+                            LiquidGlassSettings(
+                              thickness: 28.0,
+                              blur: 0.0,
+                              refractiveIndex: 1.50,
+                              lightIntensity: 0.70,
+                              ambientStrength: 0.25,
+                              ambientRim: 0.0,
+                              fresnelStrength: 0.0,
+                              chromaticAberration: 0.10,
+                              edgeAbsorption: 0.0,
+                              glassColor: isDark
+                                  ? primaryColor.withValues(alpha: 0.08)
+                                  : primaryColor.withValues(alpha: 0.05),
+                              shadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(
+                                    alpha: isDark ? 0.38 : 0.16,
+                                  ),
+                                  blurRadius: 22.0,
+                                  spreadRadius: -1.0,
+                                  offset: const Offset(0, 4.0),
+                                ),
+                              ],
+                            ),
+                            isDark: isDark,
+                          );
+
+                          return GlassTabBar.bottom(
+                            selectedIndex: _currentIndex,
+                            onTabSelected: (index) {
+                              HapticFeedback.selectionClick();
+                              _onTabSelected(index);
+                            },
+                            quality: GlassQuality.premium,
+                            backgroundQuality: GlassQuality.premium,
+                            maskingQuality: MaskingQuality.high,
+                            barBorderRadius: 999.0,
+                            indicatorBorderRadius: 999.0,
+                            adaptiveBrightness: false,
+                            barHeight: 64.0,
+                            horizontalPadding: 16.0,
+                            verticalPadding: 8.0,
+                            magnification: 1.15,
+                            innerBlur: 0.0,
+                            interactionBehavior: GlassInteractionBehavior.full,
+                            settings: barSettings,
+                            indicatorColor: primaryColor.withValues(
+                              alpha: glass.isGlassOpaque
+                                  ? (isDark ? 0.34 : 0.22)
+                                  : glass.resolveSurfaceAlpha(
+                                      isDark ? 0.24 : 0.16,
+                                    ),
+                            ),
+                            indicatorSettings: indicatorSettings,
+                            tabs: const [
+                              GlassTab(
+                                icon: Icon(CupertinoIcons.square_grid_2x2),
+                                activeIcon: Icon(
+                                  CupertinoIcons.square_grid_2x2_fill,
+                                ),
+                                label: '课程',
+                              ),
+                              GlassTab(
+                                icon: Icon(CupertinoIcons.calendar),
+                                activeIcon: Icon(CupertinoIcons.calendar_today),
+                                label: '日历',
+                              ),
+                              GlassTab(
+                                icon: Icon(CupertinoIcons.gear_alt),
+                                activeIcon: Icon(CupertinoIcons.gear_alt_fill),
+                                label: '设置',
+                              ),
+                            ],
+                          );
                         },
-                        quality: GlassQuality.premium, // [v3.0.0-alpha19] 全时 100% 极客 Premium 材质，杜绝任何运动降级
-                        backgroundQuality: GlassQuality.premium,
-                        maskingQuality: MaskingQuality.high,
-                        barBorderRadius: 999.0,
-                        indicatorBorderRadius: 999.0,
-                        adaptiveBrightness: false, // [v2.8.9] 禁用实时纹理反读消除卡顿，保持流畅 120 FPS
-                        barHeight: 64.0,
-                        horizontalPadding: 16.0,
-                        verticalPadding: 8.0,
-                        magnification: 1.15,
-                        innerBlur: 0.0, // [v3.0.0-alpha19] 绝对消除滑块底衬残留模糊，零 blur 纯净晶体透镜
-                        interactionBehavior: GlassInteractionBehavior.full,
-                        settings: const LiquidGlassSettings(
-                          thickness: 24.0,
-                          blur: 0.3, // [v3.0.0-alpha20] 极低 blur 几乎完全通透，只靠 3D 折射与色散勾勒边缘
-                          chromaticAberration: 0.12,
-                          lightIntensity: 0.75,
-                          refractiveIndex: 1.48,
-                          saturation: 1.15,
-                          ambientStrength: 0.35,
-                          ambientRim: 0.0,
-                          fresnelStrength: 0.0,
-                          glassColor: Color(0x10FFFFFF),
-                        ),
-                    // [v3.0.0-alpha21] 静态（未触发）呈现实体主题色柔和指示胶囊，按下瞬间平滑激活 3D 凸透镜大范围折射
-                    indicatorColor: isDark
-                        ? Theme.of(context).primaryColor.withValues(alpha: 0.24)
-                        : Theme.of(context).primaryColor.withValues(alpha: 0.16),
-                    indicatorSettings: LiquidGlassSettings(
-                      thickness: 28.0,
-                      blur: 0.0, // [v3.0.0-alpha19] 滑块绝对零模糊（0.0 blur）
-                      refractiveIndex: 1.50, // 真实光学玻璃高折射率
-                      lightIntensity: 0.70,
-                      ambientStrength: 0.25,
-                      ambientRim: 0.0, // 消除人造白边描边
-                      fresnelStrength: 0.0, // 消除掠射角人造白边
-                      chromaticAberration: 0.10, // 优雅物理色散勾勒边缘
-                      edgeAbsorption: 0.0,
-                      glassColor: isDark
-                          ? Theme.of(context).primaryColor.withValues(alpha: 0.08)
-                          : Theme.of(context).primaryColor.withValues(alpha: 0.05),
-                      shadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: isDark ? 0.38 : 0.16),
-                          blurRadius: 22.0,
-                          spreadRadius: -1.0,
-                          offset: const Offset(0, 4.0),
-                        ),
-                      ],
-                    ),
-                    tabs: const [
-                      GlassTab(
-                        icon: Icon(CupertinoIcons.square_grid_2x2),
-                        activeIcon: Icon(CupertinoIcons.square_grid_2x2_fill),
-                        label: '课程',
                       ),
-                      GlassTab(
-                        icon: Icon(CupertinoIcons.calendar),
-                        activeIcon: Icon(CupertinoIcons.calendar_today),
-                        label: '日历',
-                      ),
-                      GlassTab(
-                        icon: Icon(CupertinoIcons.gear_alt),
-                        activeIcon: Icon(CupertinoIcons.gear_alt_fill),
-                        label: '设置',
-                      ),
-                    ],
-                  ),
                       // [纯色背景模式] 仅在玻璃渲染完成后，通过逆向裁剪在胶囊外侧绘制柔光，
                       // 绝不被 BackdropFilter 采样进玻璃内部，100% 保持原玻璃通透度！
                       if (isSolidBg)
@@ -370,74 +394,91 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          GlassTabBar.bottom(
-            selectedIndex: _currentIndex == 2 ? 0 : _currentIndex,
-            showIndicator: _currentIndex != 2,
-            onTabSelected: (index) {
-              HapticFeedback.selectionClick();
-              _onTabSelected(index);
-            },
-            quality: GlassQuality.premium,
-            backgroundQuality: GlassQuality.premium,
-            maskingQuality: MaskingQuality.high,
-            barBorderRadius: 999.0,
-            indicatorBorderRadius: 999.0,
-            adaptiveBrightness: false,
-            barHeight: 52.0,
-            horizontalPadding: 0.0,
-            verticalPadding: 0.0,
-            magnification: 1.15,
-            innerBlur: 0.0,
-            interactionBehavior: GlassInteractionBehavior.full,
-            settings: const LiquidGlassSettings(
-              thickness: 24.0,
-              blur: 0.3,
-              chromaticAberration: 0.12,
-              lightIntensity: 0.75,
-              refractiveIndex: 1.48,
-              saturation: 1.15,
-              ambientStrength: 0.35,
-              ambientRim: 0.0,
-              fresnelStrength: 0.0,
-              glassColor: Color(0x10FFFFFF),
-            ),
-            indicatorColor: isDark
-                ? primaryColor.withValues(alpha: 0.24)
-                : primaryColor.withValues(alpha: 0.16),
-            indicatorSettings: LiquidGlassSettings(
-              thickness: 28.0,
-              blur: 0.0,
-              refractiveIndex: 1.50,
-              lightIntensity: 0.70,
-              ambientStrength: 0.25,
-              ambientRim: 0.0,
-              fresnelStrength: 0.0,
-              chromaticAberration: 0.10,
-              edgeAbsorption: 0.0,
-              glassColor: isDark
-                  ? primaryColor.withValues(alpha: 0.08)
-                  : primaryColor.withValues(alpha: 0.05),
-              shadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: isDark ? 0.38 : 0.16),
-                  blurRadius: 22.0,
-                  spreadRadius: -1.0,
-                  offset: const Offset(0, 4.0),
+          ListenableBuilder(
+            listenable: GlassAppearanceService.instance,
+            builder: (context, _) {
+              final glass = GlassAppearanceService.instance;
+              final barSettings = glass.applyToSettings(
+                const LiquidGlassSettings(
+                  thickness: 24.0,
+                  blur: 0.3,
+                  chromaticAberration: 0.12,
+                  lightIntensity: 0.75,
+                  refractiveIndex: 1.48,
+                  saturation: 1.15,
+                  ambientStrength: 0.35,
+                  ambientRim: 0.0,
+                  fresnelStrength: 0.0,
+                  glassColor: Color(0x10FFFFFF),
                 ),
-              ],
-            ),
-            tabs: const [
-              GlassTab(
-                icon: Icon(CupertinoIcons.square_grid_2x2),
-                activeIcon: Icon(CupertinoIcons.square_grid_2x2_fill),
-                label: '课程',
-              ),
-              GlassTab(
-                icon: Icon(CupertinoIcons.calendar),
-                activeIcon: Icon(CupertinoIcons.calendar_today),
-                label: '日历',
-              ),
-            ],
+                isDark: isDark,
+              );
+              final indicatorSettings = glass.applyToSettings(
+                LiquidGlassSettings(
+                  thickness: 28.0,
+                  blur: 0.0,
+                  refractiveIndex: 1.50,
+                  lightIntensity: 0.70,
+                  ambientStrength: 0.25,
+                  ambientRim: 0.0,
+                  fresnelStrength: 0.0,
+                  chromaticAberration: 0.10,
+                  edgeAbsorption: 0.0,
+                  glassColor: isDark
+                      ? primaryColor.withValues(alpha: 0.08)
+                      : primaryColor.withValues(alpha: 0.05),
+                  shadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: isDark ? 0.38 : 0.16),
+                      blurRadius: 22.0,
+                      spreadRadius: -1.0,
+                      offset: const Offset(0, 4.0),
+                    ),
+                  ],
+                ),
+                isDark: isDark,
+              );
+
+              return GlassTabBar.bottom(
+                selectedIndex: _currentIndex == 2 ? 0 : _currentIndex,
+                showIndicator: _currentIndex != 2,
+                onTabSelected: (index) {
+                  HapticFeedback.selectionClick();
+                  _onTabSelected(index);
+                },
+                quality: GlassQuality.premium,
+                backgroundQuality: GlassQuality.premium,
+                maskingQuality: MaskingQuality.high,
+                barBorderRadius: 999.0,
+                indicatorBorderRadius: 999.0,
+                adaptiveBrightness: false,
+                barHeight: 52.0,
+                horizontalPadding: 0.0,
+                verticalPadding: 0.0,
+                magnification: 1.15,
+                innerBlur: 0.0,
+                interactionBehavior: GlassInteractionBehavior.full,
+                settings: barSettings,
+                indicatorColor: primaryColor.withValues(
+                  alpha: glass.isGlassOpaque
+                      ? (isDark ? 0.34 : 0.22)
+                      : glass.resolveSurfaceAlpha(isDark ? 0.24 : 0.16),
+                ),
+                indicatorSettings: indicatorSettings,
+                tabs: const [
+                  GlassTab(
+                    icon: Icon(CupertinoIcons.square_grid_2x2),
+                    activeIcon: Icon(CupertinoIcons.square_grid_2x2_fill),
+                    label: '课程',
+                  ),
+                  GlassTab(
+                    icon: Icon(CupertinoIcons.calendar),
+                    activeIcon: Icon(CupertinoIcons.calendar_today),
+                    label: '日历',
+                  ),
+                ],
+              );
+            },
           ),
           if (isSolidBg)
             Positioned.fill(
@@ -457,46 +498,65 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
     final primaryColor = Theme.of(context).primaryColor;
     final isSelected = _currentIndex == 2;
 
-    return GlassButton.custom(
-      width: 52.0,
-      height: 52.0,
-      useOwnLayer: true,
-      shape: const LiquidOval(),
-      quality: GlassQuality.premium,
-      stretch: 0.20,
-      interactionScale: 1.12,
-      ambientBaseLight: 0.0,
-      onTap: () {
-        HapticFeedback.selectionClick();
-        if (_currentIndex == 2) {
-          _onTabSelected(0);
-        } else {
-          _onTabSelected(2);
-        }
-      },
-      settings: LiquidGlassSettings(
-        thickness: 16.0,
-        blur: 0.3,
-        refractiveIndex: 1.44,
-        edgeAbsorption: 0.10,
-        chromaticAberration: 0.12,
-        lightIntensity: 0.75,
-        ambientStrength: 0.35,
-        ambientRim: 0.0,
-        fresnelStrength: 0.0,
-        saturation: 1.15,
-        glassColor: isSelected
-            ? primaryColor.withValues(alpha: isDark ? 0.32 : 0.22)
-            : (isDark ? const Color(0x28101216) : const Color(0x25FFFFFF)),
-        shadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.38 : 0.14),
-            blurRadius: 18.0,
-            spreadRadius: -1.0,
-            offset: const Offset(0, 4.0),
+    return ListenableBuilder(
+      listenable: GlassAppearanceService.instance,
+      builder: (context, iconChild) {
+        final effectiveSettings = GlassAppearanceService.instance.applyToSettings(
+          LiquidGlassSettings(
+            thickness: 16.0,
+            blur: 0.3,
+            refractiveIndex: 1.44,
+            edgeAbsorption: 0.10,
+            chromaticAberration: 0.12,
+            lightIntensity: 0.75,
+            ambientStrength: 0.35,
+            ambientRim: 0.0,
+            fresnelStrength: 0.0,
+            saturation: 1.15,
+            glassColor: isSelected
+                ? primaryColor.withValues(alpha: isDark ? 0.32 : 0.22)
+                : (isDark ? const Color(0x28101216) : const Color(0x25FFFFFF)),
+            shadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.38 : 0.14),
+                blurRadius: 18.0,
+                spreadRadius: -1.0,
+                offset: const Offset(0, 4.0),
+              ),
+            ],
           ),
-        ],
-      ),
+          isDark: isDark,
+          opaqueColorOverride: isSelected
+              ? Color.alphaBlend(
+                  primaryColor.withValues(alpha: isDark ? 0.32 : 0.22),
+                  GlassAppearanceService.instance.defaultOpaqueSurfaceColor(
+                    isDark,
+                  ),
+                )
+              : null,
+        );
+
+        return GlassButton.custom(
+          width: 52.0,
+          height: 52.0,
+          useOwnLayer: true,
+          shape: const LiquidOval(),
+          quality: GlassQuality.premium,
+          stretch: 0.20,
+          interactionScale: 1.12,
+          ambientBaseLight: 0.0,
+          onTap: () {
+            HapticFeedback.selectionClick();
+            if (_currentIndex == 2) {
+              _onTabSelected(0);
+            } else {
+              _onTabSelected(2);
+            }
+          },
+          settings: effectiveSettings,
+          child: iconChild!,
+        );
+      },
       child: Center(
         child: AnimatedSwitcher(
           duration: const Duration(milliseconds: 200),
@@ -613,78 +673,106 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
     const weekDays = ['', '周一', '周二', '周三', '周四', '周五', '周六', '周日'];
     final dateStr = '${now.month}月${now.day}日 ${weekDays[now.weekday]}';
 
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        borderRadius: SquircleGeometry.smoothRadius(20),
-        boxShadow: liquid.HyperOSShadows.dock(isDark),
-      ),
-      child: GlassContainer(
-        useOwnLayer: true,
-        clipBehavior: Clip.antiAlias,
-        shape: const LiquidRoundedSuperellipse(borderRadius: 20),
-        quality: theme.ThemeService().glassQuality,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-        settings: LiquidGlassSettings(
-          glassColor: isDark
-              ? const Color(0x1812151B)
-              : const Color(0x18FFFFFF),
-          blur: 0.5,
-          thickness: 18.0,
-          refractiveIndex: 1.44,
-          lightIntensity: 0.70,
-          ambientStrength: 0.45,
-          ambientRim: 0.0,
-          fresnelStrength: 0.0,
-          saturation: 1.20,
-        ),
-        child: Row(
-          children: [
-            Icon(
-              CupertinoIcons.book_fill,
-              color: AppThemeColors.babyPink,
-              size: 20,
-            ),
-            const SizedBox(width: 8),
-            Text(
-              "CourseWidgets",
-              style: TextStyle(
-                color: isDark ? Colors.white : const Color(0xFF1E2128),
-                fontSize: 16.5,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.3,
-              ),
-            ),
-            const Spacer(),
-            // 当前日期指示徽章 (无边框，柔和漫反射阴影)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: liquid.HyperOSShadows.pill(isDark),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    CupertinoIcons.calendar,
-                    size: 12,
-                    color: isDark ? Colors.white70 : const Color(0xFF555B68),
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    dateStr,
-                    style: TextStyle(
-                      color: isDark ? Colors.white70 : const Color(0xFF333842),
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w600,
+    return ListenableBuilder(
+      listenable: GlassAppearanceService.instance,
+      builder: (context, barChild) {
+        final glass = GlassAppearanceService.instance;
+        final effectiveSettings = glass.applyToSettings(
+          LiquidGlassSettings(
+            glassColor: isDark
+                ? const Color(0x1812151B)
+                : const Color(0x18FFFFFF),
+            blur: 0.5,
+            thickness: 18.0,
+            refractiveIndex: 1.44,
+            lightIntensity: 0.70,
+            ambientStrength: 0.45,
+            ambientRim: 0.0,
+            fresnelStrength: 0.0,
+            saturation: 1.20,
+          ),
+          isDark: isDark,
+        );
+
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: SquircleGeometry.smoothRadius(20),
+            boxShadow: liquid.HyperOSShadows.dock(isDark),
+          ),
+          child: glass.isGlassOpaque
+              ? ClipRSuperellipse(
+                  borderRadius: SquircleGeometry.smoothRadius(20),
+                  child: Container(
+                    color: effectiveSettings.glassColor,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 7,
                     ),
+                    child: barChild,
                   ),
-                ],
-              ),
+                )
+              : GlassContainer(
+                  useOwnLayer: true,
+                  clipBehavior: Clip.antiAlias,
+                  shape: const LiquidRoundedSuperellipse(borderRadius: 20),
+                  quality: theme.ThemeService().glassQuality,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 7,
+                  ),
+                  settings: effectiveSettings,
+                  child: barChild!,
+                ),
+        );
+      },
+      child: Row(
+        children: [
+          Icon(
+            CupertinoIcons.book_fill,
+            color: AppThemeColors.babyPink,
+            size: 20,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            "CourseWidgets",
+            style: TextStyle(
+              color: isDark ? Colors.white : const Color(0xFF1E2128),
+              fontSize: 16.5,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.3,
             ),
-          ],
-        ),
+          ),
+          const Spacer(),
+          // 当前日期指示徽章 (无边框，柔和漫反射阴影)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: (isDark ? Colors.white : Colors.black)
+                  .withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: liquid.HyperOSShadows.pill(isDark),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  CupertinoIcons.calendar,
+                  size: 12,
+                  color: isDark ? Colors.white70 : const Color(0xFF555B68),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  dateStr,
+                  style: TextStyle(
+                    color: isDark ? Colors.white70 : const Color(0xFF333842),
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -700,32 +788,60 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
     final canPrev = provider.currentWeek > weeks.first;
     final canNext = provider.currentWeek < weeks.last;
 
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(26),
-        boxShadow: liquid.HyperOSShadows.dock(isDark),
-      ),
-      child: GlassContainer(
-        useOwnLayer: true,
-        shape: const LiquidRoundedSuperellipse(borderRadius: 26),
-        quality: theme.ThemeService().glassQuality,
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        settings: LiquidGlassSettings(
-          glassColor: isDark
-              ? const Color(0x35101216)
-              : const Color(0x30FFFFFF),
-          blur: 0.5,
-          thickness: 20.0,
-          refractiveIndex: 1.42,
-          lightIntensity: 0.35,
-          ambientStrength: 0.20,
-          ambientRim: 0.0,
-          fresnelStrength: 0.0,
-          edgeAbsorption: 0.06,
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
+    return ListenableBuilder(
+      listenable: GlassAppearanceService.instance,
+      builder: (context, dockChild) {
+        final glass = GlassAppearanceService.instance;
+        final effectiveSettings = glass.applyToSettings(
+          LiquidGlassSettings(
+            glassColor: isDark
+                ? const Color(0x35101216)
+                : const Color(0x30FFFFFF),
+            blur: 0.5,
+            thickness: 20.0,
+            refractiveIndex: 1.42,
+            lightIntensity: 0.35,
+            ambientStrength: 0.20,
+            ambientRim: 0.0,
+            fresnelStrength: 0.0,
+            edgeAbsorption: 0.06,
+          ),
+          isDark: isDark,
+        );
+
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(26),
+            boxShadow: liquid.HyperOSShadows.dock(isDark),
+          ),
+          child: glass.isGlassOpaque
+              ? ClipRSuperellipse(
+                  borderRadius: SquircleGeometry.smoothRadius(26),
+                  child: Container(
+                    color: effectiveSettings.glassColor,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 6,
+                    ),
+                    child: dockChild,
+                  ),
+                )
+              : GlassContainer(
+                  useOwnLayer: true,
+                  shape: const LiquidRoundedSuperellipse(borderRadius: 26),
+                  quality: theme.ThemeService().glassQuality,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 6,
+                  ),
+                  settings: effectiveSettings,
+                  child: dockChild!,
+                ),
+        );
+      },
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
               // 1. (+) 添加课程按钮 (纯净无边框，柔粉弥散阴影，Spring 跟手弹性)
               SpringTouchFeedback(
                 onTap: () {
@@ -936,9 +1052,8 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                 ),
               ),
             ],
-          ),
         ),
-      );
+    );
   }
 
   /// [v3.2.3] 移动端周次选择 FlClash 玻璃菜单（SharedElement 从触发胶囊/按钮平滑形变展开与收拢）

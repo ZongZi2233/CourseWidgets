@@ -19,6 +19,8 @@ import 'services/storage_service.dart';
 import 'services/background_task_service.dart'; // [v2.2.9] 后台任务服务
 import 'services/static_blur_service.dart'; // [v3.0.0] 全局静态壁纸模糊遮罩服务
 import 'services/render_pipeline_prewarmer.dart'; // [v3.2.3] 离屏 GPU 管线预热服务
+import 'services/glass_appearance_service.dart'; // [v3.2.4] 全应用玻璃材质与模糊统一配置服务
+import 'services/app_update_service.dart'; // [v3.2.4] 自动检测更新与历史更新缓存自动清理
 import 'utils/glass_opacity_manager.dart'; // [v2.3.0] 玻璃透明度管理器
 import 'constants/version.dart' show kSolidColorBackground;
 import 'ui/screens/schedule_screen.dart';
@@ -27,6 +29,7 @@ import 'ui/screens/ios_liquid_glass_main.dart'; // [v2.5.9] 新增iOS原生支�
 import 'ui/screens/windows_custom_window.dart';
 import 'ui/screens/macos_custom_window.dart'; // [v2.5.9] 新增macOS支持
 import 'ui/screens/onboarding_screen.dart';
+import 'ui/widgets/app_update_dialog.dart';
 import 'ui/widgets/zero_flicker_splash_preloader.dart' show preloadSplashIcon;
 import 'ui/widgets/animated_splash_overlay.dart'; // [v3.0.0] 秒开开屏动效与并行渲染就绪门
 import 'ui/transitions/smooth_slide_transitions.dart'; // [v2.4.8] 平滑过渡动画
@@ -180,6 +183,9 @@ void main() async {
   // [v2.1.10] 初始化 MMKV 存储服务
   await StorageService().initialize();
   AppLogger.data('MMKV StorageService 初始化完成');
+
+  // [v3.2.4] 初始化统一玻璃材质与全局 UI 高斯模糊配置
+  await GlassAppearanceService.instance.initialize();
 
   // [v3.1.8] 在 runApp 前同步读取初始深浅色模式，确保桌面开屏第 1 帧配色零闪烁
   final storage = StorageService();
@@ -397,6 +403,7 @@ void main() async {
           providers: [
             ChangeNotifierProvider.value(value: scheduleProvider),
             ChangeNotifierProvider.value(value: ThemeService()),
+            ChangeNotifierProvider.value(value: GlassAppearanceService.instance),
           ],
           child: MyApp(
             onDesktopSplashFirstFrame:
@@ -429,18 +436,73 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   bool _showOnboarding = false;
   String? _cachedImgKey;
   ImageProvider? _cachedImgProvider;
+  Timer? _dailyAutoUpdateTimer;
+  VoidCallback? _startupReadyListener;
+  bool _hasScheduledDailyUpdateCheck = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _scheduleUpdateCacheCleanup();
     _checkOnboarding();
+  }
+
+  void _scheduleUpdateCacheCleanup() {
+    final bindingName = WidgetsBinding.instance.runtimeType.toString();
+    if (bindingName.contains('Test')) return;
+    unawaited(AppUpdateService.instance.cleanupStaleUpdateCaches());
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.resumed) {
+      _scheduleUpdateCacheCleanup();
+    }
   }
 
   @override
   void dispose() {
+    _dailyAutoUpdateTimer?.cancel();
+    if (_startupReadyListener != null) {
+      globalStartupReadyNotifier.removeListener(_startupReadyListener!);
+      _startupReadyListener = null;
+    }
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  void _scheduleDailyAutoUpdateCheck() {
+    if (_hasScheduledDailyUpdateCheck || _showOnboarding) return;
+    final bindingName = WidgetsBinding.instance.runtimeType.toString();
+    if (bindingName.contains('Test')) return;
+    _hasScheduledDailyUpdateCheck = true;
+
+    void startCheckDelay() {
+      _dailyAutoUpdateTimer?.cancel();
+      _dailyAutoUpdateTimer = Timer(const Duration(milliseconds: 1800), () {
+        if (!mounted || _showOnboarding) return;
+        final navCtx = rootNavigatorKey.currentContext;
+        if (navCtx == null || !navCtx.mounted) return;
+        unawaited(AppUpdateDialog.checkDailyAutoUpdateAndShow(navCtx));
+      });
+    }
+
+    if (globalStartupReadyNotifier.value) {
+      startCheckDelay();
+    } else {
+      _startupReadyListener = () {
+        if (globalStartupReadyNotifier.value) {
+          if (_startupReadyListener != null) {
+            globalStartupReadyNotifier.removeListener(_startupReadyListener!);
+            _startupReadyListener = null;
+          }
+          startCheckDelay();
+        }
+      };
+      globalStartupReadyNotifier.addListener(_startupReadyListener!);
+    }
   }
 
   @override
@@ -485,6 +547,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         setState(() {
           _showOnboarding = _onboardingService.shouldShowOnboarding;
         });
+        _scheduleDailyAutoUpdateCheck();
       }
     } catch (e) {
       debugPrint('⚠️ _checkOnboarding 异常兜底: $e');
@@ -492,6 +555,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         setState(() {
           _showOnboarding = false;
         });
+        _scheduleDailyAutoUpdateCheck();
       }
     }
   }
@@ -502,6 +566,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       setState(() {
         _showOnboarding = false;
       });
+      _scheduleDailyAutoUpdateCheck();
     }
     try {
       final provider = context.read<ScheduleProvider>();

@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 import '../../providers/schedule_provider.dart';
 import '../../services/desktop_window_service.dart';
+import '../../services/glass_appearance_service.dart';
 import '../../services/windows_tray_service.dart';
 import 'macos_traffic_lights.dart';
 import 'liquid_components.dart' show resolveOverlayLocalRect;
@@ -169,16 +170,24 @@ class WindowsDesktopTitleBar extends StatelessWidget {
     final currentWeek = provider.currentWeek;
     final weekText = currentWeek > 0 ? '第 $currentWeek 周' : '';
 
-    return ClipRect(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-        child: Container(
+    return ListenableBuilder(
+      listenable: GlassAppearanceService.instance,
+      builder: (context, barChild) {
+        final glass = GlassAppearanceService.instance;
+        final double sigma = glass.resolveGlassBlur(20.0);
+        final Color bgColor = glass.resolveGlassColor(
+          baseColor: isDark
+              ? Colors.black.withValues(alpha: 0.28)
+              : Colors.white.withValues(alpha: 0.40),
+          isDark: isDark,
+        );
+        final bool useBlur = !glass.isGlassOpaque && sigma > 0.05;
+
+        final decoratedBar = Container(
           height: kWindowsDesktopTitleBarHeight,
           padding: const EdgeInsets.symmetric(horizontal: 16),
           decoration: BoxDecoration(
-            color: isDark
-                ? Colors.black.withValues(alpha: 0.28)
-                : Colors.white.withValues(alpha: 0.40),
+            color: bgColor,
             border: Border(
               bottom: BorderSide(
                 color: isDark
@@ -188,9 +197,20 @@ class WindowsDesktopTitleBar extends StatelessWidget {
               ),
             ),
           ),
-          child: GestureDetector(
-            onDoubleTap: _handleMaximize,
-            child: DragToMoveArea(
+          child: barChild,
+        );
+
+        if (!useBlur) return decoratedBar;
+        return ClipRect(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
+            child: decoratedBar,
+          ),
+        );
+      },
+      child: GestureDetector(
+        onDoubleTap: _handleMaximize,
+        child: DragToMoveArea(
               child: Row(
                 children: [
                   // macOS 27 Golden Gate 风格一体化红黄绿交通灯
@@ -323,8 +343,6 @@ class WindowsDesktopTitleBar extends StatelessWidget {
               ),
             ),
           ),
-        ),
-      ),
     );
   }
 }

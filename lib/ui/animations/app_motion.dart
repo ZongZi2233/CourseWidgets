@@ -8,6 +8,7 @@ import 'package:flutter/physics.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
+import '../../services/glass_appearance_service.dart';
 import '../widgets/app_background_layer.dart';
 import '../widgets/windows_desktop_title_bar.dart'
     show kWindowsDesktopTitleBarHeight;
@@ -405,14 +406,23 @@ class _MotionBlurTransitionState extends State<MotionBlurTransition> {
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: widget.animation,
+      animation: Listenable.merge([
+        widget.animation,
+        GlassAppearanceService.instance,
+      ]),
       child: widget.child,
       builder: (context, child) {
         final isReversing = widget.animation.status == AnimationStatus.reverse;
         final progress = widget.animation.value.clamp(0.0, 1.0);
         final t = isReversing ? (1.0 - progress) : progress;
         final envelope = AppCurves.velocityBlurEnvelope(t);
-        final rawSigma = envelope * widget.maxBlur;
+        final effectiveMaxBlur = GlassAppearanceService.instance
+            .resolveGlobalUiBlur(
+              widget.maxBlur,
+              minSigma: 1.2,
+              maxSigma: 6.5,
+            );
+        final rawSigma = envelope * effectiveMaxBlur;
         final quantizedSigma = (rawSigma * 4.0).roundToDouble() * 0.25;
         final bool hasBlur = widget.animation.isAnimating && quantizedSigma > 0.30;
 
@@ -490,8 +500,13 @@ class _PageControllerMotionBlurState extends State<PageControllerMotionBlur>
 
     if (_lastPage != null) {
       final deltaPage = (page - _lastPage!).abs();
-      // 将每帧页位移量映射为柔和的 1D 水平动态模糊强度 (上限受 widget.maxBlur 约束)
-      final effectiveMax = math.min(widget.maxBlur, 4.5);
+      // 将每帧页位移量映射为受全局界面高斯模糊度控制的 1D 水平动态模糊强度
+      final scaledMax = GlassAppearanceService.instance.resolveGlobalUiBlur(
+        widget.maxBlur,
+        minSigma: 1.2,
+        maxSigma: 6.5,
+      );
+      final effectiveMax = math.min(scaledMax, 6.5);
       final velocityFactor = (deltaPage * 22.0).clamp(0.0, 1.0);
       final computed = velocityFactor * effectiveMax;
       if (computed > _targetSigma) {

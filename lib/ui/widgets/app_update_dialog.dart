@@ -7,6 +7,7 @@ import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import '../../constants/theme_constants.dart';
 import '../../constants/version.dart';
 import '../../services/app_update_service.dart';
+import '../../services/glass_appearance_service.dart';
 import '../../services/theme_service.dart';
 import '../../utils/glass_settings_helper.dart';
 import '../animations/app_motion.dart';
@@ -64,7 +65,10 @@ class AppUpdateDialog extends StatefulWidget {
           reverseCurve: AppCurves.easeAccel,
         );
         final fade = fadeAnim.value.clamp(0.0, 1.0);
-        final blurSigma = (6.5 * fade).clamp(0.0, 6.5);
+        final maxScrimBlur = GlassAppearanceService.instance.resolveGlobalUiBlur(
+          6.5,
+        );
+        final blurSigma = (maxScrimBlur * fade).clamp(0.0, maxScrimBlur);
         final scrimColor = Colors.black.withValues(
           alpha: (isDark ? 0.26 : 0.13) * fade,
         );
@@ -96,6 +100,40 @@ class AppUpdateDialog extends StatefulWidget {
         );
       },
     );
+  }
+
+  static bool _dailyDialogShownThisSession = false;
+
+  @visibleForTesting
+  static void resetDailySessionGuardForTest() {
+    _dailyDialogShownThisSession = false;
+  }
+
+  /// 每日首次打开应用静默检查更新；仅当确认有新版本时自动弹出更新 UI
+  static Future<bool> checkDailyAutoUpdateAndShow(
+    BuildContext context, {
+    DateTime? now,
+    Future<AppUpdateInfo> Function()? checker,
+    bool autoAnalyzeWindowsDiff = true,
+    bool autoAnalyzeAndroidDiff = true,
+  }) async {
+    if (_dailyDialogShownThisSession) return false;
+    final info = await AppUpdateService.instance.checkForDailyAutoUpdate(
+      now: now,
+      checker: checker,
+    );
+    if (info == null || !info.hasUpdate || !context.mounted) {
+      return false;
+    }
+    if (_dailyDialogShownThisSession) return false;
+    _dailyDialogShownThisSession = true;
+    await show(
+      context,
+      info,
+      autoAnalyzeWindowsDiff: autoAnalyzeWindowsDiff,
+      autoAnalyzeAndroidDiff: autoAnalyzeAndroidDiff,
+    );
+    return true;
   }
 
   /// 检查 GitHub 最新 Release 并在有新版本时弹出更新窗口
@@ -189,12 +227,16 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
       if (!mounted) return;
       setState(() {
         _androidPlan = plan;
+        _diffError = plan == null
+            ? AppUpdateService.instance.lastAndroidIncrementalDiagnostic
+            : null;
         _isAnalyzingDiff = false;
       });
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
       setState(() {
         _androidPlan = null;
+        _diffError = '$e';
         _isAnalyzingDiff = false;
       });
     }
@@ -275,7 +317,7 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
 
   LiquidGlassSettings _buildDialogGlassSettings(bool isDark) {
     final base = GlassSettingsHelper.getDialogSettings();
-    return base.copyWith(
+    final dialogBase = base.copyWith(
       glassColor: isDark
           ? const Color(0x9E151822)
           : const Color(0x9DF7F9FE),
@@ -290,6 +332,10 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
       edgeAbsorption: 0.0,
       saturation: 1.40,
       specularSharpness: GlassSpecularSharpness.sharp,
+    );
+    return GlassAppearanceService.instance.applyToSettings(
+      dialogBase,
+      isDark: isDark,
     );
   }
 
@@ -314,19 +360,39 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
               constraints: const BoxConstraints(maxWidth: 468),
               child: Material(
                 type: MaterialType.transparency,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    borderRadius: SquircleGeometry.smoothRadius(28),
-                    boxShadow: liquid.HyperOSShadows.modal(isDark),
-                  ),
-                  child: GlassContainer(
-                    useOwnLayer: true,
-                    quality: ThemeService().glassQuality,
-                    clipBehavior: Clip.antiAlias,
-                    shape: const LiquidRoundedSuperellipse(borderRadius: 28),
-                    padding: const EdgeInsets.all(24),
-                    settings: _buildDialogGlassSettings(isDark),
-                    child: Column(
+                child: ListenableBuilder(
+                  listenable: GlassAppearanceService.instance,
+                  builder: (context, dialogContent) {
+                    final glass = GlassAppearanceService.instance;
+                    final dialogSettings = _buildDialogGlassSettings(isDark);
+                    return DecoratedBox(
+                      decoration: BoxDecoration(
+                        borderRadius: SquircleGeometry.smoothRadius(28),
+                        boxShadow: liquid.HyperOSShadows.modal(isDark),
+                      ),
+                      child: glass.isGlassOpaque
+                          ? ClipRSuperellipse(
+                              borderRadius: SquircleGeometry.smoothRadius(28),
+                              child: Container(
+                                color: dialogSettings.glassColor,
+                                padding: const EdgeInsets.all(24),
+                                child: dialogContent,
+                              ),
+                            )
+                          : GlassContainer(
+                              useOwnLayer: true,
+                              quality: ThemeService().glassQuality,
+                              clipBehavior: Clip.antiAlias,
+                              shape: const LiquidRoundedSuperellipse(
+                                borderRadius: 28,
+                              ),
+                              padding: const EdgeInsets.all(24),
+                              settings: dialogSettings,
+                              child: dialogContent!,
+                            ),
+                    );
+                  },
+                  child: Column(
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -546,7 +612,6 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
             ),
           ),
         ),
-      ),
     );
   }
 
@@ -827,24 +892,42 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
         color: cardBg,
         borderRadius: BorderRadius.circular(16),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            CupertinoIcons.checkmark_shield_fill,
-            color: AppThemeColors.babyPink,
-            size: 17,
+          Row(
+            children: [
+              Icon(
+                CupertinoIcons.checkmark_shield_fill,
+                color: AppThemeColors.babyPink,
+                size: 17,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Android arm64-v8a 安装包 ($sizeStr)${hasSha ? " · 附带 SHA-256 校验" : ""}',
+                  style: TextStyle(
+                    color: textColor,
+                    fontSize: 12.2,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              'Android arm64-v8a 安装包 ($sizeStr)${hasSha ? " · 附带 SHA-256 校验" : ""}',
+          if (_diffError != null && _diffError!.trim().isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              '增量预检说明: $_diffError',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                color: textColor,
-                fontSize: 12.2,
-                fontWeight: FontWeight.w600,
+                color: subColor,
+                fontSize: 11,
+                height: 1.3,
               ),
             ),
-          ),
+          ],
         ],
       ),
     );

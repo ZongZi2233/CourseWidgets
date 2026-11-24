@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import '../../constants/theme_constants.dart';
+import '../../services/glass_appearance_service.dart';
+import '../theme/squircle_geometry.dart';
 
 /// 液态玻璃 Toast 通知组件
 /// 遵循 liquid_glass_widgets API 规范
@@ -157,24 +159,47 @@ class _LiquidToastWidgetState extends State<_LiquidToastWidget>
                   ),
                 ],
               ),
-              child: GlassContainer(
-                useOwnLayer: true,
-                shape: const LiquidRoundedSuperellipse(borderRadius: 16),
-                settings: LiquidGlassSettings(
-                  glassColor: isDark
-                      ? const Color(0x35101216)
-                      : const Color(0x30FFFFFF),
-                  blur: 3.5,
-                  thickness: 20.0,
-                  refractiveIndex: 1.40,
-                  lightIntensity: 0.35,
-                  ambientStrength: 0.20,
-                  ambientRim: 0.0,
-                  edgeAbsorption: 0.04,
-                  fresnelStrength: 0.0,
-                  saturation: 1.20,
-                ),
-                quality: GlassQuality.premium,
+              child: ListenableBuilder(
+                listenable: GlassAppearanceService.instance,
+                builder: (context, toastChild) {
+                  final glass = GlassAppearanceService.instance;
+                  final effectiveSettings = glass.applyToSettings(
+                    LiquidGlassSettings(
+                      glassColor: isDark
+                          ? const Color(0x35101216)
+                          : const Color(0x30FFFFFF),
+                      blur: 3.5,
+                      thickness: 20.0,
+                      refractiveIndex: 1.40,
+                      lightIntensity: 0.35,
+                      ambientStrength: 0.20,
+                      ambientRim: 0.0,
+                      edgeAbsorption: 0.04,
+                      fresnelStrength: 0.0,
+                      saturation: 1.20,
+                    ),
+                    isDark: isDark,
+                    maxUltraLightBlur: 10.0,
+                  );
+
+                  if (glass.isGlassOpaque) {
+                    return DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: effectiveSettings.glassColor,
+                        borderRadius: SquircleGeometry.smoothRadius(16),
+                      ),
+                      child: toastChild,
+                    );
+                  }
+
+                  return GlassContainer(
+                    useOwnLayer: true,
+                    shape: const LiquidRoundedSuperellipse(borderRadius: 16),
+                    settings: effectiveSettings,
+                    quality: GlassQuality.premium,
+                    child: toastChild!,
+                  );
+                },
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16,

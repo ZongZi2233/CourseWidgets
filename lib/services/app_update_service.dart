@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
@@ -9,6 +10,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import '../constants/version.dart';
 import 'desktop_window_service.dart';
+import 'storage_service.dart';
 
 /// 远端版本发布信息模型
 class AppUpdateInfo {
@@ -30,6 +32,7 @@ class AppUpdateInfo {
   final bool hasUpdate;
   final bool isSameVersionRebuild;
   final String installedApkSha256;
+  final String installedApkPath;
 
   const AppUpdateInfo({
     required this.latestTag,
@@ -50,6 +53,7 @@ class AppUpdateInfo {
     required this.hasUpdate,
     this.isSameVersionRebuild = false,
     this.installedApkSha256 = '',
+    this.installedApkPath = '',
   });
 }
 
@@ -240,6 +244,22 @@ class UpdateProgress {
   });
 }
 
+/// 更新缓存与临时安装文件清理结果统计
+class UpdateCacheCleanupResult {
+  final int deletedFiles;
+  final int deletedDirectories;
+  final int freedBytes;
+
+  const UpdateCacheCleanupResult({
+    this.deletedFiles = 0,
+    this.deletedDirectories = 0,
+    this.freedBytes = 0,
+  });
+
+  bool get hasFreedSpace =>
+      freedBytes > 0 || deletedFiles > 0 || deletedDirectories > 0;
+}
+
 /// [v3.1.7] 跨平台工程级更新服务：
 /// - GitHub Release 最新 Tag 自动语义化比对（指向 ZongZi2233/CourseWidgets）
 /// - Android：应用内流式下载 APK + SHA-256 完整性校验 + FileProvider 原生调起系统安装器
@@ -258,26 +278,303 @@ class AppUpdateService {
   static const MethodChannel _nativeChannel =
       MethodChannel('com.zongzi.schedule/live_update');
 
+  bool _dailyAutoCheckInFlight = false;
+  bool _isUpdateTransferInProgress = false;
+
+  /// 最近一次 Android 增量分析失败或回退原因（供 UI 提示与诊断，不掩盖异常）
+  String? lastAndroidIncrementalDiagnostic;
+
+  /// 格式化本地日历日期为 `YYYY-MM-DD`
+  static String formatLocalDateKey(DateTime dt) {
+    final y = dt.year.toString().padLeft(4, '0');
+    final m = dt.month.toString().padLeft(2, '0');
+    final d = dt.day.toString().padLeft(2, '0');
+    return '$y-$m-$d';
+  }
+
+  /// 判断当天是否应当执行每日首次自动检查更新
+  static bool shouldRunDailyAutoCheck({
+    required String? lastCheckedDate,
+    required DateTime now,
+    bool enabled = true,
+  }) {
+    if (!enabled) return false;
+    return lastCheckedDate != formatLocalDateKey(now);
+  }
+
+  bool isAutoCheckUpdateEnabled() {
+    return StorageService().getBool(StorageService.keyAutoCheckUpdateEnabled) ??
+        true;
+  }
+
+  Future<void> setAutoCheckUpdateEnabled(bool enabled) async {
+    await StorageService().setBool(
+      StorageService.keyAutoCheckUpdateEnabled,
+      enabled,
+    );
+  }
+
+  String? getLastAutoUpdateCheckDate() {
+    return StorageService().getString(StorageService.keyLastAutoUpdateCheckDate);
+  }
+
+  Future<void> markAutoUpdateChecked(DateTime now) async {
+    await StorageService().setString(
+      StorageService.keyLastAutoUpdateCheckDate,
+      formatLocalDateKey(now),
+    );
+  }
+
+  /// 每日首次启动静默检查更新：当天仅检查一次；若存在新版本返回 [AppUpdateInfo]，否则返回 null；网络异常静默跳过且不占用当日配额
+  Future<AppUpdateInfo?> checkForDailyAutoUpdate({
+    DateTime? now,
+    bool force = false,
+    Future<AppUpdateInfo> Function()? checker,
+  }) async {
+    if (_dailyAutoCheckInFlight) return null;
+    final effectiveNow = now ?? DateTime.now();
+    if (!force &&
+        !shouldRunDailyAutoCheck(
+          lastCheckedDate: getLastAutoUpdateCheckDate(),
+          now: effectiveNow,
+          enabled: isAutoCheckUpdateEnabled(),
+        )) {
+      return null;
+    }
+
+    _dailyAutoCheckInFlight = true;
+    try {
+      final info = await (checker ?? checkForUpdate)();
+      await markAutoUpdateChecked(effectiveNow);
+      return info.hasUpdate ? info : null;
+    } catch (e) {
+      debugPrint('[AppUpdateService] 每日自动检查更新失败（已静默忽略）: $e');
+      return null;
+    } finally {
+      _dailyAutoCheckInFlight = false;
+    }
+  }
+
+  /// 比较两个语义化版本号（忽视 v 前缀与 +build 后缀）：a > b 返回 1，a < b 返回 -1，相等返回 0
+  static int compareVersions(String versionA, String versionB) {
+    final cleanA =
+        versionA.trim().replaceFirst(RegExp(r'^[vV]'), '').split('+').first;
+    final cleanB =
+        versionB.trim().replaceFirst(RegExp(r'^[vV]'), '').split('+').first;
+
+    final aParts =
+        cleanA.split('.').map((s) => int.tryParse(s.trim()) ?? 0).toList();
+    final bParts =
+        cleanB.split('.').map((s) => int.tryParse(s.trim()) ?? 0).toList();
+
+    final maxLen = aParts.length > bParts.length ? aParts.length : bParts.length;
+    for (int i = 0; i < maxLen; i++) {
+      final av = i < aParts.length ? aParts[i] : 0;
+      final bv = i < bParts.length ? bParts[i] : 0;
+      if (av > bv) return 1;
+      if (av < bv) return -1;
+    }
+    return 0;
+  }
+
+  /// 从安装包/更新产物文件名提取语义化版本号（如 `CourseWidgets-v3.2.4-android-arm64-v8a.apk` -> `3.2.4`）
+  @visibleForTesting
+  static String? extractVersionFromArtifactName(String filename) {
+    final match = RegExp(
+      r'^coursewidgets-v?(\d+(?:\.\d+)+)',
+      caseSensitive: false,
+    ).firstMatch(filename.trim());
+    return match?.group(1);
+  }
+
   /// 语义化版本号比对：remote > local 返回 true
   static bool isNewerVersion(String remoteTag, String localVersion) {
-    final cleanRemote =
-        remoteTag.trim().replaceFirst(RegExp(r'^[vV]'), '').split('+').first;
-    final cleanLocal =
-        localVersion.trim().replaceFirst(RegExp(r'^[vV]'), '').split('+').first;
+    return compareVersions(remoteTag, localVersion) > 0;
+  }
 
-    final rParts =
-        cleanRemote.split('.').map((s) => int.tryParse(s.trim()) ?? 0).toList();
-    final lParts =
-        cleanLocal.split('.').map((s) => int.tryParse(s.trim()) ?? 0).toList();
-
-    final maxLen = rParts.length > lParts.length ? rParts.length : lParts.length;
-    for (int i = 0; i < maxLen; i++) {
-      final rv = i < rParts.length ? rParts[i] : 0;
-      final lv = i < lParts.length ? lParts[i] : 0;
-      if (rv > lv) return true;
-      if (rv < lv) return false;
+  /// 自动清理历史更新下载、增量重组缓存、`.part`/`.tmp` 残留与过期 `_update_staging` 目录
+  Future<UpdateCacheCleanupResult> cleanupStaleUpdateCaches({
+    Directory? overrideTempDir,
+    Directory? overrideAppDir,
+    List<Directory>? extraCacheDirs,
+    String? currentVersion,
+    DateTime? now,
+    bool forcePurgeAll = false,
+    Duration retainRecentNewerApk = const Duration(hours: 2),
+    Duration retainActiveStaging = const Duration(minutes: 2),
+  }) async {
+    if (!forcePurgeAll && _isUpdateTransferInProgress) {
+      return const UpdateCacheCleanupResult();
     }
-    return false;
+
+    final effectiveNow = now ?? DateTime.now();
+    final effectiveCurrentVersion = currentVersion ?? appVersion;
+    final List<Directory> candidateDirs = [];
+    final Set<String> seenPaths = {};
+
+    void addCandidateDir(Directory? dir) {
+      if (dir == null) return;
+      final normalized = p.normalize(dir.path);
+      final dedupeKey =
+          Platform.isWindows ? normalized.toLowerCase() : normalized;
+      if (seenPaths.add(dedupeKey)) {
+        candidateDirs.add(dir);
+      }
+    }
+
+    if (overrideTempDir != null) {
+      addCandidateDir(overrideTempDir);
+      if (extraCacheDirs != null) {
+        for (final dir in extraCacheDirs) {
+          addCandidateDir(dir);
+        }
+      }
+    } else {
+      try {
+        addCandidateDir(await getTemporaryDirectory());
+      } catch (_) {}
+      if (Platform.isAndroid) {
+        try {
+          addCandidateDir(await getApplicationCacheDirectory());
+        } catch (_) {}
+        try {
+          final extDirs = await getExternalCacheDirectories();
+          if (extDirs != null) {
+            for (final dir in extDirs) {
+              addCandidateDir(dir);
+            }
+          }
+        } catch (_) {}
+      }
+      if (extraCacheDirs != null) {
+        for (final dir in extraCacheDirs) {
+          addCandidateDir(dir);
+        }
+      }
+    }
+
+    int deletedFiles = 0;
+    int deletedDirectories = 0;
+    int freedBytes = 0;
+
+    for (final dir in candidateDirs) {
+      try {
+        if (!await dir.exists()) continue;
+        await for (final entity in dir.list(followLinks: false)) {
+          if (entity is! File) continue;
+          final name = p.basename(entity.path);
+          final lower = name.toLowerCase();
+
+          final bool isPartialArtifact = (lower.startsWith('coursewidgets-') &&
+                  (lower.endsWith('.apk.part') ||
+                      lower.endsWith('.apk.tmp') ||
+                      lower.endsWith('.zip.part') ||
+                      lower.endsWith('.zip.tmp'))) ||
+              lower.endsWith('.apk.part') ||
+              lower.endsWith('.apk.tmp');
+          final bool isPackageArtifact = lower.startsWith('coursewidgets-') &&
+              (lower.endsWith('.apk') || lower.endsWith('.zip'));
+          final bool isUpdaterScript =
+              lower.startsWith('coursewidgets_updater_') &&
+                  lower.endsWith('.ps1');
+
+          if (!isPartialArtifact && !isPackageArtifact && !isUpdaterScript) {
+            continue;
+          }
+
+          bool shouldDelete = false;
+          int fileSize = 0;
+          try {
+            final stat = await entity.stat();
+            fileSize = stat.size;
+            if (isPartialArtifact) {
+              shouldDelete = true;
+            } else if (isUpdaterScript) {
+              if (lower != 'coursewidgets_updater_$pid.ps1') {
+                shouldDelete = forcePurgeAll ||
+                    effectiveNow.difference(stat.modified) >=
+                        retainActiveStaging;
+              }
+            } else if (isPackageArtifact) {
+              if (forcePurgeAll) {
+                shouldDelete = true;
+              } else {
+                final artifactVer = extractVersionFromArtifactName(name);
+                if (artifactVer == null ||
+                    compareVersions(artifactVer, effectiveCurrentVersion) <=
+                        0) {
+                  shouldDelete = true;
+                } else {
+                  shouldDelete = effectiveNow.difference(stat.modified) >=
+                      retainRecentNewerApk;
+                }
+              }
+            }
+
+            if (shouldDelete) {
+              await entity.delete();
+              deletedFiles++;
+              freedBytes += fileSize;
+            }
+          } catch (_) {}
+        }
+      } catch (_) {}
+    }
+
+    Directory? effectiveAppDir = overrideAppDir;
+    if (effectiveAppDir == null &&
+        overrideTempDir == null &&
+        Platform.isWindows) {
+      effectiveAppDir = File(Platform.resolvedExecutable).parent;
+    }
+
+    if (effectiveAppDir != null) {
+      final stagingDir = Directory(p.join(effectiveAppDir.path, '_update_staging'));
+      try {
+        if (await stagingDir.exists()) {
+          final dirStat = await stagingDir.stat();
+          DateTime? latestFileModified;
+          int dirBytes = 0;
+          try {
+            await for (final item
+                in stagingDir.list(recursive: true, followLinks: false)) {
+              if (item is File) {
+                try {
+                  final itemStat = await item.stat();
+                  dirBytes += itemStat.size;
+                  if (latestFileModified == null ||
+                      itemStat.modified.isAfter(latestFileModified)) {
+                    latestFileModified = itemStat.modified;
+                  }
+                } catch (_) {}
+              }
+            }
+          } catch (_) {}
+
+          final referenceTime = latestFileModified ?? dirStat.modified;
+          final bool shouldDeleteStaging = forcePurgeAll ||
+              effectiveNow.difference(referenceTime) >= retainActiveStaging;
+          if (shouldDeleteStaging) {
+            await stagingDir.delete(recursive: true);
+            deletedDirectories++;
+            freedBytes += dirBytes;
+          }
+        }
+      } catch (_) {}
+    }
+
+    final result = UpdateCacheCleanupResult(
+      deletedFiles: deletedFiles,
+      deletedDirectories: deletedDirectories,
+      freedBytes: freedBytes,
+    );
+    if (result.hasFreedSpace) {
+      debugPrint(
+        '[AppUpdateService] 自动清理历史更新缓存: 删除 ${result.deletedFiles} 个文件, '
+        '${result.deletedDirectories} 个目录, 释放 ${formatBytes(result.freedBytes)}',
+      );
+    }
+    return result;
   }
 
   /// 统一评估是否存在可用更新（支持语义化版本号递增 + Android 同版本构建 SHA-256 差异检测）
@@ -510,7 +807,7 @@ class AppUpdateService {
       String winZipSha256 = '';
       if (sha256SumsUrl != null) {
         try {
-          final sumsText = await _downloadString(client, sha256SumsUrl);
+          final sumsText = await _downloadStringWithRetry(client, sha256SumsUrl);
           for (final line in sumsText.split(RegExp(r'\r?\n'))) {
             final trimmed = line.trim();
             if (trimmed.isEmpty) continue;
@@ -556,6 +853,7 @@ class AppUpdateService {
         hasUpdate: availability.hasUpdate,
         isSameVersionRebuild: availability.isSameVersionRebuild,
         installedApkSha256: localApk?.sha256 ?? '',
+        installedApkPath: localApk?.apkPath ?? '',
       );
     } finally {
       client.close();
@@ -577,7 +875,7 @@ class AppUpdateService {
       if (info.winManifestUrl != null && info.winManifestUrl!.isNotEmpty) {
         try {
           final manifestText =
-              await _downloadString(client, info.winManifestUrl!);
+              await _downloadStringWithRetry(client, info.winManifestUrl!);
           final manifestJson =
               jsonDecode(manifestText) as Map<String, dynamic>;
           if ((manifestJson['zipSize'] as num?) != null && fullZipBytes <= 0) {
@@ -673,29 +971,47 @@ class AppUpdateService {
     WindowsIncrementalPlan plan, {
     required void Function(UpdateProgress progress) onProgress,
   }) async {
+    final bool ownsTransferLock = !_isUpdateTransferInProgress;
+    _isUpdateTransferInProgress = true;
     final appDir = File(Platform.resolvedExecutable).parent.path;
     final exeName = p.basename(Platform.resolvedExecutable);
     final stagingDir = Directory(p.join(appDir, '_update_staging'));
 
-    if (await stagingDir.exists()) {
-      await stagingDir.delete(recursive: true);
-    }
-    await stagingDir.create(recursive: true);
-
-    final filesToUpdate = plan.changedFiles;
-    if (filesToUpdate.isEmpty) {
-      throw Exception('未检测到需要替换的差异文件');
-    }
-
-    final totalBytesToDownload = plan.incrementalDownloadBytes > 0
-        ? plan.incrementalDownloadBytes
-        : filesToUpdate.fold<int>(0, (sum, e) => sum + e.compressedSize);
-    int accumulatedDownloadedBytes = 0;
-
     final client = HttpClient()
-      ..connectionTimeout = const Duration(seconds: 30);
+      ..connectionTimeout = const Duration(seconds: 30)
+      ..autoUncompress = false;
 
     try {
+      await cleanupStaleUpdateCaches(forcePurgeAll: true);
+
+      if (await stagingDir.exists()) {
+        await stagingDir.delete(recursive: true);
+      }
+      await stagingDir.create(recursive: true);
+
+      final filesToUpdate = plan.changedFiles;
+      if (filesToUpdate.isEmpty) {
+        throw Exception('未检测到需要替换的差异文件');
+      }
+
+      final totalBytesToDownload = plan.incrementalDownloadBytes > 0
+          ? plan.incrementalDownloadBytes
+          : filesToUpdate.fold<int>(0, (sum, e) => sum + e.compressedSize);
+      int accumulatedDownloadedBytes = 0;
+
+      String activeZipUrl = await _resolveDirectDownloadUrl(
+        client,
+        info.winZipDownloadUrl,
+      );
+
+      Future<String> refreshZipUrl() async {
+        activeZipUrl = await _resolveDirectDownloadUrl(
+          client,
+          info.winZipDownloadUrl,
+        );
+        return activeZipUrl;
+      }
+
       for (int i = 0; i < filesToUpdate.length; i++) {
         final entry = filesToUpdate[i];
         onProgress(
@@ -718,37 +1034,45 @@ class AppUpdateService {
           // 从 Local File Header 动态解析 dataOffset
           dataOffset = await _resolveZipEntryDataOffset(
             client,
-            info.winZipDownloadUrl,
+            activeZipUrl,
             entry.localHeaderOffset,
           );
         }
 
         final int startByte = dataOffset;
         final int endByte = dataOffset + entry.compressedSize - 1;
+        final int baseDownloaded = accumulatedDownloadedBytes;
+        int entryDownloaded = 0;
 
         final compressedBytes = await _downloadByteRange(
           client,
-          info.winZipDownloadUrl,
+          activeZipUrl,
           startByte: startByte,
           endByte: endByte,
+          onRefreshUrl: refreshZipUrl,
           onChunk: (chunkLen) {
-            accumulatedDownloadedBytes += chunkLen;
+            entryDownloaded += chunkLen;
             onProgress(
               UpdateProgress(
                 stage: '正在增量同步 (${i + 1}/${filesToUpdate.length})',
                 currentFile: entry.path,
                 completedFiles: i,
                 totalFiles: filesToUpdate.length,
-                downloadedBytes: accumulatedDownloadedBytes,
+                downloadedBytes: baseDownloaded + entryDownloaded,
                 totalBytes: totalBytesToDownload,
                 progress: totalBytesToDownload > 0
-                    ? (accumulatedDownloadedBytes / totalBytesToDownload)
+                    ? ((baseDownloaded + entryDownloaded) /
+                            totalBytesToDownload)
                         .clamp(0.0, 0.96)
                     : (i / filesToUpdate.length).clamp(0.0, 0.96),
               ),
             );
           },
+          onAttemptReset: () {
+            entryDownloaded = 0;
+          },
         );
+        accumulatedDownloadedBytes = baseDownloaded + compressedBytes.length;
 
         // 解压该文件的 Deflate 数据流
         final List<int> decompressedBytes;
@@ -813,6 +1137,9 @@ class AppUpdateService {
       rethrow;
     } finally {
       client.close();
+      if (ownsTransferLock) {
+        _isUpdateTransferInProgress = false;
+      }
     }
   }
 
@@ -849,6 +1176,7 @@ class AppUpdateService {
     required Map<String, ({int offset, int length, String sha256})>
         localEntriesByPath,
     int coalesceGapBytes = 4096,
+    int? minReusedEntryBytes,
   }) {
     if (targetApkSize <= 0 || targetApkSha256.trim().isEmpty) {
       return AndroidIncrementalPlan(
@@ -895,11 +1223,12 @@ class AppUpdateService {
 
     matched.sort((a, b) => a.remote.offset.compareTo(b.remote.offset));
 
+    final int effectiveMinEntryBytes = minReusedEntryBytes ?? coalesceGapBytes;
     final List<({AndroidReusableEntry remote, int localOffset})> accepted = [];
     int lastEnd = 0;
     for (final candidate in matched) {
       if (candidate.remote.offset < lastEnd) continue;
-      if (candidate.remote.length < coalesceGapBytes) continue;
+      if (candidate.remote.length < effectiveMinEntryBytes) continue;
       accepted.add(candidate);
       lastEnd = candidate.remote.offset + candidate.remote.length;
     }
@@ -1002,24 +1331,41 @@ class AppUpdateService {
   Future<AndroidIncrementalPlan?> prepareAndroidIncrementalPlan(
     AppUpdateInfo info,
   ) async {
-    if (!Platform.isAndroid ||
-        info.androidManifestUrl == null ||
-        info.androidManifestUrl!.isEmpty) {
+    lastAndroidIncrementalDiagnostic = null;
+    if (!Platform.isAndroid) {
+      return null;
+    }
+    if (info.androidManifestUrl == null || info.androidManifestUrl!.isEmpty) {
+      lastAndroidIncrementalDiagnostic =
+          '远端版本未附带 android-manifest.json 增量索引清单';
       return null;
     }
 
-    final localApk = await getInstalledApkInfo();
-    if (localApk == null) return null;
-    final localFile = File(localApk.apkPath);
-    if (!await localFile.exists()) return null;
+    String localApkPath = info.installedApkPath;
+    if (localApkPath.isEmpty || !await File(localApkPath).exists()) {
+      final localApk = await getInstalledApkInfo();
+      if (localApk == null) {
+        lastAndroidIncrementalDiagnostic = '无法读取本机已安装 APK 路径或签名信息';
+        return null;
+      }
+      localApkPath = localApk.apkPath;
+    }
+    final localFile = File(localApkPath);
+    if (!await localFile.exists()) {
+      lastAndroidIncrementalDiagnostic = '本机已安装 APK 路径不可访问 ($localApkPath)';
+      return null;
+    }
 
     final client = HttpClient()
       ..connectionTimeout = const Duration(seconds: 20);
     try {
       final manifestText =
-          await _downloadString(client, info.androidManifestUrl!);
+          await _downloadStringWithRetry(client, info.androidManifestUrl!);
       final decoded = jsonDecode(manifestText);
-      if (decoded is! Map<String, dynamic>) return null;
+      if (decoded is! Map<String, dynamic>) {
+        lastAndroidIncrementalDiagnostic = 'android-manifest.json 格式无效';
+        return null;
+      }
 
       final targetApkSize =
           (decoded['apkSize'] as num?)?.toInt() ?? info.apkSize;
@@ -1034,6 +1380,7 @@ class AppUpdateService {
           targetApkSha256.isEmpty ||
           rawEntries is! List ||
           rawEntries.isEmpty) {
+        lastAndroidIncrementalDiagnostic = '远端增量索引缺少有效条目或校验信息';
         return null;
       }
 
@@ -1041,24 +1388,55 @@ class AppUpdateService {
           .whereType<Map<String, dynamic>>()
           .map(AndroidReusableEntry.fromJson)
           .toList();
-      if (remoteEntries.isEmpty) return null;
+      if (remoteEntries.isEmpty) {
+        lastAndroidIncrementalDiagnostic = '远端可复用条目列表为空';
+        return null;
+      }
 
-      final localEntriesByPath = await _parseLocalApkReusableEntries(
-        localApk.apkPath,
-        remoteEntries,
-        minReusableSize,
+      final neededPaths = remoteEntries.map((e) => e.path).toSet();
+      final neededLengths = remoteEntries.map((e) => e.length).toSet();
+      final localEntriesByPath = await Isolate.run(
+        () => parseLocalApkReusableEntries(
+          localApkPath,
+          neededPaths,
+          neededLengths,
+          minReusableSize,
+        ),
       );
-      if (localEntriesByPath.isEmpty) return null;
+      if (localEntriesByPath.isEmpty) {
+        lastAndroidIncrementalDiagnostic =
+            '本机 APK 未命中可复用未压缩区块（可能经系统重打包）';
+        return null;
+      }
 
-      final plan = computeAndroidDeltaPlan(
+      final int preferredMinEntryBytes =
+          targetApkSize >= 4 * 1024 * 1024 ? 131072 : 4096;
+      AndroidIncrementalPlan plan = computeAndroidDeltaPlan(
         targetApkSize: targetApkSize,
         targetApkSha256: targetApkSha256,
-        localApkPath: localApk.apkPath,
+        localApkPath: localApkPath,
         remoteEntries: remoteEntries,
         localEntriesByPath: localEntriesByPath,
+        minReusedEntryBytes: preferredMinEntryBytes,
       );
-      return plan.canIncremental ? plan : null;
+      if (!plan.canIncremental && preferredMinEntryBytes > 4096) {
+        plan = computeAndroidDeltaPlan(
+          targetApkSize: targetApkSize,
+          targetApkSha256: targetApkSha256,
+          localApkPath: localApkPath,
+          remoteEntries: remoteEntries,
+          localEntriesByPath: localEntriesByPath,
+          minReusedEntryBytes: 4096,
+        );
+      }
+      if (!plan.canIncremental) {
+        lastAndroidIncrementalDiagnostic =
+            '可复用区块仅 ${formatBytes(plan.reusedBytes)}，将直接下载完整安装包';
+        return null;
+      }
+      return plan;
     } catch (e) {
+      lastAndroidIncrementalDiagnostic = '$e';
       debugPrint('[AppUpdateService] 分析 Android 增量方案失败: $e');
       return null;
     } finally {
@@ -1066,197 +1444,241 @@ class AppUpdateService {
     }
   }
 
-  /// [Android 专用] 执行字节级无损 APK 增量更新（自动全包 SHA-256 签名验证 + 异常回退全量下载）
+  /// [Android 专用] 执行字节级无损 APK 增量更新（CDN 直连复用 + 断点分段重试 + 零内存膨胀写入 + 全包 SHA-256 校验）
   Future<void> executeAndroidIncrementalUpdate(
     AppUpdateInfo info,
     AndroidIncrementalPlan plan, {
     required void Function(UpdateProgress progress) onProgress,
   }) async {
-    if (!plan.canIncremental) {
-      await downloadAndInstallAndroidApk(info, onProgress: onProgress);
-      return;
-    }
-
-    final tempDir = await getTemporaryDirectory();
-    final apkFileName = 'CourseWidgets-${info.latestTag}-android-arm64-v8a.apk';
-    final apkFile = File(p.join(tempDir.path, apkFileName));
-
-    if (await apkFile.exists()) {
-      await apkFile.delete();
-    }
-
-    final remoteOps = plan.ops.where((op) => !op.isLocalCopy).toList();
-    final totalRemoteOps = remoteOps.length.clamp(1, 9999);
-    final totalBytesToDownload = plan.incrementalDownloadBytes > 0
-        ? plan.incrementalDownloadBytes
-        : remoteOps.fold<int>(0, (sum, op) => sum + op.length);
-    int downloadedBytes = 0;
-    int completedRemoteOps = 0;
-
-    final client = HttpClient()
-      ..connectionTimeout = const Duration(seconds: 30);
-    RandomAccessFile? localRaf;
-    IOSink? sink;
-    bool readyToInstall = false;
-
+    final bool ownsTransferLock = !_isUpdateTransferInProgress;
+    _isUpdateTransferInProgress = true;
     try {
-      localRaf = await File(plan.localApkPath).open(mode: FileMode.read);
-      sink = apkFile.openWrite();
-      final copyBuf = Uint8List(65536);
-
-      for (final op in plan.ops) {
-        if (op.isLocalCopy) {
-          onProgress(
-            UpdateProgress(
-              stage: '正在复用本地未变更区块 (${plan.savedPercent.toStringAsFixed(0)}%)...',
-              currentFile: op.entryPath.split(',').first,
-              completedFiles: completedRemoteOps,
-              totalFiles: totalRemoteOps,
-              downloadedBytes: downloadedBytes,
-              totalBytes: totalBytesToDownload,
-              progress: totalBytesToDownload > 0
-                  ? (downloadedBytes / totalBytesToDownload * 0.94)
-                      .clamp(0.01, 0.94)
-                  : 0.3,
-            ),
-          );
-          await localRaf.setPosition(op.localOffset);
-          int remaining = op.length;
-          while (remaining > 0) {
-            final toRead = remaining < copyBuf.length ? remaining : copyBuf.length;
-            final read = await localRaf.readInto(copyBuf, 0, toRead);
-            if (read <= 0) {
-              throw Exception('读取本地 APK 区块提前结束');
-            }
-            sink.add(
-              read == copyBuf.length
-                  ? copyBuf.sublist(0)
-                  : copyBuf.sublist(0, read),
-            );
-            remaining -= read;
-          }
-        } else {
-          final currentRemoteIdx = completedRemoteOps + 1;
-          onProgress(
-            UpdateProgress(
-              stage: '正在增量下载差异片段 ($currentRemoteIdx/$totalRemoteOps)...',
-              currentFile: apkFileName,
-              completedFiles: completedRemoteOps,
-              totalFiles: totalRemoteOps,
-              downloadedBytes: downloadedBytes,
-              totalBytes: totalBytesToDownload,
-              progress: totalBytesToDownload > 0
-                  ? (downloadedBytes / totalBytesToDownload * 0.94)
-                      .clamp(0.01, 0.94)
-                  : 0.4,
-            ),
-          );
-          final rangeBytes = await _downloadByteRange(
-            client,
-            info.apkDownloadUrl,
-            startByte: op.targetOffset,
-            endByte: op.targetOffset + op.length - 1,
-            requirePartialContent: true,
-            onChunk: (chunkLen) {
-              downloadedBytes += chunkLen;
-              onProgress(
-                UpdateProgress(
-                  stage: '正在增量下载差异片段 ($currentRemoteIdx/$totalRemoteOps)...',
-                  currentFile: apkFileName,
-                  completedFiles: completedRemoteOps,
-                  totalFiles: totalRemoteOps,
-                  downloadedBytes: downloadedBytes,
-                  totalBytes: totalBytesToDownload,
-                  progress: totalBytesToDownload > 0
-                      ? (downloadedBytes / totalBytesToDownload * 0.94)
-                          .clamp(0.01, 0.94)
-                      : 0.5,
-                ),
-              );
-            },
-          );
-          sink.add(rangeBytes);
-          completedRemoteOps++;
-        }
+      if (!plan.canIncremental) {
+        await downloadAndInstallAndroidApk(info, onProgress: onProgress);
+        return;
       }
 
-      await sink.flush();
-      await sink.close();
-      sink = null;
-      await localRaf.close();
-      localRaf = null;
+      await cleanupStaleUpdateCaches(forcePurgeAll: true);
+
+      final tempDir = await getTemporaryDirectory();
+      final apkFileName = 'CourseWidgets-${info.latestTag}-android-arm64-v8a.apk';
+      final apkFile = File(p.join(tempDir.path, apkFileName));
+      final partFile = File('${apkFile.path}.part');
+
+      if (await partFile.exists()) {
+        await partFile.delete();
+      }
+      if (await apkFile.exists()) {
+        await apkFile.delete();
+      }
+
+      final remoteOps = plan.ops.where((op) => !op.isLocalCopy).toList();
+      final totalRemoteOps = remoteOps.length.clamp(1, 9999);
+      final totalBytesToDownload = plan.incrementalDownloadBytes > 0
+          ? plan.incrementalDownloadBytes
+          : remoteOps.fold<int>(0, (sum, op) => sum + op.length);
+      int downloadedBytes = 0;
+      int completedRemoteOps = 0;
+
+      final client = HttpClient()
+        ..connectionTimeout = const Duration(seconds: 30)
+        ..autoUncompress = false;
+      RandomAccessFile? localRaf;
+      RandomAccessFile? outRaf;
+      bool readyToInstall = false;
+
+      try {
+        localRaf = await File(plan.localApkPath).open(mode: FileMode.read);
+        outRaf = await partFile.open(mode: FileMode.write);
+        final copyBuf = Uint8List(65536);
+
+        String activeDownloadUrl = await _resolveDirectDownloadUrl(
+          client,
+          info.apkDownloadUrl,
+        );
+
+        Future<String> refreshDownloadUrl() async {
+          activeDownloadUrl = await _resolveDirectDownloadUrl(
+            client,
+            info.apkDownloadUrl,
+          );
+          return activeDownloadUrl;
+        }
+
+        for (final op in plan.ops) {
+          if (op.isLocalCopy) {
+            onProgress(
+              UpdateProgress(
+                stage: '正在复用本地未变更区块 (${plan.savedPercent.toStringAsFixed(0)}%)...',
+                currentFile: op.entryPath.split(',').first,
+                completedFiles: completedRemoteOps,
+                totalFiles: totalRemoteOps,
+                downloadedBytes: downloadedBytes,
+                totalBytes: totalBytesToDownload,
+                progress: totalBytesToDownload > 0
+                    ? (downloadedBytes / totalBytesToDownload * 0.94)
+                        .clamp(0.01, 0.94)
+                    : 0.3,
+              ),
+            );
+            await outRaf.setPosition(op.targetOffset);
+            await localRaf.setPosition(op.localOffset);
+            int remaining = op.length;
+            while (remaining > 0) {
+              final toRead =
+                  remaining < copyBuf.length ? remaining : copyBuf.length;
+              final read = await localRaf.readInto(copyBuf, 0, toRead);
+              if (read <= 0) {
+                throw Exception('读取本地 APK 区块提前结束');
+              }
+              await outRaf.writeFrom(copyBuf, 0, read);
+              remaining -= read;
+            }
+          } else {
+            final currentRemoteIdx = completedRemoteOps + 1;
+            final int baseDownloaded = downloadedBytes;
+            int opDownloaded = 0;
+            onProgress(
+              UpdateProgress(
+                stage: '正在增量下载差异片段 ($currentRemoteIdx/$totalRemoteOps)...',
+                currentFile: apkFileName,
+                completedFiles: completedRemoteOps,
+                totalFiles: totalRemoteOps,
+                downloadedBytes: baseDownloaded,
+                totalBytes: totalBytesToDownload,
+                progress: totalBytesToDownload > 0
+                    ? (baseDownloaded / totalBytesToDownload * 0.94)
+                        .clamp(0.01, 0.94)
+                    : 0.4,
+              ),
+            );
+            final fetched = await _streamByteRangeToRaf(
+              client,
+              activeDownloadUrl,
+              outRaf: outRaf,
+              targetOffset: op.targetOffset,
+              startByte: op.targetOffset,
+              endByte: op.targetOffset + op.length - 1,
+              onRefreshUrl: refreshDownloadUrl,
+              onAttemptReset: () {
+                opDownloaded = 0;
+              },
+              onChunk: (chunkLen) {
+                opDownloaded += chunkLen;
+                final currentTotal = baseDownloaded + opDownloaded;
+                onProgress(
+                  UpdateProgress(
+                    stage: '正在增量下载差异片段 ($currentRemoteIdx/$totalRemoteOps)...',
+                    currentFile: apkFileName,
+                    completedFiles: completedRemoteOps,
+                    totalFiles: totalRemoteOps,
+                    downloadedBytes: currentTotal,
+                    totalBytes: totalBytesToDownload,
+                    progress: totalBytesToDownload > 0
+                        ? (currentTotal / totalBytesToDownload * 0.94)
+                            .clamp(0.01, 0.94)
+                        : 0.5,
+                  ),
+                );
+              },
+            );
+            downloadedBytes = baseDownloaded + fetched;
+            completedRemoteOps++;
+          }
+        }
+
+        await outRaf.flush();
+        await outRaf.close();
+        outRaf = null;
+        await localRaf.close();
+        localRaf = null;
+
+        onProgress(
+          UpdateProgress(
+            stage: '正在校验重组 APK SHA-256 签名完整性...',
+            currentFile: apkFileName,
+            completedFiles: totalRemoteOps,
+            totalFiles: totalRemoteOps,
+            downloadedBytes: totalBytesToDownload,
+            totalBytes: totalBytesToDownload,
+            progress: 0.97,
+          ),
+        );
+
+        final assembledSize = await partFile.length();
+        if (assembledSize != plan.targetApkSize) {
+          throw Exception(
+            '增量重组安装包体积不一致: 预期 ${plan.targetApkSize} B, 实际 $assembledSize B',
+          );
+        }
+
+        final actualSha = await computeFileSha256(partFile);
+        if (actualSha != plan.targetApkSha256.toLowerCase()) {
+          throw Exception('增量重组安装包 SHA-256 校验未通过');
+        }
+
+        if (await apkFile.exists()) {
+          await apkFile.delete();
+        }
+        await partFile.rename(apkFile.path);
+        readyToInstall = true;
+      } catch (e) {
+        lastAndroidIncrementalDiagnostic = '$e';
+        debugPrint('[AppUpdateService] Android 增量更新异常，自动回退全量下载: $e');
+        try {
+          await outRaf?.close();
+        } catch (_) {}
+        try {
+          await localRaf?.close();
+        } catch (_) {}
+        try {
+          if (await partFile.exists()) {
+            await partFile.delete();
+          }
+        } catch (_) {}
+        try {
+          if (await apkFile.exists()) {
+            await apkFile.delete();
+          }
+        } catch (_) {}
+      } finally {
+        client.close();
+      }
+
+      if (!readyToInstall) {
+        onProgress(
+          const UpdateProgress(
+            stage: '增量通道异常，正在自动切换完整安装包下载...',
+            progress: 0.02,
+          ),
+        );
+        await downloadAndInstallAndroidApk(info, onProgress: onProgress);
+        return;
+      }
 
       onProgress(
         UpdateProgress(
-          stage: '正在校验重组 APK SHA-256 签名完整性...',
+          stage: '校验通过，正在调起系统安装程序...',
           currentFile: apkFileName,
           completedFiles: totalRemoteOps,
           totalFiles: totalRemoteOps,
           downloadedBytes: totalBytesToDownload,
           totalBytes: totalBytesToDownload,
-          progress: 0.97,
+          progress: 1.0,
         ),
       );
 
-      final assembledSize = await apkFile.length();
-      if (assembledSize != plan.targetApkSize) {
-        throw Exception(
-          '增量重组安装包体积不一致: 预期 ${plan.targetApkSize} B, 实际 $assembledSize B',
-        );
+      final installed = await _nativeChannel.invokeMethod<bool>(
+        'installApk',
+        {'filePath': apkFile.path},
+      );
+      if (installed != true) {
+        throw Exception('无法调起系统安装器，请检查安装未知应用权限');
       }
-
-      final actualSha = await computeFileSha256(apkFile);
-      if (actualSha != plan.targetApkSha256.toLowerCase()) {
-        throw Exception('增量重组安装包 SHA-256 校验未通过');
-      }
-
-      readyToInstall = true;
-    } catch (e) {
-      debugPrint('[AppUpdateService] Android 增量更新异常，自动回退全量下载: $e');
-      try {
-        await sink?.close();
-      } catch (_) {}
-      try {
-        await localRaf?.close();
-      } catch (_) {}
-      try {
-        if (await apkFile.exists()) {
-          await apkFile.delete();
-        }
-      } catch (_) {}
     } finally {
-      client.close();
-    }
-
-    if (!readyToInstall) {
-      onProgress(
-        const UpdateProgress(
-          stage: '增量通道异常，正在自动切换完整安装包下载...',
-          progress: 0.02,
-        ),
-      );
-      await downloadAndInstallAndroidApk(info, onProgress: onProgress);
-      return;
-    }
-
-    onProgress(
-      UpdateProgress(
-        stage: '校验通过，正在调起系统安装程序...',
-        currentFile: apkFileName,
-        completedFiles: totalRemoteOps,
-        totalFiles: totalRemoteOps,
-        downloadedBytes: totalBytesToDownload,
-        totalBytes: totalBytesToDownload,
-        progress: 1.0,
-      ),
-    );
-
-    final installed = await _nativeChannel.invokeMethod<bool>(
-      'installApk',
-      {'filePath': apkFile.path},
-    );
-    if (installed != true) {
-      throw Exception('无法调起系统安装器，请检查安装未知应用权限');
+      if (ownsTransferLock) {
+        _isUpdateTransferInProgress = false;
+      }
     }
   }
 
@@ -1304,18 +1726,18 @@ class AppUpdateService {
     return digest.toString().toLowerCase();
   }
 
-  Future<Map<String, ({int offset, int length, String sha256})>>
-      _parseLocalApkReusableEntries(
+  /// 静态 Isolate 安全的本地 APK 可复用 ZIP 条目扫描器
+  @visibleForTesting
+  static Future<Map<String, ({int offset, int length, String sha256})>>
+      parseLocalApkReusableEntries(
     String apkPath,
-    List<AndroidReusableEntry> remoteEntries,
+    Set<String> neededPaths,
+    Set<int> neededLengths,
     int minReusableSize,
   ) async {
     final file = File(apkPath);
     final fileLen = await file.length();
     if (fileLen < 22) return const {};
-
-    final neededPaths = remoteEntries.map((e) => e.path).toSet();
-    final neededLengths = remoteEntries.map((e) => e.length).toSet();
 
     final raf = await file.open(mode: FileMode.read);
     try {
@@ -1407,19 +1829,32 @@ class AppUpdateService {
     AppUpdateInfo info, {
     required void Function(UpdateProgress progress) onProgress,
   }) async {
-    final tempDir = await getTemporaryDirectory();
-    final apkFileName = 'CourseWidgets-${info.latestTag}-android-arm64-v8a.apk';
-    final apkFile = File(p.join(tempDir.path, apkFileName));
-
-    if (await apkFile.exists()) {
-      await apkFile.delete();
-    }
-
+    final bool ownsTransferLock = !_isUpdateTransferInProgress;
+    _isUpdateTransferInProgress = true;
     final client = HttpClient()
-      ..connectionTimeout = const Duration(seconds: 30);
+      ..connectionTimeout = const Duration(seconds: 30)
+      ..autoUncompress = false;
+    File? partFile;
+    File? apkFile;
+
     try {
+      await cleanupStaleUpdateCaches(forcePurgeAll: true);
+
+      final tempDir = await getTemporaryDirectory();
+      final apkFileName = 'CourseWidgets-${info.latestTag}-android-arm64-v8a.apk';
+      apkFile = File(p.join(tempDir.path, apkFileName));
+      partFile = File('${apkFile.path}.part');
+
+      if (await partFile.exists()) {
+        await partFile.delete();
+      }
+      if (await apkFile.exists()) {
+        await apkFile.delete();
+      }
+
       final req = await client.getUrl(Uri.parse(info.apkDownloadUrl));
       req.headers.set('User-Agent', 'CourseWidgets-Updater/$appVersion');
+      req.headers.set(HttpHeaders.acceptEncodingHeader, 'identity');
       final resp = await req.close();
 
       if (resp.statusCode != 200 && resp.statusCode != 206) {
@@ -1430,7 +1865,7 @@ class AppUpdateService {
           resp.contentLength > 0 ? resp.contentLength : info.apkSize;
       int downloaded = 0;
 
-      final sink = apkFile.openWrite();
+      final sink = partFile.openWrite();
       try {
         await for (final chunk in resp) {
           sink.add(chunk);
@@ -1467,12 +1902,17 @@ class AppUpdateService {
             progress: 0.99,
           ),
         );
-        final actualSha = await computeFileSha256(apkFile);
+        final actualSha = await computeFileSha256(partFile);
         if (actualSha != info.apkSha256.toLowerCase()) {
-          await apkFile.delete();
           throw Exception('安装包 SHA-256 校验不一致，已取消安装');
         }
       }
+
+      if (await apkFile.exists()) {
+        await apkFile.delete();
+      }
+      await partFile.rename(apkFile.path);
+      partFile = null;
 
       onProgress(
         UpdateProgress(
@@ -1493,8 +1933,23 @@ class AppUpdateService {
       if (installed != true) {
         throw Exception('无法调起系统安装器，请检查安装未知应用权限');
       }
+    } catch (_) {
+      try {
+        if (partFile != null && await partFile.exists()) {
+          await partFile.delete();
+        }
+      } catch (_) {}
+      try {
+        if (apkFile != null && await apkFile.exists()) {
+          await apkFile.delete();
+        }
+      } catch (_) {}
+      rethrow;
     } finally {
       client.close();
+      if (ownsTransferLock) {
+        _isUpdateTransferInProgress = false;
+      }
     }
   }
 
@@ -1565,60 +2020,236 @@ class AppUpdateService {
     return await resp.transform(utf8.decoder).join();
   }
 
+  Future<String> _downloadStringWithRetry(
+    HttpClient client,
+    String url, {
+    int maxAttempts = 3,
+  }) async {
+    Object? lastError;
+    for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        return await _downloadString(client, url);
+      } catch (e) {
+        lastError = e;
+        if (attempt < maxAttempts) {
+          await Future<void>.delayed(
+            Duration(milliseconds: attempt == 1 ? 300 : 800),
+          );
+        }
+      }
+    }
+    throw lastError!;
+  }
+
+  /// 预解析 GitHub Release 重定向后的直接 CDN 下载链接，避免多段 Range 请求重复触发 302 限流
+  Future<String> _resolveDirectDownloadUrl(
+    HttpClient client,
+    String url, {
+    int maxHops = 6,
+  }) async {
+    Uri current = Uri.parse(url);
+    bool followedRedirect = false;
+    for (int hop = 0; hop < maxHops; hop++) {
+      try {
+        final req = await client.openUrl('HEAD', current);
+        req.followRedirects = false;
+        req.headers.set('User-Agent', 'CourseWidgets-Updater/$appVersion');
+        req.headers.set(HttpHeaders.acceptEncodingHeader, 'identity');
+        final resp = await req.close();
+        try {
+          await resp.drain<void>();
+        } catch (_) {}
+        if (resp.isRedirect ||
+            (resp.statusCode >= 300 && resp.statusCode < 400)) {
+          final loc = resp.headers.value(HttpHeaders.locationHeader);
+          if (loc == null || loc.isEmpty) break;
+          current = current.resolve(loc);
+          followedRedirect = true;
+          continue;
+        }
+        if (resp.statusCode >= 200 && resp.statusCode < 300) {
+          return current.toString();
+        }
+        return followedRedirect ? current.toString() : url;
+      } catch (_) {
+        break;
+      }
+    }
+    return followedRedirect ? current.toString() : url;
+  }
+
+  Future<int> _streamByteRangeToRaf(
+    HttpClient client,
+    String url, {
+    required RandomAccessFile outRaf,
+    required int targetOffset,
+    required int startByte,
+    required int endByte,
+    Future<String> Function()? onRefreshUrl,
+    void Function(int chunkLength)? onChunk,
+    VoidCallback? onAttemptReset,
+    int maxAttempts = 3,
+  }) async {
+    final expectedLen = endByte - startByte + 1;
+    String effectiveUrl = url;
+    Object? lastError;
+
+    for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        onAttemptReset?.call();
+        await outRaf.setPosition(targetOffset);
+
+        final req = await client.getUrl(Uri.parse(effectiveUrl));
+        req.headers.set('User-Agent', 'CourseWidgets-Updater/$appVersion');
+        req.headers.set(HttpHeaders.acceptEncodingHeader, 'identity');
+        req.headers.set(HttpHeaders.connectionHeader, 'keep-alive');
+        req.headers.set('Range', 'bytes=$startByte-$endByte');
+        final resp = await req.close();
+
+        if (resp.statusCode == 206) {
+          int received = 0;
+          await for (final chunk in resp) {
+            if (chunk.isEmpty) continue;
+            await outRaf.writeFrom(chunk);
+            received += chunk.length;
+            onChunk?.call(chunk.length);
+          }
+          if (received != expectedLen) {
+            throw Exception(
+              'HTTP Range 数据不完整: 预期 $expectedLen B, 实际 $received B',
+            );
+          }
+          return received;
+        }
+
+        try {
+          await resp.drain<void>();
+        } catch (_) {}
+
+        if ((resp.statusCode == 401 ||
+                resp.statusCode == 403 ||
+                resp.statusCode == 410) &&
+            onRefreshUrl != null) {
+          effectiveUrl = await onRefreshUrl();
+        }
+        throw Exception('HTTP ${resp.statusCode} when requesting byte range');
+      } catch (e) {
+        lastError = e;
+        if (attempt < maxAttempts) {
+          await Future<void>.delayed(
+            Duration(milliseconds: attempt == 1 ? 350 : 900),
+          );
+        }
+      }
+    }
+    throw lastError!;
+  }
+
+  @visibleForTesting
+  Future<Uint8List> downloadByteRangeForTest(
+    HttpClient client,
+    String url, {
+    required int startByte,
+    required int endByte,
+    bool requirePartialContent = false,
+    Future<String> Function()? onRefreshUrl,
+    void Function(int chunkLength)? onChunk,
+    VoidCallback? onAttemptReset,
+    int maxAttempts = 3,
+  }) =>
+      _downloadByteRange(
+        client,
+        url,
+        startByte: startByte,
+        endByte: endByte,
+        requirePartialContent: requirePartialContent,
+        onRefreshUrl: onRefreshUrl,
+        onChunk: onChunk,
+        onAttemptReset: onAttemptReset,
+        maxAttempts: maxAttempts,
+      );
+
   Future<Uint8List> _downloadByteRange(
     HttpClient client,
     String url, {
     required int startByte,
     required int endByte,
     bool requirePartialContent = false,
+    Future<String> Function()? onRefreshUrl,
     void Function(int chunkLength)? onChunk,
+    VoidCallback? onAttemptReset,
+    int maxAttempts = 3,
   }) async {
     final expectedLen = endByte - startByte + 1;
-    final req = await client.getUrl(Uri.parse(url));
-    req.headers.set('User-Agent', 'CourseWidgets-App/$appVersion');
-    req.headers.set('Range', 'bytes=$startByte-$endByte');
-    final resp = await req.close();
+    String effectiveUrl = url;
+    Object? lastError;
 
-    if (resp.statusCode == 206) {
-      final builder = BytesBuilder(copy: false);
-      await for (final chunk in resp) {
-        builder.add(chunk);
-        onChunk?.call(chunk.length);
-      }
-      final bytes = builder.takeBytes();
-      if (bytes.length != expectedLen) {
-        throw Exception(
-          'HTTP Range 数据不完整: 预期 $expectedLen B, 实际 ${bytes.length} B',
-        );
-      }
-      return bytes;
-    } else if (resp.statusCode == 200 && !requirePartialContent) {
-      // 兼容不支持 Range 的透明代理：从全流中截取 [startByte..endByte]
-      final builder = BytesBuilder(copy: false);
-      int offset = 0;
-      await for (final chunk in resp) {
-        final chunkStart = offset;
-        final chunkEnd = offset + chunk.length - 1;
-        offset += chunk.length;
-
-        if (chunkEnd < startByte) continue;
-        if (chunkStart > endByte) break;
-
-        final sliceStart =
-            startByte > chunkStart ? (startByte - chunkStart) : 0;
-        final sliceEnd =
-            endByte < chunkEnd ? (endByte - chunkStart + 1) : chunk.length;
-        final sub = chunk.sublist(sliceStart, sliceEnd);
-        builder.add(sub);
-        onChunk?.call(sub.length);
-      }
-      return builder.takeBytes();
-    } else {
+    for (int attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        await resp.drain<void>();
-      } catch (_) {}
-      throw Exception('HTTP ${resp.statusCode} when requesting byte range');
+        onAttemptReset?.call();
+        final req = await client.getUrl(Uri.parse(effectiveUrl));
+        req.headers.set('User-Agent', 'CourseWidgets-Updater/$appVersion');
+        req.headers.set(HttpHeaders.acceptEncodingHeader, 'identity');
+        req.headers.set(HttpHeaders.connectionHeader, 'keep-alive');
+        req.headers.set('Range', 'bytes=$startByte-$endByte');
+        final resp = await req.close();
+
+        if (resp.statusCode == 206) {
+          final builder = BytesBuilder(copy: false);
+          await for (final chunk in resp) {
+            builder.add(chunk);
+            onChunk?.call(chunk.length);
+          }
+          final bytes = builder.takeBytes();
+          if (bytes.length != expectedLen) {
+            throw Exception(
+              'HTTP Range 数据不完整: 预期 $expectedLen B, 实际 ${bytes.length} B',
+            );
+          }
+          return bytes;
+        } else if (resp.statusCode == 200 && !requirePartialContent) {
+          // 兼容不支持 Range 的透明代理：从全流中截取 [startByte..endByte]
+          final builder = BytesBuilder(copy: false);
+          int offset = 0;
+          await for (final chunk in resp) {
+            final chunkStart = offset;
+            final chunkEnd = offset + chunk.length - 1;
+            offset += chunk.length;
+
+            if (chunkEnd < startByte) continue;
+            if (chunkStart > endByte) break;
+
+            final sliceStart =
+                startByte > chunkStart ? (startByte - chunkStart) : 0;
+            final sliceEnd =
+                endByte < chunkEnd ? (endByte - chunkStart + 1) : chunk.length;
+            final sub = chunk.sublist(sliceStart, sliceEnd);
+            builder.add(sub);
+            onChunk?.call(sub.length);
+          }
+          return builder.takeBytes();
+        } else {
+          try {
+            await resp.drain<void>();
+          } catch (_) {}
+          if ((resp.statusCode == 401 ||
+                  resp.statusCode == 403 ||
+                  resp.statusCode == 410) &&
+              onRefreshUrl != null) {
+            effectiveUrl = await onRefreshUrl();
+          }
+          throw Exception('HTTP ${resp.statusCode} when requesting byte range');
+        }
+      } catch (e) {
+        lastError = e;
+        if (attempt < maxAttempts) {
+          await Future<void>.delayed(
+            Duration(milliseconds: attempt == 1 ? 350 : 900),
+          );
+        }
+      }
     }
+    throw lastError!;
   }
 
   /// 回退通道：仅下载远端 ZIP 尾部 64KB 解析 ZIP Central Directory 文件列表

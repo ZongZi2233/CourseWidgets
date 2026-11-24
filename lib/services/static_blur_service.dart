@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../constants/version.dart' show globalBackgroundPath, kSolidColorBackground;
 import '../main.dart' show globalDarkModeNotifier;
+import 'glass_appearance_service.dart';
 
 /// [v3.0.0 / v3.1.0] 全局静态单次烘焙壁纸遮罩服务 (Static Blurred Wallpaper Service)
 ///
@@ -36,7 +37,7 @@ class StaticBlurredWallpaperService extends ChangeNotifier with WidgetsBindingOb
   String? _lastWallpaperKey;
   Size? _lastScreenSize;
 
-  /// 初始化并建立全局壁纸与深浅色模式监听及屏幕尺寸变化监听
+  /// 初始化并建立全局壁纸、深浅色模式、玻璃材质参数与屏幕尺寸变化监听
   void initialize() {
     WidgetsBinding.instance.removeObserver(this);
     WidgetsBinding.instance.addObserver(this);
@@ -44,12 +45,43 @@ class StaticBlurredWallpaperService extends ChangeNotifier with WidgetsBindingOb
     globalBackgroundPath.addListener(_onWallpaperOrThemeChanged);
     globalDarkModeNotifier.removeListener(_onWallpaperOrThemeChanged);
     globalDarkModeNotifier.addListener(_onWallpaperOrThemeChanged);
+    GlassAppearanceService.instance.removeListener(_onGlassAppearanceChanged);
+    GlassAppearanceService.instance.addListener(_onGlassAppearanceChanged);
 
     // 立即启动单次离屏静态模糊烘焙，确保卡片与背景在首帧及转场打开时纹理即刻就绪
     bakeCurrentWallpaper();
   }
 
   Timer? _metricsDebounceTimer;
+  Timer? _glassDebounceTimer;
+  int _lastBlurBucket = -1;
+
+  void _onGlassAppearanceChanged() {
+    final glass = GlassAppearanceService.instance;
+    if (!glass.shouldRenderGlassBlur) {
+      _glassDebounceTimer?.cancel();
+      _lastBlurBucket = 0;
+      if (_blurredImage != null) {
+        final oldImage = _blurredImage;
+        _blurredImage = null;
+        _lastWallpaperKey = 'noblur|${globalDarkModeNotifier.value}';
+        oldImage?.dispose();
+        notifyListeners();
+      }
+      return;
+    }
+
+    final outerSigma = glass.resolveGlassBlur(11.5);
+    final innerSigma = glass.resolveGlassBlur(13.0);
+    final nextBucket = ((outerSigma + innerSigma) * 10).round();
+    if (nextBucket == _lastBlurBucket && _blurredImage != null) {
+      return;
+    }
+    _glassDebounceTimer?.cancel();
+    _glassDebounceTimer = Timer(const Duration(milliseconds: 160), () {
+      bakeCurrentWallpaper();
+    });
+  }
 
   @override
   void didChangeMetrics() {
@@ -102,13 +134,16 @@ class StaticBlurredWallpaperService extends ChangeNotifier with WidgetsBindingOb
 
     final isDark = globalDarkModeNotifier.value;
     final bgPath = globalBackgroundPath.value;
+    final glass = GlassAppearanceService.instance;
 
-    // [v3.1.0] 纯色无壁纸模式：直接清空静态模糊纹理，零显存占用与零采样开销
-    if (bgPath == kSolidColorBackground) {
-      if (_blurredImage != null || _lastWallpaperKey != 'none|$isDark') {
+    // [v3.1.0 / v3.2.4] 纯色无壁纸模式或玻璃处于完全不透明/零模糊模式：直接清空静态模糊纹理，零显存占用与零采样开销
+    if (bgPath == kSolidColorBackground || !glass.shouldRenderGlassBlur) {
+      final skipKey = '${bgPath == kSolidColorBackground ? "none" : "noblur"}|$isDark';
+      _lastBlurBucket = 0;
+      if (_blurredImage != null || _lastWallpaperKey != skipKey) {
         final oldImage = _blurredImage;
         _blurredImage = null;
-        _lastWallpaperKey = 'none|$isDark';
+        _lastWallpaperKey = skipKey;
         oldImage?.dispose();
         notifyListeners();
       }
@@ -122,7 +157,13 @@ class StaticBlurredWallpaperService extends ChangeNotifier with WidgetsBindingOb
     }
     _lastScreenSize = screenSize;
 
-    final currentKey = '$bgPath|$isDark|${screenSize.width.round()}x${screenSize.height.round()}';
+    final outerSigma = glass.resolveGlassBlur(11.5);
+    final innerSigma = glass.resolveGlassBlur(13.0);
+    final blurBucket = ((outerSigma + innerSigma) * 10).round();
+    _lastBlurBucket = blurBucket;
+
+    final currentKey =
+        '$bgPath|$isDark|${screenSize.width.round()}x${screenSize.height.round()}|b$blurBucket';
     if (currentKey == _lastWallpaperKey && _blurredImage != null) {
       return; // 内容未发生改变，复用现有静态纹理
     }
@@ -170,13 +211,13 @@ class StaticBlurredWallpaperService extends ChangeNotifier with WidgetsBindingOb
       final blurPaint = Paint()
         ..imageFilter = ui.ImageFilter.compose(
           outer: ui.ImageFilter.blur(
-            sigmaX: 11.5,
-            sigmaY: 11.5,
+            sigmaX: outerSigma,
+            sigmaY: outerSigma,
             tileMode: TileMode.clamp,
           ),
           inner: ui.ImageFilter.blur(
-            sigmaX: 13.0,
-            sigmaY: 13.0,
+            sigmaX: innerSigma,
+            sigmaY: innerSigma,
             tileMode: TileMode.clamp,
           ),
         );
@@ -266,9 +307,11 @@ class StaticBlurredWallpaperService extends ChangeNotifier with WidgetsBindingOb
   @override
   void dispose() {
     _metricsDebounceTimer?.cancel();
+    _glassDebounceTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     globalBackgroundPath.removeListener(_onWallpaperOrThemeChanged);
     globalDarkModeNotifier.removeListener(_onWallpaperOrThemeChanged);
+    GlassAppearanceService.instance.removeListener(_onGlassAppearanceChanged);
     _blurredImage?.dispose();
     _blurredImage = null;
     super.dispose();

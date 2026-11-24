@@ -177,4 +177,9 @@ class StorageService {
   static const String keyCustomThemeColor = 'custom_theme_color';
   static const String keyEnableAcrylicBackdrop = 'enable_acrylic_backdrop';
   static const String keyPreviousScheduleConfig = 'schedule_config_previous';
+  static const String keyAutoCheckUpdateEnabled = 'auto_check_update_enabled';
+  static const String keyLastAutoUpdateCheckDate = 'last_auto_update_check_date';
+  static const String keyGlassOpacity = 'glass_surface_opacity';
+  static const String keyGlassBlur = 'glass_surface_blur';
+  static const String keyGlobalUiBlur = 'global_ui_blur';
 }

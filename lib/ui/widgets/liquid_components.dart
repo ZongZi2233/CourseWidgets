@@ -10,6 +10,7 @@ import 'package:flutter_miuix/miuix.dart';
 import '../../constants/theme_constants.dart';
 import '../../constants/version.dart' show kSolidColorBackground;
 import '../../utils/glass_settings_helper.dart';
+import '../../services/glass_appearance_service.dart';
 import '../../services/theme_service.dart' as theme;
 import '../../services/static_blur_service.dart';
 import '../animations/app_motion.dart';
@@ -110,23 +111,43 @@ class _AnimatedLiquidToastState extends State<_AnimatedLiquidToast>
               scale: _scale,
               child: Material(
                 color: Colors.transparent,
-                child: GlassContainer(
-                  useOwnLayer: true,
-                  quality: theme.ThemeService().glassQuality,
-                  shape: const LiquidRoundedSuperellipse(borderRadius: 20),
-                  settings: LiquidGlassSettings(
-                    glassColor: widget.isDark
-                        ? const Color(0x551E222B)
-                        : const Color(0x66FFFFFF),
-                    blur: 8.0,
-                    thickness: 16.0,
-                    lightIntensity: 0.70,
-                    ambientStrength: 0.45,
-                    ambientRim: 0.0,
-                    edgeAbsorption: 0.0,
-                    fresnelStrength: 0.0,
-                    saturation: 1.20,
-                  ),
+                child: ListenableBuilder(
+                  listenable: GlassAppearanceService.instance,
+                  builder: (context, toastChild) {
+                    final glass = GlassAppearanceService.instance;
+                    final settings = glass.applyToSettings(
+                      LiquidGlassSettings(
+                        glassColor: widget.isDark
+                            ? const Color(0x551E222B)
+                            : const Color(0x66FFFFFF),
+                        blur: 8.0,
+                        thickness: 16.0,
+                        lightIntensity: 0.70,
+                        ambientStrength: 0.45,
+                        ambientRim: 0.0,
+                        edgeAbsorption: 0.0,
+                        fresnelStrength: 0.0,
+                        saturation: 1.20,
+                      ),
+                      isDark: widget.isDark,
+                    );
+                    if (glass.isGlassOpaque) {
+                      return DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: settings.glassColor,
+                          borderRadius: SquircleGeometry.smoothRadius(20),
+                        ),
+                        child: toastChild,
+                      );
+                    }
+                    return GlassContainer(
+                      useOwnLayer: true,
+                      quality: theme.ThemeService().glassQuality,
+                      shape: const LiquidRoundedSuperellipse(borderRadius: 20),
+                      settings: settings,
+                      child: toastChild!,
+                    );
+                  },
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 18,
@@ -184,75 +205,94 @@ class LiquidCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final inLayer = context.dependOnInheritedWidgetOfExactType<InheritedLiquidGlass>() != null;
     final effectiveQuality = quality ?? theme.ThemeService().glassQuality;
+    final isDark = Theme.of(context).brightness == Brightness.dark ||
+        globalDarkModeNotifier.value;
 
-    final settings = glassColor != null
-        ? LiquidGlassSettings(
-            thickness: styleType == LiquidStyleType.micro ? 12.0 : 16.0,
-            blur: (styleType == LiquidStyleType.micro) ? 2.0 : 4.0,
-            glassColor: glassColor!,
-            refractiveIndex: 1.40,
-            lightIntensity: 0.70,
-            ambientStrength: 0.45,
-            saturation: 1.25,
-            bodyMode: GlassBodyMode.adaptive,
-            edgeAbsorption: 0.0,
-            ambientRim: 0.0,
-            fresnelStrength: 0.0,
-            specularSharpness: GlassSpecularSharpness.medium,
-          )
-        : (isPanel
-            ? GlassSettingsHelper.panelSettings
-            : GlassSettingsHelper.defaultSettings).copyWith(
-                bodyMode: GlassBodyMode.adaptive,
-                edgeAbsorption: 0.0,
-                ambientRim: 0.0,
-                fresnelStrength: 0.0,
-                specularSharpness: GlassSpecularSharpness.medium,
-              );
-
-    final effectiveColor = settings.glassColor;
-
-    return Semantics(
-      button: onTap != null,
-      selected: isSelected,
-      child: GestureDetector(
-        onTap: onTap != null
-            ? () {
-                HapticFeedback.lightImpact();
-                onTap!();
-              }
-            : null,
-        behavior: HitTestBehavior.opaque,
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(borderRadius),
-            boxShadow: [
-              if (isSelected)
-                BoxShadow(
-                  color: const Color(0x20FF9A9E).withValues(alpha: 0.4),
-                  blurRadius: 12,
-                  spreadRadius: 1,
-                )
-              else
-                BoxShadow(
-                  color: globalUseDarkMode
-                      ? Colors.black.withValues(alpha: 0.20)
-                      : Colors.black.withValues(alpha: 0.06),
-                  blurRadius: 8,
-                  spreadRadius: 0,
-                  offset: const Offset(0, 3),
+    return ListenableBuilder(
+      listenable: GlassAppearanceService.instance,
+      builder: (context, cardChild) {
+        final glass = GlassAppearanceService.instance;
+        final settings = glassColor != null
+            ? glass.applyToSettings(
+                LiquidGlassSettings(
+                  thickness: styleType == LiquidStyleType.micro ? 12.0 : 16.0,
+                  blur: (styleType == LiquidStyleType.micro) ? 2.0 : 4.0,
+                  glassColor: glassColor!,
+                  refractiveIndex: 1.40,
+                  lightIntensity: 0.70,
+                  ambientStrength: 0.45,
+                  saturation: 1.25,
+                  bodyMode: GlassBodyMode.adaptive,
+                  edgeAbsorption: 0.0,
+                  ambientRim: 0.0,
+                  fresnelStrength: 0.0,
+                  specularSharpness: GlassSpecularSharpness.medium,
                 ),
-            ],
+                isDark: isDark,
+              )
+            : (isPanel
+                    ? GlassSettingsHelper.panelSettings
+                    : GlassSettingsHelper.defaultSettings)
+                .copyWith(
+                  bodyMode: GlassBodyMode.adaptive,
+                  edgeAbsorption: 0.0,
+                  ambientRim: 0.0,
+                  fresnelStrength: 0.0,
+                  specularSharpness: GlassSpecularSharpness.medium,
+                );
+
+        return Semantics(
+          button: onTap != null,
+          selected: isSelected,
+          child: GestureDetector(
+            onTap: onTap != null
+                ? () {
+                    HapticFeedback.lightImpact();
+                    onTap!();
+                  }
+                : null,
+            behavior: HitTestBehavior.opaque,
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: SquircleGeometry.smoothRadius(borderRadius),
+                boxShadow: [
+                  if (isSelected)
+                    BoxShadow(
+                      color: const Color(0x20FF9A9E).withValues(alpha: 0.4),
+                      blurRadius: 12,
+                      spreadRadius: 1,
+                    )
+                  else
+                    BoxShadow(
+                      color: globalUseDarkMode
+                          ? Colors.black.withValues(alpha: 0.20)
+                          : Colors.black.withValues(alpha: 0.06),
+                      blurRadius: 8,
+                      spreadRadius: 0,
+                      offset: const Offset(0, 3),
+                    ),
+                ],
+              ),
+              child: glass.isGlassOpaque
+                  ? ClipRSuperellipse(
+                      borderRadius: SquircleGeometry.smoothRadius(borderRadius),
+                      child: Container(
+                        color: settings.glassColor,
+                        child: cardChild,
+                      ),
+                    )
+                  : GlassContainer(
+                      useOwnLayer: !inLayer,
+                      shape: LiquidRoundedSuperellipse(borderRadius: borderRadius),
+                      settings: settings,
+                      quality: effectiveQuality,
+                      child: cardChild!,
+                    ),
+            ),
           ),
-          child: GlassContainer(
-            useOwnLayer: !inLayer,
-            shape: LiquidRoundedSuperellipse(borderRadius: borderRadius),
-            settings: settings.copyWith(glassColor: effectiveColor),
-            quality: effectiveQuality,
-            child: Padding(padding: EdgeInsets.all(padding), child: child),
-          ),
-        ),
-      ),
+        );
+      },
+      child: Padding(padding: EdgeInsets.all(padding), child: child),
     );
   }
 }
@@ -295,32 +335,46 @@ class LiquidButton extends StatelessWidget {
                 : (lum > 0.35 ? const Color(0xFF1E2129) : Colors.white)));
     final effectiveQuality = quality ?? theme.ThemeService().glassQuality;
 
-    return GlassButton.custom(
-      onTap: onTap ?? () {},
-      width: width,
-      height: height ?? 48,
-      style: GlassButtonStyle.filled,
-      useOwnLayer: useOwnLayer ?? !inLayer,
-      quality: effectiveQuality,
-      interactionScale: 1.05,
-      glowColor: color.withValues(alpha: 0.35),
-      glowRadius: 22,
-      settings: LiquidGlassSettings(
-        glassColor: isOutline
-            ? (isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.06))
-            : color.withValues(alpha: 0.7),
-        blur: 0.6,
-        thickness: 16.0,
-        refractiveIndex: 1.48,
-        chromaticAberration: 0.08,
-        lightIntensity: 0.75,
-        bodyMode: GlassBodyMode.adaptive,
-        edgeAbsorption: 0.0,
-        ambientRim: 0.0,
-        fresnelStrength: 0.0,
-        specularSharpness: GlassSpecularSharpness.sharp,
-      ),
-      shape: const LiquidRoundedSuperellipse(borderRadius: 16),
+    return ListenableBuilder(
+      listenable: GlassAppearanceService.instance,
+      builder: (context, buttonChild) {
+        final effectiveSettings = GlassAppearanceService.instance.applyToSettings(
+          LiquidGlassSettings(
+            glassColor: isOutline
+                ? (isDark
+                    ? Colors.white.withValues(alpha: 0.1)
+                    : Colors.black.withValues(alpha: 0.06))
+                : color.withValues(alpha: 0.7),
+            blur: 0.6,
+            thickness: 16.0,
+            refractiveIndex: 1.48,
+            chromaticAberration: 0.08,
+            lightIntensity: 0.75,
+            bodyMode: GlassBodyMode.adaptive,
+            edgeAbsorption: 0.0,
+            ambientRim: 0.0,
+            fresnelStrength: 0.0,
+            specularSharpness: GlassSpecularSharpness.sharp,
+          ),
+          isDark: isDark,
+          opaqueColorOverride: isOutline ? null : color.withValues(alpha: 1.0),
+        );
+
+        return GlassButton.custom(
+          onTap: onTap ?? () {},
+          width: width,
+          height: height ?? 48,
+          style: GlassButtonStyle.filled,
+          useOwnLayer: useOwnLayer ?? !inLayer,
+          quality: effectiveQuality,
+          interactionScale: 1.05,
+          glowColor: color.withValues(alpha: 0.35),
+          glowRadius: 22,
+          settings: effectiveSettings,
+          shape: const LiquidRoundedSuperellipse(borderRadius: 16),
+          child: buttonChild!,
+        );
+      },
       child: Center(
         child: Text(
           text,
@@ -343,18 +397,32 @@ class LiquidSwitch extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GlassSwitch(
-      value: value,
-      onChanged: onChanged,
-      width: 56,
-      height: 32,
-      activeColor: AppThemeColors.babyPink,
-      settings: const LiquidGlassSettings(
-        thickness: 10,
-        blur: 2.0,
-        refractiveIndex: 1.35,
-        lightIntensity: 0.6,
-      ),
+    final isDark = Theme.of(context).brightness == Brightness.dark ||
+        globalDarkModeNotifier.value;
+    return ListenableBuilder(
+      listenable: GlassAppearanceService.instance,
+      builder: (context, _) {
+        final effectiveSettings = GlassAppearanceService.instance.applyToSettings(
+          LiquidGlassSettings(
+            glassColor: isDark
+                ? const Color(0x30101216)
+                : const Color(0x30FFFFFF),
+            thickness: 10,
+            blur: 2.0,
+            refractiveIndex: 1.35,
+            lightIntensity: 0.6,
+          ),
+          isDark: isDark,
+        );
+        return GlassSwitch(
+          value: value,
+          onChanged: onChanged,
+          width: 56,
+          height: 32,
+          activeColor: AppThemeColors.babyPink,
+          settings: effectiveSettings,
+        );
+      },
     );
   }
 }
@@ -409,7 +477,10 @@ class LiquidGlassDialog extends StatelessWidget {
           reverseCurve: AppCurves.easeAccel,
         );
         final fade = fadeAnim.value.clamp(0.0, 1.0);
-        final blurSigma = (6.5 * fade).clamp(0.0, 6.5);
+        final maxScrimBlur = GlassAppearanceService.instance.resolveGlobalUiBlur(
+          6.5,
+        );
+        final blurSigma = (maxScrimBlur * fade).clamp(0.0, maxScrimBlur);
         final scrimColor = Colors.black.withValues(
           alpha: (isDark ? 0.26 : 0.13) * fade,
         );
@@ -453,7 +524,7 @@ class LiquidGlassDialog extends StatelessWidget {
       ),
     ];
 
-    final dialogGlassSettings = GlassSettingsHelper.getDialogSettings().copyWith(
+    final baseDialogSettings = GlassSettingsHelper.getDialogSettings().copyWith(
       glassColor: isDark
           ? const Color(0x9E151822)
           : const Color(0x9DF7F9FE),
@@ -475,49 +546,75 @@ class LiquidGlassDialog extends StatelessWidget {
         constraints: BoxConstraints(maxWidth: maxWidth),
         child: Material(
           type: MaterialType.transparency,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              borderRadius: SquircleGeometry.smoothRadius(28),
-              boxShadow: HyperOSShadows.modal(isDark),
-            ),
-            child: GlassContainer(
-              useOwnLayer: true,
-              quality: theme.ThemeService().glassQuality,
-              clipBehavior: Clip.antiAlias,
-              shape: const LiquidRoundedSuperellipse(borderRadius: 28),
-              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 22),
-              settings: dialogGlassSettings,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    title,
+          child: ListenableBuilder(
+            listenable: GlassAppearanceService.instance,
+            builder: (context, dialogContent) {
+              final glass = GlassAppearanceService.instance;
+              final dialogGlassSettings = glass.applyToSettings(
+                baseDialogSettings,
+                isDark: isDark,
+              );
+              return DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: SquircleGeometry.smoothRadius(28),
+                  boxShadow: HyperOSShadows.modal(isDark),
+                ),
+                child: glass.isGlassOpaque
+                    ? ClipRSuperellipse(
+                        borderRadius: SquircleGeometry.smoothRadius(28),
+                        child: Container(
+                          color: dialogGlassSettings.glassColor,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 22,
+                            vertical: 22,
+                          ),
+                          child: dialogContent,
+                        ),
+                      )
+                    : GlassContainer(
+                        useOwnLayer: true,
+                        quality: theme.ThemeService().glassQuality,
+                        clipBehavior: Clip.antiAlias,
+                        shape: const LiquidRoundedSuperellipse(borderRadius: 28),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 22,
+                          vertical: 22,
+                        ),
+                        settings: dialogGlassSettings,
+                        child: dialogContent!,
+                      ),
+              );
+            },
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : const Color(0xFF1E2128),
+                    letterSpacing: -0.2,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 12),
+                Flexible(
+                  child: DefaultTextStyle(
                     style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: isDark ? Colors.white : const Color(0xFF1E2128),
-                      letterSpacing: -0.2,
+                      fontSize: 14.5,
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.78)
+                          : const Color(0xFF4A5060),
+                      height: 1.45,
                     ),
                     textAlign: TextAlign.center,
+                    child: content,
                   ),
-                  const SizedBox(height: 12),
-                  Flexible(
-                    child: DefaultTextStyle(
-                      style: TextStyle(
-                        fontSize: 14.5,
-                        color: isDark
-                            ? Colors.white.withValues(alpha: 0.78)
-                            : const Color(0xFF4A5060),
-                        height: 1.45,
-                      ),
-                      textAlign: TextAlign.center,
-                      child: content,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  _buildActions(context, effectiveActions, isDark),
-                ],
-              ),
+                ),
+                const SizedBox(height: 20),
+                _buildActions(context, effectiveActions, isDark),
+              ],
             ),
           ),
         ),
@@ -633,7 +730,10 @@ Future<T?> showLiquidDialog<T>({
         reverseCurve: AppCurves.easeAccel,
       );
       final fade = fadeAnim.value.clamp(0.0, 1.0);
-      final blurSigma = (6.5 * fade).clamp(0.0, 6.5);
+      final maxScrimBlur = GlassAppearanceService.instance.resolveGlobalUiBlur(
+        6.5,
+      );
+      final blurSigma = (maxScrimBlur * fade).clamp(0.0, maxScrimBlur);
       final scrimColor = Colors.black.withValues(
         alpha: (isDark ? 0.26 : 0.13) * fade,
       );
@@ -766,7 +866,10 @@ Future<T?> showSharedElementGlassDialog<T>({
       )!
           .clamp(4.0, 32.0);
 
-      final blurSigma = (6.5 * fade).clamp(0.0, 6.5);
+      final maxScrimBlur = GlassAppearanceService.instance.resolveGlobalUiBlur(
+        6.5,
+      );
+      final blurSigma = (maxScrimBlur * fade).clamp(0.0, maxScrimBlur);
       final scrimColor = Colors.black.withValues(
         alpha: (isDark ? 0.24 : 0.12) * fade,
       );
@@ -785,62 +888,97 @@ Future<T?> showSharedElementGlassDialog<T>({
 
       final BorderRadius borderRadius = BorderRadius.circular(currentRadius);
 
-      Widget glassDialogShell = DecoratedBox(
-        decoration: BoxDecoration(
-          borderRadius: SquircleGeometry.smoothRadius(currentRadius),
-          boxShadow: HyperOSShadows.modal(isDark),
-        ),
-        child: ClipRSuperellipse(
-          borderRadius: borderRadius,
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 22.0, sigmaY: 22.0),
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: isDark
-                      ? const [Color(0xAD1F2432), Color(0x9E141822)]
-                      : const [Color(0xD9FFFFFF), Color(0xBDF2F5FC)],
-                ),
-                borderRadius: borderRadius,
-                border: Border.all(
-                  color: isDark
-                      ? Colors.white.withValues(alpha: 0.16)
-                      : Colors.white.withValues(alpha: 0.85),
-                  width: 1.0,
-                ),
-              ),
-              child: OverflowBox(
-                alignment: Alignment.center,
-                minWidth: targetW,
-                maxWidth: targetW,
-                minHeight: targetH,
-                maxHeight: targetH,
-                child: Material(
-                  type: MaterialType.transparency,
-                  child: SizedBox(
-                    width: targetW,
-                    height: targetH,
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        if (previewOpacity > 0.01 &&
-                            sourcePreviewBuilder != null)
-                          IgnorePointer(
-                            child: Opacity(
-                              opacity: previewOpacity,
-                              child: sourcePreviewBuilder(ctx),
-                            ),
-                          ),
-                        Opacity(
-                          opacity: contentOpacity,
-                          child: child,
-                        ),
-                      ],
-                    ),
+      Widget glassDialogShell = ListenableBuilder(
+        listenable: GlassAppearanceService.instance,
+        builder: (context, innerDialogBody) {
+          final glass = GlassAppearanceService.instance;
+          final double shellBlur = glass.resolveGlassBlur(22.0);
+          final bool useShellBlur = !glass.isGlassOpaque && shellBlur > 0.05;
+          final List<Color> gradientColors = isDark
+              ? [
+                  glass.resolveGlassColor(
+                    baseColor: const Color(0xAD1F2432),
+                    isDark: true,
                   ),
-                ),
+                  glass.resolveGlassColor(
+                    baseColor: const Color(0x9E141822),
+                    isDark: true,
+                  ),
+                ]
+              : [
+                  glass.resolveGlassColor(
+                    baseColor: const Color(0xD9FFFFFF),
+                    isDark: false,
+                  ),
+                  glass.resolveGlassColor(
+                    baseColor: const Color(0xBDF2F5FC),
+                    isDark: false,
+                  ),
+                ];
+
+          final Widget shellContainer = Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: gradientColors,
+              ),
+              borderRadius: borderRadius,
+              border: Border.all(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.16)
+                    : Colors.white.withValues(alpha: 0.85),
+                width: 1.0,
+              ),
+            ),
+            child: innerDialogBody,
+          );
+
+          return DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: SquircleGeometry.smoothRadius(currentRadius),
+              boxShadow: HyperOSShadows.modal(isDark),
+            ),
+            child: ClipRSuperellipse(
+              borderRadius: borderRadius,
+              child: useShellBlur
+                  ? BackdropFilter(
+                      filter: ImageFilter.blur(
+                        sigmaX: shellBlur,
+                        sigmaY: shellBlur,
+                      ),
+                      child: shellContainer,
+                    )
+                  : shellContainer,
+            ),
+          );
+        },
+        child: OverflowBox(
+          alignment: Alignment.center,
+          minWidth: targetW,
+          maxWidth: targetW,
+          minHeight: targetH,
+          maxHeight: targetH,
+          child: Material(
+            type: MaterialType.transparency,
+            child: SizedBox(
+              width: targetW,
+              height: targetH,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  if (previewOpacity > 0.01 && sourcePreviewBuilder != null)
+                    IgnorePointer(
+                      child: Opacity(
+                        opacity: previewOpacity,
+                        child: sourcePreviewBuilder(ctx),
+                      ),
+                    ),
+                  Opacity(
+                    opacity: contentOpacity,
+                    child: child,
+                  ),
+                ],
               ),
             ),
           ),
@@ -1007,50 +1145,63 @@ class LiquidBackButton extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primaryColor = Theme.of(context).primaryColor;
 
-    return GlassIconButton(
-      icon: const Icon(
-        CupertinoIcons.back,
-        size: 22,
-        color: Colors.white,
-      ),
-      onPressed: () {
-        HapticFeedback.lightImpact();
-        if (onTap != null) {
-          onTap!();
-        } else {
-          Navigator.maybePop(context);
-        }
-      },
-      size: 44,
-      shape: GlassIconButtonShape.roundedSquare,
-      borderRadius: 16,
-      interactionScale: 1.10,
-      glowColor: primaryColor.withValues(alpha: isDark ? 0.42 : 0.32),
-      glowRadius: 24,
-      useOwnLayer: true,
-      quality: GlassQuality.premium,
-      settings: LiquidGlassSettings(
-        glassColor: isDark ? const Color(0x18FFFFFF) : const Color(0x10FFFFFF),
-        blur: 0.3,
-        thickness: 38.0,
-        refractiveIndex: 1.50,
-        chromaticAberration: 0.10,
-        lightIntensity: 0.80,
-        ambientStrength: 0.35,
-        edgeAbsorption: 0.0,
-        ambientRim: 0.10,
-        fresnelStrength: 0.25,
-        specularSharpness: GlassSpecularSharpness.sharp,
-        shadow: [
-          BoxShadow(
-            color: (isDark ? Colors.black : const Color(0xFF1E2129))
-                .withValues(alpha: isDark ? 0.36 : 0.14),
-            blurRadius: 14.0,
-            spreadRadius: -2.0,
-            offset: const Offset(0, 3.0),
+    return ListenableBuilder(
+      listenable: GlassAppearanceService.instance,
+      builder: (context, _) {
+        final effectiveSettings = GlassAppearanceService.instance.applyToSettings(
+          LiquidGlassSettings(
+            glassColor:
+                isDark ? const Color(0x18FFFFFF) : const Color(0x10FFFFFF),
+            blur: 0.3,
+            thickness: 38.0,
+            refractiveIndex: 1.50,
+            chromaticAberration: 0.10,
+            lightIntensity: 0.80,
+            ambientStrength: 0.35,
+            edgeAbsorption: 0.0,
+            ambientRim: 0.10,
+            fresnelStrength: 0.25,
+            specularSharpness: GlassSpecularSharpness.sharp,
+            shadow: [
+              BoxShadow(
+                color: (isDark ? Colors.black : const Color(0xFF1E2129))
+                    .withValues(alpha: isDark ? 0.36 : 0.14),
+                blurRadius: 14.0,
+                spreadRadius: -2.0,
+                offset: const Offset(0, 3.0),
+              ),
+            ],
           ),
-        ],
-      ),
+          isDark: isDark,
+        );
+
+        return GlassIconButton(
+          icon: Icon(
+            CupertinoIcons.back,
+            size: 22,
+            color: (GlassAppearanceService.instance.isGlassOpaque && !isDark)
+                ? const Color(0xFF1E2129)
+                : Colors.white,
+          ),
+          onPressed: () {
+            HapticFeedback.lightImpact();
+            if (onTap != null) {
+              onTap!();
+            } else {
+              Navigator.maybePop(context);
+            }
+          },
+          size: 44,
+          shape: GlassIconButtonShape.roundedSquare,
+          borderRadius: 16,
+          interactionScale: 1.10,
+          glowColor: primaryColor.withValues(alpha: isDark ? 0.42 : 0.32),
+          glowRadius: 24,
+          useOwnLayer: true,
+          quality: GlassQuality.premium,
+          settings: effectiveSettings,
+        );
+      },
     );
   }
 }
@@ -1070,57 +1221,69 @@ class FloatingLiquidBackButton extends StatelessWidget {
         child: SafeArea(
           top: false,
           left: false,
-          child: GlassButton.custom(
-          width: 52,
-          height: 52,
-          useOwnLayer: true,
-          shape: const LiquidOval(),
-          quality: theme.ThemeService().glassQuality,
-          stretch: 0.25,
-          interactionScale: 1.12,
-            ambientBaseLight: 0.0,
-          onTap: () {
-            HapticFeedback.lightImpact();
-            if (onBack != null) {
-              onBack!();
-            } else {
-              Navigator.maybePop(context);
-            }
-          },
-          settings: LiquidGlassSettings(
-            glassColor: isDark
-                ? const Color(0x35101216)
-                : const Color(0x30FFFFFF),
-            blur: 0.35,
-            thickness: 16.0,
-            refractiveIndex: 1.44,
-            edgeAbsorption: 0.10,
-            chromaticAberration: 0.12,
-            lightIntensity: 0.75,
-            ambientStrength: 0.35,
-            ambientRim: 0.0,
-            fresnelStrength: 0.0,
-            saturation: 1.15,
-            specularSharpness: GlassSpecularSharpness.sharp,
-            shadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: isDark ? 0.38 : 0.14),
-                blurRadius: 18.0,
-                spreadRadius: -1.0,
-                offset: const Offset(0, 4.0),
+          child: ListenableBuilder(
+            listenable: GlassAppearanceService.instance,
+            builder: (context, iconChild) {
+              final effectiveSettings =
+                  GlassAppearanceService.instance.applyToSettings(
+                LiquidGlassSettings(
+                  glassColor: isDark
+                      ? const Color(0x35101216)
+                      : const Color(0x30FFFFFF),
+                  blur: 0.35,
+                  thickness: 16.0,
+                  refractiveIndex: 1.44,
+                  edgeAbsorption: 0.10,
+                  chromaticAberration: 0.12,
+                  lightIntensity: 0.75,
+                  ambientStrength: 0.35,
+                  ambientRim: 0.0,
+                  fresnelStrength: 0.0,
+                  saturation: 1.15,
+                  specularSharpness: GlassSpecularSharpness.sharp,
+                  shadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: isDark ? 0.38 : 0.14),
+                      blurRadius: 18.0,
+                      spreadRadius: -1.0,
+                      offset: const Offset(0, 4.0),
+                    ),
+                  ],
+                ),
+                isDark: isDark,
+              );
+
+              return GlassButton.custom(
+                width: 52,
+                height: 52,
+                useOwnLayer: true,
+                shape: const LiquidOval(),
+                quality: theme.ThemeService().glassQuality,
+                stretch: 0.25,
+                interactionScale: 1.12,
+                ambientBaseLight: 0.0,
+                onTap: () {
+                  HapticFeedback.lightImpact();
+                  if (onBack != null) {
+                    onBack!();
+                  } else {
+                    Navigator.maybePop(context);
+                  }
+                },
+                settings: effectiveSettings,
+                child: iconChild!,
+              );
+            },
+            child: Center(
+              child: Icon(
+                CupertinoIcons.back,
+                size: 22,
+                color: isDark ? Colors.white : const Color(0xFF1D2129),
               ),
-            ],
-          ),
-          child: Center(
-            child: Icon(
-              CupertinoIcons.back,
-              size: 22,
-              color: isDark ? Colors.white : const Color(0xFF1D2129),
             ),
           ),
         ),
       ),
-    ),
     );
   }
 }
@@ -1141,6 +1304,33 @@ class FloatingGlassHeaderButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDark ? Colors.white : const Color(0xFF1D2129);
+    final rowContent = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            CupertinoIcons.chevron_left,
+            size: 18,
+            color: textColor.withValues(alpha: 0.9),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.bold,
+              color: textColor,
+              letterSpacing: 0.3,
+            ),
+          ),
+          if (trailing != null) ...[
+            const SizedBox(width: 8),
+            trailing!,
+          ],
+        ],
+      ),
+    );
 
     return SpringTouchFeedback(
       onTap: () {
@@ -1152,45 +1342,39 @@ class FloatingGlassHeaderButton extends StatelessWidget {
         }
       },
       child: RepaintBoundary(
-        child: ClipRSuperellipse(
-          borderRadius: SquircleGeometry.smoothRadius(22),
-          child: BackdropFilter.grouped(
-            filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        child: ListenableBuilder(
+          listenable: GlassAppearanceService.instance,
+          builder: (context, pillChild) {
+            final glass = GlassAppearanceService.instance;
+            final double sigma = glass.resolveGlassBlur(16.0);
+            final Color bgColor = glass.resolveGlassColor(
+              baseColor: isDark
+                  ? Colors.black.withValues(alpha: 0.35)
+                  : Colors.white.withValues(alpha: 0.65),
+              isDark: isDark,
+            );
+            final bool useBlur = !glass.isGlassOpaque && sigma > 0.05;
+
+            final container = Container(
               decoration: BoxDecoration(
-                color: isDark
-                    ? Colors.black.withValues(alpha: 0.35)
-                    : Colors.white.withValues(alpha: 0.65),
+                color: bgColor,
                 borderRadius: SquircleGeometry.smoothRadius(22),
                 boxShadow: HyperOSShadows.pill(isDark),
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    CupertinoIcons.chevron_left,
-                    size: 18,
-                    color: textColor.withValues(alpha: 0.9),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.bold,
-                      color: textColor,
-                      letterSpacing: 0.3,
-                    ),
-                  ),
-                  if (trailing != null) ...[
-                    const SizedBox(width: 8),
-                    trailing!,
-                  ],
-                ],
-              ),
-            ),
-          ),
+              child: pillChild,
+            );
+
+            return ClipRSuperellipse(
+              borderRadius: SquircleGeometry.smoothRadius(22),
+              child: useBlur
+                  ? BackdropFilter.grouped(
+                      filter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
+                      child: container,
+                    )
+                  : container,
+            );
+          },
+          child: rowContent,
         ),
       ),
     );
@@ -1424,109 +1608,134 @@ class HyperOSCard extends StatelessWidget {
     final isSolidBg = globalBackgroundPath.value == kSolidColorBackground;
     final primary = theme.ThemeService().primaryColor;
 
-    // [v3.1.0] 在纯色无壁纸模式下（浅色纯白 #FFFFFF / 夜间微信深灰 #111111），
-    // 为卡片赋予层次分明的温润微表面色（浅色 #F6F7FA 融合微主题色，夜间 #191919 微信深色卡片底色）
-    final defaultBgColor = isSolidBg
-        ? (isDark
-            ? Color.alphaBlend(primary.withValues(alpha: 0.06), const Color(0xFF191919))
-            : Color.alphaBlend(primary.withValues(alpha: 0.05), const Color(0xFFF6F7FB)))
-        : (isDark
-            ? Color.alphaBlend(primary.withValues(alpha: 0.14), const Color(0x5514171E))
-            : Color.alphaBlend(primary.withValues(alpha: 0.12), const Color(0x60FFFFFF)));
-
-    final effectiveColor = color ?? defaultBgColor;
-
-    final lum = effectiveColor.computeLuminance();
-    final autoTextColor = lum > 0.45 ? const Color(0xFF1B1D24) : const Color(0xFFF2F5FA);
-    final effectiveTextColor = contentColor ?? autoTextColor;
-
     final effectiveBorderSide = border ?? BorderSide.none;
-
     final shape = RoundedSuperellipseBorder(
       borderRadius: BorderRadius.all(Radius.circular(cornerRadius)),
       side: effectiveBorderSide,
     );
-
     final effectiveShadows = shadows ?? HyperOSShadows.card(isDark);
-
     final screenSize = MediaQuery.sizeOf(context);
     final scrollable = Scrollable.maybeOf(context);
     final scrollPosition = scrollable?.position;
+    final paddedChild = RepaintBoundary(
+      child: Padding(
+        padding: padding,
+        child: child,
+      ),
+    );
 
-    Widget cardBody;
-    if (useBlur && !isSolidBg) {
-      cardBody = ListenableBuilder(
-        listenable: StaticBlurredWallpaperService.instance,
-        builder: (context, _) {
-          return _SharedBlurStencilWidget(
-            blurredImage: StaticBlurredWallpaperService.instance.blurredImage,
+    return ListenableBuilder(
+      listenable: Listenable.merge([
+        StaticBlurredWallpaperService.instance,
+        GlassAppearanceService.instance,
+      ]),
+      builder: (context, cardInner) {
+        final glass = GlassAppearanceService.instance;
+        final Color defaultBgColor = isSolidBg
+            ? (isDark
+                ? Color.alphaBlend(
+                    primary.withValues(alpha: 0.06),
+                    const Color(0xFF191919),
+                  )
+                : Color.alphaBlend(
+                    primary.withValues(alpha: 0.05),
+                    const Color(0xFFF6F7FB),
+                  ))
+            : glass.resolveGlassColor(
+                baseColor: isDark
+                    ? Color.alphaBlend(
+                        primary.withValues(alpha: 0.14),
+                        const Color(0x5514171E),
+                      )
+                    : Color.alphaBlend(
+                        primary.withValues(alpha: 0.12),
+                        const Color(0x60FFFFFF),
+                      ),
+                isDark: isDark,
+                opaqueColorOverride: isDark
+                    ? Color.alphaBlend(
+                        primary.withValues(alpha: 0.08),
+                        const Color(0xFF191B23),
+                      )
+                    : Color.alphaBlend(
+                        primary.withValues(alpha: 0.06),
+                        const Color(0xFFF6F7FB),
+                      ),
+              );
+
+        final Color effectiveColor;
+        if (color == null) {
+          effectiveColor = defaultBgColor;
+        } else if (isSolidBg || color!.a >= 0.99) {
+          effectiveColor = color!;
+        } else {
+          final opaqueBlended = Color.alphaBlend(
+            color!,
+            glass.defaultOpaqueSurfaceColor(isDark),
+          );
+          effectiveColor = glass.resolveGlassColor(
+            baseColor: color!,
+            isDark: isDark,
+            opaqueColorOverride: opaqueBlended,
+          );
+        }
+
+        final lum = effectiveColor.computeLuminance();
+        final autoTextColor =
+            lum > 0.45 ? const Color(0xFF1B1D24) : const Color(0xFFF2F5FA);
+        final effectiveTextColor = contentColor ?? autoTextColor;
+
+        final bool allowStaticBlur =
+            useBlur && !isSolidBg && glass.shouldRenderGlassBlur;
+
+        Widget cardContent = MiuixContentColor(
+          color: effectiveTextColor,
+          child: _SharedBlurStencilWidget(
+            blurredImage: allowStaticBlur
+                ? StaticBlurredWallpaperService.instance.blurredImage
+                : null,
             screenSize: screenSize,
             backgroundColor: effectiveColor,
             cornerRadius: cornerRadius,
             shape: shape,
             shadows: effectiveShadows,
-            scrollPosition: scrollPosition,
-            child: RepaintBoundary(
-              child: Padding(
-                padding: padding,
-                child: child,
-              ),
-            ),
-          );
-        },
-      );
-    } else {
-      cardBody = _SharedBlurStencilWidget(
-        blurredImage: null,
-        screenSize: screenSize,
-        backgroundColor: effectiveColor,
-        cornerRadius: cornerRadius,
-        shape: shape,
-        shadows: effectiveShadows,
-        scrollPosition: null,
-        child: RepaintBoundary(
-          child: Padding(
-            padding: padding,
-            child: child,
+            scrollPosition: allowStaticBlur ? scrollPosition : null,
+            child: cardInner!,
           ),
-        ),
-      );
-    }
+        );
 
-    Widget cardContent = MiuixContentColor(
-      color: effectiveTextColor,
-      child: cardBody,
+        if (onTap != null || onLongPress != null) {
+          cardContent = MiuixPressable(
+            onPressed: onTap != null
+                ? () {
+                    SharedElementSourceRegistry.recordFromContext(
+                      context,
+                      cornerRadius: cornerRadius,
+                    );
+                    onTap!();
+                  }
+                : null,
+            onLongPress: onLongPress != null
+                ? () {
+                    SharedElementSourceRegistry.recordFromContext(
+                      context,
+                      cornerRadius: cornerRadius,
+                    );
+                    onLongPress!();
+                  }
+                : null,
+            feedbackType: feedbackType,
+            sinkAmount: 0.96,
+            overlayColor: Colors.transparent,
+            borderRadius: BorderRadius.circular(cornerRadius),
+            child: cardContent,
+          );
+        }
+
+        return cardContent;
+      },
+      child: paddedChild,
     );
-
-    if (onTap != null || onLongPress != null) {
-      cardContent = MiuixPressable(
-        onPressed: onTap != null
-            ? () {
-                SharedElementSourceRegistry.recordFromContext(
-                  context,
-                  cornerRadius: cornerRadius,
-                );
-                onTap!();
-              }
-            : null,
-        onLongPress: onLongPress != null
-            ? () {
-                SharedElementSourceRegistry.recordFromContext(
-                  context,
-                  cornerRadius: cornerRadius,
-                );
-                onLongPress!();
-              }
-            : null,
-        feedbackType: feedbackType,
-        sinkAmount: 0.96,
-        overlayColor: Colors.transparent,
-        borderRadius: BorderRadius.circular(cornerRadius),
-        child: cardContent,
-      );
-    }
-
-    return cardContent;
   }
 }
 

@@ -1,6 +1,7 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
+import '../../services/glass_appearance_service.dart';
 import '../../services/theme_service.dart';
 
 /// [v3.0.0-alpha13] 物理状态栏顶级沉浸式无极渐变物理高斯模糊遮罩 (Progressive Variable Blur)
@@ -34,41 +35,58 @@ class ImmersiveStatusBarBackdrop extends StatelessWidget {
       height: totalHeight,
       child: IgnorePointer(
         child: RepaintBoundary(
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              // 阶段 1: 硬件级无极渐变高斯模糊或多阶梯渐变模糊
-              if (ui.ImageFilter.isShaderFilterSupported)
-                const ProgressiveBlur(
-                  maxSigma: 20,
-                  direction: ProgressiveBlurDirection.topToBottom,
-                  falloff: 1.2,
-                )
-              else
-                _buildStaggeredSlicesBlur(context, totalHeight),
+          child: ListenableBuilder(
+            listenable: GlassAppearanceService.instance,
+            builder: (context, _) {
+              final glass = GlassAppearanceService.instance;
+              final maxSigma = glass.resolveGlobalUiBlur(
+                20.0,
+                minSigma: 8.0,
+                maxSigma: 28.0,
+              );
+              final globalScale = glass.globalUiBlurScale.clamp(0.42, 1.45);
 
-              // 阶段 2: 极微环境光防眩抗眩晕柔光层（极低饱和与透光，杜绝死黑与生硬色块）
-              DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    stops: const [0.0, 0.60, 1.0],
-                    colors: isDark
-                        ? const [
-                            Color(0x240E1015),
-                            Color(0x0A0E1015),
-                            Colors.transparent,
-                          ]
-                        : const [
-                            Color(0x20FFFFFF),
-                            Color(0x06FFFFFF),
-                            Colors.transparent,
-                          ],
+              return Stack(
+                fit: StackFit.expand,
+                children: [
+                  // 阶段 1: 硬件级无极渐变高斯模糊或多阶梯渐变模糊（受全局 UI 模糊控制，不可完全关闭）
+                  if (ui.ImageFilter.isShaderFilterSupported)
+                    ProgressiveBlur(
+                      maxSigma: maxSigma,
+                      direction: ProgressiveBlurDirection.topToBottom,
+                      falloff: 1.2,
+                    )
+                  else
+                    _buildStaggeredSlicesBlur(
+                      context,
+                      totalHeight,
+                      globalScale,
+                    ),
+
+                  // 阶段 2: 极微环境光防眩抗眩晕柔光层（极低饱和与透光，杜绝死黑与生硬色块）
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        stops: const [0.0, 0.60, 1.0],
+                        colors: isDark
+                            ? const [
+                                Color(0x240E1015),
+                                Color(0x0A0E1015),
+                                Colors.transparent,
+                              ]
+                            : const [
+                                Color(0x20FFFFFF),
+                                Color(0x06FFFFFF),
+                                Colors.transparent,
+                              ],
+                      ),
+                    ),
                   ),
-                ),
-              ),
-            ],
+                ],
+              );
+            },
           ),
         ),
       ),
@@ -76,7 +94,11 @@ class ImmersiveStatusBarBackdrop extends StatelessWidget {
   }
 
   /// 当平台着色器不可用时的多阶梯渐进衰减平滑模糊降级方案 (5阶共享采样)
-  Widget _buildStaggeredSlicesBlur(BuildContext context, double totalHeight) {
+  Widget _buildStaggeredSlicesBlur(
+    BuildContext context,
+    double totalHeight,
+    double globalScale,
+  ) {
     const sigmas = [20.0, 14.0, 9.0, 5.0, 2.5];
     const fractions = [0.35, 0.55, 0.75, 0.90, 1.0];
     final hasGroup = BackdropGroup.of(context) != null;
@@ -84,6 +106,7 @@ class ImmersiveStatusBarBackdrop extends StatelessWidget {
     final slices = Stack(
       children: List.generate(sigmas.length, (i) {
         final sliceHeight = totalHeight * fractions[i];
+        final sigma = (sigmas[i] * 0.45 * globalScale).clamp(0.8, 18.0);
         return Positioned(
           top: 0,
           left: 0,
@@ -92,8 +115,8 @@ class ImmersiveStatusBarBackdrop extends StatelessWidget {
           child: ClipRect(
             child: BackdropFilter.grouped(
               filter: ui.ImageFilter.blur(
-                sigmaX: sigmas[i] * 0.45,
-                sigmaY: sigmas[i] * 0.45,
+                sigmaX: sigma,
+                sigmaY: sigma,
               ),
               child: const SizedBox.expand(),
             ),

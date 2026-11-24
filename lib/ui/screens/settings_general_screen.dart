@@ -6,6 +6,8 @@ import 'package:file_selector/file_selector.dart';
 import 'dart:io';
 import '../../constants/theme_constants.dart';
 import '../../constants/version.dart' show kSolidColorBackground;
+import '../../services/app_update_service.dart';
+import '../../services/glass_appearance_service.dart';
 import '../../services/storage_service.dart';
 import '../../services/theme_service.dart' as theme;
 import '../../utils/glass_settings_helper.dart';
@@ -27,6 +29,7 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
   final theme.ThemeService _themeService = theme.ThemeService();
 
   bool _adaptiveDarkMode = false;
+  bool _autoCheckUpdate = true;
   theme.ThemeMode _currentThemeMode = theme.ThemeMode.defaultMode;
 
   bool get _isDarkMode => _themeService.isDarkMode;
@@ -51,11 +54,24 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
   Future<void> _loadSettings() async {
     final adaptiveMode =
         _storage.getBool(StorageService.keyAdaptiveDarkMode) ?? false;
+    final autoCheckUpdate = AppUpdateService.instance.isAutoCheckUpdateEnabled();
 
     setState(() {
       _adaptiveDarkMode = adaptiveMode;
+      _autoCheckUpdate = autoCheckUpdate;
       _currentThemeMode = _themeService.themeMode;
     });
+  }
+
+  Future<void> _toggleAutoCheckUpdate(bool value) async {
+    HapticFeedback.selectionClick();
+    setState(() {
+      _autoCheckUpdate = value;
+    });
+    await AppUpdateService.instance.setAutoCheckUpdateEnabled(value);
+    if (mounted) {
+      _showToast(value ? '已开启每日自动检查更新' : '已关闭每日自动检查更新');
+    }
   }
 
   void _toggleDarkMode(bool value) async {
@@ -464,6 +480,134 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
                           ),
                         ]),
 
+                        const SizedBox(height: 20),
+
+                        // [v3.2.4] 全应用玻璃白值、玻璃模糊与全局界面高斯模糊统一控制（3.2.4–3.2.5 分两阶段迁移）
+                        _buildSection('玻璃与模糊材质'),
+                        ListenableBuilder(
+                          listenable: GlassAppearanceService.instance,
+                          builder: (context, _) {
+                            final glass = GlassAppearanceService.instance;
+                            final int opacityPct =
+                                (glass.glassOpacity * 100).round();
+                            final String opacitySubtitle;
+                            if (glass.isGlassOpaque) {
+                              opacitySubtitle =
+                                  '已设为完全不透明，玻璃组件高斯模糊已自动关闭以降低功耗';
+                            } else if (glass.isGlassTransparent) {
+                              opacitySubtitle =
+                                  '已设为 0% 完全透明，保留纯净折射与边线层次';
+                            } else {
+                              opacitySubtitle =
+                                  '控制底栏、顶栏、菜单、弹窗与按钮白值 (0% – 100%)';
+                            }
+
+                            final String glassBlurSubtitle = glass.isGlassOpaque
+                                ? '当前玻璃为完全不透明，已自动跳过高斯模糊渲染'
+                                : '控制玻璃组件自身的磨砂模糊强度，独立于全局模糊 (0.0 – 28.0)';
+
+                            return _buildCardGroup([
+                              _buildSliderRow(
+                                sliderKey: const ValueKey('glass_opacity_slider'),
+                                title: '玻璃透明度（白值）',
+                                subtitle: opacitySubtitle,
+                                icon: CupertinoIcons.drop_triangle_fill,
+                                valueText: '$opacityPct%',
+                                value: glass.glassOpacity,
+                                min: GlassAppearanceService.minGlassOpacity,
+                                max: GlassAppearanceService.maxGlassOpacity,
+                                onChanged: (v) =>
+                                    glass.setGlassOpacity(v, persist: false),
+                                onChangeEnd: (v) =>
+                                    glass.setGlassOpacity(v, persist: true),
+                              ),
+                              _buildSliderRow(
+                                sliderKey: const ValueKey('glass_blur_slider'),
+                                title: '玻璃高斯模糊度',
+                                subtitle: glassBlurSubtitle,
+                                icon: CupertinoIcons.sparkles,
+                                valueText: glass.isGlassOpaque
+                                    ? '已关闭'
+                                    : glass.glassBlur.toStringAsFixed(1),
+                                value: glass.glassBlur,
+                                min: GlassAppearanceService.minGlassBlur,
+                                max: GlassAppearanceService.maxGlassBlur,
+                                disabled: glass.isGlassOpaque,
+                                onChanged: (v) =>
+                                    glass.setGlassBlur(v, persist: false),
+                                onChangeEnd: (v) =>
+                                    glass.setGlassBlur(v, persist: true),
+                              ),
+                              _buildSliderRow(
+                                sliderKey:
+                                    const ValueKey('global_ui_blur_slider'),
+                                title: '全局界面高斯模糊度',
+                                subtitle:
+                                    '控制弹窗背景幕布、状态栏与动效模糊（独立于玻璃组件，不可完全关闭）',
+                                icon: CupertinoIcons.rectangle_stack_fill,
+                                valueText:
+                                    glass.globalUiBlur.toStringAsFixed(1),
+                                value: glass.globalUiBlur,
+                                min: GlassAppearanceService.minGlobalUiBlur,
+                                max: GlassAppearanceService.maxGlobalUiBlur,
+                                onChanged: (v) =>
+                                    glass.setGlobalUiBlur(v, persist: false),
+                                onChangeEnd: (v) =>
+                                    glass.setGlobalUiBlur(v, persist: true),
+                              ),
+                              _buildActionRow(
+                                '恢复默认',
+                                '将玻璃透明度、玻璃模糊与全局界面模糊重置为默认参数',
+                                CupertinoIcons.arrow_counterclockwise,
+                                () async {
+                                  HapticFeedback.lightImpact();
+                                  await glass.resetToDefaults();
+                                  _showToast('已恢复默认玻璃与模糊参数');
+                                },
+                                rowKey: const ValueKey(
+                                  'reset_glass_appearance_button',
+                                ),
+                                trailing: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: (glass.isDefault
+                                            ? _textSecondaryColor
+                                            : _themeService.primaryColor)
+                                        .withValues(alpha: 0.14),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(
+                                    glass.isDefault ? '已是默认' : '重置',
+                                    style: TextStyle(
+                                      color: glass.isDefault
+                                          ? _textSecondaryColor
+                                          : _themeService.primaryColor,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ]);
+                          },
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        _buildSection('应用更新'),
+                        _buildCardGroup([
+                          _buildSwitchRow(
+                            '每日自动检查更新',
+                            '每天首次打开软件后自动检测新版本并提示更新',
+                            CupertinoIcons.arrow_2_circlepath,
+                            _autoCheckUpdate,
+                            _toggleAutoCheckUpdate,
+                          ),
+                        ]),
+
                         const SizedBox(height: 100),
                       ],
                     ),
@@ -696,15 +840,128 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
     );
   }
 
+  Widget _buildSliderRow({
+    required Key sliderKey,
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required String valueText,
+    required double value,
+    required double min,
+    required double max,
+    required ValueChanged<double> onChanged,
+    ValueChanged<double>? onChangeEnd,
+    bool disabled = false,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final accent = _themeService.primaryColor;
+    final double titleAlpha = disabled ? 0.45 : 1.0;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              SizedBox(
+                width: 36,
+                height: 36,
+                child: Center(
+                  child: Icon(
+                    icon,
+                    color: (isDark
+                            ? const Color(0xFFD6DBE5)
+                            : const Color(0xFF3A4150))
+                        .withValues(alpha: titleAlpha),
+                    size: 21,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        color: _textColor.withValues(alpha: titleAlpha),
+                        fontWeight: FontWeight.w600,
+                        fontSize: 15,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        color: _textSecondaryColor.withValues(alpha: titleAlpha),
+                        fontSize: 11.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: disabled ? 0.08 : 0.14),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  valueText,
+                  style: TextStyle(
+                    color: disabled
+                        ? _textSecondaryColor.withValues(alpha: 0.7)
+                        : accent,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          Padding(
+            padding: const EdgeInsets.only(left: 40, right: 2, top: 2),
+            child: SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                trackHeight: 4.0,
+                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8.0),
+                overlayShape: const RoundSliderOverlayShape(overlayRadius: 15.0),
+                activeTrackColor:
+                    disabled ? _textSecondaryColor.withValues(alpha: 0.25) : accent,
+                inactiveTrackColor: isDark
+                    ? Colors.white.withValues(alpha: 0.12)
+                    : Colors.black.withValues(alpha: 0.09),
+                thumbColor: disabled ? _textSecondaryColor : Colors.white,
+              ),
+              child: Slider(
+                key: sliderKey,
+                value: value.clamp(min, max),
+                min: min,
+                max: max,
+                onChanged: disabled ? null : onChanged,
+                onChangeEnd: disabled ? null : onChangeEnd,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildActionRow(
     String title,
     String subtitle,
     IconData icon,
     VoidCallback onTap, {
+    Key? rowKey,
     Widget? trailing,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return InkWell(
+      key: rowKey,
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
       child: SizedBox(

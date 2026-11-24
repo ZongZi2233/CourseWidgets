@@ -2,6 +2,32 @@
 
 本文档记录 CourseWidgets 各版本更新的动态活动演进，重点关注架构改进、渲染优化、故障诊断与教务抓取能力提升。
 
+## [v3.2.4] - 2026-11-25 (Build 3240 · Phase 1 代码与建档提交版，暂未构建发行包)
+
+### 1. 全应用玻璃白值与全局界面高斯模糊统一控制体系（Phase 1）
+- **新增统一材质响应中枢 (`GlassAppearanceService` & `GlassSettingsHelper`)**：在通用设置（`SettingsGeneralScreen`）新增「玻璃与模糊材质」分组，提供三项独立受控滑块与「恢复默认」选项，实时持久化至 MMKV：
+  - **玻璃透明度（白值）(`0% ~ 100%`)**：统一控制底栏、顶栏、菜单、弹窗与按钮玻璃白值，支持完全透明（`0%`）至完全不透明（`100%`）；当设为完全不透明时自动跳过玻璃自身高斯模糊渲染，消除冗余离屏开销；
+  - **玻璃高斯模糊度 (`0.0 ~ 28.0`)**：仅控制所有玻璃组件自身磨砂模糊强度，与全局界面高斯模糊完全独立；
+  - **全局界面高斯模糊度 (`3.0 ~ 14.0`)**：仅控制弹窗背景幕布模糊、状态栏渐进模糊与切换动态模糊等非玻璃场景，严格独立于玻璃模糊且禁止完全关闭或过载设置；
+- **全量组件建档 (`docs/GLASS_COMPONENTS_INVENTORY.md`)**：完成 `lib/` 全部 83 个文件的玻璃与模糊使用审计建档，并规划于 `v3.2.4`–`v3.2.5` 两版本分期推进；本期 Phase 1 已率先完成核心共享组件（`LiquidCard`、`LiquidButton`、`LiquidSwitch`、`LiquidGlassDialog`、`showLiquidDialog`、`showSharedElementGlassDialog`、`FloatingGlassHeaderButton`、`FloatingLiquidBackButton`、`LiquidBackButton`、`HyperOSCard`、`GlassContextMenu`、`LiquidToast`、`AppUpdateDialog`）、主导航 Chrome（Android 底栏/顶栏/悬浮 Dock、Windows 底栏/持久化标题栏）与全局模糊基建（`StaticBlurredWallpaperService`、`ImmersiveStatusBarBackdrop`、`MotionBlurTransition`、`PageControllerMotionBlur`）迁移。
+
+### 2. 每日首次打开自动检查更新 (`AppUpdateService` & `AppUpdateDialog`)
+- 上线跨平台每日自动检测更新机制：每日首次打开软件且进入主界面后静默检测 GitHub Releases 新版本（当天仅校验一次，记录本地日历日期于 MMKV），发现新版本时自动弹出液态玻璃更新弹窗，已是最新或无网络时静默跳过；通用设置同步提供「每日自动检查更新」开关。
+
+### 3. 修复 Android 应用名称缺失与增量更新回退故障
+- **恢复 Android 安装器与系统应用信息名称 (`AndroidManifest.xml` & `strings.xml`)**：将 `<application android:label>` 由空白占位符恢复为 `@string/app_name`（`CourseWidgets`），解决安装包解析器与系统设置「应用信息」不显示应用名称的问题；
+- **加固 Android 字节级增量更新通道 (`AppUpdateService` & `AppUpdateDialog`)**：修复 `prepareAndroidIncrementalPlan` 对同一次检测重复全盘哈希 65 MB `base.apk` 的问题并迁入后台 `Isolate.run` 扫描 ZIP 条目；加入 128 KB 最小有效复用门槛（带 4 KB 兜底）消弭大量零碎 Range 请求；在 `executeAndroidIncrementalUpdate` 预解析 CDN 302 直连地址并长连接复用、禁用 `Accept-Encoding: gzip` 干预（`identity` + `autoUncompress = false`）、以 `RandomAccessFile` 精确按偏移原位重试写盘（3 次指数退避 + 过期链接自动刷新），并在预检面板透出简洁诊断信息以便定位。
+
+### 4. 更新下载与增量合并缓存自动清理机制 (`AppUpdateService` & `main.dart`)
+- **`.part` 原子写入与下载前主动清空 (`executeAndroidIncrementalUpdate` & `downloadAndInstallAndroidApk`)**：Android 全量/增量安装包下载与重组统一先写入 `.apk.part` 临时文件并在体积与 SHA-256 校验全部通过后再原子重命名为 `.apk`；每次发起新下载前自动执行 `cleanupStaleUpdateCaches(forcePurgeAll: true)` 清理历史安装包与半途残留，异常失败路径同步清除残损文件，彻底避免连续多版本增量更新导致缓存目录体积不断膨胀；
+- **启动与恢复前台自动清理**：在应用启动与恢复前台时异步运行 `cleanupStaleUpdateCaches()`，自动清理版本号不高于当前已安装版本的 `CourseWidgets-*.apk`/`.zip`、残余 `.apk.part`/`.apk.tmp`、超过 2 小时的过期未安装新包以及 Windows 端过期 `_update_staging` 暂存目录与旧更新脚本（同时保护正在进行中的下载与无关缓存文件）。
+
+### 5. 修复 Android 实况通知教室字号无层级对比问题 (`LiveUpdateNotificationManager.kt` & `SettingsNotificationScreen`)
+- **绕开 AOSP Binder `removeTextSizeSpans()` 字号剥离限制**：修正此前 `RelativeSizeSpan` 经由 `Notification.safeCharSequence()` 跨进程传递至 SystemUI 时被系统强制剥离、导致正文行内教室与场地等大无对比的问题；在完全保留原生 Android 16 Promoted Ongoing 合规性（零 `RemoteViews`）的前提下，重塑原生三槽位字号对比体系：
+  - 将高对比课程色块教室编号与关键时间（`[ 中1203 ] 18:30–20:05` / `[ A101 ] 09:40 下课`）整体提升至原生最大粗体 **`contentTitle`** 槽位，形成压倒性第一视觉焦距；
+  - 将课程名称、附属场地说明与次节预告下沉至较小字号的 **`contentText` / `BigTextStyle`** 槽位，并将右侧独立真圆角节次/日历徽章放大至 `56dp`；
+- **设置页 1:1 真实预览同步 (`SettingsNotificationScreen`)**：同步更新通知设置页三场景实况预览卡片，真实呈现教室标题置顶放大 > 课程名称中等 > 场地与详情次要的层级比例。
+
 ## [v3.2.3] - 2026-11-25 (Build 3230 正式版)
 
 ### 1. 课时配置页 120Hz 渲染彻底顺滑化与单节编辑 SharedElement 玻璃形变弹窗
