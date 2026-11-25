@@ -1036,7 +1036,10 @@ class AndroidScheduleConfigScreenState
                       style: TextStyle(
                         fontSize: 12.5,
                         fontWeight: FontWeight.w700,
-                        color: AppThemeColors.babyPink,
+                        color: GlassSettingsHelper.getAccentTextColor(
+                          context,
+                          AppThemeColors.babyPink,
+                        ),
                       ),
                     ),
                   ),
@@ -1197,9 +1200,16 @@ class AndroidScheduleConfigScreenState
                   borderRadius: const BorderRadius.horizontal(
                     left: Radius.circular(12),
                   ),
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                    child: Icon(Icons.remove_rounded, size: 16),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 7,
+                    ),
+                    child: Icon(
+                      Icons.remove_rounded,
+                      size: 16,
+                      color: textColor,
+                    ),
                   ),
                 ),
                 Padding(
@@ -1219,9 +1229,16 @@ class AndroidScheduleConfigScreenState
                   borderRadius: const BorderRadius.horizontal(
                     right: Radius.circular(12),
                   ),
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                    child: Icon(Icons.add_rounded, size: 16),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 7,
+                    ),
+                    child: Icon(
+                      Icons.add_rounded,
+                      size: 16,
+                      color: textColor,
+                    ),
                   ),
                 ),
               ],
@@ -1679,7 +1696,10 @@ class _SectionEditDialogBodyState extends State<_SectionEditDialogBody> {
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w700,
-            color: AppThemeColors.babyPink,
+            color: GlassSettingsHelper.getAccentTextColor(
+              context,
+              AppThemeColors.babyPink,
+            ),
           ),
         ),
       ),

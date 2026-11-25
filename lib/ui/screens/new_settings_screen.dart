@@ -182,7 +182,7 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
   static const double kSettingsItemHeight = 56.0;
 
   Widget _buildCardGroup(List<Widget> children) {
-    final isDark = ThemeService().isDarkMode;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final dividerColor = isDark
         ? Colors.white.withValues(alpha: 0.06)
         : Colors.black.withValues(alpha: 0.05);
@@ -213,7 +213,7 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
     required IconData icon,
     required VoidCallback onTap,
   }) {
-    final isDark = ThemeService().isDarkMode;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Builder(
       builder: (rowContext) => InkWell(
         onTap: () {

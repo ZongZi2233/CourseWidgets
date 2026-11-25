@@ -32,7 +32,7 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
   bool _autoCheckUpdate = true;
   theme.ThemeMode _currentThemeMode = theme.ThemeMode.defaultMode;
 
-  bool get _isDarkMode => _themeService.isDarkMode;
+  bool get _isDarkMode => Theme.of(context).brightness == Brightness.dark;
 
   Color get _textColor => _isDarkMode ? Colors.white : Colors.black87;
   Color get _textSecondaryColor =>
@@ -52,8 +52,7 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
   }
 
   Future<void> _loadSettings() async {
-    final adaptiveMode =
-        _storage.getBool(StorageService.keyAdaptiveDarkMode) ?? false;
+    final adaptiveMode = _storage.getEffectiveAdaptiveDarkMode();
     final autoCheckUpdate = AppUpdateService.instance.isAutoCheckUpdateEnabled();
 
     setState(() {
@@ -76,13 +75,11 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
 
   void _toggleDarkMode(bool value) async {
     setState(() {
-      if (value) _adaptiveDarkMode = false;
+      _adaptiveDarkMode = false;
     });
     _themeService.setDarkMode(value);
     await _storage.setBool(StorageService.keyDarkMode, value);
-    if (value) {
-      await _storage.setBool(StorageService.keyAdaptiveDarkMode, false);
-    }
+    await _storage.setBool(StorageService.keyAdaptiveDarkMode, false);
   }
 
   void _toggleAdaptiveMode(bool value) async {
@@ -505,7 +502,8 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
                         const SizedBox(height: 20),
 
                         // [v3.2.4] 全应用玻璃白值、玻璃模糊与全局界面高斯模糊统一控制（3.2.4–3.2.5 分两阶段迁移）
-                        _buildSection('玻璃与模糊材质'),
+                        // [v3.2.5] 全应用组件白值、组件模糊与全局模糊统一控制
+                        _buildSection('材质与模糊'),
                         ListenableBuilder(
                           listenable: GlassAppearanceService.instance,
                           builder: (context, _) {
@@ -514,24 +512,26 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
                                 (glass.glassOpacity * 100).round();
                             final String opacitySubtitle;
                             if (glass.isGlassOpaque) {
-                              opacitySubtitle =
-                                  '已设为完全不透明，玻璃组件高斯模糊已自动关闭以降低功耗';
+                              opacitySubtitle = '完全不透明，已关闭模糊';
                             } else if (glass.isGlassTransparent) {
-                              opacitySubtitle =
-                                  '已设为 0% 完全透明，保留纯净折射与边线层次';
+                              opacitySubtitle = '0% 全透明';
                             } else {
-                              opacitySubtitle =
-                                  '控制底栏、顶栏、菜单、弹窗与按钮白值 (0% – 100%)';
+                              opacitySubtitle = '玻璃表面白值';
                             }
 
                             final String glassBlurSubtitle = glass.isGlassOpaque
-                                ? '当前玻璃为完全不透明，已自动跳过高斯模糊渲染'
-                                : '控制玻璃组件自身的磨砂模糊强度，独立于全局模糊 (0.0 – 28.0)';
+                                ? '不透明时已关闭'
+                                : '玻璃模糊强度';
+                            final accentTextColor =
+                                GlassSettingsHelper.getAccentTextColor(
+                              context,
+                              _themeService.primaryColor,
+                            );
 
                             return _buildCardGroup([
                               _buildSliderRow(
                                 sliderKey: const ValueKey('glass_opacity_slider'),
-                                title: '玻璃透明度（白值）',
+                                title: '组件白值',
                                 subtitle: opacitySubtitle,
                                 icon: CupertinoIcons.drop_triangle_fill,
                                 valueText: '$opacityPct%',
@@ -545,7 +545,7 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
                               ),
                               _buildSliderRow(
                                 sliderKey: const ValueKey('glass_blur_slider'),
-                                title: '玻璃高斯模糊度',
+                                title: '组件模糊',
                                 subtitle: glassBlurSubtitle,
                                 icon: CupertinoIcons.sparkles,
                                 valueText: glass.isGlassOpaque
@@ -563,9 +563,8 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
                               _buildSliderRow(
                                 sliderKey:
                                     const ValueKey('global_ui_blur_slider'),
-                                title: '全局界面高斯模糊度',
-                                subtitle:
-                                    '控制弹窗背景幕布、状态栏与动效模糊（独立于玻璃组件，不可完全关闭）',
+                                title: '全局模糊',
+                                subtitle: '弹窗、状态栏与动效模糊',
                                 icon: CupertinoIcons.rectangle_stack_fill,
                                 valueText:
                                     glass.globalUiBlur.toStringAsFixed(1),
@@ -579,12 +578,12 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
                               ),
                               _buildActionRow(
                                 '恢复默认',
-                                '将玻璃透明度、玻璃模糊与全局界面模糊重置为默认参数',
+                                '重置为当前平台默认参数',
                                 CupertinoIcons.arrow_counterclockwise,
                                 () async {
                                   HapticFeedback.lightImpact();
                                   await glass.resetToDefaults();
-                                  _showToast('已恢复默认玻璃与模糊参数');
+                                  _showToast('已恢复默认参数');
                                 },
                                 rowKey: const ValueKey(
                                   'reset_glass_appearance_button',
@@ -606,7 +605,7 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
                                     style: TextStyle(
                                       color: glass.isDefault
                                           ? _textSecondaryColor
-                                          : _themeService.primaryColor,
+                                          : accentTextColor,
                                       fontSize: 12,
                                       fontWeight: FontWeight.w600,
                                     ),
@@ -878,6 +877,7 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final accent = _themeService.primaryColor;
+    final accentText = GlassSettingsHelper.getAccentTextColor(context, accent);
     final double titleAlpha = disabled ? 0.45 : 1.0;
 
     return Padding(
@@ -937,7 +937,7 @@ class _SettingsGeneralScreenState extends State<SettingsGeneralScreen> {
                   style: TextStyle(
                     color: disabled
                         ? _textSecondaryColor.withValues(alpha: 0.7)
-                        : accent,
+                        : accentText,
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
                   ),

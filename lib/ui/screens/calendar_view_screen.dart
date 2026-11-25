@@ -8,6 +8,7 @@ import '../../constants/theme_constants.dart';
 import '../../services/data_import_service.dart';
 import '../../services/glass_appearance_service.dart';
 import '../../services/theme_service.dart' as theme;
+import '../../utils/glass_settings_helper.dart';
 import '../../utils/responsive_utils.dart';
 import '../widgets/liquid_components.dart' as liquid;
 import '../widgets/glass_context_menu.dart';
@@ -235,7 +236,10 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
                 child: Text(
                   '今天',
                   style: TextStyle(
-                    color: AppThemeColors.babyPink,
+                    color: GlassSettingsHelper.getAccentTextColor(
+                      context,
+                      AppThemeColors.babyPink,
+                    ),
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
                   ),
@@ -485,7 +489,10 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
     } else if (!isCurrentMonth && _isMonthView) {
       textColor = isDark ? Colors.white24 : const Color(0x331A1A2E);
     } else if (isToday) {
-      textColor = AppThemeColors.babyPink;
+      textColor = GlassSettingsHelper.getAccentTextColor(
+        context,
+        AppThemeColors.babyPink,
+      );
     } else {
       textColor = isDark ? Colors.white : const Color(0xFF1A1A2E);
     }

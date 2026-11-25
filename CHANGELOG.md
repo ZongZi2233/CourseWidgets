@@ -2,6 +2,23 @@
 
 本文档记录 CourseWidgets 各版本更新的动态活动演进，重点关注架构改进、渲染优化、故障诊断与教务抓取能力提升。
 
+## [v3.2.5] - 2026-11-26 (Build 3250 正式版)
+
+### 1. 分平台默认玻璃材质参数与设置文案精简 (`GlassAppearanceService` & `SettingsGeneralScreen`)
+- **精准对齐 Windows 与 Android 分平台出厂默认材质**：保持底层 `0.35 / 12.0 / 6.5` 映射校准基准点不变，为双端分别配置开箱即用的通透默认参数：
+  - **Windows 默认参数**：**组件白值 `5%` (`0.05`)** · **组件模糊 `4.5`** · **全局模糊 `3.5`**；
+  - **Android 默认参数**：**组件白值 `15%` (`0.15`)** · **组件模糊 `4.5`** · **全局模糊 `3.5`**；
+- **精简「通用设置 → 材质与模糊」交互文案**：将三项滑块名称与描述统一精简为 **`组件白值`**、**`组件模糊`**、**`全局模糊`** 与「恢复默认」，一目了然、减少冗余阅读负担。
+
+### 2. Windows 端默认开启自动跟随系统深色模式 (`StorageService`, `main.dart` & `SettingsGeneralScreen`)
+- 新增 `StorageService.getEffectiveAdaptiveDarkMode()` 统一判定逻辑：当用户未显式配置或未开启「强制深色模式」时，**Windows 端默认开启「自适应深色模式（跟随系统）」**，随系统深浅色切换自动联动；
+- 系统亮度变更回调（`didChangePlatformBrightness`）改由 `ThemeService().setDarkMode(isDark)` 统一驱动，同步刷新深浅色主题、莫奈取色、壁纸明暗及所有依赖 `ThemeService` 的页面。
+
+### 3. Windows 深色模式深色文字对比度根治与全页面联动修复
+- **修复自定义标题栏 (`WindowsDesktopTitleBar`) 深色模式下永远识别为浅色主题的根因**：将 `main.dart` 中的 `material.Theme(...)` 作用域上移包裹包含 `WindowsDesktopTitleBar` 在内的整窗体树，彻底解决深色模式下标题栏 `CourseWidgets` 标题、分隔线、路由标题与「返回」按钮文字保持深灰黑字落入暗底看不清的问题；
+- **打通 `GlassTheme` / `GlassTabBar.bottom` 亮度解析链路**：为 `LiquidGlassWidgets.wrap` 接入 `brightnessResolver: Theme.maybeBrightnessOf`，并为 Windows 左下悬浮导航（`课程` / `日历`）显式指定昼夜高对比文字与图标色彩；
+- **修复 Material 3 深色模式 `ThemeData.primaryColor` 发黑及偏暗强调色文字问题**：为 `ThemeData` 显式注入 `primaryColor: colorScheme.primary`，并在 `GlassSettingsHelper.getAccentTextColor` 中对深色模式下的暗色调莫奈/系统/自定义强调色自动提亮，同步覆盖桌面标题栏周次胶囊、课表日期角标/今日表头、日历今日指示、课时配置步进按钮/时间胶囊、通用设置滑块徽章及全部设置二级页与 `HyperOSCard` 的实时深浅色订阅联动。
+
 ## [v3.2.4] - 2026-11-26 (Build 3240 正式版)
 
 ### 1. 全应用玻璃白值与全局界面高斯模糊统一控制体系（Phase 1 + Phase 2 全量完成）

@@ -268,7 +268,8 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                         listenable: GlassAppearanceService.instance,
                         builder: (context, _) {
                           final glass = GlassAppearanceService.instance;
-                          final primaryColor = Theme.of(context).primaryColor;
+                          final primaryColor =
+                              Theme.of(context).colorScheme.primary;
                           final barSettings = glass.applyToSettings(
                             const LiquidGlassSettings(
                               thickness: 24.0,
@@ -386,7 +387,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
   Widget _buildLandscapeLeftNav(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isSolidBg = globalBackgroundPath.value == kSolidColorBackground;
-    final primaryColor = Theme.of(context).primaryColor;
+    final primaryColor = Theme.of(context).colorScheme.primary;
 
     return SizedBox(
       width: 180.0,
@@ -495,7 +496,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
   /// [v3.0.0-alpha25] 横屏手机右下角纯透镜液态玻璃设置按钮（52x52圆形），物理弹簧灵动缩放，杜绝任何实色/Material遮罩
   Widget _buildLandscapeSettingsButton(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final primaryColor = Theme.of(context).primaryColor;
+    final primaryColor = Theme.of(context).colorScheme.primary;
     final isSelected = _currentIndex == 2;
 
     return ListenableBuilder(

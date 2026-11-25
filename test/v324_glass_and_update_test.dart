@@ -57,15 +57,31 @@ void main() {
   group('v3.2.4 GlassAppearanceService bounds, opaque bypass & independence',
       () {
     test(
-        'preserves v3.2.3 defaults and enforces min/max bounds with opaque blur bypass',
+        'enforces platform defaults and min/max bounds with opaque blur bypass',
         () async {
       final glass = GlassAppearanceService.instance;
+      expect(
+        GlassAppearanceService.defaultGlassOpacityFor(isWindows: true),
+        closeTo(0.05, 1e-6),
+      );
+      expect(
+        GlassAppearanceService.defaultGlassOpacityFor(isWindows: false),
+        closeTo(0.15, 1e-6),
+      );
+      expect(GlassAppearanceService.defaultGlassBlur, closeTo(4.5, 1e-6));
+      expect(GlassAppearanceService.defaultGlobalUiBlur, closeTo(3.5, 1e-6));
       expect(glass.glassOpacity, GlassAppearanceService.defaultGlassOpacity);
       expect(glass.glassBlur, GlassAppearanceService.defaultGlassBlur);
       expect(glass.globalUiBlur, GlassAppearanceService.defaultGlobalUiBlur);
       expect(glass.isDefault, isTrue);
+      expect(glass.resolveSurfaceAlpha(0.62), lessThan(0.62));
+      expect(glass.resolveGlassBlur(16.0), lessThan(16.0));
+      expect(glass.resolveGlobalUiBlur(6.5), lessThan(6.5));
 
-      // Baseline exactness at default values.
+      // Calibration exactness at 1.0x reference pivots.
+      glass.setGlassOpacity(GlassAppearanceService.referenceGlassOpacity);
+      glass.setGlassBlur(GlassAppearanceService.referenceGlassBlur);
+      glass.setGlobalUiBlur(GlassAppearanceService.referenceGlobalUiBlur);
       expect(glass.resolveSurfaceAlpha(0.62), closeTo(0.62, 1e-6));
       expect(glass.resolveGlassBlur(16.0), closeTo(16.0, 1e-6));
       expect(glass.resolveGlobalUiBlur(6.5), closeTo(6.5, 1e-6));
@@ -182,10 +198,10 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('玻璃与模糊材质'), findsOneWidget);
-      expect(find.text('玻璃透明度（白值）'), findsOneWidget);
-      expect(find.text('玻璃高斯模糊度'), findsOneWidget);
-      expect(find.text('全局界面高斯模糊度'), findsOneWidget);
+      expect(find.text('材质与模糊'), findsOneWidget);
+      expect(find.text('组件白值'), findsOneWidget);
+      expect(find.text('组件模糊'), findsOneWidget);
+      expect(find.text('全局模糊'), findsOneWidget);
       expect(find.byKey(const ValueKey('glass_opacity_slider')), findsOneWidget);
       expect(find.byKey(const ValueKey('glass_blur_slider')), findsOneWidget);
       expect(
@@ -205,7 +221,7 @@ void main() {
       );
       expect(blurSlider.onChanged, isNull);
 
-      // Tap "恢复默认" -> restores defaults immediately.
+      // Tap "恢复默认" -> restores platform defaults immediately.
       await tester.ensureVisible(
         find.byKey(const ValueKey('reset_glass_appearance_button')),
       );
@@ -218,7 +234,9 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(GlassAppearanceService.instance.isDefault, isTrue);
-      expect(find.text('35%'), findsOneWidget);
+      expect(find.text(Platform.isWindows ? '5%' : '15%'), findsOneWidget);
+      expect(find.text('4.5'), findsOneWidget);
+      expect(find.text('3.5'), findsOneWidget);
     });
 
     testWidgets(

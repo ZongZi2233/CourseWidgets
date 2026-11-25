@@ -2,9 +2,9 @@ import 'dart:io';
 import '../main.dart' show globalDarkModeNotifier, globalBackgroundPath;
 export '../main.dart' show globalBackgroundPath;
 
-/// 当前版本：[v3.2.4 正式版] 全应用玻璃/全局模糊统一控制（Phase 1 + 2）、课时配置 120Hz 根治、Android 16 实况 64dp 纯白字教室导视方块、每日自动更新与缓存清理（Build 3240）
-const String appVersion = '3.2.4';
-const int buildNumber = 3240;
+/// 当前版本：[v3.2.5 正式版] 分平台默认材质白值/模糊、简化材质文案、Windows 默认跟随系统深色与深色模式文字对比度修复（Build 3250）
+const String appVersion = '3.2.5';
+const int buildNumber = 3250;
 const String copyright = 'Copyright © ZongZi';
 const String githubRepoUrl = 'https://github.com/ZongZi2233/CourseWidgets';
 

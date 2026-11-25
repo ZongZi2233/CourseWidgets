@@ -244,6 +244,22 @@ class GlassSettingsHelper {
     return isDark(context) ? Colors.white70 : const Color(0xFF555B68);
   }
 
+  /// 解析在当前深浅色模式下清晰可读的强调文字色：
+  /// 深色模式下自动将偏暗的莫奈/系统/自定义强调色提亮，防止深字落深底看不清；浅色模式保持原色。
+  static Color getAccentTextColor(BuildContext context, [Color? accent]) {
+    final dark = isDark(context);
+    final base = accent ?? Theme.of(context).colorScheme.primary;
+    if (!dark) return base;
+    final hsl = HSLColor.fromColor(base);
+    if (hsl.lightness < 0.72) {
+      return hsl
+          .withLightness(0.78)
+          .withSaturation((hsl.saturation * 0.92).clamp(0.35, 0.90))
+          .toColor();
+    }
+    return base;
+  }
+
   /// 获取禁用文本颜色（根据深色模式）
   static Color getDisabledTextColor([BuildContext? context]) {
     return isDark(context)

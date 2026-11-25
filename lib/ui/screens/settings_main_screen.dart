@@ -61,9 +61,9 @@ class _SettingsMainScreenState extends State<SettingsMainScreen> {
     return nm.isDoubleReminderEnabled ? '课前常规 + 5分钟二次提醒' : '课前单次通知提醒';
   }
 
-  String _generalSummarySubtitle() {
+  String _generalSummarySubtitle(bool isDark) {
     final ts = ThemeService();
-    final darkLabel = ts.isDarkMode ? '夜间深色' : '日间浅色';
+    final darkLabel = isDark ? '夜间深色' : '日间浅色';
     final glassLabel = ts.glassQuality == GlassQuality.premium ? '旗舰折射' : '流畅高帧';
     return '$darkLabel · $glassLabel · 个性壁纸';
   }
@@ -83,7 +83,7 @@ class _SettingsMainScreenState extends State<SettingsMainScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = ThemeService().isDarkMode;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final isDesktopOrTablet = ResponsiveUtils.isTabletMode(context) ||
         ResponsiveUtils.isDesktopOrLandscape(context);
@@ -107,7 +107,7 @@ class _SettingsMainScreenState extends State<SettingsMainScreen> {
     final schedule = _watchScheduleSafe(context);
     final courseSub = _courseSummarySubtitle(schedule);
     final notifySub = _notificationSummarySubtitle();
-    final generalSub = _generalSummarySubtitle();
+    final generalSub = _generalSummarySubtitle(isDark);
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -343,30 +343,34 @@ class _SettingsMainScreenState extends State<SettingsMainScreen> {
   }
 
   Widget _buildCardGroup(List<Widget> children) {
-    final isDark = ThemeService().isDarkMode;
-    final dividerColor = isDark
-        ? Colors.white.withValues(alpha: 0.06)
-        : Colors.black.withValues(alpha: 0.05);
+    return Builder(
+      builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        final dividerColor = isDark
+            ? Colors.white.withValues(alpha: 0.06)
+            : Colors.black.withValues(alpha: 0.05);
 
-    return RepaintBoundary(
-      child: liquid.HyperOSCard(
-        cornerRadius: 24,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        child: Column(
-          children: [
-            for (int i = 0; i < children.length; i++) ...[
-              if (i > 0)
-                Divider(
-                  height: 1,
-                  thickness: 0.6,
-                  indent: 48,
-                  color: dividerColor,
-                ),
-              children[i],
-            ],
-          ],
-        ),
-      ),
+        return RepaintBoundary(
+          child: liquid.HyperOSCard(
+            cornerRadius: 24,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: Column(
+              children: [
+                for (int i = 0; i < children.length; i++) ...[
+                  if (i > 0)
+                    Divider(
+                      height: 1,
+                      thickness: 0.6,
+                      indent: 48,
+                      color: dividerColor,
+                    ),
+                  children[i],
+                ],
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 

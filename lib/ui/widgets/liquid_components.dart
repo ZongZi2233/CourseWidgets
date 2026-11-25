@@ -1143,7 +1143,7 @@ class LiquidBackButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final primaryColor = Theme.of(context).primaryColor;
+    final primaryColor = Theme.of(context).colorScheme.primary;
 
     return ListenableBuilder(
       listenable: GlassAppearanceService.instance,
@@ -1613,7 +1613,7 @@ class HyperOSCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = globalDarkModeNotifier.value;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final isSolidBg = globalBackgroundPath.value == kSolidColorBackground;
     final primary = theme.ThemeService().primaryColor;
 
@@ -1637,6 +1637,7 @@ class HyperOSCard extends StatelessWidget {
       listenable: Listenable.merge([
         StaticBlurredWallpaperService.instance,
         GlassAppearanceService.instance,
+        globalDarkModeNotifier,
       ]),
       builder: (context, cardInner) {
         final glass = GlassAppearanceService.instance;

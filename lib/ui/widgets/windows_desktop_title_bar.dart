@@ -8,6 +8,7 @@ import '../../providers/schedule_provider.dart';
 import '../../services/desktop_window_service.dart';
 import '../../services/glass_appearance_service.dart';
 import '../../services/windows_tray_service.dart';
+import '../../utils/glass_settings_helper.dart';
 import 'macos_traffic_lights.dart';
 import 'liquid_components.dart' show resolveOverlayLocalRect;
 import 'weekly_schedule_grid.dart' show showWeekPickerGlassDialog;
@@ -165,7 +166,11 @@ class WindowsDesktopTitleBar extends StatelessWidget {
     if (!Platform.isWindows) return const SizedBox.shrink();
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final primaryColor = Theme.of(context).primaryColor;
+    final primaryColor = Theme.of(context).colorScheme.primary;
+    final accentTextColor = GlassSettingsHelper.getAccentTextColor(
+      context,
+      primaryColor,
+    );
     final provider = context.watch<ScheduleProvider>();
     final currentWeek = provider.currentWeek;
     final weekText = currentWeek > 0 ? '第 $currentWeek 周' : '';
@@ -279,7 +284,7 @@ class WindowsDesktopTitleBar extends StatelessWidget {
                           Text(
                             routeTitle,
                             style: TextStyle(
-                              color: primaryColor,
+                              color: accentTextColor,
                               fontSize: 12.5,
                               fontWeight: FontWeight.w600,
                               letterSpacing: 0.2,
@@ -328,7 +333,7 @@ class WindowsDesktopTitleBar extends StatelessWidget {
                             child: Text(
                               weekText,
                               style: TextStyle(
-                                color: primaryColor,
+                                color: accentTextColor,
                                 fontSize: 10,
                                 fontWeight: FontWeight.w600,
                               ),

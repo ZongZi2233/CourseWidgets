@@ -12,7 +12,7 @@
 [![Dart](https://img.shields.io/badge/Dart-3.14.0+-0175C2?logo=dart)](https://dart.dev)
 [![Android](https://img.shields.io/badge/Android-15%2B%20(API%2035--37.2)-3DDC84?logo=android)](https://github.com/ZongZi2233/CourseWidgets/releases)
 [![Windows](https://img.shields.io/badge/Windows-10%2F11%20x64-0078D6?logo=windows)](https://github.com/ZongZi2233/CourseWidgets/releases)
-[![Version](https://img.shields.io/badge/Release-v3.2.4%20(Build%203240)-FF9BAE)](https://github.com/ZongZi2233/CourseWidgets/releases/tag/v3.2.4)
+[![Version](https://img.shields.io/badge/Release-v3.2.5%20(Build%203250)-FF9BAE)](https://github.com/ZongZi2233/CourseWidgets/releases/tag/v3.2.5)
 
 **English** | [简体中文](README.md)
 
@@ -20,10 +20,10 @@
 
 ---
 
-## 📦 Latest Release: [v3.2.4 (Build 3240)](https://github.com/ZongZi2233/CourseWidgets/releases/tag/v3.2.4)
+## 📦 Latest Release: [v3.2.5 (Build 3250)](https://github.com/ZongZi2233/CourseWidgets/releases/tag/v3.2.5)
 
-* **Android Client (`arm64-v8a`)**: [`CourseWidgets-v3.2.4-android-arm64-v8a.apk`](https://github.com/ZongZi2233/CourseWidgets/releases/download/v3.2.4/CourseWidgets-v3.2.4-android-arm64-v8a.apk) — Requires Android 15+ (API 35+, compiled against API 37.2 & NDK r30), delivering app-wide Glass Opacity / Glass Blur / independent Global UI Blur controls (with automatic blur bypass at 100% opacity), 120Hz schedule config fix eliminating full-screen `BackdropGroup` offscreen copies plus restored Liquid Glass Save button, restored full Edge-to-Edge home schedule grid scrolling, enlarged `64dp` pure-white-on-color classroom Live Update signage immune to Light Mode contrast graying with Light/Dark 1:1 preview parity, daily automatic update checks, stale update cache auto-cleanup, Android app label restoration, and hardened byte-level delta updates.
-* **Windows Desktop (`x64`)**: [`CourseWidgets-v3.2.4-windows-x64.zip`](https://github.com/ZongZi2233/CourseWidgets/releases/download/v3.2.4/CourseWidgets-v3.2.4-windows-x64.zip) — Portable x64 package (MSVC `/O2` + `/OPT:REF,/OPT:ICF` + Dart AOT), delivering unified Glass & Global UI Blur controls with one-tap factory reset, restored full Edge-to-Edge home schedule grid scrolling, daily automatic update checks & stale staging cleanup, 120Hz schedule config scrolling, Monet persistence protection, file-level `SHA-256` hot updates, and WebView2 9-portal extraction.
+* **Android Client (`arm64-v8a`)**: [`CourseWidgets-v3.2.5-android-arm64-v8a.apk`](https://github.com/ZongZi2233/CourseWidgets/releases/download/v3.2.5/CourseWidgets-v3.2.5-android-arm64-v8a.apk) — Requires Android 15+ (API 35+, compiled against API 37.2 & NDK r30), featuring refined Android default glass opacity (`15%`), glass blur (`4.5`), and global UI blur (`3.5`), streamlined General Settings slider copy (`组件白值` / `组件模糊` / `全局模糊`), plus unified app-wide glass/blur controls, 120Hz schedule config scrolling, Edge-to-Edge grid scrolling, `64dp` pure-white-on-color classroom Live Update signage, daily auto-update checks, cache auto-cleanup, and hardened byte-level delta updates.
+* **Windows Desktop (`x64`)**: [`CourseWidgets-v3.2.5-windows-x64.zip`](https://github.com/ZongZi2233/CourseWidgets/releases/download/v3.2.5/CourseWidgets-v3.2.5-windows-x64.zip) — Portable x64 package (MSVC `/O2` + `/OPT:REF,/OPT:ICF` + Dart AOT), enabling automatic follow-system dark mode by default on Windows, refined Windows default glass opacity (`5%`), glass blur (`4.5`), and global UI blur (`3.5`), and resolving dark-text/low-contrast issues across the Windows title bar, bottom navigation tabs, headers, and settings pages in Dark Mode.
 
 ---
 

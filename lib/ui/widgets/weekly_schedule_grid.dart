@@ -18,6 +18,7 @@ import '../theme/squircle_geometry.dart';
 import '../transitions/smooth_slide_transitions.dart';
 import 'adaptive_smooth_scroll.dart';
 import '../animations/app_motion.dart';
+import '../../utils/glass_settings_helper.dart';
 import '../../utils/responsive_utils.dart';
 import '../../services/glass_appearance_service.dart';
 import '../../services/theme_service.dart' as theme;
@@ -38,7 +39,7 @@ Future<void> showWeekPickerGlassDialog(
       : List.generate(25, (i) => i + 1);
   if (!context.mounted) return;
 
-  final primaryColor = Theme.of(context).primaryColor;
+  final primaryColor = Theme.of(context).colorScheme.primary;
   final rows = (weeks.length / 5).ceil();
   final double computedHeight = (rows * 54.0 + 96.0).clamp(240.0, 380.0);
 
@@ -774,7 +775,10 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
   ) {
     final now = DateTime.now();
     const weekdays = ['', '周一', '周二', '周三', '周四', '周五', '周六', '周日'];
-    final primaryColor = Theme.of(context).primaryColor;
+    final accentTextColor = GlassSettingsHelper.getAccentTextColor(
+      context,
+      Theme.of(context).colorScheme.primary,
+    );
 
     final baseBadgeSettings = LiquidGlassSettings(
       glassColor:
@@ -811,7 +815,7 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
             style: TextStyle(
               fontSize: 11.5,
               fontWeight: FontWeight.bold,
-              color: primaryColor,
+              color: accentTextColor,
               height: 1.1,
             ),
           ),
@@ -878,6 +882,11 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
         now.month == dayDate.month &&
         now.day == dayDate.day;
 
+    final todayAccent = GlassSettingsHelper.getAccentTextColor(
+      context,
+      AppThemeColors.babyPink,
+    );
+
     return Container(
       height: 44,
       width: double.infinity,
@@ -896,7 +905,7 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
                   weekdays[day - 1],
                   style: TextStyle(
                     color: isToday
-                        ? (isDark ? AppThemeColors.babyPink : const Color(0xFFC84B66))
+                        ? (isDark ? todayAccent : const Color(0xFFC84B66))
                         : (isDark ? Colors.white60 : const Color(0xFF6B7280)),
                     fontSize: 11.5,
                     fontWeight: isToday ? FontWeight.w800 : FontWeight.w600,
@@ -908,7 +917,7 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
                   '${dayDate.day}',
                   style: TextStyle(
                     color: isToday
-                        ? (isDark ? AppThemeColors.babyPink : const Color(0xFFC84B66))
+                        ? (isDark ? todayAccent : const Color(0xFFC84B66))
                         : (isDark ? Colors.white.withValues(alpha: 0.9) : const Color(0xFF1F2228)),
                     fontSize: 12.0,
                     fontWeight: isToday ? FontWeight.w900 : FontWeight.w700,
@@ -924,7 +933,7 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
                   weekdays[day - 1],
                   style: TextStyle(
                     color: isToday
-                        ? AppThemeColors.babyPink
+                        ? todayAccent
                         : (isDark ? Colors.white70 : const Color(0xFF6B7280)),
                     fontSize: 13,
                     fontWeight: isToday ? FontWeight.bold : FontWeight.w600,
@@ -935,7 +944,7 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
                   dateLabel,
                   style: TextStyle(
                     color: isToday
-                        ? AppThemeColors.babyPink
+                        ? todayAccent
                         : (isDark ? Colors.white.withValues(alpha: 0.9) : const Color(0xFF1F2228)),
                     fontSize: 11.5,
                     fontWeight: isToday ? FontWeight.w900 : FontWeight.w600,

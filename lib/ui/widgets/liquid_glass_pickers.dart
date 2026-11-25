@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import '../../constants/theme_constants.dart';
 import '../../services/glass_appearance_service.dart';
 import '../../services/theme_service.dart';
+import '../../utils/glass_settings_helper.dart';
 import '../theme/squircle_geometry.dart';
 import 'liquid_components.dart' as liquid;
 
@@ -15,7 +16,7 @@ class _PickerGlassShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = ThemeService().isDarkMode;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return ListenableBuilder(
       listenable: GlassAppearanceService.instance,
       builder: (context, inner) {
@@ -70,7 +71,7 @@ Future<T?> _showModalGlassSheet<T>({
   required Widget child,
 }) {
   final isTablet = MediaQuery.of(context).size.shortestSide >= 600;
-  final isDark = ThemeService().isDarkMode;
+  final isDark = Theme.of(context).brightness == Brightness.dark;
 
   return showGeneralDialog<T>(
     context: context,
@@ -179,7 +180,7 @@ class _LiquidGlassDatePickerState extends State<LiquidGlassDatePicker> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = ThemeService().isDarkMode;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDark ? Colors.white : const Color(0xFF1A1A2E);
 
     return liquid.HyperOSCard(
@@ -257,7 +258,7 @@ Future<DateTime?> showLiquidGlassDatePicker({
   required DateTime initialDate,
 }) async {
   DateTime selectedDate = initialDate;
-  final isDark = ThemeService().isDarkMode;
+  final isDark = Theme.of(context).brightness == Brightness.dark;
 
   final result = await _showModalGlassSheet<bool>(
     context: context,
@@ -385,7 +386,7 @@ class LiquidGlassWeekdayPicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = ThemeService().isDarkMode;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDark ? Colors.white : const Color(0xFF1A1A2E);
 
     return SizedBox(
@@ -429,7 +430,7 @@ Future<int?> showLiquidGlassWeekdayPicker({
   required int initialWeekday,
 }) async {
   int selectedWeekday = initialWeekday;
-  final isDark = ThemeService().isDarkMode;
+  final isDark = Theme.of(context).brightness == Brightness.dark;
 
   final result = await _showModalGlassSheet<bool>(
     context: context,
@@ -578,7 +579,7 @@ class _LiquidGlassCalendarPickerState extends State<LiquidGlassCalendarPicker> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = ThemeService().isDarkMode;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDark ? Colors.white : const Color(0xFF1A1A2E);
     final textSecondary = isDark ? Colors.white60 : Colors.black45;
     final days = _getDaysInMonth();
@@ -719,7 +720,10 @@ class _LiquidGlassCalendarPickerState extends State<LiquidGlassCalendarPicker> {
                       color: isSelected
                           ? Colors.white
                           : isToday
-                              ? AppThemeColors.babyPink
+                              ? GlassSettingsHelper.getAccentTextColor(
+                                  context,
+                                  AppThemeColors.babyPink,
+                                )
                               : textColor,
                       fontSize: 14.5,
                       fontWeight: (isSelected || isToday)
@@ -743,7 +747,7 @@ Future<DateTime?> showLiquidGlassCalendarPicker({
   required DateTime initialDate,
 }) async {
   DateTime selectedDate = initialDate;
-  final isDark = ThemeService().isDarkMode;
+  final isDark = Theme.of(context).brightness == Brightness.dark;
 
   final result = await _showModalGlassSheet<bool>(
     context: context,

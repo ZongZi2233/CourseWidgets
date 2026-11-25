@@ -44,7 +44,7 @@ class _SettingsDataScreenState extends State<SettingsDataScreen> {
   Widget build(BuildContext context) {
     final provider = context.read<ScheduleProvider>();
     final dataImportService = DataImportService();
-    final isDark = ThemeService().isDarkMode; // Added this line
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final isDesktop =
         Platform.isWindows || Platform.isMacOS || Platform.isLinux;
     final topPadding =

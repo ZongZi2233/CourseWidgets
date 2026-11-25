@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:mmkv/mmkv.dart';
 import 'package:flutter/foundation.dart';
 
@@ -182,4 +183,17 @@ class StorageService {
   static const String keyGlassOpacity = 'glass_surface_opacity';
   static const String keyGlassBlur = 'glass_surface_blur';
   static const String keyGlobalUiBlur = 'global_ui_blur';
+
+  /// 默认是否开启「自适应深色模式（跟随系统）」：
+  /// Windows 端默认开启（若用户曾手动开启强制深色且未单独配置自适应，则尊重手动配置）
+  bool getEffectiveAdaptiveDarkMode({
+    @visibleForTesting bool? isWindowsOverride,
+  }) {
+    final saved = getBool(keyAdaptiveDarkMode);
+    if (saved != null) return saved;
+    final isWin = isWindowsOverride ?? Platform.isWindows;
+    if (!isWin) return false;
+    final manualDark = getBool(keyDarkMode) ?? false;
+    return !manualDark;
+  }
 }

@@ -190,8 +190,7 @@ void main() async {
   // [v3.1.8] 在 runApp 前同步读取初始深浅色模式，确保桌面开屏第 1 帧配色零闪烁
   final storage = StorageService();
   final darkMode = storage.getBool(StorageService.keyDarkMode) ?? false;
-  final adaptiveMode =
-      storage.getBool(StorageService.keyAdaptiveDarkMode) ?? false;
+  final adaptiveMode = storage.getEffectiveAdaptiveDarkMode();
   final bool initialDark = adaptiveMode
       ? WidgetsBinding.instance.platformDispatcher.platformBrightness ==
             Brightness.dark
@@ -398,6 +397,7 @@ void main() async {
 
   runApp(
     LiquidGlassWidgets.wrap(
+      brightnessResolver: material.Theme.maybeBrightnessOf,
       child: Phoenix(
         child: MultiProvider(
           providers: [
@@ -509,15 +509,12 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   void didChangePlatformBrightness() {
     super.didChangePlatformBrightness();
     final storage = StorageService();
-    final adaptiveMode =
-        storage.getBool(StorageService.keyAdaptiveDarkMode) ?? false;
+    final adaptiveMode = storage.getEffectiveAdaptiveDarkMode();
     if (adaptiveMode) {
       final brightness =
           WidgetsBinding.instance.platformDispatcher.platformBrightness;
       final isDark = brightness == Brightness.dark;
-      GlassOpacityManager().setDarkMode(isDark);
-      globalUseDarkMode = isDark;
-      globalDarkModeNotifier.value = isDark;
+      ThemeService().setDarkMode(isDark);
       if (mounted) {
         setState(() {});
       }
@@ -528,8 +525,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     try {
       final storage = StorageService();
       final darkMode = storage.getBool(StorageService.keyDarkMode) ?? false;
-      final adaptiveMode =
-          storage.getBool(StorageService.keyAdaptiveDarkMode) ?? false;
+      final adaptiveMode = storage.getEffectiveAdaptiveDarkMode();
 
       bool isDark = false;
       if (adaptiveMode) {
@@ -539,9 +535,13 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       } else {
         isDark = darkMode;
       }
-      GlassOpacityManager().setDarkMode(isDark);
-      globalUseDarkMode = isDark;
-      globalDarkModeNotifier.value = isDark;
+      if (ThemeService().isDarkMode != isDark) {
+        ThemeService().setDarkMode(isDark);
+      } else {
+        GlassOpacityManager().setDarkMode(isDark);
+        globalUseDarkMode = isDark;
+        globalDarkModeNotifier.value = isDark;
+      }
 
       if (mounted) {
         setState(() {
@@ -615,14 +615,16 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           builder: (context, backgroundPath, _) {
             return Consumer<ThemeService>(
               builder: (context, themeService, child) {
+                final lightColorScheme = material.ColorScheme.fromSeed(
+                  seedColor: themeService.primaryColor,
+                  brightness: material.Brightness.light,
+                );
                 final lightMaterialTheme = material.ThemeData(
                   useMaterial3: true,
                   brightness: material.Brightness.light,
                   scaffoldBackgroundColor: material.Colors.transparent,
-                  colorScheme: material.ColorScheme.fromSeed(
-                    seedColor: themeService.primaryColor,
-                    brightness: material.Brightness.light,
-                  ),
+                  colorScheme: lightColorScheme,
+                  primaryColor: lightColorScheme.primary,
                   fontFamily: (Platform.isWindows || Platform.isMacOS)
                       ? 'PingFangSC'
                       : null,
@@ -649,14 +651,16 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                   ),
                 );
 
+                final darkColorScheme = material.ColorScheme.fromSeed(
+                  seedColor: themeService.primaryColor,
+                  brightness: material.Brightness.dark,
+                );
                 final darkMaterialTheme = material.ThemeData(
                   useMaterial3: true,
                   brightness: material.Brightness.dark,
                   scaffoldBackgroundColor: material.Colors.transparent,
-                  colorScheme: material.ColorScheme.fromSeed(
-                    seedColor: themeService.primaryColor,
-                    brightness: material.Brightness.dark,
-                  ),
+                  colorScheme: darkColorScheme,
+                  primaryColor: darkColorScheme.primary,
                   fontFamily: (Platform.isWindows || Platform.isMacOS)
                       ? 'PingFangSC'
                       : null,
@@ -784,17 +788,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                     // 隔离背景层，防止二级页面切换时引发玻璃滤镜的重绘掉帧
                     backgroundWidget = RepaintBoundary(child: backgroundWidget);
 
-                    final Widget innerContent = material.Theme(
-                      data: isDarkMode ? darkMaterialTheme : lightMaterialTheme,
-                      child: material.Material(
-                        type: material.MaterialType.transparency,
-                        child: child ?? const SizedBox(),
-                      ),
-                    );
-
-                    Widget contentWidget = innerContent;
+                    Widget pageBody = child ?? const SizedBox();
                     if (Platform.isWindows) {
-                      contentWidget = CallbackShortcuts(
+                      pageBody = CallbackShortcuts(
                         bindings: {
                           const SingleActivator(LogicalKeyboardKey.escape): () {
                             if (rootNavigatorKey.currentState?.canPop() ?? false) {
@@ -807,12 +803,20 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                           child: Column(
                             children: [
                               const WindowsDesktopTitleBar(),
-                              Expanded(child: innerContent),
+                              Expanded(child: pageBody),
                             ],
                           ),
                         ),
                       );
                     }
+
+                    final Widget contentWidget = material.Theme(
+                      data: isDarkMode ? darkMaterialTheme : lightMaterialTheme,
+                      child: material.Material(
+                        type: material.MaterialType.transparency,
+                        child: pageBody,
+                      ),
+                    );
 
                     final coreStack = Listener(
                       behavior: HitTestBehavior.translucent,

@@ -195,7 +195,7 @@ class _WindowsCustomWindowState extends State<WindowsCustomWindow> {
   /// [v3.0.0-alpha25] Windows 桌面端左下角官方 GlassTabBar 双标签 touch bar（课程、日历）
   Widget _buildLandscapeLeftNav(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final primaryColor = Theme.of(context).primaryColor;
+    final primaryColor = Theme.of(context).colorScheme.primary;
 
     return SizedBox(
       width: 180.0,
@@ -265,6 +265,16 @@ class _WindowsCustomWindowState extends State<WindowsCustomWindow> {
             innerBlur: 0.0,
             interactionBehavior: GlassInteractionBehavior.full,
             settings: barSettings,
+            selectedIconColor:
+                isDark ? Colors.white : const Color(0xFF1A1D24),
+            unselectedIconColor: isDark
+                ? Colors.white.withValues(alpha: 0.72)
+                : const Color(0xFF4A4E58),
+            selectedLabelColor:
+                isDark ? Colors.white : const Color(0xFF1A1D24),
+            unselectedLabelColor: isDark
+                ? Colors.white.withValues(alpha: 0.72)
+                : const Color(0xFF4A4E58),
             indicatorColor: primaryColor.withValues(
               alpha: glass.isGlassOpaque
                   ? (isDark ? 0.34 : 0.22)
@@ -292,7 +302,7 @@ class _WindowsCustomWindowState extends State<WindowsCustomWindow> {
   /// [v3.0.0-alpha25] Windows 桌面端右下角纯透镜液态玻璃设置按钮（52x52圆形），物理弹簧灵动缩放，杜绝任何实色/Material遮罩
   Widget _buildLandscapeSettingsButton(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final primaryColor = Theme.of(context).primaryColor;
+    final primaryColor = Theme.of(context).colorScheme.primary;
     final isSelected = _selectedIndex == 2;
 
     return ListenableBuilder(

@@ -61,7 +61,7 @@ class _SettingsNotificationScreenState
 
   @override
   Widget build(BuildContext context) {
-    final isDark = ThemeService().isDarkMode;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final isDesktop =
         Platform.isWindows || Platform.isMacOS || Platform.isLinux;
     final topPadding =

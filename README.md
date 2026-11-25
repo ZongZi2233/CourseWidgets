@@ -12,7 +12,7 @@
 [![Dart](https://img.shields.io/badge/Dart-3.14.0+-0175C2?logo=dart)](https://dart.dev)
 [![Android](https://img.shields.io/badge/Android-15%2B%20(API%2035--37.2)-3DDC84?logo=android)](https://github.com/ZongZi2233/CourseWidgets/releases)
 [![Windows](https://img.shields.io/badge/Windows-10%2F11%20x64-0078D6?logo=windows)](https://github.com/ZongZi2233/CourseWidgets/releases)
-[![Version](https://img.shields.io/badge/Release-v3.2.4%20(Build%203240)-FF9BAE)](https://github.com/ZongZi2233/CourseWidgets/releases/tag/v3.2.4)
+[![Version](https://img.shields.io/badge/Release-v3.2.5%20(Build%203250)-FF9BAE)](https://github.com/ZongZi2233/CourseWidgets/releases/tag/v3.2.5)
 
 [English](README_EN.md) | **简体中文**
 
@@ -20,10 +20,10 @@
 
 ---
 
-## 📦 最新正式版下载：[v3.2.4 (Build 3240)](https://github.com/ZongZi2233/CourseWidgets/releases/tag/v3.2.4)
+## 📦 最新正式版下载：[v3.2.5 (Build 3250)](https://github.com/ZongZi2233/CourseWidgets/releases/tag/v3.2.5)
 
-* **Android 客户端 (`arm64-v8a`)**：[`CourseWidgets-v3.2.4-android-arm64-v8a.apk`](https://github.com/ZongZi2233/CourseWidgets/releases/download/v3.2.4/CourseWidgets-v3.2.4-android-arm64-v8a.apk) —— 支持 Android 15+（API 35+，基于 API 37.2 与 NDK r30 编译），完整包含全应用玻璃白值/玻璃模糊与独立全局界面模糊三滑块统一控制（支持 100% 不透明跳过玻璃模糊）、课时配置页 `BackdropGroup` 120Hz 掉帧根治与液态玻璃「保存」按钮回归、首页课表全高 Edge-to-Edge 贯穿滚动恢复、Android 16 实况通知右侧 `64dp` 纯白大字教室方块与浅/深色 1:1 真实预览、每日自动检查更新、更新缓存自动清理以及 Android 应用名称恢复与字节级增量更新加固。
-* **Windows 桌面端 (`x64`)**：[`CourseWidgets-v3.2.4-windows-x64.zip`](https://github.com/ZongZi2233/CourseWidgets/releases/download/v3.2.4/CourseWidgets-v3.2.4-windows-x64.zip) —— 免安装便携版（MSVC `/O2` + `/OPT:REF,/OPT:ICF` + Dart AOT），包含全应用玻璃白值/玻璃模糊/全局 UI 模糊解耦控制与一键恢复默认、首页课表全高 Edge-to-Edge 贯穿滚动恢复、每日首次打开自动检查更新与过期暂存目录自动清理、120Hz 课时配置优化、莫奈取色持久保护与文件级 `SHA-256` 增量热更新。
+* **Android 客户端 (`arm64-v8a`)**：[`CourseWidgets-v3.2.5-android-arm64-v8a.apk`](https://github.com/ZongZi2233/CourseWidgets/releases/download/v3.2.5/CourseWidgets-v3.2.5-android-arm64-v8a.apk) —— 支持 Android 15+（API 35+，基于 API 37.2 与 NDK r30 编译），默认组件白值 `15%`、组件模糊 `4.5`、全局模糊 `3.5`，并简化通用设置材质文案（`组件白值` / `组件模糊` / `全局模糊`）；继承全应用材质与模糊统一控制、课时配置 120Hz 优化、Edge-to-Edge 全高滚动、Android 16 实况通知 `64dp` 纯白字教室方块、每日自动检查更新及字节级增量更新。
+* **Windows 桌面端 (`x64`)**：[`CourseWidgets-v3.2.5-windows-x64.zip`](https://github.com/ZongZi2233/CourseWidgets/releases/download/v3.2.5/CourseWidgets-v3.2.5-windows-x64.zip) —— 免安装便携版（MSVC `/O2` + `/OPT:REF,/OPT:ICF` + Dart AOT），默认开启自适应跟随系统深色模式，默认组件白值 `5%`、组件模糊 `4.5`、全局模糊 `3.5`，并全面修复深色模式下标题栏、左下角导航、日历与设置页部分深色文字与暗色强调色对比度问题。
 
 ---
 

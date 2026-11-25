@@ -1,36 +1,60 @@
+import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'storage_service.dart';
 
-/// [v3.2.4] 全应用玻璃材质与全局界面高斯模糊统一响应式配置服务
+/// [v3.2.4 / v3.2.5] 全应用玻璃材质与全局界面高斯模糊统一响应式配置服务
 ///
 /// 严格遵循三项相互独立且边界受控的参数规范：
-/// 1. [glassOpacity]（玻璃透明度 / 白值）：范围 `[0.0 .. 1.0]`，允许 0% 完全透明，也允许 100% 完全不透明；
+/// 1. [glassOpacity]（组件白值）：范围 `[0.0 .. 1.0]`，允许 0% 完全透明，也允许 100% 完全不透明；
 ///    当达到完全不透明（`>= 0.995`）时，自动跳过玻璃组件的高斯模糊渲染以节省 GPU 带宽；
-/// 2. [glassBlur]（玻璃高斯模糊度）：范围 `[0.0 .. 28.0]`，仅控制玻璃组件自身的磨砂模糊强度，
+/// 2. [glassBlur]（组件模糊）：范围 `[0.0 .. 28.0]`，仅控制玻璃组件自身的磨砂模糊强度，
 ///    与全局界面高斯模糊彻底解耦；
-/// 3. [globalUiBlur]（全局界面高斯模糊度）：范围 `[3.0 .. 14.0]`，仅控制弹窗背景幕布、状态栏渐进模糊、
+/// 3. [globalUiBlur]（全局模糊）：范围 `[3.0 .. 14.0]`，仅控制弹窗背景幕布、状态栏渐进模糊、
 ///    滑动动态模糊等非玻璃全局 UI 模糊，不影响玻璃组件自身模糊，且禁止完全关闭（`min > 0`）或设得过大（`max <= 14.0`）。
 class GlassAppearanceService extends ChangeNotifier {
   GlassAppearanceService._();
   static final GlassAppearanceService instance = GlassAppearanceService._();
 
-  // ── 玻璃透明度（白值）边界与默认值 ──────────────────────────────────────────
+  // ── 映射校准基准点（保持跨版本渲染比例稳定） ───────────────────────────────
+  static const double referenceGlassOpacity = 0.35;
+  static const double referenceGlassBlur = 12.0;
+  static const double referenceGlobalUiBlur = 6.5;
+
+  // ── 平台默认参数（v3.2.5：Windows 5%/4.5/3.5，Android 15%/4.5/3.5） ──────────
+  static const double windowsDefaultGlassOpacity = 0.05;
+  static const double androidDefaultGlassOpacity = 0.15;
+  static const double windowsDefaultGlassBlur = 4.5;
+  static const double androidDefaultGlassBlur = 4.5;
+  static const double windowsDefaultGlobalUiBlur = 3.5;
+  static const double androidDefaultGlobalUiBlur = 3.5;
+
+  static double defaultGlassOpacityFor({required bool isWindows}) =>
+      isWindows ? windowsDefaultGlassOpacity : androidDefaultGlassOpacity;
+  static double defaultGlassBlurFor({required bool isWindows}) =>
+      isWindows ? windowsDefaultGlassBlur : androidDefaultGlassBlur;
+  static double defaultGlobalUiBlurFor({required bool isWindows}) =>
+      isWindows ? windowsDefaultGlobalUiBlur : androidDefaultGlobalUiBlur;
+
+  // ── 组件白值边界与当前平台默认值 ──────────────────────────────────────────
   static const double minGlassOpacity = 0.0;
   static const double maxGlassOpacity = 1.0;
-  static const double defaultGlassOpacity = 0.35;
+  static double get defaultGlassOpacity =>
+      defaultGlassOpacityFor(isWindows: Platform.isWindows);
   static const double opaqueBypassThreshold = 0.995;
 
-  // ── 玻璃高斯模糊度边界与默认值 ──────────────────────────────────────────────
+  // ── 组件模糊边界与当前平台默认值 ──────────────────────────────────────────
   static const double minGlassBlur = 0.0;
   static const double maxGlassBlur = 28.0;
-  static const double defaultGlassBlur = 12.0;
+  static double get defaultGlassBlur =>
+      defaultGlassBlurFor(isWindows: Platform.isWindows);
 
-  // ── 全局界面高斯模糊度边界与默认值（不可完全关闭，不可过大） ────────────────
+  // ── 全局模糊边界与当前平台默认值（不可完全关闭，不可过大） ──────────────────
   static const double minGlobalUiBlur = 3.0;
   static const double maxGlobalUiBlur = 14.0;
-  static const double defaultGlobalUiBlur = 6.5;
+  static double get defaultGlobalUiBlur =>
+      defaultGlobalUiBlurFor(isWindows: Platform.isWindows);
 
   final StorageService _storage = StorageService();
   bool _initialized = false;
@@ -61,8 +85,8 @@ class GlassAppearanceService extends ChangeNotifier {
       (_glassBlur - defaultGlassBlur).abs() < 0.05 &&
       (_globalUiBlur - defaultGlobalUiBlur).abs() < 0.05;
 
-  /// 全局界面模糊相对默认基准 (`6.5`) 的倍率（恒 > 0，独立于玻璃模糊）
-  double get globalUiBlurScale => _globalUiBlur / defaultGlobalUiBlur;
+  /// 全局界面模糊相对校准基准 (`6.5`) 的倍率（恒 > 0，独立于玻璃模糊）
+  double get globalUiBlurScale => _globalUiBlur / referenceGlobalUiBlur;
 
   /// 从 MMKV 恢复并钳制三项材质参数
   Future<void> initialize() async {
@@ -145,7 +169,7 @@ class GlassAppearanceService extends ChangeNotifier {
   }
 
   /// 分段线性映射表层不透明度：
-  /// - 在 `defaultGlassOpacity (0.35)` 时 100% 精准保持组件原始 `defaultAlpha`
+  /// - 在 `referenceGlassOpacity (0.35)` 时 100% 精准保持组件原始 `defaultAlpha`
   /// - 向下到 `0.0` 时线性平滑收敛至 `0.0`（完全透明）
   /// - 向上到 `1.0` 时线性平滑提升至 `1.0`（完全不透明）
   double resolveSurfaceAlpha(double defaultAlpha) {
@@ -153,12 +177,12 @@ class GlassAppearanceService extends ChangeNotifier {
     if (_glassOpacity <= 0.001) return 0.0;
     if (_glassOpacity >= opaqueBypassThreshold) return 1.0;
 
-    if (_glassOpacity <= defaultGlassOpacity) {
-      return (baseAlpha * (_glassOpacity / defaultGlassOpacity))
+    if (_glassOpacity <= referenceGlassOpacity) {
+      return (baseAlpha * (_glassOpacity / referenceGlassOpacity))
           .clamp(0.0, 1.0);
     }
-    final t = (_glassOpacity - defaultGlassOpacity) /
-        (opaqueBypassThreshold - defaultGlassOpacity);
+    final t = (_glassOpacity - referenceGlassOpacity) /
+        (opaqueBypassThreshold - referenceGlassOpacity);
     return (baseAlpha + (1.0 - baseAlpha) * t).clamp(0.0, 1.0);
   }
 
@@ -193,11 +217,11 @@ class GlassAppearanceService extends ChangeNotifier {
     if (isGlassOpaque) {
       return opaqueTarget;
     }
-    if (_glassOpacity <= defaultGlassOpacity) {
+    if (_glassOpacity <= referenceGlassOpacity) {
       return baseColor.withValues(alpha: targetAlpha);
     }
-    final t = ((_glassOpacity - defaultGlassOpacity) /
-            (opaqueBypassThreshold - defaultGlassOpacity))
+    final t = ((_glassOpacity - referenceGlassOpacity) /
+            (opaqueBypassThreshold - referenceGlassOpacity))
         .clamp(0.0, 1.0);
     final blendedRgb = Color.lerp(
           baseColor.withValues(alpha: 1.0),
@@ -210,8 +234,8 @@ class GlassAppearanceService extends ChangeNotifier {
 
   /// 解析玻璃组件自身的高斯模糊半径（与 [globalUiBlur] 完全隔离）：
   /// - 当玻璃处于完全不透明 (`isGlassOpaque`) 或 `glassBlur <= 0.05` 时强制返回 `0.0`（跳过模糊渲染）；
-  /// - 在默认值 `12.0` 时严格等于 `defaultSigma`；
-  /// - 高于默认值时按区间平滑增稠（对超通透折射玻璃封顶于 [maxUltraLightSigma] 以保留边缘折射，对 BackdropFilter/大模糊组件延伸至 [maxSigma]）。
+  /// - 在校准基准 `12.0` 时严格等于 `defaultSigma`；
+  /// - 高于校准基准时按区间平滑增稠（对超通透折射玻璃封顶于 [maxUltraLightSigma] 以保留边缘折射，对 BackdropFilter/大模糊组件延伸至 [maxSigma]）。
   double resolveGlassBlur(
     double defaultSigma, {
     double maxSigma = maxGlassBlur,
@@ -223,15 +247,15 @@ class GlassAppearanceService extends ChangeNotifier {
     if (defaultSigma <= 0.0) {
       return 0.0;
     }
-    if (_glassBlur <= defaultGlassBlur) {
-      return (defaultSigma * (_glassBlur / defaultGlassBlur))
+    if (_glassBlur <= referenceGlassBlur) {
+      return (defaultSigma * (_glassBlur / referenceGlassBlur))
           .clamp(0.0, math.max(maxSigma, defaultSigma));
     }
     final double upperTarget = defaultSigma < 4.0
         ? math.min(maxSigma, maxUltraLightSigma)
         : math.max(defaultSigma, maxSigma);
-    final double t = (_glassBlur - defaultGlassBlur) /
-        (maxGlassBlur - defaultGlassBlur);
+    final double t = (_glassBlur - referenceGlassBlur) /
+        (maxGlassBlur - referenceGlassBlur);
     return (defaultSigma + (upperTarget - defaultSigma) * t)
         .clamp(0.0, math.max(maxSigma, defaultSigma));
   }
@@ -247,11 +271,11 @@ class GlassAppearanceService extends ChangeNotifier {
     final safeDefault = math.max(1.0, defaultSigma);
     final minAllowed = math.max(
       0.8,
-      minSigma ?? (safeDefault * (minGlobalUiBlur / defaultGlobalUiBlur)),
+      minSigma ?? (safeDefault * (minGlobalUiBlur / referenceGlobalUiBlur)),
     );
     final maxAllowed = math.max(
       minAllowed,
-      maxSigma ?? (safeDefault * (maxGlobalUiBlur / defaultGlobalUiBlur)),
+      maxSigma ?? (safeDefault * (maxGlobalUiBlur / referenceGlobalUiBlur)),
     );
     final scaled = safeDefault * globalUiBlurScale;
     return scaled.clamp(minAllowed, maxAllowed).toDouble();
