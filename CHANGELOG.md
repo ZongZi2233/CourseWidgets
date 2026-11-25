@@ -2,44 +2,37 @@
 
 本文档记录 CourseWidgets 各版本更新的动态活动演进，重点关注架构改进、渲染优化、故障诊断与教务抓取能力提升。
 
-## [v3.2.5] - 2026-11-25 (Build 3250 · Phase 2 全量收官与课时配置 120Hz 根治提交版，暂未构建发行包)
+## [v3.2.4] - 2026-11-26 (Build 3240 正式版)
 
-### 1. 根治课时配置页与通知设置页 120Hz 滚动掉帧，并恢复顶部液态玻璃「保存」按钮
-- **定位并清除全屏离屏模糊拷贝元凶 (`android_schedule_config_screen.dart`、`settings_notification_screen.dart` & `liquid_components.dart`)**：此前上述两页是全库唯一将整块可滚动 `Scaffold.body` 包裹在 `BackdropGroup(...)` 内的页面，导致顶部使用 `BackdropFilter.grouped` 的胶囊在每次 120Hz 滚动帧都强制 Impeller 执行整屏尺寸（`1200×2600px`）背景回读与全屏高斯模糊，引发剧烈掉帧（与主页大量玻璃控件无任何掉帧的原因完全一致）：
-  - 移除 `AndroidScheduleConfigScreen` 与 `SettingsNotificationScreen` 的全屏 `BackdropGroup` 包裹，`FloatingGlassHeaderButton` 改用局部尺寸 `BackdropFilter`；
-  - 将 `AndroidScheduleConfigScreen` 主内容区重构为独立 `RepaintBoundary` 隔离的 `SingleChildScrollView`，在固定 5 张 `HyperOSCard` 场景下彻底避免滚动甩动时 `SliverList` 重建与整页重绘扩散；同步为 `SettingsGeneralScreen` 补充滚动层 `RepaintBoundary` 隔离；
-  - **恢复真实液态玻璃「保存」按钮**：`AndroidScheduleConfigScreen` 顶部右上角「保存」按钮回归 `GlassButton.custom` 实时液态玻璃质感并完整绑定 `GlassAppearanceService`（玻璃全不透明时自动直出实体超椭圆容器）；
-  - **优化 `HyperOSCard` / `_RenderSharedBlurStencil` 绘制路径**：为 `HyperOSShadows.card` 引入常量阴影列表消除无意义重建标识变更，预缓存阴影 `Paint` 与 `_sheenColor` 亮度计算以实现 `paint()` 零分配，并将采样防抖阈值提升至 `3.0dp`。
-
-### 2. 全应用玻璃白值与模糊统一控制体系（Phase 2 全量收官）
-- **核心活跃界面与弹窗抽屉**：完成日历视图顶部玻璃栏（`CalendarViewScreen`）、课表网格周次控制条 / 日期角标 / 课程详情弹窗（`WeeklyScheduleGrid`）、日期/星期/日历三大选择器弹窗（`liquid_glass_pickers.dart`，弹窗壳体联动 `glassOpacity` + `glassBlur` 且全屏幕布模糊严格独立绑定 `globalUiBlur`）、课时「智慧推算」底部抽屉（`AndroidScheduleConfigScreen`）、通用设置主题模式抽屉（`SettingsGeneralScreen`）以及 WebView 教务导入弹窗与检索抽屉（`WebviewImportScreen`）的全面迁移与不透明直出优化；
-- **全平台、引导页与管线基础设施收口**：完成平板侧边栏（`TabletSideBar`）、iOS 主窗体（`IosLiquidGlassMain`）、macOS 主窗体（`MacosCustomWindow`）、4 个引导页（`onboarding_welcome`/`theme`/`import`/`config`）、旧版桌面课时设置页（`ScheduleConfigScreen`）及运行期离屏 PSO 预热器（`RenderPipelinePrewarmer`）迁移；并删除 `acrylic_backdrop_plate.dart`、`unified_backdrop_panel.dart` 与 `page_blur_controller.dart` 三份零引用遗留文件，更新全量建档清单（[`docs/GLASS_COMPONENTS_INVENTORY.md`](./docs/GLASS_COMPONENTS_INVENTORY.md)）至 Phase 2 100% 完成态。
-
-## [v3.2.4] - 2026-11-25 (Build 3240 · Phase 1 代码与建档提交版，暂未构建发行包)
-
-### 1. 全应用玻璃白值与全局界面高斯模糊统一控制体系（Phase 1）
+### 1. 全应用玻璃白值与全局界面高斯模糊统一控制体系（Phase 1 + Phase 2 全量完成）
 - **新增统一材质响应中枢 (`GlassAppearanceService` & `GlassSettingsHelper`)**：在通用设置（`SettingsGeneralScreen`）新增「玻璃与模糊材质」分组，提供三项独立受控滑块与「恢复默认」选项，实时持久化至 MMKV：
-  - **玻璃透明度（白值）(`0% ~ 100%`)**：统一控制底栏、顶栏、菜单、弹窗与按钮玻璃白值，支持完全透明（`0%`）至完全不透明（`100%`）；当设为完全不透明时自动跳过玻璃自身高斯模糊渲染，消除冗余离屏开销；
-  - **玻璃高斯模糊度 (`0.0 ~ 28.0`)**：仅控制所有玻璃组件自身磨砂模糊强度，与全局界面高斯模糊完全独立；
-  - **全局界面高斯模糊度 (`3.0 ~ 14.0`)**：仅控制弹窗背景幕布模糊、状态栏渐进模糊与切换动态模糊等非玻璃场景，严格独立于玻璃模糊且禁止完全关闭或过载设置；
-- **全量组件建档 (`docs/GLASS_COMPONENTS_INVENTORY.md`)**：完成 `lib/` 全部 83 个文件的玻璃与模糊使用审计建档，并规划于 `v3.2.4`–`v3.2.5` 两版本分期推进；本期 Phase 1 已率先完成核心共享组件（`LiquidCard`、`LiquidButton`、`LiquidSwitch`、`LiquidGlassDialog`、`showLiquidDialog`、`showSharedElementGlassDialog`、`FloatingGlassHeaderButton`、`FloatingLiquidBackButton`、`LiquidBackButton`、`HyperOSCard`、`GlassContextMenu`、`LiquidToast`、`AppUpdateDialog`）、主导航 Chrome（Android 底栏/顶栏/悬浮 Dock、Windows 底栏/持久化标题栏）与全局模糊基建（`StaticBlurredWallpaperService`、`ImmersiveStatusBarBackdrop`、`MotionBlurTransition`、`PageControllerMotionBlur`）迁移。
+  - **玻璃透明度（白值）(`0% ~ 100%`)**：统一控制全应用底栏、顶栏、侧边栏、菜单、选择器、抽屉、弹窗与按钮玻璃白值，支持完全透明（`0%`）至完全不透明（`100%`）；当设为完全不透明时自动降级为实体超椭圆容器并跳过玻璃自身高斯模糊渲染，彻底消除冗余离屏开销；
+  - **玻璃高斯模糊度 (`0.0 ~ 28.0`)**：仅控制所有玻璃组件自身磨砂模糊强度与静态壁纸模糊采样，与全局界面高斯模糊完全独立；
+  - **全局界面高斯模糊度 (`3.0 ~ 14.0`)**：仅控制弹窗背景幕布模糊（`LiquidGlassDialog` / `showLiquidDialog` / `showSharedElementGlassDialog` / `AppUpdateDialog` / 三大选择器）、状态栏渐进模糊（`ImmersiveStatusBarBackdrop`）与切周 1D 动态模糊（`MotionBlurTransition`），严格独立于玻璃模糊且禁止完全关闭或过载设置；
+- **全量组件建档与双期全覆盖 (`docs/GLASS_COMPONENTS_INVENTORY.md`)**：完成 `lib/` 全部文件的玻璃与模糊审计建档，并一次性合并完成 Phase 1 + Phase 2 全量迁移（涵盖日历顶栏、课表周次控制条与课程详情抽屉、三大选择器弹窗、课时推算/主题抽屉、WebView/iOS/macOS/平板/引导页/旧版课时页、`RenderPipelinePrewarmer` 自适应预热），并删除 `acrylic_backdrop_plate.dart`、`unified_backdrop_panel.dart`、`page_blur_controller.dart` 3 份零引用遗留文件。
 
-### 2. 每日首次打开自动检查更新 (`AppUpdateService` & `AppUpdateDialog`)
-- 上线跨平台每日自动检测更新机制：每日首次打开软件且进入主界面后静默检测 GitHub Releases 新版本（当天仅校验一次，记录本地日历日期于 MMKV），发现新版本时自动弹出液态玻璃更新弹窗，已是最新或无网络时静默跳过；通用设置同步提供「每日自动检查更新」开关。
+### 2. 根治课时配置页与通知设置页 120Hz 滚动掉帧，并恢复顶部液态玻璃「保存」按钮
+- **定位并清除全屏离屏模糊拷贝元凶 (`android_schedule_config_screen.dart`、`settings_notification_screen.dart` & `liquid_components.dart`)**：此前上述两页是全库唯一将整块可滚动 `Scaffold.body` 包裹在 `BackdropGroup(...)` 内的页面，导致顶部使用 `BackdropFilter.grouped` 的胶囊在每次 120Hz 滚动帧都强制 Impeller 执行整屏尺寸背景回读与全屏高斯模糊，引发剧烈掉帧：
+  - 移除 `AndroidScheduleConfigScreen` 与 `SettingsNotificationScreen` 的全屏 `BackdropGroup` 包裹，`FloatingGlassHeaderButton` 改用局部尺寸 `BackdropFilter`；
+  - 将 `AndroidScheduleConfigScreen` 主内容区重构为独立 `RepaintBoundary` 隔离的 `SingleChildScrollView`，彻底避免滚动时 `SliverList` 重建与整页重绘扩散；同步为 `SettingsGeneralScreen` 与 `SettingsNotificationScreen` 补充滚动层 `RepaintBoundary` 隔离；
+  - **恢复真实液态玻璃「保存」按钮**：`AndroidScheduleConfigScreen` 顶部右上角「保存」按钮回归 `GlassButton.custom` 实时液态玻璃质感并完整绑定 `GlassAppearanceService`（玻璃全不透明时自动直出实体超椭圆容器）；
+  - **优化 `HyperOSCard` / `_RenderSharedBlurStencil` 绘制路径**：引入 `HyperOSShadows.card` 常量阴影列表、画笔与亮度预缓存以实现 `paint()` 零堆分配，并将采样防抖阈值提升至 `3.0dp`。
 
-### 3. 修复 Android 应用名称缺失与增量更新回退故障
-- **恢复 Android 安装器与系统应用信息名称 (`AndroidManifest.xml` & `strings.xml`)**：将 `<application android:label>` 由空白占位符恢复为 `@string/app_name`（`CourseWidgets`），解决安装包解析器与系统设置「应用信息」不显示应用名称的问题；
-- **加固 Android 字节级增量更新通道 (`AppUpdateService` & `AppUpdateDialog`)**：修复 `prepareAndroidIncrementalPlan` 对同一次检测重复全盘哈希 65 MB `base.apk` 的问题并迁入后台 `Isolate.run` 扫描 ZIP 条目；加入 128 KB 最小有效复用门槛（带 4 KB 兜底）消弭大量零碎 Range 请求；在 `executeAndroidIncrementalUpdate` 预解析 CDN 302 直连地址并长连接复用、禁用 `Accept-Encoding: gzip` 干预（`identity` + `autoUncompress = false`）、以 `RandomAccessFile` 精确按偏移原位重试写盘（3 次指数退避 + 过期链接自动刷新），并在预检面板透出简洁诊断信息以便定位。
+### 3. Android 16 实况通知右侧 64dp 超大纯白字体教室方块、浅色模式变灰修复与 1:1 真实预览
+- **彻底修复浅色模式下蓝色块内教室文字变灰看不清问题 (`LiveUpdateNotificationManager.kt`)**：定位 AOSP `ContrastColorUtil.ensureColorSpanContrast()` 会忽略 `BackgroundColorSpan` 并直接按浅色白卡对比度将正文内 `ForegroundColorSpan(0xFFFFFFFF)` 强行压暗为中灰色的底层机制，彻底移除文本槽位中的 `BackgroundColorSpan`；
+- **右侧 `64dp×64dp` 高饱和渐变成像主导视方块 (`createClassroomHeroBadgeBitmap`)**：严格保留 `1:1` 正方形尺寸适配 AOSP `notification_right_icon_size` + `centerCrop`，使用经 WCAG `>= 4.8:1` 亮度对比校验的课程高饱和渐变底块绘制 **`23.5–28dp` 强制纯白 `#FFFFFFFF` 超大教室编号（`中1203` / `A101`）** 与底部深色半透节次/日程标签胶囊（`1-2节` / `3-4节` / `周一·3门`），同时绕开 `Notification.removeTextSizeSpans()` 剥离限制，形成 **64dp 纯白方块教室 > 16sp 粗体主标题关键时间 > 14sp 次要课名/场地 > 12sp 页眉状态** 的 4 级真实字号落差；
+- **全通知浅/深色自适应与设置页 1:1 诚实双色预览 (`SettingsNotificationScreen`)**：依据系统夜间模式动态切换通知重点强调色、正文字色、进度轨道与游标底环颜色，并将设置页预览卡片同步重构为 **浅色白卡 / 深色暗卡 1:1 等比例真实对照预览**。
 
-### 4. 更新下载与增量合并缓存自动清理机制 (`AppUpdateService` & `main.dart`)
-- **`.part` 原子写入与下载前主动清空 (`executeAndroidIncrementalUpdate` & `downloadAndInstallAndroidApk`)**：Android 全量/增量安装包下载与重组统一先写入 `.apk.part` 临时文件并在体积与 SHA-256 校验全部通过后再原子重命名为 `.apk`；每次发起新下载前自动执行 `cleanupStaleUpdateCaches(forcePurgeAll: true)` 清理历史安装包与半途残留，异常失败路径同步清除残损文件，彻底避免连续多版本增量更新导致缓存目录体积不断膨胀；
-- **启动与恢复前台自动清理**：在应用启动与恢复前台时异步运行 `cleanupStaleUpdateCaches()`，自动清理版本号不高于当前已安装版本的 `CourseWidgets-*.apk`/`.zip`、残余 `.apk.part`/`.apk.tmp`、超过 2 小时的过期未安装新包以及 Windows 端过期 `_update_staging` 暂存目录与旧更新脚本（同时保护正在进行中的下载与无关缓存文件）。
+### 4. 每日首次打开自动检查更新与更新缓存自动清理 (`AppUpdateService` & `AppUpdateDialog` & `main.dart`)
+- **每日静默检查更新**：每日首次打开软件并进入主界面后静默检测 GitHub Releases 新版本（以本地日期 `YYYY-MM-DD` 持久化于 MMKV，网络异常不消耗当日次数），发现新版本即弹出液态玻璃更新浮窗；通用设置提供「每日自动检查更新」开关。
+- **缓存防膨胀自动清理**：Android 全量/增量下载统一 `.apk.part` 原子写入与 SHA-256 校验，每次发起新下载前及应用启动/恢复前台时自动清理历史安装包、残余 `.part`/`.tmp`、超时未安装缓存及 Windows 过期 `_update_staging` 暂存目录。
 
-### 5. 修复 Android 实况通知教室字号无层级对比问题 (`LiveUpdateNotificationManager.kt` & `SettingsNotificationScreen`)
-- **绕开 AOSP Binder `removeTextSizeSpans()` 字号剥离限制**：修正此前 `RelativeSizeSpan` 经由 `Notification.safeCharSequence()` 跨进程传递至 SystemUI 时被系统强制剥离、导致正文行内教室与场地等大无对比的问题；在完全保留原生 Android 16 Promoted Ongoing 合规性（零 `RemoteViews`）的前提下，重塑原生三槽位字号对比体系：
-  - 将高对比课程色块教室编号与关键时间（`[ 中1203 ] 18:30–20:05` / `[ A101 ] 09:40 下课`）整体提升至原生最大粗体 **`contentTitle`** 槽位，形成压倒性第一视觉焦距；
-  - 将课程名称、附属场地说明与次节预告下沉至较小字号的 **`contentText` / `BigTextStyle`** 槽位，并将右侧独立真圆角节次/日历徽章放大至 `56dp`；
-- **设置页 1:1 真实预览同步 (`SettingsNotificationScreen`)**：同步更新通知设置页三场景实况预览卡片，真实呈现教室标题置顶放大 > 课程名称中等 > 场地与详情次要的层级比例。
+### 5. 修复 Android 应用名称缺失与字节级增量更新通道加固
+- **恢复 Android 安装器与系统应用信息名称 (`AndroidManifest.xml` & `strings.xml`)**：恢复 `<application android:label="@string/app_name">`（`CourseWidgets`），解决安装包解析器与系统应用信息界面名称显示空白的问题；
+- **加固 Android Range 增量更新**：预解析 CDN 302 直连并长连接复用、强制 `Accept-Encoding: identity` (`autoUncompress = false`)、`Isolate.run` 扫描 ZIP 条目避免重复全盘哈希、过滤 128 KB 以下碎片块并以 `RandomAccessFile` 原位指数退避重试写入。
+
+### 6. 恢复 Android & Windows 首页课表网格全高 Edge-to-Edge 贯穿滚动
+- **移除星期表头下方硬裁切 (`WeeklyScheduleGrid` & `WindowsScheduleScreen`)**：恢复纵向滚动区域为 `Positioned.fill` + `Clip.none`（由 `padding.top` 控制初始起课间距）并移除 Windows 端外层上下 `Padding`，使课程卡片重新支持穿过星期行、悬浮顶栏 / 周次控制条、状态栏与底栏的全高 Edge-to-Edge 平滑滚动与玻璃折射体验。
 
 ## [v3.2.3] - 2026-11-25 (Build 3230 正式版)
 

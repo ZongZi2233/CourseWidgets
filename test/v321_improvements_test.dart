@@ -73,7 +73,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('高等数学'), findsOneWidget);
+      expect(find.text('09:40 下课 · 高等数学'), findsOneWidget);
       expect(find.text('逸夫楼'), findsOneWidget);
       expect(find.textContaining('课表 ·'), findsNothing);
       expect(find.textContaining('CourseWidgets'), findsNothing);
@@ -85,10 +85,10 @@ void main() {
       await tester.pump(const Duration(milliseconds: 250));
 
       expect(find.text('嵌入'), findsNothing);
-      expect(find.text('嵌入式系统原理与应用'), findsOneWidget);
+      expect(find.text('10:00–11:40 · 嵌入式系统原理与应用'), findsOneWidget);
       expect(find.text('中1203'), findsAtLeastNWidgets(1));
       expect(find.text('信工学院基础实验室（4）'), findsOneWidget);
-      expect(find.text('3-4'), findsOneWidget);
+      expect(find.text('3-4节'), findsOneWidget);
 
       await tester.tap(find.text('今日无课'));
       await tester.pump();
@@ -100,8 +100,7 @@ void main() {
       expect(emptyDaySize.height, greaterThanOrEqualTo(156));
       expect(find.text('人工智能—AI绘画从入门到精通'), findsOneWidget);
       expect(find.text('11月30日 · 第 12 周'), findsOneWidget);
-      expect(find.text('周一'), findsOneWidget);
-      expect(find.text('3门'), findsOneWidget);
+      expect(find.text('周一·3门'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 

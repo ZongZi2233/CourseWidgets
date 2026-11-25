@@ -628,22 +628,19 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
         : (topPadding + headerHeight + 6);
 
     return Stack(
+      clipBehavior: Clip.none,
       children: [
-        // 1. 纵向滚动内容区（顶部在星期表头下方精准裁剪，底部延伸至悬浮底栏下方供液态玻璃折射）
-        Positioned(
-          top: contentTop,
-          left: 0,
-          right: 0,
-          bottom: 0,
+        // 1. 纵向滚动内容区（全高 Edge-to-Edge 贯穿滚动，顶部穿过星期栏、悬浮玻璃栏直抵状态栏，底部穿过悬浮底栏）
+        Positioned.fill(
           child: AdaptiveSmoothScroll(
             durationMS: 250,
             scrollSpeed: 1.2,
             builder: (context, controller, physics) => SingleChildScrollView(
               controller: controller,
               physics: physics,
-              clipBehavior: Clip.hardEdge,
+              clipBehavior: Clip.none,
               padding: EdgeInsets.only(
-                top: 2,
+                top: contentTop,
                 bottom: resolvedPadding.bottom,
                 left: resolvedPadding.left,
                 right: resolvedPadding.right,

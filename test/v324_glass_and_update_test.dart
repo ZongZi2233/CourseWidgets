@@ -7,14 +7,17 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
+import 'package:coursewidgets/providers/schedule_provider.dart';
 import 'package:coursewidgets/services/app_update_service.dart';
 import 'package:coursewidgets/services/glass_appearance_service.dart';
 import 'package:coursewidgets/services/storage_service.dart';
-import 'package:coursewidgets/services/theme_service.dart';
+import 'package:coursewidgets/services/theme_service.dart' as app_theme;
 import 'package:coursewidgets/ui/screens/settings_general_screen.dart';
 import 'package:coursewidgets/ui/screens/settings_notification_screen.dart';
+import 'package:coursewidgets/ui/screens/windows_schedule_screen.dart';
 import 'package:coursewidgets/ui/widgets/app_update_dialog.dart';
 import 'package:coursewidgets/ui/widgets/liquid_components.dart';
+import 'package:coursewidgets/ui/widgets/weekly_schedule_grid.dart';
 
 class _DirectHttpOverrides extends HttpOverrides {}
 
@@ -164,7 +167,9 @@ void main() {
           theme: GlassThemeData.simple(quality: GlassQuality.standard),
           child: MultiProvider(
             providers: [
-              ChangeNotifierProvider<ThemeService>.value(value: ThemeService()),
+              ChangeNotifierProvider<app_theme.ThemeService>.value(
+                value: app_theme.ThemeService(),
+              ),
               ChangeNotifierProvider<GlassAppearanceService>.value(
                 value: GlassAppearanceService.instance,
               ),
@@ -745,10 +750,10 @@ void main() {
     });
   });
 
-  group('v3.2.4 Android live notification native Title slot classroom hierarchy',
+  group('v3.2.4 Android live notification hero classroom badge & Light/Dark parity',
       () {
     test(
-        'LiveUpdateNotificationManager promotes appendClassroomPill in heroTitleSpan without stripped RelativeSizeSpan or RemoteViews',
+        'LiveUpdateNotificationManager eliminates BackgroundColorSpan/RelativeSizeSpan/RemoteViews and renders 64dp pure-white classroom hero badge',
         () async {
       final rawKtSource = await File(
         'android/app/src/main/kotlin/com/zongzi/schedule/LiveUpdateNotificationManager.kt',
@@ -757,22 +762,98 @@ void main() {
           .replaceAll(RegExp(r'/\*[\s\S]*?\*/'), '')
           .replaceAll(RegExp(r'//.*$', multiLine: true), '');
 
+      expect(ktSource.contains('BackgroundColorSpan'), isFalse);
       expect(ktSource.contains('RelativeSizeSpan'), isFalse);
       expect(ktSource.contains('setCustomContentView'), isFalse);
       expect(ktSource.contains('setCustomBigContentView'), isFalse);
 
-      // All three primary course states (ongoing, waiting, future/empty-day)
-      // promote appendClassroomPill inside heroTitleSpan (contentTitle slot).
-      final heroMatches = RegExp(
-        r'val heroTitleSpan\s*=\s*SpannableStringBuilder\(\)\.apply\s*\{[\s\S]*?appendClassroomPill\(',
+      expect(ktSource.contains('createClassroomHeroBadgeBitmap'), isTrue);
+      expect(ktSource.contains('64f * density'), isTrue);
+      expect(ktSource.contains('0xFFFFFFFF.toInt()'), isTrue);
+
+      // All 3 course states (ongoing, waiting, future/empty-day) promote classroom.code into badgePrimary.
+      final badgePrimaryMatches = RegExp(
+        r'val badgePrimary\s*=\s*if\s*\(classroom\.code\.isNotEmpty\(\)\)\s*\{?\s*classroom\.code',
       ).allMatches(ktSource);
-      expect(heroMatches.length, 3);
+      expect(badgePrimaryMatches.length, 3);
     });
 
     testWidgets(
-        'SettingsNotificationScreen preview shows enlarged classroom above smaller course title and venue',
+        'SettingsNotificationScreen preview forces pure white text on classroom hero badge in Light & Dark Mode with 4-tier hierarchy',
         (WidgetTester tester) async {
       tester.view.physicalSize = const Size(420, 920);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      final themeService = app_theme.ThemeService();
+      final prevDark = themeService.isDarkMode;
+      final prevMode = themeService.themeMode;
+      await themeService.setThemeMode(app_theme.ThemeMode.defaultMode);
+      addTearDown(() async {
+        themeService.setDarkMode(prevDark);
+        await themeService.setThemeMode(prevMode);
+      });
+
+      for (final dark in [false, true]) {
+        themeService.setDarkMode(dark);
+        await tester.pumpWidget(
+          LiquidGlassWidgets.wrap(
+            adaptiveQuality: false,
+            theme: GlassThemeData.simple(quality: GlassQuality.standard),
+            child: MaterialApp(
+              key: ValueKey('notif_screen_$dark'),
+              home: const SettingsNotificationScreen(),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // Ongoing scenario: enlarged pure-white A101 hero block
+        final ongoingRoomWidget = tester.widget<Text>(find.text('A101'));
+        expect(ongoingRoomWidget.style!.color, Colors.white);
+        expect(ongoingRoomWidget.style!.fontSize, greaterThanOrEqualTo(20.0));
+
+        // Empty-day scenario: verify full 4-tier hierarchy (hero room >= 20 > time 16 > course 14 >= venue 13.5)
+        await tester.tap(find.text('今日无课'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 250));
+
+        final roomFinder = find.text('中1203');
+        final courseFinder = find.text('人工智能—AI绘画从入门到精通');
+        final venueFinder = find.text('信工学院基础实验室（4）');
+        final timeRichFinder = find.byWidgetPredicate(
+          (w) =>
+              w is Text &&
+              (w.textSpan?.toPlainText().contains('18:30–20:05') ?? false),
+        );
+
+        final roomStyle = tester.widget<Text>(roomFinder).style!;
+        final timeFirstSpan =
+            (tester.widget<Text>(timeRichFinder).textSpan! as TextSpan)
+                .children!
+                .first as TextSpan;
+        final courseStyle = tester.widget<Text>(courseFinder).style!;
+        final venueStyle = tester.widget<Text>(venueFinder).style!;
+
+        expect(roomStyle.color, Colors.white);
+        expect(roomStyle.fontSize, greaterThanOrEqualTo(20.0));
+        expect(roomStyle.fontSize, greaterThan(timeFirstSpan.style!.fontSize!));
+        expect(timeFirstSpan.style!.fontSize, greaterThan(courseStyle.fontSize!));
+        expect(
+          courseStyle.fontSize,
+          greaterThanOrEqualTo(venueStyle.fontSize!),
+        );
+      }
+    });
+  });
+
+  group('v3.2.4 Edge-to-Edge home schedule grid scrolling', () {
+    testWidgets(
+        'WeeklyScheduleGrid uses Positioned.fill + Clip.none with top padding, and WindowsScheduleScreen has no outer clipping Padding',
+        (WidgetTester tester) async {
+      final provider = ScheduleProvider();
+      provider.setCurrentWeek(1);
+      tester.view.physicalSize = const Size(1200, 820);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
 
@@ -780,30 +861,49 @@ void main() {
         LiquidGlassWidgets.wrap(
           adaptiveQuality: false,
           theme: GlassThemeData.simple(quality: GlassQuality.standard),
-          child: const MaterialApp(
-            home: SettingsNotificationScreen(),
+          child: ChangeNotifierProvider<ScheduleProvider>.value(
+            value: provider,
+            child: const MaterialApp(
+              home: Scaffold(
+                body: WindowsScheduleScreen(),
+              ),
+            ),
           ),
         ),
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('今日无课'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 250));
+      final scrollFinder = find.descendant(
+        of: find.byType(WeeklyScheduleGrid),
+        matching: find.byType(SingleChildScrollView),
+      );
+      expect(scrollFinder, findsOneWidget);
+      final scrollView = tester.widget<SingleChildScrollView>(scrollFinder);
+      expect(scrollView.clipBehavior, Clip.none);
+      expect((scrollView.padding! as EdgeInsets).top, greaterThanOrEqualTo(54.0));
 
-      final roomFinder = find.text('中1203');
-      final courseFinder = find.text('人工智能—AI绘画从入门到精通');
-      final venueFinder = find.text('信工学院基础实验室（4）');
+      final positionedFinder = find
+          .ancestor(
+            of: scrollFinder,
+            matching: find.byType(Positioned),
+          )
+          .first;
+      final positioned = tester.widget<Positioned>(positionedFinder);
+      expect(positioned.top, 0.0);
+      expect(positioned.bottom, 0.0);
+      expect(positioned.left, 0.0);
+      expect(positioned.right, 0.0);
 
-      final roomStyle = tester.widget<Text>(roomFinder).style!;
-      final courseStyle = tester.widget<Text>(courseFinder).style!;
-      final venueStyle = tester.widget<Text>(venueFinder).style!;
-
-      expect(roomStyle.fontSize, greaterThan(courseStyle.fontSize!));
-      expect(courseStyle.fontSize, greaterThan(venueStyle.fontSize!));
+      // WindowsScheduleScreen must not wrap WeeklyScheduleGrid in an outer Padding box.
       expect(
-        tester.getTopLeft(roomFinder).dy,
-        lessThan(tester.getTopLeft(courseFinder).dy),
+        find.descendant(
+          of: find.byType(WindowsScheduleScreen),
+          matching: find.ancestor(
+            of: find.byType(WeeklyScheduleGrid),
+            matching: find.byType(Padding),
+          ),
+        ),
+        findsNothing,
       );
     });
   });

@@ -187,10 +187,9 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Scenario 1: right badge shows section (1-2 / 节), NOT duplicate room A101
+      // Scenario 1: right hero badge shows enlarged room A101 + footer 1-2节
       expect(find.text('A101'), findsOneWidget);
-      expect(find.text('1-2'), findsOneWidget);
-      expect(find.text('节'), findsOneWidget);
+      expect(find.text('1-2节'), findsOneWidget);
 
       // Scenario 3 (今日无课): every piece of metadata appears exactly once
       await tester.tap(find.text('今日无课'));
@@ -199,8 +198,7 @@ void main() {
 
       expect(find.text('11月30日 · 第 12 周'), findsOneWidget);
       expect(find.text('中1203'), findsOneWidget);
-      expect(find.text('周一'), findsOneWidget);
-      expect(find.text('3门'), findsOneWidget);
+      expect(find.text('周一·3门'), findsOneWidget);
       expect(find.text('人工智能—AI绘画从入门到精通'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });

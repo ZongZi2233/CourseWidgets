@@ -257,7 +257,10 @@ class _SettingsNotificationScreenState
         children: [
           _buildScenarioSwitcher(isDark),
           const SizedBox(height: 10),
-          _buildLivePreviewNotificationCard(isCentered: isCentered),
+          _buildLivePreviewNotificationCard(
+            isCentered: isCentered,
+            isDark: isDark,
+          ),
           const SizedBox(height: 12),
           _buildStyleOptionTile(
             styleKey: NotificationManager.styleCenteredDots,
@@ -350,7 +353,73 @@ class _SettingsNotificationScreenState
     );
   }
 
-  Widget _buildLivePreviewNotificationCard({required bool isCentered}) {
+  double _wcagContrastRatio(Color a, Color b) {
+    final l1 = a.computeLuminance();
+    final l2 = b.computeLuminance();
+    final lighter = l1 > l2 ? l1 : l2;
+    final darker = l1 > l2 ? l2 : l1;
+    return (lighter + 0.05) / (darker + 0.05);
+  }
+
+  (Color, Color) _resolveHeroBadgeGradient(Color accent) {
+    var hsv = HSVColor.fromColor(accent);
+    if (hsv.saturation > 0.12) {
+      hsv = hsv.withSaturation((hsv.saturation * 1.06).clamp(0.45, 0.94));
+    }
+    var topColor = hsv.toColor();
+    int steps = 0;
+    while (_wcagContrastRatio(topColor, Colors.white) < 4.8 &&
+        hsv.value > 0.18 &&
+        steps < 28) {
+      final nextVal = (hsv.value - 0.03).clamp(0.18, 1.0);
+      final nextSat = hsv.saturation > 0.12
+          ? (hsv.saturation + 0.01).clamp(0.0, 0.96)
+          : hsv.saturation;
+      hsv = hsv.withValue(nextVal).withSaturation(nextSat);
+      topColor = hsv.toColor();
+      steps++;
+    }
+    final bottomColor = hsv
+        .withValue((hsv.value * 0.88).clamp(0.14, 1.0))
+        .toColor();
+    return (topColor, bottomColor);
+  }
+
+  Color _resolveThemeSafeAccentText(Color accent, bool isDark) {
+    var hsv = HSVColor.fromColor(accent);
+    if (isDark) {
+      const darkSurface = Color(0xFF14171F);
+      var candidate = accent;
+      int steps = 0;
+      while (_wcagContrastRatio(candidate, darkSurface) < 4.6 &&
+          hsv.value < 0.98 &&
+          steps < 20) {
+        hsv = hsv.withValue((hsv.value + 0.04).clamp(0.0, 0.98));
+        candidate = hsv.toColor();
+        steps++;
+      }
+      return candidate;
+    } else {
+      if (hsv.saturation > 0.12) {
+        hsv = hsv.withSaturation((hsv.saturation * 1.08).clamp(0.42, 0.96));
+      }
+      var candidate = hsv.toColor();
+      int steps = 0;
+      while (_wcagContrastRatio(candidate, Colors.white) < 4.8 &&
+          hsv.value > 0.18 &&
+          steps < 28) {
+        hsv = hsv.withValue((hsv.value - 0.03).clamp(0.18, 1.0));
+        candidate = hsv.toColor();
+        steps++;
+      }
+      return candidate;
+    }
+  }
+
+  Widget _buildLivePreviewNotificationCard({
+    required bool isCentered,
+    required bool isDark,
+  }) {
     final isEmptyDay = _previewScenario == _PreviewScenario.emptyDay;
     final isWaiting = _previewScenario == _PreviewScenario.longClassroom;
 
@@ -360,11 +429,12 @@ class _SettingsNotificationScreenState
     final IconData statusIcon;
     final String courseTitle;
     final String rawRoom;
-    final String badgePrimary;
     final String badgeSecondary;
-    final String largeTimeText;
-    final String? timeMiddleText;
-    final String? timeSuffixText;
+    final String heroAccentText;
+    final String heroTitleSuffix;
+    final String? detailPrimaryBold;
+    final String? nextCourseAccent;
+    final String? nextCourseName;
     final String? thirdMetaLine;
     final List<String> barCourses;
     final int barActiveIdx;
@@ -376,12 +446,13 @@ class _SettingsNotificationScreenState
       statusIcon = Icons.calendar_view_week_rounded;
       courseTitle = '人工智能—AI绘画从入门到精通';
       rawRoom = '中1203室（信工学院基础实验室（4））';
-      badgePrimary = '周一';
-      badgeSecondary = '3门';
-      largeTimeText = '18:30–20:05';
-      timeMiddleText = null;
-      timeSuffixText = null;
-      thirdMetaLine = '第 9-10 节 · 今日无课 · 龚鸣敏';
+      badgeSecondary = '周一·3门';
+      heroAccentText = '18:30–20:05';
+      heroTitleSuffix = ' · 第 9-10 节';
+      detailPrimaryBold = courseTitle;
+      nextCourseAccent = null;
+      nextCourseName = null;
+      thirdMetaLine = '今日无课 · 龚鸣敏';
       barCourses = const [];
       barActiveIdx = 0;
     } else if (isWaiting) {
@@ -391,11 +462,12 @@ class _SettingsNotificationScreenState
       statusIcon = Icons.schedule_rounded;
       courseTitle = '嵌入式系统原理与应用';
       rawRoom = '中1203室（信工学院基础实验室（4））';
-      badgePrimary = '3-4';
-      badgeSecondary = '节';
-      largeTimeText = '10:00–11:40';
-      timeMiddleText = null;
-      timeSuffixText = null;
+      badgeSecondary = '3-4节';
+      heroAccentText = '10:00–11:40';
+      heroTitleSuffix = ' · $courseTitle';
+      detailPrimaryBold = null;
+      nextCourseAccent = null;
+      nextCourseName = null;
       thirdMetaLine = '距开课 15分钟 · 今日余 3 门 · 李教授';
       barCourses = const ['嵌入式系统原理与应用'];
       barActiveIdx = 0;
@@ -406,11 +478,12 @@ class _SettingsNotificationScreenState
       statusIcon = Icons.menu_book_rounded;
       courseTitle = '高等数学';
       rawRoom = 'A101逸夫楼';
-      badgePrimary = '1-2';
-      badgeSecondary = '节';
-      largeTimeText = '09:40';
-      timeMiddleText = ' 下课';
-      timeSuffixText = ' · 下节 C302 数据结构';
+      badgeSecondary = '1-2节';
+      heroAccentText = '09:40 下课';
+      heroTitleSuffix = ' · $courseTitle';
+      detailPrimaryBold = null;
+      nextCourseAccent = 'C302';
+      nextCourseName = '数据结构';
       thirdMetaLine = null;
       barCourses = const ['早读', '高等数学', '嵌入式系统原理与应用', '数据结构'];
       barActiveIdx = 1;
@@ -419,11 +492,27 @@ class _SettingsNotificationScreenState
     final roomInfo = ClassroomDisplayInfo.parse(rawRoom);
     final Color themeColor =
         CourseColorPalette.getNotificationAccentColor(courseTitle);
-    final Color badgeBg = Color.lerp(
-      themeColor,
-      const Color(0xFF0A0E16),
-      0.24,
-    )!;
+    final Color accentTextColor =
+        _resolveThemeSafeAccentText(themeColor, isDark);
+    final (Color badgeTopColor, Color badgeBottomColor) =
+        _resolveHeroBadgeGradient(themeColor);
+
+    final Color cardBg = isDark ? const Color(0xFF14171F) : Colors.white;
+    final Color cardBorder = isDark
+        ? Colors.white.withValues(alpha: 0.08)
+        : Colors.black.withValues(alpha: 0.08);
+    final Color primaryInk =
+        isDark ? Colors.white : const Color(0xFF111827);
+    final Color secondaryInk =
+        isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+    final Color mutedInk =
+        isDark ? const Color(0xFF8E95A3) : const Color(0xFF6B7280);
+    final Color nextAccentColor = nextCourseName != null
+        ? _resolveThemeSafeAccentText(
+            CourseColorPalette.getNotificationAccentColor(nextCourseName),
+            isDark,
+          )
+        : accentTextColor;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -464,13 +553,13 @@ class _SettingsNotificationScreenState
                 ),
               ),
               const SizedBox(width: 8),
-              const Expanded(
+              Expanded(
                 child: Text(
                   '状态栏实况胶囊',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: Color(0xFF94A3B8),
+                    color: mutedInk,
                     fontSize: 11,
                     fontWeight: FontWeight.w500,
                   ),
@@ -484,22 +573,29 @@ class _SettingsNotificationScreenState
           constraints: const BoxConstraints(minHeight: 176),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
-            color: const Color(0xFF0E1117),
+            color: cardBg,
             borderRadius: SquircleGeometry.smoothRadius(20),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.08),
-            ),
+            border: Border.all(color: cardBorder),
+            boxShadow: isDark
+                ? null
+                : [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.05),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              // 1. 顶部精简状态行（功能导视单色图标 + 状态/日期 + 系统原样纯文本计时器）
+              // 1. 顶部精简状态行（12sp 功能导视单色图标 + 状态/日期 + 系统原样纯文本计时器）
               Row(
                 children: [
                   Icon(
                     statusIcon,
-                    color: themeColor,
+                    color: accentTextColor,
                     size: 13,
                   ),
                   const SizedBox(width: 6),
@@ -508,9 +604,9 @@ class _SettingsNotificationScreenState
                       headerText,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Color(0xFF9CA3AF),
-                        fontSize: 11,
+                      style: TextStyle(
+                        color: secondaryInk,
+                        fontSize: 12,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
@@ -519,19 +615,19 @@ class _SettingsNotificationScreenState
                     const SizedBox(width: 8),
                     Text(
                       chronometerText,
-                      style: const TextStyle(
-                        color: Color(0xFFCBD5E1),
-                        fontSize: 11.5,
+                      style: TextStyle(
+                        color: primaryInk,
+                        fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        fontFeatures: [FontFeature.tabularFigures()],
+                        fontFeatures: const [FontFeature.tabularFigures()],
                       ),
                     ),
                   ],
                 ],
               ),
-              const SizedBox(height: 9),
+              const SizedBox(height: 10),
 
-              // 2. 原生大字号 Title 槽（超大对比教室底块 + 核心时间）> 次行中等字号课程名 > 小号场地与详情 > 右侧 56dp 独立节次/星期徽章
+              // 2. 与 Android 16 实体 1:1 对齐：左侧 16sp 粗体主标题 + 14sp 次要信息 | 右侧 60dp 高对比纯白字教室大色块 + 节次底栏
               Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
@@ -539,92 +635,65 @@ class _SettingsNotificationScreenState
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            if (!roomInfo.isEmpty &&
-                                roomInfo.code.isNotEmpty) ...[
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 2.5,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: badgeBg,
-                                  borderRadius: BorderRadius.circular(5),
-                                ),
-                                child: Text(
-                                  roomInfo.code,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 18.5,
-                                    fontWeight: FontWeight.w800,
-                                    height: 1.08,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                            ],
-                            Expanded(
-                              child: Text.rich(
-                                TextSpan(
-                                  children: [
-                                    TextSpan(
-                                      text: largeTimeText,
-                                      style: TextStyle(
-                                        color: themeColor,
-                                        fontSize: 17,
-                                        fontWeight: FontWeight.w800,
-                                        fontFeatures: const [
-                                          FontFeature.tabularFigures(),
-                                        ],
-                                      ),
-                                    ),
-                                    if (timeMiddleText != null)
-                                      TextSpan(
-                                        text: timeMiddleText,
-                                        style: TextStyle(
-                                          color: themeColor,
-                                          fontSize: 13.5,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                      ),
+                        Text.rich(
+                          TextSpan(
+                            children: [
+                              TextSpan(
+                                text: heroAccentText,
+                                style: TextStyle(
+                                  color: accentTextColor,
+                                  fontSize: 16.0,
+                                  fontWeight: FontWeight.w700,
+                                  height: 1.25,
+                                  fontFeatures: const [
+                                    FontFeature.tabularFigures(),
                                   ],
                                 ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
                               ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          courseTitle,
+                              TextSpan(
+                                text: heroTitleSuffix,
+                                style: TextStyle(
+                                  color: primaryInk,
+                                  fontSize: 16.0,
+                                  fontWeight: FontWeight.w700,
+                                  height: 1.25,
+                                ),
+                              ),
+                            ],
+                          ),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14.0,
-                            fontWeight: FontWeight.w700,
-                            height: 1.22,
-                          ),
                         ),
-                        if (roomInfo.hasVenue || timeSuffixText != null) ...[
-                          const SizedBox(height: 3.5),
+                        if (detailPrimaryBold != null) ...[
+                          const SizedBox(height: 5),
+                          Text(
+                            detailPrimaryBold,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: primaryInk,
+                              fontSize: 14.0,
+                              fontWeight: FontWeight.w700,
+                              height: 1.25,
+                            ),
+                          ),
+                        ],
+                        if (roomInfo.hasVenue || nextCourseName != null) ...[
+                          const SizedBox(height: 4),
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
-                              if (roomInfo.hasVenue && timeSuffixText != null)
+                              if (roomInfo.hasVenue && nextCourseName != null)
                                 ConstrainedBox(
                                   constraints: const BoxConstraints(
-                                    maxWidth: 120,
+                                    maxWidth: 96,
                                   ),
                                   child: _MarqueeVenueText(
                                     text: roomInfo.venue,
-                                    style: const TextStyle(
-                                      color: Color(0xFF94A3B8),
-                                      fontSize: 11.5,
-                                      fontWeight: FontWeight.w500,
+                                    style: TextStyle(
+                                      color: secondaryInk,
+                                      fontSize: 13.5,
+                                      fontWeight: FontWeight.w400,
                                     ),
                                   ),
                                 )
@@ -632,38 +701,61 @@ class _SettingsNotificationScreenState
                                 Expanded(
                                   child: _MarqueeVenueText(
                                     text: roomInfo.venue,
-                                    style: const TextStyle(
-                                      color: Color(0xFF94A3B8),
-                                      fontSize: 11.5,
-                                      fontWeight: FontWeight.w500,
+                                    style: TextStyle(
+                                      color: secondaryInk,
+                                      fontSize: 13.5,
+                                      fontWeight: FontWeight.w400,
                                     ),
                                   ),
                                 ),
-                              if (timeSuffixText != null)
+                              if (nextCourseName != null)
                                 Expanded(
-                                  child: Text(
-                                    timeSuffixText,
+                                  child: Text.rich(
+                                    TextSpan(
+                                      children: [
+                                        TextSpan(
+                                          text: ' · 下节 ',
+                                          style: TextStyle(
+                                            color: secondaryInk,
+                                            fontSize: 13.5,
+                                            fontWeight: FontWeight.w400,
+                                          ),
+                                        ),
+                                        if (nextCourseAccent != null)
+                                          TextSpan(
+                                            text: nextCourseAccent,
+                                            style: TextStyle(
+                                              color: nextAccentColor,
+                                              fontSize: 13.5,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                        TextSpan(
+                                          text: ' $nextCourseName',
+                                          style: TextStyle(
+                                            color: secondaryInk,
+                                            fontSize: 13.5,
+                                            fontWeight: FontWeight.w400,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      color: Color(0xFFCBD5E1),
-                                      fontSize: 11.5,
-                                      fontWeight: FontWeight.w600,
-                                    ),
                                   ),
                                 ),
                             ],
                           ),
                         ],
                         if (thirdMetaLine != null) ...[
-                          const SizedBox(height: 3),
+                          const SizedBox(height: 3.5),
                           Text(
                             thirdMetaLine,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Color(0xFF8E95A3),
-                              fontSize: 11,
+                            style: TextStyle(
+                              color: mutedInk,
+                              fontSize: 13.0,
                               height: 1.3,
                             ),
                           ),
@@ -673,42 +765,66 @@ class _SettingsNotificationScreenState
                   ),
                   const SizedBox(width: 12),
                   Container(
-                    width: 56,
-                    height: 56,
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    key: const ValueKey('live_hero_room_badge'),
+                    width: 60,
+                    height: 60,
+                    padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
                     decoration: BoxDecoration(
-                      color: badgeBg,
-                      borderRadius: SquircleGeometry.smoothRadius(16),
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [badgeTopColor, badgeBottomColor],
+                      ),
+                      borderRadius: SquircleGeometry.smoothRadius(14),
                       border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.2),
+                        color: Colors.white.withValues(alpha: 0.22),
                         width: 1,
                       ),
                     ),
                     child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: Text(
-                            badgePrimary,
-                            maxLines: 1,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w800,
-                              height: 1.08,
+                        Expanded(
+                          child: Center(
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                roomInfo.code,
+                                maxLines: 1,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 22.0,
+                                  fontWeight: FontWeight.w800,
+                                  height: 1.04,
+                                  letterSpacing: -0.4,
+                                ),
+                              ),
                             ),
                           ),
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          badgeSecondary,
-                          maxLines: 1,
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.9),
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            height: 1.1,
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 4,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.22),
+                            borderRadius: BorderRadius.circular(7),
+                          ),
+                          alignment: Alignment.center,
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              badgeSecondary,
+                              maxLines: 1,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w700,
+                                height: 1.1,
+                              ),
+                            ),
                           ),
                         ),
                       ],
@@ -717,7 +833,7 @@ class _SettingsNotificationScreenState
                 ],
               ),
 
-              // 3. 底部按课程区分颜色的多节点进度条（课间 45 分钟内展示候课单条，无课时自动隐藏并维持饱满高度）
+              // 3. 底部按课程区分颜色的多节点进度条（浅/深色自适应轨道，无课时自动隐藏并维持饱满高度）
               if (!isEmptyDay) ...[
                 const SizedBox(height: 12),
                 if (isWaiting)
@@ -726,6 +842,7 @@ class _SettingsNotificationScreenState
                     progressFraction: 0.66,
                     height: 7,
                     trackerIcon: statusIcon,
+                    isDark: isDark,
                   )
                 else if (isCentered)
                   _buildMultiCourseDotsBar(
@@ -734,6 +851,7 @@ class _SettingsNotificationScreenState
                     progressFraction: 0.60,
                     height: 7,
                     trackerIcon: statusIcon,
+                    isDark: isDark,
                   )
                 else
                   _buildMultiCourseSegmentsBar(
@@ -743,6 +861,7 @@ class _SettingsNotificationScreenState
                     progressFraction: 0.62,
                     height: 7,
                     trackerIcon: statusIcon,
+                    isDark: isDark,
                   ),
               ],
             ],
@@ -757,8 +876,13 @@ class _SettingsNotificationScreenState
     required double progressFraction,
     required double height,
     required IconData trackerIcon,
+    bool isDark = true,
   }) {
-    final track = Color.lerp(color, const Color(0xFF161A22), 0.72)!;
+    final track = Color.lerp(
+      color,
+      isDark ? const Color(0xFF161A22) : const Color(0xFFE2E8F0),
+      isDark ? 0.72 : 0.78,
+    )!;
     return Row(
       children: [
         Expanded(
@@ -782,22 +906,27 @@ class _SettingsNotificationScreenState
           ),
         ),
         const SizedBox(width: 6),
-        _buildTrackerBadge(color, trackerIcon),
+        _buildTrackerBadge(color, trackerIcon, isDark: isDark),
       ],
     );
   }
 
-  Widget _buildTrackerBadge(Color color, IconData icon) {
+  Widget _buildTrackerBadge(
+    Color color,
+    IconData icon, {
+    bool isDark = true,
+  }) {
+    final safeColor = _resolveThemeSafeAccentText(color, isDark);
     return Container(
       width: 18,
       height: 18,
       decoration: BoxDecoration(
-        color: const Color(0xFF121318),
+        color: isDark ? const Color(0xFF121318) : Colors.white,
         shape: BoxShape.circle,
-        border: Border.all(color: color, width: 1.2),
+        border: Border.all(color: safeColor, width: 1.2),
       ),
       alignment: Alignment.center,
-      child: Icon(icon, size: 10, color: color),
+      child: Icon(icon, size: 10, color: safeColor),
     );
   }
 
@@ -807,10 +936,17 @@ class _SettingsNotificationScreenState
     required double progressFraction,
     required double height,
     IconData? trackerIcon,
+    bool isDark = true,
   }) {
     final activeColor = CourseColorPalette.getNotificationAccentColor(
       courseNames[activeIndex.clamp(0, courseNames.length - 1)],
     );
+    final pastTarget =
+        isDark ? const Color(0xFF3E4452) : const Color(0xFF94A3B8);
+    final futureTarget =
+        isDark ? const Color(0xFF232833) : const Color(0xFFCBD5E1);
+    final trackTarget =
+        isDark ? const Color(0xFF161A22) : const Color(0xFFE2E8F0);
     return Row(
       children: [
         for (int i = 0; i < courseNames.length; i++) ...[
@@ -821,15 +957,15 @@ class _SettingsNotificationScreenState
                   CourseColorPalette.getNotificationAccentColor(courseNames[i]);
               if (i < activeIndex) {
                 return _buildPreviewDot(
-                  Color.lerp(courseColor, const Color(0xFF3E4452), 0.5)!,
+                  Color.lerp(courseColor, pastTarget, 0.5)!,
                   size: height,
                 );
               }
               if (i == activeIndex) {
                 final track = Color.lerp(
                   courseColor,
-                  const Color(0xFF161A22),
-                  0.72,
+                  trackTarget,
+                  isDark ? 0.72 : 0.78,
                 )!;
                 return Expanded(
                   child: Container(
@@ -853,7 +989,11 @@ class _SettingsNotificationScreenState
                 );
               }
               return _buildPreviewDot(
-                Color.lerp(courseColor, const Color(0xFF232833), 0.45)!,
+                Color.lerp(
+                  courseColor,
+                  futureTarget,
+                  isDark ? 0.45 : 0.58,
+                )!,
                 size: height,
               );
             },
@@ -861,7 +1001,7 @@ class _SettingsNotificationScreenState
         ],
         if (trackerIcon != null) ...[
           const SizedBox(width: 6),
-          _buildTrackerBadge(activeColor, trackerIcon),
+          _buildTrackerBadge(activeColor, trackerIcon, isDark: isDark),
         ],
       ],
     );
@@ -874,10 +1014,17 @@ class _SettingsNotificationScreenState
     required double progressFraction,
     required double height,
     IconData? trackerIcon,
+    bool isDark = true,
   }) {
     final activeColor = CourseColorPalette.getNotificationAccentColor(
       courseNames[activeIndex.clamp(0, courseNames.length - 1)],
     );
+    final pastTarget =
+        isDark ? const Color(0xFF3E4452) : const Color(0xFF94A3B8);
+    final futureTarget =
+        isDark ? const Color(0xFF232833) : const Color(0xFFCBD5E1);
+    final trackTarget =
+        isDark ? const Color(0xFF161A22) : const Color(0xFFE2E8F0);
     return Row(
       children: [
         for (int i = 0; i < courseNames.length; i++) ...[
@@ -893,8 +1040,8 @@ class _SettingsNotificationScreenState
                 if (i == activeIndex) {
                   final track = Color.lerp(
                     courseColor,
-                    const Color(0xFF161A22),
-                    0.72,
+                    trackTarget,
+                    isDark ? 0.72 : 0.78,
                   )!;
                   return Container(
                     height: height,
@@ -916,8 +1063,12 @@ class _SettingsNotificationScreenState
                   );
                 }
                 final muted = i < activeIndex
-                    ? Color.lerp(courseColor, const Color(0xFF3E4452), 0.5)!
-                    : Color.lerp(courseColor, const Color(0xFF232833), 0.45)!;
+                    ? Color.lerp(courseColor, pastTarget, 0.5)!
+                    : Color.lerp(
+                        courseColor,
+                        futureTarget,
+                        isDark ? 0.45 : 0.58,
+                      )!;
                 return Container(
                   height: height,
                   decoration: BoxDecoration(
@@ -931,7 +1082,7 @@ class _SettingsNotificationScreenState
         ],
         if (trackerIcon != null) ...[
           const SizedBox(width: 6),
-          _buildTrackerBadge(activeColor, trackerIcon),
+          _buildTrackerBadge(activeColor, trackerIcon, isDark: isDark),
         ],
       ],
     );
@@ -1233,7 +1384,7 @@ class _SettingsNotificationScreenState
           ),
           const SizedBox(height: 12),
           Text(
-            '采用全新实况导视字号层级排版（放大高对比教室编号色块与具体时间范围、缩小次要场地说明，并搭配课本/钟表/课表三态单色功能图标），同时状态栏胶囊智能区分紧急程度：仅在上课中或临近开课 60 分钟内显示教室与剩余时间，今日无课或跨天预告精简为「周一·3节」等下次上课概览。\n\n'
+            '采用与 Android 16 原生实况模板 1:1 对齐的 4 层导视排版：右侧 64dp 高饱和教室主导视方块（浅/深色下字迹恒为纯白）+ 16sp 主标题关键时间与课程名 + 14sp 次要场地与下节预告 + 12sp 状态页眉；状态栏胶囊按紧迫度分级，仅上课中与 60 分钟内候课显示教室和余分，跨天预告自动精简为「周一·3节」。\n\n'
             '• 按课程分色引擎：通知主题色、右侧徽章、进度圆点与分段条均自动对齐各课程独立色彩\n'
             '• 秒级实时倒计时：由系统底层 Chronometer 驱动跳秒，零额外功耗\n'
             '• 双模节点时间轴：支持「居中圆点样式」与「按时长分段样式」实时切换',

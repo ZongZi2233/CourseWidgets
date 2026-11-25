@@ -10,13 +10,10 @@ class WindowsScheduleScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const RepaintBoundary(
-      child: Padding(
-        padding: EdgeInsets.only(top: 4.0, bottom: 8.0, left: 4.0, right: 4.0),
-        child: WeeklyScheduleGrid(
-          showControlBar: true,
-          isPhone: false,
-          contentPadding: EdgeInsets.symmetric(horizontal: 4.0, vertical: 2.0),
-        ),
+      child: WeeklyScheduleGrid(
+        showControlBar: true,
+        isPhone: false,
+        contentPadding: EdgeInsets.fromLTRB(8.0, 6.0, 8.0, 84.0),
       ),
     );
   }

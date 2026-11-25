@@ -167,7 +167,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 250));
       expect(find.text('中1203·15分'), findsOneWidget);
-      expect(find.text('嵌入式系统原理与应用'), findsOneWidget);
+      expect(find.text('10:00–11:40 · 嵌入式系统原理与应用'), findsOneWidget);
 
       // Empty-day scenario: capsule MUST summarize upcoming day without leaking time or classroom
       await tester.tap(find.text('今日无课'));

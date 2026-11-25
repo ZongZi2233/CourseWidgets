@@ -7,19 +7,22 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
 import android.graphics.RectF
+import android.graphics.Shader
 import android.graphics.Typeface
 import android.graphics.drawable.Icon
 import android.os.Build
 import android.text.Spannable
 import android.text.SpannableStringBuilder
-import android.text.style.BackgroundColorSpan
 import android.text.style.ForegroundColorSpan
 import android.text.style.StyleSpan
 import android.util.Log
@@ -32,6 +35,7 @@ import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.pow
 
 object LiveUpdateNotificationManager {
     // [v3.1.0] 升级全新高优先级通道 ID，彻底重置系统通知降级缓存，保障 Android 16 实况胶囊与锁屏卡片 100% 置顶展示
@@ -130,7 +134,89 @@ object LiveUpdateNotificationManager {
         return android.graphics.Color.argb(a, r, g, b)
     }
 
-    private fun darkenForBadge(argb: Int): Int = mixColor(argb, 0xFF0A0E16.toInt(), 0.78f)
+    private fun isSystemNightMode(context: Context): Boolean {
+        val nightMask = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
+        return nightMask == Configuration.UI_MODE_NIGHT_YES
+    }
+
+    private fun linearizeChannel(channel255: Int): Double {
+        val s = channel255 / 255.0
+        return if (s <= 0.03928) s / 12.92 else ((s + 0.055) / 1.055).pow(2.4)
+    }
+
+    private fun relativeLuminance(argb: Int): Double {
+        val r = linearizeChannel(Color.red(argb))
+        val g = linearizeChannel(Color.green(argb))
+        val b = linearizeChannel(Color.blue(argb))
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b
+    }
+
+    private fun contrastRatio(c1: Int, c2: Int): Double {
+        val l1 = relativeLuminance(c1)
+        val l2 = relativeLuminance(c2)
+        val lighter = max(l1, l2)
+        val darker = min(l1, l2)
+        return (lighter + 0.05) / (darker + 0.05)
+    }
+
+    /**
+     * 为右侧教室核心色块生成高饱和、高对比度渐变底色，保证纯白 #FFFFFFFF 字迹对比度 >= 4.8:1
+     */
+    private fun resolveHeroBadgeGradient(accentColor: Int): Pair<Int, Int> {
+        val hsv = FloatArray(3)
+        Color.colorToHSV(accentColor, hsv)
+        if (hsv[1] > 0.12f) {
+            hsv[1] = (hsv[1] * 1.06f).coerceIn(0.45f, 0.94f)
+        }
+        var candidate = Color.HSVToColor(hsv)
+        val white = 0xFFFFFFFF.toInt()
+        var steps = 0
+        while (contrastRatio(candidate, white) < 4.8 && hsv[2] > 0.18f && steps < 28) {
+            hsv[2] = (hsv[2] - 0.03f).coerceAtLeast(0.18f)
+            if (hsv[1] > 0.12f) {
+                hsv[1] = (hsv[1] + 0.01f).coerceAtMost(0.96f)
+            }
+            candidate = Color.HSVToColor(hsv)
+            steps++
+        }
+        val topColor = candidate
+        val bottomHsv = hsv.copyOf()
+        bottomHsv[2] = (bottomHsv[2] * 0.88f).coerceAtLeast(0.14f)
+        val bottomColor = Color.HSVToColor(bottomHsv)
+        return topColor to bottomColor
+    }
+
+    /**
+     * 根据系统深浅色模式修正强调色文字，确保浅色白卡 (>= 4.8:1) 与深色卡 (>= 4.6:1) 均清晰锐利
+     */
+    private fun resolveThemeSafeAccentText(accentColor: Int, isNight: Boolean): Int {
+        val hsv = FloatArray(3)
+        Color.colorToHSV(accentColor, hsv)
+        if (isNight) {
+            val darkSurface = 0xFF14171F.toInt()
+            var candidate = accentColor
+            var steps = 0
+            while (contrastRatio(candidate, darkSurface) < 4.6 && hsv[2] < 0.98f && steps < 20) {
+                hsv[2] = (hsv[2] + 0.04f).coerceAtMost(0.98f)
+                candidate = Color.HSVToColor(hsv)
+                steps++
+            }
+            return candidate
+        } else {
+            val lightSurface = 0xFFFFFFFF.toInt()
+            if (hsv[1] > 0.12f) {
+                hsv[1] = (hsv[1] * 1.08f).coerceIn(0.42f, 0.96f)
+            }
+            var candidate = Color.HSVToColor(hsv)
+            var steps = 0
+            while (contrastRatio(candidate, lightSurface) < 4.8 && hsv[2] > 0.18f && steps < 28) {
+                hsv[2] = (hsv[2] - 0.03f).coerceAtLeast(0.18f)
+                candidate = Color.HSVToColor(hsv)
+                steps++
+            }
+            return candidate
+        }
+    }
 
     fun parseClassroomInfo(raw: String): ClassroomInfo {
         val trimmed = raw.trim()
@@ -244,24 +330,6 @@ object LiveUpdateNotificationManager {
         if (bold) {
             setSpan(StyleSpan(Typeface.BOLD), start, end, flags)
         }
-        return this
-    }
-
-    /**
-     * 以高对比课程主题色填充底块绘制核心教室编号（置于原生大字号 contentTitle 槽位，避免 AOSP removeTextSizeSpans 剥离导致无字号对比）
-     */
-    private fun SpannableStringBuilder.appendClassroomPill(
-        code: String,
-        bgColor: Int
-    ): SpannableStringBuilder {
-        if (code.isEmpty()) return this
-        val start = length
-        append("\u00A0\u00A0$code\u00A0\u00A0")
-        val end = length
-        val flags = Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
-        setSpan(BackgroundColorSpan(bgColor), start, end, flags)
-        setSpan(ForegroundColorSpan(0xFFFFFFFF.toInt()), start, end, flags)
-        setSpan(StyleSpan(Typeface.BOLD), start, end, flags)
         return this
     }
 
@@ -439,12 +507,12 @@ object LiveUpdateNotificationManager {
         @Suppress("DEPRECATION")
         builder.setPriority(Notification.PRIORITY_MAX)
 
-        // 右侧高 DPI 真圆角独立徽章大图（官方 Android 16 Promoted Ongoing 完整支持，与设置页预览 1:1 对齐）
-        val badgeBmp = createRoundedStatusBadgeBitmap(
+        // 右侧 64dp 高 DPI 1:1 真圆角大号教室主导视方块（官方 Android 16 Promoted Ongoing 完整支持；位图强制纯白字彻底规避 AOSP 浅色对比度改灰）
+        val badgeBmp = createClassroomHeroBadgeBitmap(
             context = context,
             primaryText = snapshot.badgePrimary,
             secondaryText = snapshot.badgeSecondary,
-            bgColor = snapshot.badgeBgColor
+            accentColor = snapshot.badgeBgColor
         )
         if (badgeBmp != null) {
             builder.setLargeIcon(badgeBmp)
@@ -560,6 +628,13 @@ object LiveUpdateNotificationManager {
         snapshot: LiveUpdateSnapshot
     ): Notification.ProgressStyle {
         val style = Notification.ProgressStyle()
+        val isNight = isSystemNightMode(context)
+        val trackMixTarget = if (isNight) 0xFF161A22.toInt() else 0xFFE2E8F0.toInt()
+        val pastMixTarget = if (isNight) 0xFF3E4452.toInt() else 0xFF94A3B8.toInt()
+        val futureMixTarget = if (isNight) 0xFF232833.toInt() else 0xFFCBD5E1.toInt()
+        val trackMixRatio = if (isNight) 0.28f else 0.22f
+        val futureMixRatio = if (isNight) 0.65f else 0.42f
+
         val totalCount = snapshot.segments.size.coerceAtLeast(1)
         val safeActive = snapshot.activeIndex.coerceIn(0, totalCount - 1)
         val clampedProgress = snapshot.progressFraction.coerceIn(0.03f, 0.98f)
@@ -574,7 +649,7 @@ object LiveUpdateNotificationManager {
             } else {
                 snapshot.accentColor
             }
-            val segTrack = mixColor(segColor, 0xFF161A22.toInt(), 0.28f)
+            val segTrack = mixColor(segColor, trackMixTarget, trackMixRatio)
             val filledLen = (totalLen * clampedProgress).toInt().coerceIn(10, totalLen - 10)
             val remainLen = (totalLen - filledLen).coerceAtLeast(10)
             style.addProgressSegment(
@@ -599,9 +674,9 @@ object LiveUpdateNotificationManager {
                 } else {
                     snapshot.accentColor
                 }
-                val pastColor = mixColor(baseColor, 0xFF3E4452.toInt(), 0.50f)
-                val futureColor = mixColor(baseColor, 0xFF232833.toInt(), 0.65f)
-                val segTrack = mixColor(baseColor, 0xFF161A22.toInt(), 0.28f)
+                val pastColor = mixColor(baseColor, pastMixTarget, 0.50f)
+                val futureColor = mixColor(baseColor, futureMixTarget, futureMixRatio)
+                val segTrack = mixColor(baseColor, trackMixTarget, trackMixRatio)
 
                 when {
                     i < safeActive -> {
@@ -659,9 +734,9 @@ object LiveUpdateNotificationManager {
                 } else {
                     snapshot.accentColor
                 }
-                val pastColor = mixColor(baseColor, 0xFF3E4452.toInt(), 0.50f)
-                val futureColor = mixColor(baseColor, 0xFF232833.toInt(), 0.65f)
-                val segTrack = mixColor(baseColor, 0xFF161A22.toInt(), 0.28f)
+                val pastColor = mixColor(baseColor, pastMixTarget, 0.50f)
+                val futureColor = mixColor(baseColor, futureMixTarget, futureMixRatio)
+                val segTrack = mixColor(baseColor, trackMixTarget, trackMixRatio)
 
                 when {
                     i < safeActive -> {
@@ -700,7 +775,7 @@ object LiveUpdateNotificationManager {
                             }
                             style.addProgressPoint(
                                 Notification.ProgressStyle.Point(cumulativePos)
-                                    .setColor(mixColor(nextBase, 0xFF232833.toInt(), 0.65f))
+                                    .setColor(mixColor(nextBase, futureMixTarget, futureMixRatio))
                                     .setId(i + 1)
                             )
                         }
@@ -741,34 +816,45 @@ object LiveUpdateNotificationManager {
     }
 
     /**
-     * 渲染右侧 56dp×56dp 高 DPI 超椭圆风格真圆角徽章 Bitmap（优先显示节次或次日日期/课程数，与大字号教室标题形成清晰视觉分工）
+     * 渲染右侧 64dp×64dp 1:1 高 DPI 教室主导视色块位图：
+     * - 保持 1:1 正方形占比以适配 AOSP `notification_right_icon_size` + `scaleType="centerCrop"`；
+     * - 使用高饱和渐变彩底 + 强制纯白 `#FFFFFFFF` 超大粗体教室编码与半透明底栏节次标签，完全免疫浅色模式下 `ContrastColorUtil` 将白字压灰问题与 `removeTextSizeSpans` 字号剥离限制。
      */
-    private fun createRoundedStatusBadgeBitmap(
+    private fun createClassroomHeroBadgeBitmap(
         context: Context,
         primaryText: String,
         secondaryText: String,
-        bgColor: Int
+        accentColor: Int
     ): Bitmap? {
         return try {
             val density = context.resources.displayMetrics.density.coerceIn(2.5f, 4.0f)
-            val sizePx = (56f * density).toInt()
+            val sizePx = (64f * density).toInt()
             val bmp = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(bmp)
-            val cornerRadius = 16f * density
+            val cornerRadius = sizePx * 0.22f
+            val (topColor, bottomColor) = resolveHeroBadgeGradient(accentColor)
 
             val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 style = Paint.Style.FILL
-                color = bgColor
+                shader = LinearGradient(
+                    0f,
+                    0f,
+                    0f,
+                    sizePx.toFloat(),
+                    topColor,
+                    bottomColor,
+                    Shader.TileMode.CLAMP
+                )
             }
             val bgRect = RectF(0f, 0f, sizePx.toFloat(), sizePx.toFloat())
             canvas.drawRoundRect(bgRect, cornerRadius, cornerRadius, bgPaint)
 
             val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 style = Paint.Style.STROKE
-                strokeWidth = 1.2f * density
-                color = 0x33FFFFFF
+                strokeWidth = 1.0f * density
+                color = 0x38FFFFFF
             }
-            val borderInset = 0.6f * density
+            val borderInset = 0.5f * density
             canvas.drawRoundRect(
                 RectF(borderInset, borderInset, sizePx - borderInset, sizePx - borderInset),
                 cornerRadius - borderInset,
@@ -776,42 +862,71 @@ object LiveUpdateNotificationManager {
                 borderPaint
             )
 
-            val maxTextW = sizePx * 0.86f
+            val maxTextW = sizePx * 0.92f
             var primarySize = when {
-                primaryText.length <= 2 -> 19.5f * density
-                primaryText.length <= 4 -> 16.0f * density
-                else -> 13.0f * density
+                primaryText.length <= 2 -> 28.0f * density
+                primaryText.length == 3 -> 25.0f * density
+                primaryText.length == 4 -> 23.5f * density
+                primaryText.length == 5 -> 20.5f * density
+                else -> 18.0f * density
+            }
+            val primarySpacing = when {
+                primaryText.length <= 2 -> 0f
+                primaryText.length == 3 -> -0.02f
+                primaryText.length <= 5 -> -0.04f
+                else -> -0.05f
             }
             val primaryPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = 0xFFFFFFFF.toInt()
                 textAlign = Paint.Align.CENTER
-                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
                 textSize = primarySize
+                letterSpacing = primarySpacing
+                setShadowLayer(1.6f * density, 0f, 0.9f * density, 0x3D000000)
             }
-            while (primaryPaint.measureText(primaryText) > maxTextW && primarySize > 9.5f * density) {
-                primarySize -= 0.7f * density
+            var scaleX = 1.0f
+            while (primaryPaint.measureText(primaryText) > maxTextW && scaleX > 0.80f) {
+                scaleX = (scaleX - 0.04f).coerceAtLeast(0.80f)
+                primaryPaint.textScaleX = scaleX
+            }
+            while (primaryPaint.measureText(primaryText) > maxTextW && primarySize > 12.5f * density) {
+                primarySize -= 0.6f * density
                 primaryPaint.textSize = primarySize
             }
 
             val cx = sizePx / 2f
             if (secondaryText.isNotEmpty()) {
                 val pFm = primaryPaint.fontMetrics
-                val pY = sizePx * 0.42f - (pFm.ascent + pFm.descent) / 2f
+                val pY = sizePx * 0.37f - (pFm.ascent + pFm.descent) / 2f
                 canvas.drawText(primaryText, cx, pY, primaryPaint)
 
-                val secPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = 0xE6FFFFFF.toInt()
-                    textAlign = Paint.Align.CENTER
-                    typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-                    textSize = 9.8f * density
+                val pillRect = RectF(sizePx * 0.08f, sizePx * 0.65f, sizePx * 0.92f, sizePx * 0.91f)
+                val pillRadius = sizePx * 0.13f
+                val pillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    style = Paint.Style.FILL
+                    color = 0x38000000
                 }
-                var secSize = 9.8f * density
-                while (secPaint.measureText(secondaryText) > maxTextW && secSize > 7.5f * density) {
+                canvas.drawRoundRect(pillRect, pillRadius, pillRadius, pillPaint)
+
+                val secMaxW = pillRect.width() - 4f * density
+                var secSize = 11.2f * density
+                val secPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = 0xFFFFFFFF.toInt()
+                    textAlign = Paint.Align.CENTER
+                    typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+                    textSize = secSize
+                }
+                var secScaleX = 1.0f
+                while (secPaint.measureText(secondaryText) > secMaxW && secScaleX > 0.85f) {
+                    secScaleX = (secScaleX - 0.03f).coerceAtLeast(0.85f)
+                    secPaint.textScaleX = secScaleX
+                }
+                while (secPaint.measureText(secondaryText) > secMaxW && secSize > 8.2f * density) {
                     secSize -= 0.5f * density
                     secPaint.textSize = secSize
                 }
                 val sFm = secPaint.fontMetrics
-                val sY = sizePx * 0.77f - (sFm.ascent + sFm.descent) / 2f
+                val sY = pillRect.centerY() - (sFm.ascent + sFm.descent) / 2f
                 canvas.drawText(secondaryText, cx, sY, secPaint)
             } else {
                 val pFm = primaryPaint.fontMetrics
@@ -821,13 +936,13 @@ object LiveUpdateNotificationManager {
 
             bmp
         } catch (e: Exception) {
-            Log.e("CourseWidgets", "创建真圆角状态徽章失败: ${e.message}")
+            Log.e("CourseWidgets", "创建教室主导视方块位图失败: ${e.message}")
             null
         }
     }
 
     /**
-     * 将功能导视矢量图标 (ic_live_class / ic_live_waiting / ic_live_schedule) 按设备真实物理 DPI 渲染为带高对比暗色圆底的游标 Icon
+     * 将功能导视矢量图标 (ic_live_class / ic_live_waiting / ic_live_schedule) 按设备真实物理 DPI 与深浅色模式渲染为游标 Icon
      */
     private fun createVectorTrackerIcon(
         context: Context,
@@ -835,6 +950,8 @@ object LiveUpdateNotificationManager {
         accentColor: Int
     ): Icon? {
         return try {
+            val isNight = isSystemNightMode(context)
+            val safeAccent = resolveThemeSafeAccentText(accentColor, isNight)
             val density = context.resources.displayMetrics.density.coerceIn(2.5f, 4.0f)
             val sizePx = (26f * density).toInt()
             val bmp = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
@@ -844,18 +961,18 @@ object LiveUpdateNotificationManager {
             val cy = sizePx / 2f
             val radius = sizePx / 2f - 1f * density
 
-            // 1. 深色高对比圆形底座
+            // 1. 深浅色自适应圆形底座
             val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 style = Paint.Style.FILL
-                color = 0xFF121318.toInt()
+                color = if (isNight) 0xFF121318.toInt() else 0xFFFFFFFF.toInt()
             }
             canvas.drawCircle(cx, cy, radius, bgPaint)
 
-            // 2. 主题色发光细描边环
+            // 2. 对比度校验后的主题色细描边环
             val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 style = Paint.Style.STROKE
                 strokeWidth = 1.4f * density
-                color = accentColor
+                color = safeAccent
             }
             canvas.drawCircle(cx, cy, radius, strokePaint)
 
@@ -864,7 +981,7 @@ object LiveUpdateNotificationManager {
             if (drawable != null) {
                 val pad = (5.2f * density).toInt()
                 drawable.setBounds(pad, pad, sizePx - pad, sizePx - pad)
-                drawable.colorFilter = PorterDuffColorFilter(accentColor, PorterDuff.Mode.SRC_IN)
+                drawable.colorFilter = PorterDuffColorFilter(safeAccent, PorterDuff.Mode.SRC_IN)
                 drawable.draw(canvas)
             }
 
@@ -912,19 +1029,23 @@ object LiveUpdateNotificationManager {
         val todayCourses = allCourses
             .filter { it.startTime in todayStart..todayEnd }
             .sortedBy { it.startTime }
+        val isNight = isSystemNightMode(context)
+        val primaryBodyInk = if (isNight) 0xFFF1F5F9.toInt() else 0xFF111827.toInt()
+        val trackMixTarget = if (isNight) 0xFF161A22.toInt() else 0xFFE2E8F0.toInt()
+        val trackMixRatio = if (isNight) 0.28f else 0.22f
 
         if (todayCourses.isNotEmpty()) {
             val activeIdx = todayCourses.indexOfFirst { now >= it.startTime && now < it.endTime }
             val nextIdx = todayCourses.indexOfFirst { it.startTime > now }
 
             if (activeIdx >= 0) {
-                // ==================== 状态 A：正在上课（原生大字号 contentTitle 展示教室色块+下课时间，body 展示课程名+场地与下节） ====================
+                // ==================== 状态 A：正在上课（右侧 64dp 超大纯白教室方块 + 原生 contentTitle 下课时间与课名 + 原生主题自适应正文） ====================
                 val current = todayCourses[activeIdx]
                 val nextCourse = if (activeIdx + 1 < todayCourses.size) todayCourses[activeIdx + 1] else null
 
                 val accentColor = resolveCourseAccentColor(current.name, current.colorArgb)
-                val badgeBgColor = darkenForBadge(accentColor)
-                val trackColor = mixColor(accentColor, 0xFF161A22.toInt(), 0.28f)
+                val accentText = resolveThemeSafeAccentText(accentColor, isNight)
+                val trackColor = mixColor(accentColor, trackMixTarget, trackMixRatio)
 
                 val secNums = formatSectionNumbersOnly(current)
                 val startStr = timeFmt.format(Date(current.startTime))
@@ -935,66 +1056,56 @@ object LiveUpdateNotificationManager {
                 val progressFraction = ((now - current.startTime).toFloat() / totalMs.toFloat()).coerceIn(0.03f, 1f)
                 val remainingMin = max(1, ((current.endTime - now + 59_999L) / 60_000L).toInt())
 
-                // 使用原生最大字号 contentTitle 槽位突出教室编号色块与下课时间（规避 AOSP removeTextSizeSpans 剥离尺寸 Span）
                 val heroTitleSpan = SpannableStringBuilder().apply {
-                    if (classroom.code.isNotEmpty()) {
-                        appendClassroomPill(classroom.code, badgeBgColor)
-                        append("  ")
-                        appendStyled("$endStr 下课", color = accentColor, bold = true)
-                    } else {
-                        appendStyled("$endStr 下课", color = accentColor, bold = true)
-                        appendStyled(" · ${current.name}", color = null, bold = true)
-                    }
+                    appendStyled("$endStr 下课", color = accentText, bold = true)
+                    appendStyled(" · ${current.name}", color = null, bold = true)
                 }
 
                 val detailBodySpan = SpannableStringBuilder().apply {
-                    if (classroom.code.isNotEmpty()) {
-                        appendStyled(current.name, color = null, bold = true)
-                    }
                     if (classroom.hasVenue) {
-                        if (length > 0) appendStyled(" · ", color = 0xFF8E95A3.toInt())
-                        appendStyled(classroom.venue, color = 0xFF94A3B8.toInt())
+                        append(classroom.venue)
                     }
                     if (nextCourse != null) {
-                        val nextAccent = resolveCourseAccentColor(nextCourse.name, nextCourse.colorArgb)
+                        val nextAccent = resolveThemeSafeAccentText(
+                            resolveCourseAccentColor(nextCourse.name, nextCourse.colorArgb),
+                            isNight
+                        )
                         val nextStartStr = timeFmt.format(Date(nextCourse.startTime))
                         val nextRoom = parseClassroomInfo(nextCourse.location)
-                        if (length > 0) appendStyled(" · ", color = 0xFF8E95A3.toInt())
-                        appendStyled("下节 ", color = 0xFF8E95A3.toInt())
+                        if (length > 0) append(" · ")
+                        append("下节 ")
                         if (!nextRoom.isEmpty && nextRoom.code.isNotEmpty()) {
                             appendStyled(nextRoom.code, color = nextAccent, bold = true)
-                            appendStyled(" ${nextCourse.name}", color = null, bold = true)
+                            append(" ${nextCourse.name}")
                         } else {
-                            appendStyled("$nextStartStr ${nextCourse.name}", color = null, bold = true)
+                            append("$nextStartStr ${nextCourse.name}")
                         }
                     } else {
-                        if (length > 0) appendStyled(" · ", color = 0xFF8E95A3.toInt())
-                        appendStyled("今日最后一节", color = 0xFF8E95A3.toInt())
+                        if (length > 0) append(" · ")
+                        append("今日最后一节")
                     }
                 }
 
                 val bigDetailBodySpan = SpannableStringBuilder().apply {
-                    if (classroom.code.isNotEmpty()) {
-                        appendStyled(current.name, color = null, bold = true)
-                        if (classroom.hasVenue) {
-                            appendStyled("  ·  ${classroom.venue}", color = 0xFF94A3B8.toInt())
-                        }
-                        append("\n")
-                    } else if (classroom.hasVenue) {
-                        appendStyled("${classroom.venue}\n", color = 0xFF94A3B8.toInt())
+                    if (classroom.hasVenue) {
+                        append("${classroom.venue}\n")
                     }
                     if (nextCourse != null) {
-                        val nextAccent = resolveCourseAccentColor(nextCourse.name, nextCourse.colorArgb)
+                        val nextAccent = resolveThemeSafeAccentText(
+                            resolveCourseAccentColor(nextCourse.name, nextCourse.colorArgb),
+                            isNight
+                        )
+                        val nextStartStr = timeFmt.format(Date(nextCourse.startTime))
                         val nextRoom = parseClassroomInfo(nextCourse.location)
-                        appendStyled("下节 ", color = 0xFF8E95A3.toInt())
+                        append("下节 ")
                         if (nextRoom.code.isNotEmpty()) {
                             appendStyled(nextRoom.code, color = nextAccent, bold = true)
-                            appendStyled(" ${nextCourse.name}", color = null, bold = true)
+                            append(" ${nextCourse.name}")
                         } else {
-                            appendStyled(nextCourse.name, color = null, bold = true)
+                            append("$nextStartStr ${nextCourse.name}")
                         }
                     } else {
-                        appendStyled("今日最后一节", color = 0xFF8E95A3.toInt())
+                        append("今日最后一节")
                     }
                 }
 
@@ -1018,15 +1129,26 @@ object LiveUpdateNotificationManager {
                     timeChip
                 }
 
+                val badgePrimary = if (classroom.code.isNotEmpty()) {
+                    classroom.code
+                } else {
+                    secNums.ifEmpty { "课堂" }
+                }
+                val badgeSecondary = if (classroom.code.isNotEmpty()) {
+                    if (secNums.isNotEmpty()) "${secNums}节" else "进行中"
+                } else {
+                    if (secNums.isNotEmpty()) "节" else ""
+                }
+
                 return LiveUpdateSnapshot(
                     headerSubText = "进行中 · $startStr–$endStr",
                     shortCapsuleText = capsule,
                     heroTitleSpan = heroTitleSpan,
                     detailBodySpan = detailBodySpan,
                     bigDetailBodySpan = bigDetailBodySpan,
-                    badgePrimary = secNums.ifEmpty { "课堂" },
-                    badgeSecondary = if (secNums.isNotEmpty()) "节" else "",
-                    badgeBgColor = badgeBgColor,
+                    badgePrimary = badgePrimary,
+                    badgeSecondary = badgeSecondary,
+                    badgeBgColor = accentColor,
                     smallIconRes = R.drawable.ic_live_class,
                     accentColor = accentColor,
                     trackColor = trackColor,
@@ -1047,8 +1169,8 @@ object LiveUpdateNotificationManager {
                 val prevCourse = if (nextIdx > 0) todayCourses[nextIdx - 1] else null
 
                 val accentColor = resolveCourseAccentColor(nextCourse.name, nextCourse.colorArgb)
-                val badgeBgColor = darkenForBadge(accentColor)
-                val trackColor = mixColor(accentColor, 0xFF161A22.toInt(), 0.28f)
+                val accentText = resolveThemeSafeAccentText(accentColor, isNight)
+                val trackColor = mixColor(accentColor, trackMixTarget, trackMixRatio)
 
                 val todayWeekday = formatWeekday(now)
                 val secNums = formatSectionNumbersOnly(nextCourse)
@@ -1067,44 +1189,49 @@ object LiveUpdateNotificationManager {
                 val remainTodayCount = todayCourses.size - nextIdx
                 val showBreakBar = diffMin <= 45
 
-                val heroTitleSpan = SpannableStringBuilder().apply {
-                    if (classroom.code.isNotEmpty()) {
-                        appendClassroomPill(classroom.code, badgeBgColor)
-                        append("  ")
-                        appendStyled("$nextStartStr–$nextEndStr", color = accentColor, bold = true)
-                    } else {
-                        appendStyled("$nextStartStr–$nextEndStr", color = accentColor, bold = true)
-                        appendStyled(" · ${nextCourse.name}", color = null, bold = true)
-                    }
-                }
-
                 val waitText = if (diffMin >= 60) "${diffMin / 60}小时${diffMin % 60}分" else "${diffMin}分钟"
                 val teacherText = nextCourse.teacher.trim()
 
-                val detailBodySpan = SpannableStringBuilder().apply {
-                    if (classroom.code.isNotEmpty()) {
-                        appendStyled(nextCourse.name, color = null, bold = true)
-                        appendStyled(" · ", color = 0xFF8E95A3.toInt())
+                val heroTitleSpan = SpannableStringBuilder().apply {
+                    appendStyled("$nextStartStr–$nextEndStr", color = accentText, bold = true)
+                    if (showBreakBar) {
+                        appendStyled(" · ${nextCourse.name}", color = null, bold = true)
+                    } else {
+                        appendStyled(" · 距开课 $waitText", color = null, bold = true)
                     }
-                    appendStyled("距开课 $waitText", color = 0xFFCBD5E1.toInt())
-                    if (classroom.hasVenue) {
-                        appendStyled(" · ${classroom.venue}", color = 0xFF94A3B8.toInt())
+                }
+
+                val detailBodySpan = SpannableStringBuilder().apply {
+                    if (showBreakBar) {
+                        if (classroom.hasVenue) {
+                            append(classroom.venue)
+                            append(" · 今日余 ${remainTodayCount} 门${if (teacherText.isNotEmpty()) " · $teacherText" else ""}")
+                        } else {
+                            append("距开课 $waitText · 今日余 ${remainTodayCount} 门${if (teacherText.isNotEmpty()) " · $teacherText" else ""}")
+                        }
+                    } else {
+                        appendStyled(nextCourse.name, color = primaryBodyInk, bold = true)
+                        if (classroom.hasVenue) {
+                            append(" · ${classroom.venue}")
+                        }
                     }
                 }
 
                 val bigDetailBodySpan = SpannableStringBuilder().apply {
-                    if (classroom.code.isNotEmpty()) {
-                        appendStyled("${nextCourse.name}\n", color = null, bold = true)
+                    if (showBreakBar) {
+                        if (classroom.hasVenue) {
+                            append("${classroom.venue}\n")
+                        }
+                        append("距开课 $waitText · 今日余 ${remainTodayCount} 门${if (teacherText.isNotEmpty()) " · $teacherText" else ""}")
+                    } else {
+                        appendStyled("${nextCourse.name}\n", color = primaryBodyInk, bold = true)
+                        if (classroom.hasVenue) {
+                            append("${classroom.venue}\n")
+                        } else if (classroom.isEmpty) {
+                            append("未指定教室\n")
+                        }
+                        append("今日余 ${remainTodayCount} 门${if (teacherText.isNotEmpty()) " · $teacherText" else ""}")
                     }
-                    if (classroom.hasVenue) {
-                        appendStyled("${classroom.venue}\n", color = 0xFF94A3B8.toInt())
-                    } else if (classroom.isEmpty) {
-                        appendStyled("未指定教室\n", color = 0xFF8E95A3.toInt())
-                    }
-                    appendStyled(
-                        "距开课 $waitText · 今日余 ${remainTodayCount} 门${if (teacherText.isNotEmpty()) " · $teacherText" else ""}",
-                        color = 0xFF8E95A3.toInt()
-                    )
                 }
 
                 val shortCapsule = when {
@@ -1119,15 +1246,26 @@ object LiveUpdateNotificationManager {
                     else -> "课间候课"
                 }
 
+                val badgePrimary = if (classroom.code.isNotEmpty()) {
+                    classroom.code
+                } else {
+                    secNums.ifEmpty { "待上" }
+                }
+                val badgeSecondary = if (classroom.code.isNotEmpty()) {
+                    if (secNums.isNotEmpty()) "${secNums}节" else "候课"
+                } else {
+                    if (secNums.isNotEmpty()) "节" else ""
+                }
+
                 return LiveUpdateSnapshot(
                     headerSubText = headerLabel,
                     shortCapsuleText = shortCapsule,
                     heroTitleSpan = heroTitleSpan,
                     detailBodySpan = detailBodySpan,
                     bigDetailBodySpan = bigDetailBodySpan,
-                    badgePrimary = secNums.ifEmpty { "待上" },
-                    badgeSecondary = if (secNums.isNotEmpty()) "节" else "",
-                    badgeBgColor = badgeBgColor,
+                    badgePrimary = badgePrimary,
+                    badgeSecondary = badgeSecondary,
+                    badgeBgColor = accentColor,
                     smallIconRes = R.drawable.ic_live_waiting,
                     accentColor = accentColor,
                     trackColor = trackColor,
@@ -1150,8 +1288,8 @@ object LiveUpdateNotificationManager {
 
         if (futureCourse != null) {
             val accentColor = resolveCourseAccentColor(futureCourse.name, futureCourse.colorArgb)
-            val badgeBgColor = darkenForBadge(accentColor)
-            val trackColor = mixColor(accentColor, 0xFF161A22.toInt(), 0.28f)
+            val accentText = resolveThemeSafeAccentText(accentColor, isNight)
+            val trackColor = mixColor(accentColor, trackMixTarget, trackMixRatio)
 
             val startStr = timeFmt.format(Date(futureCourse.startTime))
             val endStr = timeFmt.format(Date(futureCourse.endTime))
@@ -1173,42 +1311,35 @@ object LiveUpdateNotificationManager {
             val targetCount = targetDayCourses.size.coerceAtLeast(1)
 
             val heroTitleSpan = SpannableStringBuilder().apply {
-                if (classroom.code.isNotEmpty()) {
-                    appendClassroomPill(classroom.code, badgeBgColor)
-                    append("  ")
-                    appendStyled("$startStr–$endStr", color = accentColor, bold = true)
-                } else {
-                    appendStyled("$startStr–$endStr", color = accentColor, bold = true)
-                    appendStyled(" · ${futureCourse.name}", color = null, bold = true)
-                }
+                appendStyled("$startStr–$endStr", color = accentText, bold = true)
+                appendStyled(" · $sectionLabel", color = null, bold = true)
             }
 
             val todayPrefix = if (todayCourses.isNotEmpty()) "今日已结课" else "今日无课"
             val teacher = futureCourse.teacher.trim()
 
             val detailBodySpan = SpannableStringBuilder().apply {
-                if (classroom.code.isNotEmpty()) {
-                    appendStyled(futureCourse.name, color = null, bold = true)
-                }
+                appendStyled(futureCourse.name, color = primaryBodyInk, bold = true)
                 if (classroom.hasVenue) {
-                    if (length > 0) appendStyled(" · ", color = 0xFF8E95A3.toInt())
-                    appendStyled(classroom.venue, color = 0xFF94A3B8.toInt())
+                    append(" · ${classroom.venue}")
                 }
             }
 
             val bigDetailBodySpan = SpannableStringBuilder().apply {
-                if (classroom.code.isNotEmpty()) {
-                    appendStyled("${futureCourse.name}\n", color = null, bold = true)
-                }
+                appendStyled("${futureCourse.name}\n", color = primaryBodyInk, bold = true)
                 if (classroom.hasVenue) {
-                    appendStyled("${classroom.venue}\n", color = 0xFF94A3B8.toInt())
+                    append("${classroom.venue}\n")
                 } else if (classroom.isEmpty) {
-                    appendStyled("未指定教室\n", color = 0xFF8E95A3.toInt())
+                    append("未指定教室\n")
                 }
-                appendStyled(
-                    "$sectionLabel · $todayPrefix${if (teacher.isNotEmpty()) " · $teacher" else ""}",
-                    color = 0xFF8E95A3.toInt()
-                )
+                append("$todayPrefix${if (teacher.isNotEmpty()) " · $teacher" else ""}")
+            }
+
+            val badgePrimary = if (classroom.code.isNotEmpty()) classroom.code else shortRelBadge
+            val badgeSecondary = if (classroom.code.isNotEmpty()) {
+                "$shortRelBadge·${targetCount}门"
+            } else {
+                "${targetCount}门"
             }
 
             return LiveUpdateSnapshot(
@@ -1217,9 +1348,9 @@ object LiveUpdateNotificationManager {
                 heroTitleSpan = heroTitleSpan,
                 detailBodySpan = detailBodySpan,
                 bigDetailBodySpan = bigDetailBodySpan,
-                badgePrimary = shortRelBadge,
-                badgeSecondary = "${targetCount}门",
-                badgeBgColor = badgeBgColor,
+                badgePrimary = badgePrimary,
+                badgeSecondary = badgeSecondary,
+                badgeBgColor = accentColor,
                 smallIconRes = R.drawable.ic_live_schedule,
                 accentColor = accentColor,
                 trackColor = trackColor,
@@ -1240,11 +1371,11 @@ object LiveUpdateNotificationManager {
         val fallbackTitleSpan = SpannableStringBuilder()
             .appendStyled(fallbackTitle.ifEmpty { "今日暂无课程安排" }, color = null, bold = true)
         val fallbackBodySpan = SpannableStringBuilder()
-            .appendStyled(fallbackBody.ifEmpty { "近期暂无待上排课 · 点击查看周课表" }, color = 0xFF8E95A3.toInt())
+            .append(fallbackBody.ifEmpty { "近期暂无待上排课 · 点击查看周课表" })
         val fallbackBigBodySpan = SpannableStringBuilder()
-            .appendStyled("近期暂无后续排课\n", color = 0xFFCBD5E1.toInt(), bold = true)
-            .appendStyled("可自由安排学习与生活计划\n", color = 0xFF9CA3AF.toInt())
-            .appendStyled("点击通知卡片查看完整周课表", color = 0xFF8E95A3.toInt())
+            .appendStyled("近期暂无后续排课\n", color = primaryBodyInk, bold = true)
+            .append("可自由安排学习与生活计划\n")
+            .append("点击通知卡片查看完整周课表")
 
         return LiveUpdateSnapshot(
             headerSubText = "$weekLabel · 今日无课",
