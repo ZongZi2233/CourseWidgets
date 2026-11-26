@@ -12,7 +12,7 @@
 [![Dart](https://img.shields.io/badge/Dart-3.14.0+-0175C2?logo=dart)](https://dart.dev)
 [![Android](https://img.shields.io/badge/Android-15%2B%20(API%2035--37.2)-3DDC84?logo=android)](https://github.com/ZongZi2233/CourseWidgets/releases)
 [![Windows](https://img.shields.io/badge/Windows-10%2F11%20x64-0078D6?logo=windows)](https://github.com/ZongZi2233/CourseWidgets/releases)
-[![Version](https://img.shields.io/badge/Release-v3.2.5%20(Build%203250)-FF9BAE)](https://github.com/ZongZi2233/CourseWidgets/releases/tag/v3.2.5)
+[![Version](https://img.shields.io/badge/Release-v3.2.6%20(Build%203260)-FF9BAE)](https://github.com/ZongZi2233/CourseWidgets/releases/tag/v3.2.6)
 
 **English** | [简体中文](README.md)
 
@@ -20,10 +20,10 @@
 
 ---
 
-## 📦 Latest Release: [v3.2.5 (Build 3250)](https://github.com/ZongZi2233/CourseWidgets/releases/tag/v3.2.5)
+## 📦 Latest Release: [v3.2.6 (Build 3260)](https://github.com/ZongZi2233/CourseWidgets/releases/tag/v3.2.6)
 
-* **Android Client (`arm64-v8a`)**: [`CourseWidgets-v3.2.5-android-arm64-v8a.apk`](https://github.com/ZongZi2233/CourseWidgets/releases/download/v3.2.5/CourseWidgets-v3.2.5-android-arm64-v8a.apk) — Requires Android 15+ (API 35+, compiled against API 37.2 & NDK r30), featuring refined Android default glass opacity (`15%`), glass blur (`4.5`), and global UI blur (`3.5`), streamlined General Settings slider copy (`组件白值` / `组件模糊` / `全局模糊`), plus unified app-wide glass/blur controls, 120Hz schedule config scrolling, Edge-to-Edge grid scrolling, `64dp` pure-white-on-color classroom Live Update signage, daily auto-update checks, cache auto-cleanup, and hardened byte-level delta updates.
-* **Windows Desktop (`x64`)**: [`CourseWidgets-v3.2.5-windows-x64.zip`](https://github.com/ZongZi2233/CourseWidgets/releases/download/v3.2.5/CourseWidgets-v3.2.5-windows-x64.zip) — Portable x64 package (MSVC `/O2` + `/OPT:REF,/OPT:ICF` + Dart AOT), enabling automatic follow-system dark mode by default on Windows, refined Windows default glass opacity (`5%`), glass blur (`4.5`), and global UI blur (`3.5`), and resolving dark-text/low-contrast issues across the Windows title bar, bottom navigation tabs, headers, and settings pages in Dark Mode.
+* **Android Client (`arm64-v8a`)**: [`CourseWidgets-v3.2.6-android-arm64-v8a.apk`](https://github.com/ZongZi2233/CourseWidgets/releases/download/v3.2.6/CourseWidgets-v3.2.6-android-arm64-v8a.apk) — Requires Android 15+ (API 35+, compiled against API 37.2 & NDK r30), replacing metallic gray glass rims with soft dark-translucent iOS 27 / FlClash edges, upgrading the SharedElement Week Picker morph dialog to real `GlassContainer` refraction, unifying Home & Calendar portrait top bar height/radius (`48dp / 20dp`), adding dynamic GitHub release notes on the About screen, locking the primary update button while incremental diff calculation is in flight, and introducing iOS Calendar-style full-height today column highlights with a theme-colored current-time indicator line & axis cursor pill.
+* **Windows Desktop (`x64`)**: [`CourseWidgets-v3.2.6-windows-x64.zip`](https://github.com/ZongZi2233/CourseWidgets/releases/download/v3.2.6/CourseWidgets-v3.2.6-windows-x64.zip) — Portable x64 package (MSVC `/O2` + `/OPT:REF,/OPT:ICF` + Dart AOT), including all visual edge refinements, unified glass dialogs, About release notes, update button diff lock, and iOS Calendar-style today strip & timeline alongside default follow-system dark mode and file-level delta updates.
 
 ---
 

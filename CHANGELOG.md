@@ -2,6 +2,28 @@
 
 本文档记录 CourseWidgets 各版本更新的动态活动演进，重点关注架构改进、渲染优化、故障诊断与教务抓取能力提升。
 
+## [v3.2.6] - 2026-11-27 (Build 3260 正式版)
+
+### 1. 全局玻璃材质去灰白金属描边，升级黑半透明 iOS 27 / FlClash 柔和边缘
+- **消除低白值玻璃外圈灰边（`lightweight_glass.frag` & `GlassAppearanceService`）**：在 `lightweight_glass.frag` 中解除 `uFresnelStrength` 最小 `0.25` 强制下限并压制纯暗边模式下的灰色边缘环，同时在 `GlassAppearanceService.applyToSettings()` 与 `GlassSettingsHelper` 全组预设中统一注入 `GlassLensModel.paraxial`、零金属方向高光/环境光（`lightIntensity: 0.0`, `ambientStrength: 0.0`, `fresnelStrength: 0.0`, `rimLight: 0.0`）与微弱渐变黑半透明边缘（`rimShade` + 柔和 `edgeAbsorption`）；
+- **统一非着色器容器暗边质感（`HyperOSCard`、`WindowsDesktopTitleBar`、选择器弹窗、悬浮胶囊 Dock）**：将 `HyperOSCard` `_sheenColor` 白色描边、Windows 标题栏底边、日期/星期选择器边框与悬浮操作 Dock 圆形按钮白边全面替换为低饱和黑半透明边缘（`alpha: 0.07 ~ 0.28`）。
+
+### 2. 周次选择器等 SharedElement 形变弹窗升级为真液态玻璃 (`GlassContainer`)
+- **真实折射玻璃形变外壳（`showSharedElementGlassDialog`）**：将原本以渐变背景 + 白色边框实现的 SharedElement 弹窗外壳升级为原生实时折射 `GlassContainer`（支持跟随随形圆角插值 `LiquidRoundedSuperellipse(borderRadius: currentRadius)` 与最小值防护，并在 `100%` 组件白值下自动直出实体超椭圆零模糊），同步赋能周次选择弹窗（`showWeekPickerGlassDialog`）与单节时间编辑弹窗。
+
+### 3. 首页顶栏与日历顶栏几何尺寸、圆角与玻璃质感彻底统一
+- **以日历顶栏为基准对齐全端竖屏顶部胶囊（`GlassSettingsHelper.unifiedPortraitTopBarHeight`）**：抽出统一常量 `48.0dp` 高度、`20.0dp` 圆角、`16.0dp` 水平边距、`6.0dp` 顶部间距与共享 `GlassSettingsHelper.getTopBarSettings()` 材质参数，消除首页顶栏与日历顶栏切页时的大小跳变，并将首页课表顶部起始内边距顺延为 `padding.top + 60`（保持 Edge-to-Edge 全高贯穿滚动）。
+
+### 4. 关于软件页新增「当前版本更新内容」动态卡片 (`SettingsAboutScreen` & `AppUpdateService`)
+- **从 GitHub Releases 动态拉取并本地缓存（`fetchReleaseNotesForVersion`）**：在「关于软件」页中部（「检查新版本」与版权卡片之间）新增当前版本更新日志卡片，首次自动按当前版本号 tag 请求 GitHub Releases API 过滤展示 Markdown 更新日志（含 SHA-256 过滤），本地 MMKV 持久化缓存以秒开呈现，并支持手动刷新与断网重试。
+
+### 5. 更新弹窗增量计算期间严格锁定主确认按钮 (`AppUpdateDialog`)
+- **杜绝提前点击误触下载完整包**：在 `AppUpdateDialog` `initState` 中即刻同步进入 `_isAnalyzingDiff` 锁定态，主按钮置灰不可点按并显示加载指示器与「正在计算增量更新...」；严格等待两端增量分析完成返回有效增量方案（点亮为「增量更新并重启 / 安装」）或确认增量不可用后（点亮回退「完整更新并重启 / 下载完整包并安装」）方允许点按。
+
+### 6. iOS 日历风格当日全高纵向竖条与主题色当前时间指示横线 (`WeeklyScheduleGrid`)
+- **当日整列主题色纵贯高光条 + 集成式日期胶囊**：在周课表网格底层绘制从当日表头直抵屏幕底部的渐变纵向高光竖条（`today_column_highlight_strip`），配合表头当日日期圆角胶囊（`today_header_date_pill`），无论页面如何滚动均清晰标识当日列；
+- **主题色当前时间横线与左侧圆角矩形时刻光标**：按节次起止时间分段线性映射当前时刻纵坐标（仅随页面刷新重绘，零后台定时器），在左侧时间轴绘制主题色圆角矩形 `HH:mm` 光标，并跨越周日程区延伸出浅色引导细线与当日高亮主题色粗线 + 带描边锚点圆点。
+
 ## [v3.2.5] - 2026-11-26 (Build 3250 正式版)
 
 ### 1. 分平台默认玻璃材质参数与设置文案精简 (`GlassAppearanceService` & `SettingsGeneralScreen`)

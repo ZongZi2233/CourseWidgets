@@ -738,6 +738,71 @@ class AppUpdateService {
     return collapsed;
   }
 
+  /// 1.5 按版本号从 GitHub Releases 拉取当前版本更新内容（带 MMKV 本地缓存，支持强制刷新）
+  Future<String> fetchReleaseNotesForVersion(
+    String version, {
+    bool forceRefresh = false,
+    Future<Map<String, dynamic>?> Function(Uri uri)? jsonFetcher,
+  }) async {
+    final cleanVer = version.trim().replaceFirst(RegExp(r'^[vV]'), '');
+    if (cleanVer.isEmpty) {
+      throw Exception('无效的版本号');
+    }
+    final cacheKey = 'cached_release_notes_v$cleanVer';
+    if (!forceRefresh) {
+      final cached = StorageService().getString(cacheKey);
+      if (cached != null && cached.trim().isNotEmpty) {
+        return cached;
+      }
+    }
+
+    final uri = Uri.parse(
+      'https://api.github.com/repos/$repoOwner/$repoName/releases/tags/v$cleanVer',
+    );
+
+    Map<String, dynamic>? releaseData;
+    if (jsonFetcher != null) {
+      releaseData = await jsonFetcher(uri);
+      if (releaseData == null) {
+        throw Exception('暂未在 GitHub Releases 找到 v$cleanVer 的发布说明');
+      }
+    } else {
+      final client = HttpClient()
+        ..connectionTimeout = const Duration(seconds: 15);
+      try {
+        final req = await client.getUrl(uri);
+        req.headers.set('User-Agent', 'CourseWidgets-App/$appVersion');
+        req.headers.set('Accept', 'application/vnd.github+json');
+        final resp = await req.close();
+        if (resp.statusCode == 200) {
+          final body = await resp.transform(utf8.decoder).join();
+          final decoded = jsonDecode(body);
+          if (decoded is Map<String, dynamic>) {
+            releaseData = decoded;
+          }
+        } else if (resp.statusCode == 404) {
+          throw Exception('暂未在 GitHub Releases 找到 v$cleanVer 的发布说明');
+        } else {
+          throw Exception('拉取更新日志失败 (HTTP ${resp.statusCode})');
+        }
+      } finally {
+        client.close();
+      }
+    }
+
+    if (releaseData == null) {
+      throw Exception('无法解析 v$cleanVer 的更新日志响应');
+    }
+
+    final rawNotes = (releaseData['body'] as String?)?.trim() ?? '';
+    final filtered = filterReleaseNotes(rawNotes);
+    final result = filtered.isEmpty ? '当前版本暂无详细更新日志' : filtered;
+    if (filtered.isNotEmpty) {
+      await StorageService().setString(cacheKey, filtered);
+    }
+    return result;
+  }
+
   /// 1. 检查 GitHub 最新 Release 版本信息
   Future<AppUpdateInfo> checkForUpdate() async {
     final client = HttpClient()

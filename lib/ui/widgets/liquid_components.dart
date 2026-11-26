@@ -887,51 +887,28 @@ Future<T?> showSharedElementGlassDialog<T>({
               : 0.0;
 
       final BorderRadius borderRadius = BorderRadius.circular(currentRadius);
+      final Rect safeRect = Rect.fromCenter(
+        center: currentRect.center,
+        width: math.max(currentRect.width, 20.0),
+        height: math.max(currentRect.height, 20.0),
+      );
 
       Widget glassDialogShell = ListenableBuilder(
         listenable: GlassAppearanceService.instance,
         builder: (context, innerDialogBody) {
           final glass = GlassAppearanceService.instance;
-          final double shellBlur = glass.resolveGlassBlur(22.0);
-          final bool useShellBlur = !glass.isGlassOpaque && shellBlur > 0.05;
-          final List<Color> gradientColors = isDark
-              ? [
-                  glass.resolveGlassColor(
-                    baseColor: const Color(0xAD1F2432),
-                    isDark: true,
-                  ),
-                  glass.resolveGlassColor(
-                    baseColor: const Color(0x9E141822),
-                    isDark: true,
-                  ),
-                ]
-              : [
-                  glass.resolveGlassColor(
-                    baseColor: const Color(0xD9FFFFFF),
-                    isDark: false,
-                  ),
-                  glass.resolveGlassColor(
-                    baseColor: const Color(0xBDF2F5FC),
-                    isDark: false,
-                  ),
-                ];
-
-          final Widget shellContainer = Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: gradientColors,
-              ),
-              borderRadius: borderRadius,
-              border: Border.all(
-                color: isDark
-                    ? Colors.white.withValues(alpha: 0.16)
-                    : Colors.white.withValues(alpha: 0.85),
-                width: 1.0,
-              ),
+          final dialogSettings = glass.applyToSettings(
+            LiquidGlassSettings(
+              glassColor: isDark
+                  ? const Color(0x9E151822)
+                  : const Color(0x9DF7F9FE),
+              blur: 10.0,
+              thickness: 22.0,
+              refractiveIndex: 1.48,
+              chromaticAberration: 0.08,
+              saturation: 1.35,
             ),
-            child: innerDialogBody,
+            isDark: isDark,
           );
 
           return DecoratedBox(
@@ -939,18 +916,23 @@ Future<T?> showSharedElementGlassDialog<T>({
               borderRadius: SquircleGeometry.smoothRadius(currentRadius),
               boxShadow: HyperOSShadows.modal(isDark),
             ),
-            child: ClipRSuperellipse(
-              borderRadius: borderRadius,
-              child: useShellBlur
-                  ? BackdropFilter(
-                      filter: ImageFilter.blur(
-                        sigmaX: shellBlur,
-                        sigmaY: shellBlur,
-                      ),
-                      child: shellContainer,
-                    )
-                  : shellContainer,
-            ),
+            child: glass.isGlassOpaque
+                ? ClipRSuperellipse(
+                    borderRadius: borderRadius,
+                    child: Container(
+                      color: dialogSettings.glassColor,
+                      child: innerDialogBody,
+                    ),
+                  )
+                : GlassContainer(
+                    useOwnLayer: true,
+                    quality: theme.ThemeService().glassQuality,
+                    clipBehavior: Clip.antiAlias,
+                    shape: LiquidRoundedSuperellipse(borderRadius: currentRadius),
+                    padding: EdgeInsets.zero,
+                    settings: dialogSettings,
+                    child: innerDialogBody!,
+                  ),
           );
         },
         child: OverflowBox(
@@ -1010,7 +992,7 @@ Future<T?> showSharedElementGlassDialog<T>({
             ),
           ),
           Positioned.fromRect(
-            rect: currentRect,
+            rect: safeRect,
             child: glassDialogShell,
           ),
         ],
@@ -1839,8 +1821,8 @@ class _RenderSharedBlurStencil extends RenderProxyBox {
         ? const []
         : List<Paint>.unmodifiable(shadows.map((s) => s.toPaint()));
     _sheenColor = backgroundColor.computeLuminance() < 0.5
-        ? const Color(0x18FFFFFF)
-        : const Color(0x28FFFFFF);
+        ? const Color(0x2E000000)
+        : const Color(0x12000000);
     _sheenPaint.color = _sheenColor;
   }
 

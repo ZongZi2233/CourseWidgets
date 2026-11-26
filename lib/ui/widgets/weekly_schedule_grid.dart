@@ -207,18 +207,124 @@ Future<void> showWeekPickerGlassDialog(
   );
 }
 
-/// [v3.1.0] 本周课程网格视图（支持平板与手机竖屏全看板，防溢出自适应与单周 RepaintBoundary 缓存）
+/// [v3.1.0 / v3.2.6] 本周课程网格视图（支持平板与手机竖屏全看板、防溢出自适应、单周 RepaintBoundary 缓存、iOS 日历当日竖条与当前时间主题色横线）
 class WeeklyScheduleGrid extends StatefulWidget {
   final bool showControlBar;
   final EdgeInsetsGeometry contentPadding;
   final bool isPhone;
+  final DateTime? currentTimeOverride;
 
   const WeeklyScheduleGrid({
     super.key,
     this.showControlBar = true,
     this.contentPadding = EdgeInsets.zero,
     this.isPhone = false,
+    this.currentTimeOverride,
   });
+
+  static int defaultSectionStartMinute(int section) {
+    final i = section - 1;
+    return 480 + (i < 5 ? i * 50 : 360 + i * 50);
+  }
+
+  /// 计算指定周的周一日期（与表头日期映射保持 100% 一致）
+  static DateTime weekStartMonday(DateTime semesterStart, int viewedWeek) {
+    final semesterStartDateOnly = DateTime(
+      semesterStart.year,
+      semesterStart.month,
+      semesterStart.day,
+    );
+    final firstMonday = semesterStartDateOnly.subtract(
+      Duration(days: semesterStartDateOnly.weekday - 1),
+    );
+    return firstMonday.add(Duration(days: (viewedWeek - 1) * 7));
+  }
+
+  /// 判断当前查看周是否包含 `now` 所在的真实日历周
+  static bool isViewedWeekCurrent({
+    required ScheduleConfigModel config,
+    required int viewedWeek,
+    DateTime? now,
+  }) {
+    final effectiveNow = now ?? DateTime.now();
+    final todayOnly = DateTime(
+      effectiveNow.year,
+      effectiveNow.month,
+      effectiveNow.day,
+    );
+    final monday = weekStartMonday(config.semesterStartDate, viewedWeek);
+    final diffDays = todayOnly.difference(monday).inDays;
+    return diffDays >= 0 && diffDays < 7;
+  }
+
+  /// 返回今日在当前展示列 (`0 .. daysCount - 1`) 中的列索引；若不在当前展示列则返回 `null`
+  static int? resolveTodayColumnIndex({
+    required ScheduleConfigModel config,
+    required int viewedWeek,
+    required int daysCount,
+    DateTime? now,
+  }) {
+    final effectiveNow = now ?? DateTime.now();
+    final todayOnly = DateTime(
+      effectiveNow.year,
+      effectiveNow.month,
+      effectiveNow.day,
+    );
+    final monday = weekStartMonday(config.semesterStartDate, viewedWeek);
+    final diffDays = todayOnly.difference(monday).inDays;
+    if (diffDays >= 0 && diffDays < daysCount) {
+      return diffDays;
+    }
+    return null;
+  }
+
+  /// 根据课时节次起止时间，分段线性计算当前时刻在课程纵向网格中的 Y 偏移
+  static double computeCurrentTimeOffsetY(
+    ScheduleConfigModel config,
+    DateTime now, {
+    double sectionRowHeight = 68.0,
+    int totalSections = 13,
+  }) {
+    final double totalHeight = totalSections * sectionRowHeight;
+    final double minY = 8.0;
+    final double maxY = math.max(minY, totalHeight - 10.0);
+    final double nowMin = now.hour * 60.0 + now.minute + now.second / 60.0;
+
+    final List<double> starts = [];
+    final List<double> durations = [];
+    final List<double> ends = [];
+
+    for (int s = 1; s <= totalSections; s++) {
+      final int startMin =
+          config.sectionStartTimes[s] ?? defaultSectionStartMinute(s);
+      final int rawDuration = config.isEqualDuration
+          ? config.defaultDuration
+          : (config.sectionDurations[s] ?? config.defaultDuration);
+      final int safeDuration = rawDuration.clamp(1, 300);
+      starts.add(startMin.toDouble());
+      durations.add(safeDuration.toDouble());
+      ends.add((startMin + safeDuration).toDouble());
+    }
+
+    if (starts.isEmpty || nowMin <= starts.first) {
+      return minY;
+    }
+
+    for (int i = 0; i < totalSections; i++) {
+      final double start = starts[i];
+      final double dur = durations[i];
+      final double end = ends[i];
+      if (nowMin <= end) {
+        final double progress = ((nowMin - start) / dur).clamp(0.0, 1.0);
+        return ((i + progress) * sectionRowHeight).clamp(minY, maxY);
+      }
+      if (i + 1 < totalSections && nowMin < starts[i + 1]) {
+        return ((i + 1) * sectionRowHeight).clamp(minY, maxY);
+      }
+    }
+
+    return maxY;
+  }
 
   @override
   State<WeeklyScheduleGrid> createState() => _WeeklyScheduleGridState();
@@ -615,6 +721,19 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
     final int daysCount = showWeekends ? 7 : 5;
     final config = provider.currentConfig;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = Theme.of(context).colorScheme.primary;
+    final now = widget.currentTimeOverride ?? DateTime.now();
+    final int? todayColIdx = WeeklyScheduleGrid.resolveTodayColumnIndex(
+      config: config,
+      viewedWeek: week,
+      daysCount: daysCount,
+      now: now,
+    );
+    final bool isCurrentWeek = WeeklyScheduleGrid.isViewedWeekCurrent(
+      config: config,
+      viewedWeek: week,
+      now: now,
+    );
     final isLandscape = ResponsiveUtils.isLandscape(context) ||
         ResponsiveUtils.isDesktopOrLandscape(context);
     final timeColWidth = isLandscape ? (widget.isPhone ? 56.0 : 60.0) : (widget.isPhone ? 32.0 : 38.0);
@@ -631,6 +750,57 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
     return Stack(
       clipBehavior: Clip.none,
       children: [
+        // 0. [v3.2.6] iOS 日历风格：当日所在整列贯穿至底部的主题色纵向高光竖条
+        if (todayColIdx != null)
+          Positioned(
+            top: weekdayTop,
+            bottom: 0,
+            left: resolvedPadding.left,
+            right: resolvedPadding.right,
+            child: IgnorePointer(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SizedBox(width: timeColWidth),
+                  ...List.generate(daysCount, (idx) {
+                    if (idx != todayColIdx) {
+                      return const Expanded(child: SizedBox.shrink());
+                    }
+                    return Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 1.5),
+                        child: DecoratedBox(
+                          key: const ValueKey('today_column_highlight_strip'),
+                          decoration: BoxDecoration(
+                            borderRadius: const BorderRadius.vertical(
+                              top: Radius.circular(14),
+                            ),
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              stops: const [0.0, 0.25, 1.0],
+                              colors: [
+                                primaryColor.withValues(
+                                  alpha: isDark ? 0.22 : 0.14,
+                                ),
+                                primaryColor.withValues(
+                                  alpha: isDark ? 0.10 : 0.07,
+                                ),
+                                primaryColor.withValues(
+                                  alpha: isDark ? 0.045 : 0.03,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            ),
+          ),
+
         // 1. 纵向滚动内容区（全高 Edge-to-Edge 贯穿滚动，顶部穿过星期栏、悬浮玻璃栏直抵状态栏，底部穿过悬浮底栏）
         Positioned.fill(
           child: AdaptiveSmoothScroll(
@@ -647,78 +817,103 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
                 right: resolvedPadding.right,
               ),
               child: RepaintBoundary(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                child: Stack(
+                  clipBehavior: Clip.none,
                   children: [
-                    // 左侧时间轴 (1~13 节课) - 独立 RepaintBoundary 避免随课程卡片重绘
-                    RepaintBoundary(
-                      child: SizedBox(
-                        width: timeColWidth,
-                        child: Column(
-                          children: List.generate(kTotalSections, (i) {
-                            final section = i + 1;
-                            final startMin = config.sectionStartTimes[section] ??
-                                (480 + (i < 5 ? i * 50 : 360 + i * 50));
-                            final hour =
-                                (startMin ~/ 60).toString().padLeft(2, '0');
-                            final min =
-                                (startMin % 60).toString().padLeft(2, '0');
-                            final timeStr = '$hour:$min';
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // 左侧时间轴 (1~13 节课) - 独立 RepaintBoundary 避免随课程卡片重绘
+                        RepaintBoundary(
+                          child: SizedBox(
+                            width: timeColWidth,
+                            child: Column(
+                              children: List.generate(kTotalSections, (i) {
+                                final section = i + 1;
+                                final startMin =
+                                    config.sectionStartTimes[section] ??
+                                        WeeklyScheduleGrid
+                                            .defaultSectionStartMinute(section);
+                                final hour =
+                                    (startMin ~/ 60).toString().padLeft(2, '0');
+                                final min =
+                                    (startMin % 60).toString().padLeft(2, '0');
+                                final timeStr = '$hour:$min';
 
-                            return SizedBox(
-                              height: kSectionRowHeight,
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Text(
-                                    '$section',
-                                    style: TextStyle(
-                                      color: isDark
-                                          ? Colors.white.withValues(alpha: 0.85)
-                                          : const Color(0xFF2D3139),
-                                      fontSize: widget.isPhone ? 11 : 12,
-                                      fontWeight: FontWeight.bold,
-                                    ),
+                                return SizedBox(
+                                  height: kSectionRowHeight,
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Text(
+                                        '$section',
+                                        style: TextStyle(
+                                          color: isDark
+                                              ? Colors.white
+                                                  .withValues(alpha: 0.85)
+                                              : const Color(0xFF2D3139),
+                                          fontSize: widget.isPhone ? 11 : 12,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 1),
+                                      Text(
+                                        timeStr,
+                                        style: TextStyle(
+                                          color: isDark
+                                              ? Colors.white
+                                                  .withValues(alpha: 0.45)
+                                              : const Color(0xFF7A808C),
+                                          fontSize: widget.isPhone ? 8.5 : 9.5,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                  const SizedBox(height: 1),
-                                  Text(
-                                    timeStr,
-                                    style: TextStyle(
-                                      color: isDark
-                                          ? Colors.white.withValues(alpha: 0.45)
-                                          : const Color(0xFF7A808C),
-                                      fontSize: widget.isPhone ? 8.5 : 9.5,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          }),
-                        ),
-                      ),
-                    ),
-
-                    // 周一至周日各列的课程网格
-                    ...List.generate(daysCount, (dayIndex) {
-                      final day = dayIndex + 1;
-                      final courses = provider.getCoursesForDayAndWeek(day, week);
-
-                      return Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 1.5),
-                          child: _buildDayGridStack(
-                            context,
-                            day,
-                            courses,
-                            provider,
-                            isDark,
-                            week: week,
-                            daysCount: daysCount,
+                                );
+                              }),
+                            ),
                           ),
                         ),
-                      );
-                    }),
+
+                        // 周一至周日各列的课程网格
+                        ...List.generate(daysCount, (dayIndex) {
+                          final day = dayIndex + 1;
+                          final courses =
+                              provider.getCoursesForDayAndWeek(day, week);
+
+                          return Expanded(
+                            child: Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 1.5),
+                              child: _buildDayGridStack(
+                                context,
+                                day,
+                                courses,
+                                provider,
+                                isDark,
+                                week: week,
+                                daysCount: daysCount,
+                              ),
+                            ),
+                          );
+                        }),
+                      ],
+                    ),
+
+                    // [v3.2.6] iOS 日历风格当前时间指示横线 + 左侧时间轴圆角矩形光标（随页面刷新更新，零定时器开销）
+                    if (isCurrentWeek)
+                      _buildCurrentTimeIndicatorOverlay(
+                        context: context,
+                        config: config,
+                        now: now,
+                        isDark: isDark,
+                        isLandscape: isLandscape,
+                        timeColWidth: timeColWidth,
+                        daysCount: daysCount,
+                        todayColIdx: todayColIdx,
+                        primaryColor: primaryColor,
+                      ),
                   ],
                 ),
               ),
@@ -746,7 +941,14 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
                   return Expanded(
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 1.5),
-                      child: _buildDayHeaderCell(context, day, provider, isDark, week: week),
+                      child: _buildDayHeaderCell(
+                        context,
+                        day,
+                        provider,
+                        isDark,
+                        week: week,
+                        now: now,
+                      ),
                     ),
                   );
                 }),
@@ -765,6 +967,162 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
             child: _buildWeekControl(context, provider, week: week),
           ),
       ],
+    );
+  }
+
+  /// 构建 iOS 日历风格当前时间轴圆角矩形时间标尺与主题色横线指示器
+  Widget _buildCurrentTimeIndicatorOverlay({
+    required BuildContext context,
+    required ScheduleConfigModel config,
+    required DateTime now,
+    required bool isDark,
+    required bool isLandscape,
+    required double timeColWidth,
+    required int daysCount,
+    required int? todayColIdx,
+    required Color primaryColor,
+  }) {
+    const double indicatorHeight = 18.0;
+    const double totalHeight = kTotalSections * kSectionRowHeight;
+    final double offsetY = WeeklyScheduleGrid.computeCurrentTimeOffsetY(
+      config,
+      now,
+      sectionRowHeight: kSectionRowHeight,
+      totalSections: kTotalSections,
+    );
+    final double clampedTop = (offsetY - indicatorHeight / 2).clamp(
+      0.0,
+      math.max(0.0, totalHeight - indicatorHeight),
+    );
+    final String timeLabel =
+        '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+    final Color pillTextColor =
+        ThemeData.estimateBrightnessForColor(primaryColor) == Brightness.dark
+            ? Colors.white
+            : const Color(0xFF1A1A2E);
+    final Color dotBorderColor =
+        isDark ? const Color(0xFF141822) : Colors.white;
+
+    return Positioned(
+      top: clampedTop,
+      left: 0,
+      right: 0,
+      height: indicatorHeight,
+      child: IgnorePointer(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            // 左侧时间轴圆角矩形当前时间光标
+            SizedBox(
+              width: timeColWidth,
+              child: Center(
+                child: Container(
+                  key: const ValueKey('current_time_axis_pill'),
+                  height: isLandscape ? 18.0 : 16.0,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isLandscape ? 5.0 : 2.5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: primaryColor,
+                    borderRadius: BorderRadius.circular(6),
+                    boxShadow: [
+                      BoxShadow(
+                        color: primaryColor.withValues(alpha: 0.35),
+                        blurRadius: 6,
+                        offset: const Offset(0, 1),
+                      ),
+                    ],
+                  ),
+                  child: Center(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        timeLabel,
+                        style: TextStyle(
+                          color: pillTextColor,
+                          fontSize: isLandscape ? 10.0 : 8.5,
+                          fontWeight: FontWeight.w800,
+                          height: 1.0,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
+            // 跨越周日程网格的主题色横线与当日高精度圆点高亮条
+            Expanded(
+              child: Stack(
+                alignment: Alignment.centerLeft,
+                clipBehavior: Clip.none,
+                children: [
+                  Container(
+                    key: const ValueKey('current_time_guide_line'),
+                    height: 1.0,
+                    color: primaryColor.withValues(alpha: isDark ? 0.36 : 0.28),
+                  ),
+                  if (todayColIdx != null)
+                    Row(
+                      children: List.generate(daysCount, (idx) {
+                        if (idx != todayColIdx) {
+                          return const Expanded(child: SizedBox.shrink());
+                        }
+                        return Expanded(
+                          child: Padding(
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 1.5),
+                            child: Stack(
+                              alignment: Alignment.centerLeft,
+                              clipBehavior: Clip.none,
+                              children: [
+                                Container(
+                                  key: const ValueKey('current_time_today_bar'),
+                                  height: 2.0,
+                                  decoration: BoxDecoration(
+                                    color: primaryColor,
+                                    borderRadius: BorderRadius.circular(1.0),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: primaryColor.withValues(
+                                          alpha: 0.38,
+                                        ),
+                                        blurRadius: 4,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Positioned(
+                                  left: -3.5,
+                                  child: Container(
+                                    key: const ValueKey(
+                                      'current_time_today_dot',
+                                    ),
+                                    width: 7.5,
+                                    height: 7.5,
+                                    decoration: BoxDecoration(
+                                      color: primaryColor,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: dotBorderColor,
+                                        width: 1.5,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -868,35 +1226,34 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
     ScheduleProvider provider,
     bool isDark, {
     required int week,
+    DateTime? now,
   }) {
     final weekdays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
-    final semesterStart = provider.semesterStartDate;
-    final weekOffset = (week - 1) * 7;
-    final semesterStartDateOnly = DateTime(semesterStart.year, semesterStart.month, semesterStart.day);
-    final firstMonday = semesterStartDateOnly.subtract(Duration(days: semesterStartDateOnly.weekday - 1));
-    final dayDate = firstMonday.add(Duration(days: weekOffset + day - 1));
+    final firstMonday = WeeklyScheduleGrid.weekStartMonday(
+      provider.semesterStartDate,
+      week,
+    );
+    final dayDate = firstMonday.add(Duration(days: day - 1));
     final dateLabel = '${dayDate.month}/${dayDate.day}';
 
-    final now = DateTime.now();
-    final isToday = now.year == dayDate.year &&
-        now.month == dayDate.month &&
-        now.day == dayDate.day;
+    final effectiveNow = now ?? DateTime.now();
+    final isToday = effectiveNow.year == dayDate.year &&
+        effectiveNow.month == dayDate.month &&
+        effectiveNow.day == dayDate.day;
 
+    final primaryColor = Theme.of(context).colorScheme.primary;
     final todayAccent = GlassSettingsHelper.getAccentTextColor(
       context,
-      AppThemeColors.babyPink,
+      primaryColor,
     );
+    final pillTextColor =
+        ThemeData.estimateBrightnessForColor(primaryColor) == Brightness.dark
+            ? Colors.white
+            : const Color(0xFF1A1A2E);
 
-    return Container(
+    return SizedBox(
       height: 44,
       width: double.infinity,
-      decoration: isToday
-          ? BoxDecoration(
-              color: AppThemeColors.babyPink.withValues(alpha: isDark ? 0.28 : 0.18),
-              borderRadius: BorderRadius.circular(10),
-              boxShadow: liquid.HyperOSShadows.pill(isDark, accentColor: AppThemeColors.babyPink),
-            )
-          : null,
       child: widget.isPhone
           ? Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -905,25 +1262,54 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
                   weekdays[day - 1],
                   style: TextStyle(
                     color: isToday
-                        ? (isDark ? todayAccent : const Color(0xFFC84B66))
+                        ? todayAccent
                         : (isDark ? Colors.white60 : const Color(0xFF6B7280)),
-                    fontSize: 11.5,
+                    fontSize: 11.0,
                     fontWeight: isToday ? FontWeight.w800 : FontWeight.w600,
                     height: 1.1,
                   ),
                 ),
-                const SizedBox(height: 1.5),
-                Text(
-                  '${dayDate.day}',
-                  style: TextStyle(
-                    color: isToday
-                        ? (isDark ? todayAccent : const Color(0xFFC84B66))
-                        : (isDark ? Colors.white.withValues(alpha: 0.9) : const Color(0xFF1F2228)),
-                    fontSize: 12.0,
-                    fontWeight: isToday ? FontWeight.w900 : FontWeight.w700,
-                    height: 1.1,
+                const SizedBox(height: 2.0),
+                if (isToday)
+                  Container(
+                    key: const ValueKey('today_header_date_pill'),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: primaryColor,
+                      borderRadius: BorderRadius.circular(10),
+                      boxShadow: [
+                        BoxShadow(
+                          color: primaryColor.withValues(alpha: 0.32),
+                          blurRadius: 6,
+                          offset: const Offset(0, 1),
+                        ),
+                      ],
+                    ),
+                    child: Text(
+                      '${dayDate.day}',
+                      style: TextStyle(
+                        color: pillTextColor,
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w900,
+                        height: 1.05,
+                      ),
+                    ),
+                  )
+                else
+                  Text(
+                    '${dayDate.day}',
+                    style: TextStyle(
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.9)
+                          : const Color(0xFF1F2228),
+                      fontSize: 12.0,
+                      fontWeight: FontWeight.w700,
+                      height: 1.1,
+                    ),
                   ),
-                ),
               ],
             )
           : Row(
@@ -936,20 +1322,42 @@ class _WeeklyScheduleGridState extends State<WeeklyScheduleGrid> {
                         ? todayAccent
                         : (isDark ? Colors.white70 : const Color(0xFF6B7280)),
                     fontSize: 13,
-                    fontWeight: isToday ? FontWeight.bold : FontWeight.w600,
+                    fontWeight: isToday ? FontWeight.w800 : FontWeight.w600,
                   ),
                 ),
-                const SizedBox(width: 4),
-                Text(
-                  dateLabel,
-                  style: TextStyle(
-                    color: isToday
-                        ? todayAccent
-                        : (isDark ? Colors.white.withValues(alpha: 0.9) : const Color(0xFF1F2228)),
-                    fontSize: 11.5,
-                    fontWeight: isToday ? FontWeight.w900 : FontWeight.w600,
+                const SizedBox(width: 5),
+                if (isToday)
+                  Container(
+                    key: const ValueKey('today_header_date_pill'),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 2.5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: primaryColor,
+                      borderRadius: BorderRadius.circular(9),
+                    ),
+                    child: Text(
+                      dateLabel,
+                      style: TextStyle(
+                        color: pillTextColor,
+                        fontSize: 11.0,
+                        fontWeight: FontWeight.w900,
+                        height: 1.05,
+                      ),
+                    ),
+                  )
+                else
+                  Text(
+                    dateLabel,
+                    style: TextStyle(
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.9)
+                          : const Color(0xFF1F2228),
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                ),
               ],
             ),
     );

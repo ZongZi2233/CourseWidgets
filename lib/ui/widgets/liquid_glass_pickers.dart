@@ -33,10 +33,8 @@ class _PickerGlassShell extends StatelessWidget {
             color: bgColor,
             borderRadius: SquircleGeometry.smoothRadius(26),
             border: Border.all(
-              color: isDark
-                  ? Colors.white.withValues(alpha: 0.15)
-                  : Colors.white.withValues(alpha: 0.70),
-              width: 1.0,
+              color: Colors.black.withValues(alpha: isDark ? 0.28 : 0.08),
+              width: 0.7,
             ),
             boxShadow: [
               BoxShadow(

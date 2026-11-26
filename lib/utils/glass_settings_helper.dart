@@ -6,6 +6,39 @@ import '../services/glass_appearance_service.dart';
 /// [v2.2.8 / v3.2.4] 全局液态玻璃透明度系统
 /// 统一接入 [GlassAppearanceService]，根据深色模式、玻璃白值与玻璃模糊度自动调节
 class GlassSettingsHelper {
+  /// [v3.2.6] 首页与日历竖屏顶部玻璃栏统一几何与材质基准（严格以日历顶栏为基准对齐）
+  static const double unifiedPortraitTopBarHeight = 48.0;
+  static const double unifiedPortraitTopBarRadius = 20.0;
+  static const double unifiedPortraitTopBarHorizontalMargin = 16.0;
+  static const double unifiedPortraitTopBarTopGap = 6.0;
+
+  /// 获取首页与日历统一顶栏玻璃参数
+  static LiquidGlassSettings getTopBarSettings({bool? isDark}) {
+    final dark = isDark ?? globalDarkModeNotifier.value;
+    return applyAppearance(
+      LiquidGlassSettings(
+        glassColor: dark
+            ? const Color(0x2212151B)
+            : const Color(0x35FFFFFF),
+        blur: 1.5,
+        thickness: 20.0,
+        refractiveIndex: 1.45,
+        chromaticAberration: 0.08,
+        lensModel: GlassLensModel.paraxial,
+        lightIntensity: 0.0,
+        ambientStrength: 0.0,
+        ambientRim: 0.0,
+        fresnelStrength: 0.0,
+        rimLight: 0.0,
+        rimShade: dark ? 0.68 : 0.56,
+        rimShadeEnds: dark ? 0.68 : 0.76,
+        edgeAbsorption: dark ? 0.06 : 0.035,
+        saturation: 1.15,
+      ),
+      isDark: dark,
+    );
+  }
+
   /// 统一将全局玻璃透明度（白值）与玻璃高斯模糊度作用于任意 [LiquidGlassSettings]
   static LiquidGlassSettings applyAppearance(
     LiquidGlassSettings base, {
@@ -15,6 +48,7 @@ class GlassSettingsHelper {
     Color? opaqueColorOverride,
     double maxBlur = GlassAppearanceService.maxGlassBlur,
     double maxUltraLightBlur = 8.0,
+    bool preserveLegacyRim = false,
   }) {
     return GlassAppearanceService.instance.applyToSettings(
       base,
@@ -24,6 +58,7 @@ class GlassSettingsHelper {
       opaqueColorOverride: opaqueColorOverride,
       maxBlur: maxBlur,
       maxUltraLightBlur: maxUltraLightBlur,
+      preserveLegacyRim: preserveLegacyRim,
     );
   }
 
@@ -50,13 +85,16 @@ class GlassSettingsHelper {
         thickness: thickness ?? 20.0,
         refractiveIndex: 1.48,
         chromaticAberration: 0.08,
-        lightIntensity: 0.70,
-        ambientStrength: 0.30,
+        lensModel: GlassLensModel.paraxial,
+        lightIntensity: 0.0,
+        ambientStrength: 0.0,
         ambientRim: 0.0,
         fresnelStrength: 0.0,
-        edgeAbsorption: 0.0,
+        rimLight: 0.0,
+        rimShade: isDark ? 0.68 : 0.56,
+        rimShadeEnds: isDark ? 0.68 : 0.76,
+        edgeAbsorption: isDark ? 0.06 : 0.035,
         saturation: 1.15,
-        specularSharpness: GlassSpecularSharpness.sharp,
       ),
       isDark: isDark,
     );
@@ -76,13 +114,16 @@ class GlassSettingsHelper {
         thickness: 18.0,
         refractiveIndex: 1.48,
         chromaticAberration: 0.08,
-        lightIntensity: 0.70,
-        ambientStrength: 0.30,
+        lensModel: GlassLensModel.paraxial,
+        lightIntensity: 0.0,
+        ambientStrength: 0.0,
         ambientRim: 0.0,
         fresnelStrength: 0.0,
-        edgeAbsorption: 0.0,
+        rimLight: 0.0,
+        rimShade: isDark ? 0.68 : 0.56,
+        rimShadeEnds: isDark ? 0.68 : 0.76,
+        edgeAbsorption: isDark ? 0.06 : 0.035,
         saturation: 1.15,
-        specularSharpness: GlassSpecularSharpness.sharp,
       ),
       isDark: isDark,
     );
@@ -114,12 +155,15 @@ class GlassSettingsHelper {
         thickness: 16.0,
         refractiveIndex: 1.48,
         chromaticAberration: 0.08,
-        lightIntensity: 0.70,
-        ambientStrength: 0.30,
+        lensModel: GlassLensModel.paraxial,
+        lightIntensity: 0.0,
+        ambientStrength: 0.0,
         ambientRim: 0.0,
         fresnelStrength: 0.0,
-        edgeAbsorption: 0.0,
-        specularSharpness: GlassSpecularSharpness.sharp,
+        rimLight: 0.0,
+        rimShade: isDark ? 0.68 : 0.56,
+        rimShadeEnds: isDark ? 0.68 : 0.76,
+        edgeAbsorption: isDark ? 0.06 : 0.035,
       ),
       isDark: isDark,
     );
@@ -139,12 +183,15 @@ class GlassSettingsHelper {
         thickness: 22.0,
         refractiveIndex: 1.48,
         chromaticAberration: 0.08,
-        lightIntensity: 0.70,
-        ambientStrength: 0.30,
+        lensModel: GlassLensModel.paraxial,
+        lightIntensity: 0.0,
+        ambientStrength: 0.0,
         ambientRim: 0.0,
         fresnelStrength: 0.0,
-        edgeAbsorption: 0.0,
-        specularSharpness: GlassSpecularSharpness.sharp,
+        rimLight: 0.0,
+        rimShade: isDark ? 0.68 : 0.56,
+        rimShadeEnds: isDark ? 0.68 : 0.76,
+        edgeAbsorption: isDark ? 0.06 : 0.035,
       ),
       isDark: isDark,
     );
@@ -164,11 +211,15 @@ class GlassSettingsHelper {
         thickness: 10.0,
         refractiveIndex: 1.42,
         chromaticAberration: 0.06,
-        lightIntensity: 0.65,
-        ambientStrength: 0.25,
+        lensModel: GlassLensModel.paraxial,
+        lightIntensity: 0.0,
+        ambientStrength: 0.0,
         ambientRim: 0.0,
         fresnelStrength: 0.0,
-        edgeAbsorption: 0.0,
+        rimLight: 0.0,
+        rimShade: isDark ? 0.68 : 0.56,
+        rimShadeEnds: isDark ? 0.68 : 0.76,
+        edgeAbsorption: isDark ? 0.06 : 0.035,
       ),
       isDark: isDark,
     );
@@ -188,12 +239,15 @@ class GlassSettingsHelper {
         thickness: 24.0,
         refractiveIndex: 1.50,
         chromaticAberration: 0.10,
-        lightIntensity: 0.75,
-        ambientStrength: 0.35,
+        lensModel: GlassLensModel.paraxial,
+        lightIntensity: 0.0,
+        ambientStrength: 0.0,
         ambientRim: 0.0,
         fresnelStrength: 0.0,
-        edgeAbsorption: 0.0,
-        specularSharpness: GlassSpecularSharpness.sharp,
+        rimLight: 0.0,
+        rimShade: isDark ? 0.68 : 0.56,
+        rimShadeEnds: isDark ? 0.68 : 0.76,
+        edgeAbsorption: isDark ? 0.06 : 0.035,
       ),
       isDark: isDark,
     );
@@ -213,12 +267,15 @@ class GlassSettingsHelper {
         thickness: 22.0,
         refractiveIndex: 1.48,
         chromaticAberration: 0.08,
-        lightIntensity: 0.70,
-        ambientStrength: 0.30,
+        lensModel: GlassLensModel.paraxial,
+        lightIntensity: 0.0,
+        ambientStrength: 0.0,
         ambientRim: 0.0,
         fresnelStrength: 0.0,
-        edgeAbsorption: 0.0,
-        specularSharpness: GlassSpecularSharpness.sharp,
+        rimLight: 0.0,
+        rimShade: isDark ? 0.68 : 0.56,
+        rimShadeEnds: isDark ? 0.68 : 0.76,
+        edgeAbsorption: isDark ? 0.06 : 0.035,
       ),
       isDark: isDark,
     );

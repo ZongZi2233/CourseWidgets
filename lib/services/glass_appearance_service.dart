@@ -282,6 +282,7 @@ class GlassAppearanceService extends ChangeNotifier {
   }
 
   /// 将当前玻璃白值与玻璃模糊统一注入任意 `LiquidGlassSettings`
+  /// 默认同步切换为 iOS 27 / FlClash 风格黑半透明柔和边缘（零金属/灰白高光描边）
   LiquidGlassSettings applyToSettings(
     LiquidGlassSettings base, {
     required bool isDark,
@@ -290,6 +291,7 @@ class GlassAppearanceService extends ChangeNotifier {
     Color? opaqueColorOverride,
     double maxBlur = maxGlassBlur,
     double maxUltraLightBlur = 8.0,
+    bool preserveLegacyRim = false,
   }) {
     final resolvedColor = resolveGlassColor(
       baseColor: base.glassColor,
@@ -305,9 +307,24 @@ class GlassAppearanceService extends ChangeNotifier {
             maxSigma: maxBlur,
             maxUltraLightSigma: maxUltraLightBlur,
           );
+    if (preserveLegacyRim) {
+      return base.copyWith(
+        glassColor: resolvedColor,
+        blur: resolvedBlur,
+      );
+    }
     return base.copyWith(
       glassColor: resolvedColor,
       blur: resolvedBlur,
+      lensModel: GlassLensModel.paraxial,
+      lightIntensity: 0.0,
+      ambientStrength: 0.0,
+      ambientRim: 0.0,
+      fresnelStrength: 0.0,
+      rimLight: 0.0,
+      rimShade: isDark ? 0.68 : 0.56,
+      rimShadeEnds: isDark ? 0.68 : 0.76,
+      edgeAbsorption: isDark ? 0.06 : 0.035,
     );
   }
 

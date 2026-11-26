@@ -17,16 +17,58 @@ import '../widgets/adaptive_smooth_scroll.dart';
 
 /// [修复7] iOS 26 液态玻璃风格关于软件页面
 class SettingsAboutScreen extends StatefulWidget {
-  const SettingsAboutScreen({super.key});
+  final Future<String> Function(String version, {bool forceRefresh})?
+      releaseNotesFetcher;
+  final bool autoFetchReleaseNotes;
+
+  const SettingsAboutScreen({
+    super.key,
+    this.releaseNotesFetcher,
+    this.autoFetchReleaseNotes = true,
+  });
+
   @override
   State<SettingsAboutScreen> createState() => _SettingsAboutScreenState();
 }
 
 class _SettingsAboutScreenState extends State<SettingsAboutScreen> {
+  String? _releaseNotes;
+  String? _releaseNotesError;
+  bool _isLoadingReleaseNotes = false;
+
   @override
   void initState() {
     super.initState();
     setWindowsDesktopTitle('关于软件');
+    if (widget.autoFetchReleaseNotes) {
+      _loadCurrentVersionReleaseNotes();
+    }
+  }
+
+  Future<void> _loadCurrentVersionReleaseNotes({
+    bool forceRefresh = false,
+  }) async {
+    if (_isLoadingReleaseNotes) return;
+    setState(() {
+      _isLoadingReleaseNotes = true;
+      _releaseNotesError = null;
+    });
+    try {
+      final fetcher = widget.releaseNotesFetcher ??
+          AppUpdateService.instance.fetchReleaseNotesForVersion;
+      final notes = await fetcher(appVersion, forceRefresh: forceRefresh);
+      if (!mounted) return;
+      setState(() {
+        _releaseNotes = notes;
+        _isLoadingReleaseNotes = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _releaseNotesError = e.toString().replaceFirst('Exception: ', '');
+        _isLoadingReleaseNotes = false;
+      });
+    }
   }
 
   @override
@@ -154,6 +196,10 @@ class _SettingsAboutScreenState extends State<SettingsAboutScreen> {
 
                 const SizedBox(height: 20),
 
+                _buildCurrentReleaseNotesCard(isDark),
+
+                const SizedBox(height: 20),
+
                 // Copyright Card（点击直接跳转默认浏览器打开 GitHub 仓库主页）
                 MouseRegion(
                   cursor: SystemMouseCursors.click,
@@ -218,12 +264,15 @@ class _SettingsAboutScreenState extends State<SettingsAboutScreen> {
                                 color: secondaryTextColor,
                               ),
                               const SizedBox(width: 6),
-                              Text(
-                                'github.com/ZongZi2233/CourseWidgets',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w500,
-                                  color: secondaryTextColor,
+                              Flexible(
+                                child: Text(
+                                  'github.com/ZongZi2233/CourseWidgets',
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w500,
+                                    color: secondaryTextColor,
+                                  ),
                                 ),
                               ),
                               const SizedBox(width: 4),
@@ -291,6 +340,212 @@ class _SettingsAboutScreenState extends State<SettingsAboutScreen> {
       onFinish: () {
         if (mounted) setState(() => _isCheckingUpdate = false);
       },
+    );
+  }
+
+  Widget _buildCurrentReleaseNotesCard(bool isDark) {
+    final titleColor = isDark ? Colors.white : const Color(0xFF1A1A2E);
+    final subColor = isDark ? Colors.white60 : const Color(0xFF5A6272);
+    final insetBg = isDark
+        ? Colors.white.withValues(alpha: 0.055)
+        : Colors.black.withValues(alpha: 0.035);
+    final accentColor = GlassSettingsHelper.getAccentTextColor(
+      context,
+      AppThemeColors.babyPink,
+    );
+
+    return liquid.HyperOSCard(
+      key: const ValueKey('about_current_release_notes_card'),
+      cornerRadius: 22,
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: AppThemeColors.babyPink.withValues(
+                    alpha: isDark ? 0.22 : 0.14,
+                  ),
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: Icon(
+                  CupertinoIcons.doc_text_fill,
+                  color: AppThemeColors.babyPink,
+                  size: 18,
+                ),
+              ),
+              const SizedBox(width: 11),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(
+                          '当前版本更新内容',
+                          style: TextStyle(
+                            fontSize: 15.5,
+                            fontWeight: FontWeight.w700,
+                            color: titleColor,
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppThemeColors.babyPink.withValues(
+                              alpha: isDark ? 0.22 : 0.14,
+                            ),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            'v$appVersion',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: accentColor,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '同步自 GitHub Releases 发布说明',
+                      style: TextStyle(fontSize: 11.5, color: subColor),
+                    ),
+                  ],
+                ),
+              ),
+              MouseRegion(
+                cursor: _isLoadingReleaseNotes
+                    ? SystemMouseCursors.basic
+                    : SystemMouseCursors.click,
+                child: GestureDetector(
+                  key: const ValueKey('about_release_notes_refresh_btn'),
+                  onTap: _isLoadingReleaseNotes
+                      ? null
+                      : () {
+                          HapticFeedback.lightImpact();
+                          _loadCurrentVersionReleaseNotes(forceRefresh: true);
+                        },
+                  child: Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: (isDark ? Colors.white : Colors.black)
+                          .withValues(alpha: isDark ? 0.08 : 0.05),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: _isLoadingReleaseNotes
+                        ? const Center(
+                            child: CupertinoActivityIndicator(radius: 7.5),
+                          )
+                        : Icon(
+                            CupertinoIcons.refresh,
+                            size: 15,
+                            color: subColor,
+                          ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: insetBg,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: _isLoadingReleaseNotes && _releaseNotes == null
+                ? Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const CupertinoActivityIndicator(radius: 8.5),
+                        const SizedBox(width: 10),
+                        Flexible(
+                          child: Text(
+                            '正在从 GitHub 拉取 v$appVersion 更新日志...',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: 12.5, color: subColor),
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : (_releaseNotes != null && _releaseNotes!.trim().isNotEmpty)
+                    ? ConstrainedBox(
+                        constraints: const BoxConstraints(maxHeight: 280),
+                        child: SingleChildScrollView(
+                          physics: const BouncingScrollPhysics(),
+                          child: ReleaseNotesMarkdownView(
+                            markdown: _releaseNotes!,
+                            isDark: isDark,
+                            onLinkTap: (url) => AppUpdateService.instance
+                                .openExternalDownloadUrl(url),
+                          ),
+                        ),
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _releaseNotesError ?? '点击右上角刷新按钮从 GitHub 获取更新内容',
+                            style: TextStyle(fontSize: 12.5, color: subColor),
+                          ),
+                          const SizedBox(height: 10),
+                          MouseRegion(
+                            cursor: SystemMouseCursors.click,
+                            child: GestureDetector(
+                              key: const ValueKey(
+                                'about_release_notes_retry_btn',
+                              ),
+                              onTap: _isLoadingReleaseNotes
+                                  ? null
+                                  : () => _loadCurrentVersionReleaseNotes(
+                                        forceRefresh: true,
+                                      ),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppThemeColors.babyPink.withValues(
+                                    alpha: isDark ? 0.22 : 0.14,
+                                  ),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Text(
+                                  '重新加载',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: accentColor,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+          ),
+        ],
+      ),
     );
   }
 

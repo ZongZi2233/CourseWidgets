@@ -131,7 +131,7 @@ void main() {
 
       expect(find.text('第 1 节作息时间'), findsOneWidget);
       expect(find.byType(BackdropFilter), findsAtLeastNWidgets(1));
-      expect(find.byType(ClipRSuperellipse), findsAtLeastNWidgets(1));
+      expect(find.byType(GlassContainer), findsAtLeastNWidgets(1));
       expect(find.text('应用'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });

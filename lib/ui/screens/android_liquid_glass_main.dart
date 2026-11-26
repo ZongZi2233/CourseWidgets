@@ -23,6 +23,7 @@ import '../theme/squircle_geometry.dart';
 import '../animations/app_motion.dart';
 import '../../services/glass_appearance_service.dart';
 import '../../services/theme_service.dart' as theme;
+import '../../utils/glass_settings_helper.dart';
 class AndroidLiquidGlassMain extends StatefulWidget {
   const AndroidLiquidGlassMain({super.key});
   @override
@@ -597,7 +598,10 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
           // [v3.0.0-alpha23] 横屏模式彻底移除大标题栏，仅保留左上角节次星期交汇处的悬浮日期胶囊，释放全幅垂直空间
           final topPadding = isLandscape
               ? (MediaQuery.of(context).padding.top + 6)
-              : (MediaQuery.of(context).padding.top + 54);
+              : (MediaQuery.of(context).padding.top +
+                  GlassSettingsHelper.unifiedPortraitTopBarTopGap +
+                  GlassSettingsHelper.unifiedPortraitTopBarHeight +
+                  6);
 
           return Stack(
             children: [
@@ -618,7 +622,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                 ),
               ),
 
-              // 顶部悬浮标题栏：轻量品牌与日期指示（仅竖屏展示，横屏由左上角胶囊承接）
+              // 顶部悬浮标题栏：轻量品牌与日期指示（与日历顶栏统一尺寸、圆角与材质，仅竖屏展示）
               if (!isLandscape)
                 Positioned(
                   top: 0,
@@ -629,7 +633,12 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                     left: true,
                     right: true,
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 6, 16, 4),
+                      padding: const EdgeInsets.fromLTRB(
+                        GlassSettingsHelper.unifiedPortraitTopBarHorizontalMargin,
+                        GlassSettingsHelper.unifiedPortraitTopBarTopGap,
+                        GlassSettingsHelper.unifiedPortraitTopBarHorizontalMargin,
+                        0,
+                      ),
                       child: RepaintBoundary(
                         child: _buildModernTopBar(provider),
                       ),
@@ -666,8 +675,7 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
       );
   }
 
-  /// 现代晶透顶部栏：精简为品牌 Logo 与当前日期指示，腾出顶部空间
-  /// [v3.1.4] 恢复真实 3D 折射液态玻璃 (GlassContainer Premium)，配合常驻预烘焙几何缓存与动态背景补偿，切页零掉帧且不变暗
+  /// 现代晶透顶部栏：与日历顶栏严格统一高度 (48dp)、圆角 (20dp)、边距与液态玻璃参数
   Widget _buildModernTopBar(ScheduleProvider provider) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final now = DateTime.now();
@@ -678,52 +686,46 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
       listenable: GlassAppearanceService.instance,
       builder: (context, barChild) {
         final glass = GlassAppearanceService.instance;
-        final effectiveSettings = glass.applyToSettings(
-          LiquidGlassSettings(
-            glassColor: isDark
-                ? const Color(0x1812151B)
-                : const Color(0x18FFFFFF),
-            blur: 0.5,
-            thickness: 18.0,
-            refractiveIndex: 1.44,
-            lightIntensity: 0.70,
-            ambientStrength: 0.45,
-            ambientRim: 0.0,
-            fresnelStrength: 0.0,
-            saturation: 1.20,
-          ),
+        final effectiveSettings = GlassSettingsHelper.getTopBarSettings(
           isDark: isDark,
         );
 
-        return DecoratedBox(
-          decoration: BoxDecoration(
-            borderRadius: SquircleGeometry.smoothRadius(20),
-            boxShadow: liquid.HyperOSShadows.dock(isDark),
-          ),
-          child: glass.isGlassOpaque
-              ? ClipRSuperellipse(
-                  borderRadius: SquircleGeometry.smoothRadius(20),
-                  child: Container(
-                    color: effectiveSettings.glassColor,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 7,
+        return SizedBox(
+          height: GlassSettingsHelper.unifiedPortraitTopBarHeight,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: SquircleGeometry.smoothRadius(
+                GlassSettingsHelper.unifiedPortraitTopBarRadius,
+              ),
+              boxShadow: liquid.HyperOSShadows.dock(isDark),
+            ),
+            child: glass.isGlassOpaque
+                ? ClipRSuperellipse(
+                    borderRadius: SquircleGeometry.smoothRadius(
+                      GlassSettingsHelper.unifiedPortraitTopBarRadius,
                     ),
-                    child: barChild,
+                    child: Container(
+                      height: GlassSettingsHelper.unifiedPortraitTopBarHeight,
+                      color: effectiveSettings.glassColor,
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      child: barChild,
+                    ),
+                  )
+                : GlassContainer(
+                    useOwnLayer: true,
+                    clipBehavior: Clip.antiAlias,
+                    shape: const LiquidRoundedSuperellipse(
+                      borderRadius: GlassSettingsHelper.unifiedPortraitTopBarRadius,
+                    ),
+                    quality: theme.ThemeService().glassQuality,
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    settings: effectiveSettings,
+                    child: SizedBox(
+                      height: GlassSettingsHelper.unifiedPortraitTopBarHeight,
+                      child: barChild!,
+                    ),
                   ),
-                )
-              : GlassContainer(
-                  useOwnLayer: true,
-                  clipBehavior: Clip.antiAlias,
-                  shape: const LiquidRoundedSuperellipse(borderRadius: 20),
-                  quality: theme.ThemeService().glassQuality,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 7,
-                  ),
-                  settings: effectiveSettings,
-                  child: barChild!,
-                ),
+          ),
         );
       },
       child: Row(
@@ -887,10 +889,10 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                         : (canPrev ? Colors.white.withValues(alpha: 0.55) : Colors.white.withValues(alpha: 0.22)),
                     borderRadius: BorderRadius.circular(18),
                     border: Border.all(
-                      color: isDark
-                          ? Colors.white.withValues(alpha: canPrev ? 0.12 : 0.04)
-                          : Colors.white.withValues(alpha: canPrev ? 0.70 : 0.35),
-                      width: 0.8,
+                      color: Colors.black.withValues(
+                        alpha: isDark ? (canPrev ? 0.24 : 0.12) : (canPrev ? 0.07 : 0.04),
+                      ),
+                      width: 0.6,
                     ),
                     boxShadow: canPrev ? liquid.HyperOSShadows.pill(isDark) : null,
                   ),
@@ -964,10 +966,10 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                         : (canNext ? Colors.white.withValues(alpha: 0.55) : Colors.white.withValues(alpha: 0.22)),
                     borderRadius: BorderRadius.circular(18),
                     border: Border.all(
-                      color: isDark
-                          ? Colors.white.withValues(alpha: canNext ? 0.12 : 0.04)
-                          : Colors.white.withValues(alpha: canNext ? 0.70 : 0.35),
-                      width: 0.8,
+                      color: Colors.black.withValues(
+                        alpha: isDark ? (canNext ? 0.24 : 0.12) : (canNext ? 0.07 : 0.04),
+                      ),
+                      width: 0.6,
                     ),
                     boxShadow: canNext ? liquid.HyperOSShadows.pill(isDark) : null,
                   ),
@@ -1001,10 +1003,8 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                               : Colors.white.withValues(alpha: 0.55),
                           borderRadius: BorderRadius.circular(18),
                           border: Border.all(
-                            color: isDark
-                                ? Colors.white.withValues(alpha: 0.12)
-                                : Colors.white.withValues(alpha: 0.70),
-                            width: 0.8,
+                            color: Colors.black.withValues(alpha: isDark ? 0.24 : 0.07),
+                            width: 0.6,
                           ),
                           boxShadow: liquid.HyperOSShadows.pill(isDark),
                         ),

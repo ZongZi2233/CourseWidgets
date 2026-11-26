@@ -23,12 +23,18 @@ class AppUpdateDialog extends StatefulWidget {
   final AppUpdateInfo updateInfo;
   final bool autoAnalyzeWindowsDiff;
   final bool autoAnalyzeAndroidDiff;
+  final Future<WindowsIncrementalPlan> Function(AppUpdateInfo info)?
+      windowsDiffAnalyzer;
+  final Future<AndroidIncrementalPlan?> Function(AppUpdateInfo info)?
+      androidDiffAnalyzer;
 
   const AppUpdateDialog({
     super.key,
     required this.updateInfo,
     this.autoAnalyzeWindowsDiff = true,
     this.autoAnalyzeAndroidDiff = true,
+    this.windowsDiffAnalyzer,
+    this.androidDiffAnalyzer,
   });
 
   /// 统一以真实液态玻璃与轻度全屏背景模糊展示更新弹窗
@@ -172,19 +178,34 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
   WindowsIncrementalPlan? _winPlan;
   AndroidIncrementalPlan? _androidPlan;
   bool _isAnalyzingDiff = false;
+  bool _diffAnalysisCompleted = true;
   String? _diffError;
 
   bool _isUpdating = false;
   UpdateProgress? _progress;
   String? _updateError;
 
+  bool get _isPrimaryButtonLocked =>
+      _isUpdating || _isAnalyzingDiff || !_diffAnalysisCompleted;
+
   @override
   void initState() {
     super.initState();
-    if (Platform.isWindows && widget.autoAnalyzeWindowsDiff) {
-      _analyzeWindowsIncrementalDiff();
-    } else if (Platform.isAndroid && widget.autoAnalyzeAndroidDiff) {
-      _analyzeAndroidIncrementalDiff();
+    final bool needsWindowsDiff =
+        Platform.isWindows && widget.autoAnalyzeWindowsDiff;
+    final bool needsAndroidDiff =
+        Platform.isAndroid && widget.autoAnalyzeAndroidDiff;
+    if (needsWindowsDiff || needsAndroidDiff) {
+      _isAnalyzingDiff = true;
+      _diffAnalysisCompleted = false;
+      if (needsWindowsDiff) {
+        _analyzeWindowsIncrementalDiff();
+      } else {
+        _analyzeAndroidIncrementalDiff();
+      }
+    } else {
+      _isAnalyzingDiff = false;
+      _diffAnalysisCompleted = true;
     }
   }
 
@@ -197,21 +218,26 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
   Future<void> _analyzeWindowsIncrementalDiff() async {
     setState(() {
       _isAnalyzingDiff = true;
+      _diffAnalysisCompleted = false;
       _diffError = null;
     });
     try {
-      final plan = await AppUpdateService.instance
-          .prepareWindowsIncrementalPlan(widget.updateInfo);
+      final analyzer = widget.windowsDiffAnalyzer ??
+          AppUpdateService.instance.prepareWindowsIncrementalPlan;
+      final plan = await analyzer(widget.updateInfo);
       if (!mounted) return;
       setState(() {
         _winPlan = plan;
         _isAnalyzingDiff = false;
+        _diffAnalysisCompleted = true;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
+        _winPlan = null;
         _diffError = '$e';
         _isAnalyzingDiff = false;
+        _diffAnalysisCompleted = true;
       });
     }
   }
@@ -219,18 +245,22 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
   Future<void> _analyzeAndroidIncrementalDiff() async {
     setState(() {
       _isAnalyzingDiff = true;
+      _diffAnalysisCompleted = false;
       _diffError = null;
     });
     try {
-      final plan = await AppUpdateService.instance
-          .prepareAndroidIncrementalPlan(widget.updateInfo);
+      final analyzer = widget.androidDiffAnalyzer ??
+          AppUpdateService.instance.prepareAndroidIncrementalPlan;
+      final plan = await analyzer(widget.updateInfo);
       if (!mounted) return;
       setState(() {
         _androidPlan = plan;
         _diffError = plan == null
-            ? AppUpdateService.instance.lastAndroidIncrementalDiagnostic
+            ? (AppUpdateService.instance.lastAndroidIncrementalDiagnostic ??
+                '增量比对不可用，将使用完整包安装')
             : null;
         _isAnalyzingDiff = false;
+        _diffAnalysisCompleted = true;
       });
     } catch (e) {
       if (!mounted) return;
@@ -238,12 +268,13 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
         _androidPlan = null;
         _diffError = '$e';
         _isAnalyzingDiff = false;
+        _diffAnalysisCompleted = true;
       });
     }
   }
 
   Future<void> _startUpdate() async {
-    if (_isUpdating) return;
+    if (_isPrimaryButtonLocked) return;
     HapticFeedback.mediumImpact();
 
     setState(() {
@@ -493,7 +524,7 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
                                   horizontal: 15,
                                   vertical: 14,
                                 ),
-                                child: _ReleaseNotesMarkdownView(
+                                child: ReleaseNotesMarkdownView(
                                   markdown: cleanNotes,
                                   isDark: isDark,
                                   onLinkTap: (url) => AppUpdateService.instance
@@ -558,7 +589,10 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
                               child: Material(
                                 color: Colors.transparent,
                                 child: InkWell(
-                                  onTap: (_isUpdating || _isAnalyzingDiff)
+                                  key: const ValueKey(
+                                    'update_dialog_primary_action',
+                                  ),
+                                  onTap: _isPrimaryButtonLocked
                                       ? null
                                       : _startUpdate,
                                   borderRadius:
@@ -566,37 +600,80 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
                                   child: Ink(
                                     height: 46,
                                     decoration: BoxDecoration(
-                                      color: (_isUpdating || _isAnalyzingDiff)
-                                          ? AppThemeColors.babyPink
-                                              .withValues(alpha: 0.45)
-                                          : AppThemeColors.babyPink,
+                                      color: (_isAnalyzingDiff ||
+                                              !_diffAnalysisCompleted)
+                                          ? (isDark
+                                              ? Colors.white
+                                                  .withValues(alpha: 0.10)
+                                              : Colors.black
+                                                  .withValues(alpha: 0.08))
+                                          : (_isUpdating
+                                              ? AppThemeColors.babyPink
+                                                  .withValues(alpha: 0.55)
+                                              : AppThemeColors.babyPink),
                                       borderRadius:
                                           SquircleGeometry.smoothRadius(16),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: AppThemeColors.babyPink
-                                              .withValues(alpha: 0.30),
-                                          blurRadius: 12,
-                                          offset: const Offset(0, 4),
-                                        ),
-                                      ],
+                                      boxShadow: _isPrimaryButtonLocked
+                                          ? const []
+                                          : [
+                                              BoxShadow(
+                                                color: AppThemeColors.babyPink
+                                                    .withValues(alpha: 0.30),
+                                                blurRadius: 12,
+                                                offset: const Offset(0, 4),
+                                              ),
+                                            ],
                                     ),
                                     child: Center(
-                                      child: Text(
-                                        _isUpdating
-                                            ? '正在更新...'
-                                            : (Platform.isWindows
-                                                ? '增量更新并重启'
-                                                : (_androidPlan?.canIncremental ==
-                                                        true
-                                                    ? '增量更新并安装'
-                                                    : '立即下载并安装')),
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 14.5,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
+                                      child: (_isAnalyzingDiff ||
+                                              !_diffAnalysisCompleted)
+                                          ? Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                SizedBox(
+                                                  width: 14,
+                                                  height: 14,
+                                                  child:
+                                                      CircularProgressIndicator(
+                                                    strokeWidth: 2.0,
+                                                    color: isDark
+                                                        ? Colors.white70
+                                                        : const Color(
+                                                            0xFF4A5060),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                Text(
+                                                  '正在计算增量更新...',
+                                                  style: TextStyle(
+                                                    color: isDark
+                                                        ? Colors.white70
+                                                        : const Color(
+                                                            0xFF4A5060),
+                                                    fontSize: 13.5,
+                                                    fontWeight: FontWeight.w700,
+                                                  ),
+                                                ),
+                                              ],
+                                            )
+                                          : Text(
+                                              _isUpdating
+                                                  ? '正在更新...'
+                                                  : (Platform.isWindows
+                                                      ? (_winPlan != null
+                                                          ? '增量更新并重启'
+                                                          : '完整更新并重启')
+                                                      : (_androidPlan
+                                                                  ?.canIncremental ==
+                                                              true
+                                                          ? '增量更新并安装'
+                                                          : '下载完整包并安装')),
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 14.5,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
                                     ),
                                   ),
                                 ),
@@ -1003,12 +1080,13 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
 }
 
 /// 原生 Markdown 更新日志渲染组件（支持标题层级、悬挂缩进列表、粗体/行内代码/引用/链接）
-class _ReleaseNotesMarkdownView extends StatelessWidget {
+class ReleaseNotesMarkdownView extends StatelessWidget {
   final String markdown;
   final bool isDark;
   final ValueChanged<String>? onLinkTap;
 
-  const _ReleaseNotesMarkdownView({
+  const ReleaseNotesMarkdownView({
+    super.key,
     required this.markdown,
     required this.isDark,
     this.onLinkTap,

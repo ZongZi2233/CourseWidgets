@@ -151,8 +151,11 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
       bottom: false,
       child: Column(
         children: [
-          const SizedBox(height: 6),
-          _buildHeader(horizontalPadding: 16),
+          const SizedBox(height: GlassSettingsHelper.unifiedPortraitTopBarTopGap),
+          _buildHeader(
+            horizontalPadding:
+                GlassSettingsHelper.unifiedPortraitTopBarHorizontalMargin,
+          ),
           const SizedBox(height: 12),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -168,29 +171,18 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
     );
   }
 
-  /// 现代晶透月历顶栏（年月切换、今天速达、月/周胶囊切换）
-  /// [v3.1.3 FlClash 级优化] 统一使用预烘焙静态壁纸纹理采样的 HyperOSCard，
-  /// 彻底消除“课程 ↔ 日历”切换时的 Picture.toImageSync 首帧卡顿与 BackdropFilter 采样黑底闪烁。
+  /// 现代晶透月历顶栏（年月切换、今天速达、展开/收起切换），与首页顶栏严格统一高度 (48dp)、圆角 (20dp) 与材质
   Widget _buildHeader({double horizontalPadding = 16.0, bool compact = false}) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDark ? Colors.white : const Color(0xFF1A1A2E);
     final isCurrentMonthToday = _currentMonth.year == DateTime.now().year &&
         _currentMonth.month == DateTime.now().month;
 
-    final baseHeaderSettings = LiquidGlassSettings(
-      glassColor: isDark ? const Color(0x2212151B) : const Color(0x35FFFFFF),
-      blur: 1.5,
-      thickness: 20.0,
-      refractiveIndex: 1.45,
-      lightIntensity: 0.75,
-      ambientStrength: 0.45,
-      ambientRim: 0.0,
-      fresnelStrength: 0.0,
-      saturation: 1.15,
-    );
+    final double headerHeight =
+        compact ? 44.0 : GlassSettingsHelper.unifiedPortraitTopBarHeight;
     final headerPadding = compact
-        ? const EdgeInsets.symmetric(horizontal: 10, vertical: 6)
-        : const EdgeInsets.symmetric(horizontal: 14, vertical: 8);
+        ? const EdgeInsets.symmetric(horizontal: 10)
+        : const EdgeInsets.symmetric(horizontal: 14);
     final headerRow = Row(
       children: [
         // 上个月
@@ -297,40 +289,52 @@ class _CalendarViewScreenState extends State<CalendarViewScreen> {
 
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          borderRadius: SquircleGeometry.smoothRadius(20),
-          boxShadow: liquid.HyperOSShadows.dock(isDark),
-        ),
-        child: ListenableBuilder(
-          listenable: GlassAppearanceService.instance,
-          builder: (context, rowChild) {
-            final glass = GlassAppearanceService.instance;
-            final effectiveSettings = glass.applyToSettings(
-              baseHeaderSettings,
-              isDark: isDark,
-            );
-            if (glass.isGlassOpaque) {
-              return ClipRSuperellipse(
-                borderRadius: SquircleGeometry.smoothRadius(20),
-                child: Container(
-                  padding: headerPadding,
-                  color: effectiveSettings.glassColor,
-                  child: rowChild,
+      child: SizedBox(
+        height: headerHeight,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: SquircleGeometry.smoothRadius(
+              GlassSettingsHelper.unifiedPortraitTopBarRadius,
+            ),
+            boxShadow: liquid.HyperOSShadows.dock(isDark),
+          ),
+          child: ListenableBuilder(
+            listenable: GlassAppearanceService.instance,
+            builder: (context, rowChild) {
+              final glass = GlassAppearanceService.instance;
+              final effectiveSettings = GlassSettingsHelper.getTopBarSettings(
+                isDark: isDark,
+              );
+              if (glass.isGlassOpaque) {
+                return ClipRSuperellipse(
+                  borderRadius: SquircleGeometry.smoothRadius(
+                    GlassSettingsHelper.unifiedPortraitTopBarRadius,
+                  ),
+                  child: Container(
+                    height: headerHeight,
+                    padding: headerPadding,
+                    color: effectiveSettings.glassColor,
+                    child: rowChild,
+                  ),
+                );
+              }
+              return GlassContainer(
+                useOwnLayer: true,
+                clipBehavior: Clip.antiAlias,
+                shape: const LiquidRoundedSuperellipse(
+                  borderRadius: GlassSettingsHelper.unifiedPortraitTopBarRadius,
+                ),
+                quality: theme.ThemeService().glassQuality,
+                padding: headerPadding,
+                settings: effectiveSettings,
+                child: SizedBox(
+                  height: headerHeight,
+                  child: rowChild!,
                 ),
               );
-            }
-            return GlassContainer(
-              useOwnLayer: true,
-              clipBehavior: Clip.antiAlias,
-              shape: const LiquidRoundedSuperellipse(borderRadius: 20),
-              quality: theme.ThemeService().glassQuality,
-              padding: headerPadding,
-              settings: effectiveSettings,
-              child: rowChild!,
-            );
-          },
-          child: headerRow,
+            },
+            child: headerRow,
+          ),
         ),
       ),
     );

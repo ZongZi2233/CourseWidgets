@@ -195,9 +195,7 @@ class WindowsDesktopTitleBar extends StatelessWidget {
             color: bgColor,
             border: Border(
               bottom: BorderSide(
-                color: isDark
-                    ? Colors.white.withValues(alpha: 0.12)
-                    : Colors.white.withValues(alpha: 0.55),
+                color: Colors.black.withValues(alpha: isDark ? 0.28 : 0.07),
                 width: 0.6,
               ),
             ),

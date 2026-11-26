@@ -12,7 +12,7 @@
 [![Dart](https://img.shields.io/badge/Dart-3.14.0+-0175C2?logo=dart)](https://dart.dev)
 [![Android](https://img.shields.io/badge/Android-15%2B%20(API%2035--37.2)-3DDC84?logo=android)](https://github.com/ZongZi2233/CourseWidgets/releases)
 [![Windows](https://img.shields.io/badge/Windows-10%2F11%20x64-0078D6?logo=windows)](https://github.com/ZongZi2233/CourseWidgets/releases)
-[![Version](https://img.shields.io/badge/Release-v3.2.5%20(Build%203250)-FF9BAE)](https://github.com/ZongZi2233/CourseWidgets/releases/tag/v3.2.5)
+[![Version](https://img.shields.io/badge/Release-v3.2.6%20(Build%203260)-FF9BAE)](https://github.com/ZongZi2233/CourseWidgets/releases/tag/v3.2.6)
 
 [English](README_EN.md) | **简体中文**
 
@@ -20,10 +20,10 @@
 
 ---
 
-## 📦 最新正式版下载：[v3.2.5 (Build 3250)](https://github.com/ZongZi2233/CourseWidgets/releases/tag/v3.2.5)
+## 📦 最新正式版下载：[v3.2.6 (Build 3260)](https://github.com/ZongZi2233/CourseWidgets/releases/tag/v3.2.6)
 
-* **Android 客户端 (`arm64-v8a`)**：[`CourseWidgets-v3.2.5-android-arm64-v8a.apk`](https://github.com/ZongZi2233/CourseWidgets/releases/download/v3.2.5/CourseWidgets-v3.2.5-android-arm64-v8a.apk) —— 支持 Android 15+（API 35+，基于 API 37.2 与 NDK r30 编译），默认组件白值 `15%`、组件模糊 `4.5`、全局模糊 `3.5`，并简化通用设置材质文案（`组件白值` / `组件模糊` / `全局模糊`）；继承全应用材质与模糊统一控制、课时配置 120Hz 优化、Edge-to-Edge 全高滚动、Android 16 实况通知 `64dp` 纯白字教室方块、每日自动检查更新及字节级增量更新。
-* **Windows 桌面端 (`x64`)**：[`CourseWidgets-v3.2.5-windows-x64.zip`](https://github.com/ZongZi2233/CourseWidgets/releases/download/v3.2.5/CourseWidgets-v3.2.5-windows-x64.zip) —— 免安装便携版（MSVC `/O2` + `/OPT:REF,/OPT:ICF` + Dart AOT），默认开启自适应跟随系统深色模式，默认组件白值 `5%`、组件模糊 `4.5`、全局模糊 `3.5`，并全面修复深色模式下标题栏、左下角导航、日历与设置页部分深色文字与暗色强调色对比度问题。
+* **Android 客户端 (`arm64-v8a`)**：[`CourseWidgets-v3.2.6-android-arm64-v8a.apk`](https://github.com/ZongZi2233/CourseWidgets/releases/download/v3.2.6/CourseWidgets-v3.2.6-android-arm64-v8a.apk) —— 支持 Android 15+（API 35+，基于 API 37.2 与 NDK r30 编译），升级黑半透明 iOS 27 / FlClash 柔和玻璃边缘（全面移除低白值下的灰白金属描边）、真液态玻璃 SharedElement 周次形变弹窗、首页与日历顶栏 `48dp / 20dp` 统一尺寸、关于页动态当前版本更新日志、增量计算完成前主按钮锁定防误触，以及 iOS 日历风格当日全高竖条与主题色当前时间指示横线。
+* **Windows 桌面端 (`x64`)**：[`CourseWidgets-v3.2.6-windows-x64.zip`](https://github.com/ZongZi2233/CourseWidgets/releases/download/v3.2.6/CourseWidgets-v3.2.6-windows-x64.zip) —— 免安装便携版（MSVC `/O2` + `/OPT:REF,/OPT:ICF` + Dart AOT），同步享有全部视觉、交互与更新机制升级，延续默认自适应系统深色模式、组件白值 `5%` / 组件模糊 `4.5` / 全局模糊 `3.5` 与文件级字节差分热更新。
 
 ---
 

@@ -383,9 +383,7 @@ void main() {
   // uFresnelStrength (slot 33) scales the grazing-angle rim. Default 1.0 = calibrated
   // iOS 26 baseline. 0.0 removes the rim highlight entirely.
   float adaptiveStrength = mix(1.2, 0.8, uBackdropLuma);
-  float effectiveFresnelStrength = hasNativeRim
-      ? max(uFresnelStrength, 0.25)
-      : uFresnelStrength;
+  float effectiveFresnelStrength = uFresnelStrength;
   float fresnel = (1.0 - normalZ) * borderMask * 0.10 * adaptiveStrength * effectiveFresnelStrength;
 
   // Native iOS 26 / iOS 27 rim light (soft cos³ lobe at ends of light axis, inset
@@ -402,18 +400,23 @@ void main() {
       float lobe  = lit * lit * lit + 0.85 * opp * opp * opp;
 
       // Replace the harsh n=16 vertical specular bar with a smooth perimeter rim
-      // that stays continuous across the sides/corners and rises via cos³ at the
-      // top and bottom lobes, plus any explicit directional specular (ios26Dark).
+      // when directional lighting or native rim light is active. When both are
+      // zeroed (pure dark-translucent rimShade edge), suppress the grey stroke.
       float hairline = 1.0 - smoothstep(0.30, 1.10, distFromEdge);
       float hairlineGate = 1.0 - hairline * step(0.001, uRimShade);
-      float nativeRimBright = 0.28 + 0.14 * uRimLight * lobe
-                            + totalSpecular * kRimSpecularMix
-                            + thicknessOffset * 0.06 + densityFactor * 0.04;
-      rimColorBase = vec3(clamp(nativeRimBright, 0.0, 1.0));
-      float nativeRimFade = mix(0.32, 0.08, step(0.5, uBackdropLuma));
-      float nativeRimAlpha = (0.42 + 0.20 * uRimLight * lobe + totalSpecular * kRimAlphaSpecular)
-                           * nativeRimFade * (1.0 + densityFactor * 0.1) * borderMask * hairlineGate;
-      rimAlphaBase = clamp(nativeRimAlpha, 0.0, 1.0);
+      if (uRimLight > 0.001 || effectiveLightIntensity > 0.001) {
+        float nativeRimBright = 0.28 + 0.14 * uRimLight * lobe
+                              + totalSpecular * kRimSpecularMix
+                              + thicknessOffset * 0.06 + densityFactor * 0.04;
+        rimColorBase = vec3(clamp(nativeRimBright, 0.0, 1.0));
+        float nativeRimFade = mix(0.32, 0.08, step(0.5, uBackdropLuma));
+        float nativeRimAlpha = (0.42 + 0.20 * uRimLight * lobe + totalSpecular * kRimAlphaSpecular)
+                             * nativeRimFade * (1.0 + densityFactor * 0.1) * borderMask * hairlineGate;
+        rimAlphaBase = clamp(nativeRimAlpha, 0.0, 1.0);
+      } else {
+        rimColorBase = vec3(0.0);
+        rimAlphaBase = 0.0;
+      }
 
       if (uRimLight > 0.001) {
         float inset = max(distFromEdge - 0.75, 0.0);
