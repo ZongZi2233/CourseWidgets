@@ -577,7 +577,7 @@ class AppUpdateService {
     return result;
   }
 
-  /// 统一评估是否存在可用更新（支持语义化版本号递增 + Android 同版本构建 SHA-256 差异检测）
+  /// 统一评估是否存在可用更新（支持语义化版本号递增 + Android/Windows 同版本 SHA-256 差异检测）
   @visibleForTesting
   static ({bool hasUpdate, bool isSameVersionRebuild})
       evaluateUpdateAvailability({
@@ -586,6 +586,8 @@ class AppUpdateService {
     String remoteApkSha256 = '',
     String localApkSha256 = '',
     bool isAndroid = false,
+    bool isWindows = false,
+    bool windowsHasLocalFileDiff = false,
   }) {
     if (isNewerVersion(remoteTag, localVersion)) {
       return (hasUpdate: true, isSameVersionRebuild: false);
@@ -604,6 +606,13 @@ class AppUpdateService {
         rSha.isNotEmpty &&
         lSha.isNotEmpty &&
         rSha != lSha) {
+      return (hasUpdate: true, isSameVersionRebuild: true);
+    }
+
+    if (isWindows &&
+        normRemote.isNotEmpty &&
+        normRemote == normLocal &&
+        windowsHasLocalFileDiff) {
       return (hasUpdate: true, isSameVersionRebuild: true);
     }
 
@@ -890,6 +899,44 @@ class AppUpdateService {
         } catch (_) {}
       }
 
+      final bool isSameTagVersion =
+          compareVersions(normalizedTag, appVersion) == 0;
+
+      // 同版本发布回退通道：若 SHA256SUMS.txt 未提供 APK 摘要，尝试读取 android-manifest.json
+      if (Platform.isAndroid &&
+          isSameTagVersion &&
+          apkSha256.isEmpty &&
+          androidManifestUrl != null &&
+          androidManifestUrl.isNotEmpty) {
+        try {
+          final manifestText =
+              await _downloadStringWithRetry(client, androidManifestUrl);
+          final manifestJson = jsonDecode(manifestText);
+          if (manifestJson is Map) {
+            final manifestSha =
+                (manifestJson['apkSha256'] as String?)?.trim().toLowerCase() ??
+                    '';
+            if (manifestSha.isNotEmpty) {
+              apkSha256 = manifestSha;
+            }
+          }
+        } catch (_) {}
+      }
+
+      // Windows 同版本号构建差异检测：直接比对本地安装产物与远端 windows-manifest.json
+      bool windowsHasLocalFileDiff = false;
+      if (Platform.isWindows &&
+          isSameTagVersion &&
+          winManifestUrl != null &&
+          winManifestUrl.isNotEmpty) {
+        try {
+          windowsHasLocalFileDiff = await _detectWindowsSameVersionRebuild(
+            client,
+            winManifestUrl,
+          );
+        } catch (_) {}
+      }
+
       final localApk = Platform.isAndroid ? await getInstalledApkInfo() : null;
       final availability = evaluateUpdateAvailability(
         remoteTag: normalizedTag,
@@ -897,6 +944,8 @@ class AppUpdateService {
         remoteApkSha256: apkSha256,
         localApkSha256: localApk?.sha256 ?? '',
         isAndroid: Platform.isAndroid,
+        isWindows: Platform.isWindows,
+        windowsHasLocalFileDiff: windowsHasLocalFileDiff,
       );
 
       return AppUpdateInfo(
@@ -923,6 +972,73 @@ class AppUpdateService {
     } finally {
       client.close();
     }
+  }
+
+  /// 比对本地单个 Windows 编译产物文件是否与远端清单一致
+  Future<bool> _matchesLocalWindowsFile(
+    String appDir,
+    WindowsReleaseFileEntry entry,
+  ) async {
+    final localPath = p.joinAll([appDir, ...entry.path.split('/')]);
+    final localFile = File(localPath);
+    if (!await localFile.exists()) return false;
+    try {
+      final localLen = await localFile.length();
+      if (localLen != entry.size) return false;
+      final bytes = await localFile.readAsBytes();
+      if (entry.sha256.isNotEmpty) {
+        final localHash = sha256.convert(bytes).toString().toLowerCase();
+        return localHash == entry.sha256.toLowerCase();
+      }
+      if (entry.crc32 != 0) {
+        return _computeCrc32(bytes) == entry.crc32;
+      }
+    } catch (_) {
+      return false;
+    }
+    return false;
+  }
+
+  /// 判断 Windows 当前运行目录与远端 [remoteEntries] 是否存在文件哈希差异（用于同版本号重建增量更新检测）
+  @visibleForTesting
+  Future<bool> hasWindowsLocalDiffAgainstEntries(
+    List<WindowsReleaseFileEntry> remoteEntries, {
+    String? overrideAppDir,
+  }) async {
+    if (remoteEntries.isEmpty) return false;
+    final appDir =
+        overrideAppDir ?? File(Platform.resolvedExecutable).parent.path;
+    if (overrideAppDir == null &&
+        !await File(p.join(appDir, 'data', 'app.so')).exists()) {
+      // 非打包 Release 环境（如 flutter test / debug run）不误报同版本更新
+      return false;
+    }
+    for (final entry in remoteEntries) {
+      if (!await _matchesLocalWindowsFile(appDir, entry)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  Future<bool> _detectWindowsSameVersionRebuild(
+    HttpClient client,
+    String winManifestUrl, {
+    String? overrideAppDir,
+  }) async {
+    final manifestText = await _downloadStringWithRetry(client, winManifestUrl);
+    final manifestJson = jsonDecode(manifestText);
+    if (manifestJson is! Map<String, dynamic>) return false;
+    final filesList = manifestJson['files'];
+    if (filesList is! List || filesList.isEmpty) return false;
+    final remoteEntries = filesList
+        .whereType<Map<String, dynamic>>()
+        .map(WindowsReleaseFileEntry.fromJson)
+        .toList();
+    return hasWindowsLocalDiffAgainstEntries(
+      remoteEntries,
+      overrideAppDir: overrideAppDir,
+    );
   }
 
   /// 2. [Windows 专用] 扫描本地安装目录并与远端编译清单比对，生成文件级增量更新方案
@@ -977,27 +1093,7 @@ class AppUpdateService {
       int unchangedCount = 0;
 
       for (final entry in remoteEntries) {
-        final localPath = p.joinAll([appDir, ...entry.path.split('/')]);
-        final localFile = File(localPath);
-
-        bool isSame = false;
-        if (await localFile.exists()) {
-          try {
-            final localLen = await localFile.length();
-            if (localLen == entry.size) {
-              final bytes = await localFile.readAsBytes();
-              if (entry.sha256.isNotEmpty) {
-                final localHash = sha256.convert(bytes).toString().toLowerCase();
-                isSame = (localHash == entry.sha256.toLowerCase());
-              } else if (entry.crc32 != 0) {
-                final localCrc = _computeCrc32(bytes);
-                isSame = (localCrc == entry.crc32);
-              }
-            }
-          } catch (_) {
-            isSame = false;
-          }
-        }
+        final bool isSame = await _matchesLocalWindowsFile(appDir, entry);
 
         if (isSame) {
           unchangedCount++;

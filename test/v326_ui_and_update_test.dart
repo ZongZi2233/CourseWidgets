@@ -1,8 +1,11 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
+import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
+import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 import 'package:coursewidgets/models/schedule_config.dart';
 import 'package:coursewidgets/providers/schedule_provider.dart';
@@ -46,9 +49,9 @@ void main() {
     await StorageService().clear();
   });
 
-  group('v3.2.6 Item 1: iOS 27 / FlClash dark-translucent glass edge', () {
+  group('v3.2.6 Item 1: FlClash (prism_ui) soft optical glass edge', () {
     test(
-        'applyToSettings strips metallic specular/ambient rim and enables dark-translucent rimShade in both light & dark modes',
+        'applyToSettings removes hard gray metallic rim & dark wireframe, applying FlClash soft top/bottom rimLight and whisper-soft light hairline',
         () {
       const legacyBase = LiquidGlassSettings(
         glassColor: Color(0x30FFFFFF),
@@ -66,34 +69,44 @@ void main() {
         isDark: false,
       );
       expect(lightResolved.lensModel, GlassLensModel.paraxial);
+      expect(lightResolved.lightAngle, closeTo(math.pi / 2, 1e-6));
       expect(lightResolved.lightIntensity, 0.0);
       expect(lightResolved.ambientStrength, 0.0);
       expect(lightResolved.ambientRim, 0.0);
       expect(lightResolved.fresnelStrength, 0.0);
-      expect(lightResolved.rimLight, 0.0);
-      expect(lightResolved.rimShade, closeTo(0.56, 1e-6));
-      expect(lightResolved.edgeAbsorption, greaterThan(0.0));
+      expect(lightResolved.rimLight, closeTo(0.36, 1e-6));
+      expect(lightResolved.rimShade, closeTo(0.24, 1e-6));
+      expect(lightResolved.rimShadeEnds, closeTo(0.18, 1e-6));
+      expect(lightResolved.edgeAbsorption, closeTo(0.02, 1e-6));
 
       final darkResolved = GlassAppearanceService.instance.applyToSettings(
         legacyBase,
         isDark: true,
       );
       expect(darkResolved.lensModel, GlassLensModel.paraxial);
+      expect(darkResolved.lightAngle, closeTo(math.pi / 2, 1e-6));
       expect(darkResolved.lightIntensity, 0.0);
       expect(darkResolved.ambientStrength, 0.0);
       expect(darkResolved.fresnelStrength, 0.0);
-      expect(darkResolved.rimLight, 0.0);
-      expect(darkResolved.rimShade, closeTo(0.68, 1e-6));
-      expect(darkResolved.edgeAbsorption, greaterThan(0.0));
+      expect(darkResolved.rimLight, closeTo(0.30, 1e-6));
+      expect(darkResolved.rimShade, 0.0);
+      expect(darkResolved.rimShadeEnds, 0.0);
+      expect(darkResolved.edgeAbsorption, closeTo(0.03, 1e-6));
     });
 
-    test('GlassSettingsHelper presets match unified dark-translucent edge optics',
+    test('GlassSettingsHelper presets match FlClash prism_ui optical edge values',
         () {
-      final topBar = GlassSettingsHelper.getTopBarSettings(isDark: false);
-      expect(topBar.lightIntensity, 0.0);
-      expect(topBar.ambientStrength, 0.0);
-      expect(topBar.rimShade, greaterThan(0.0));
-      expect(topBar.lensModel, GlassLensModel.paraxial);
+      final topBarLight = GlassSettingsHelper.getTopBarSettings(isDark: false);
+      expect(topBarLight.lightIntensity, 0.0);
+      expect(topBarLight.ambientStrength, 0.0);
+      expect(topBarLight.rimLight, closeTo(0.36, 1e-6));
+      expect(topBarLight.rimShade, closeTo(0.24, 1e-6));
+      expect(topBarLight.lensModel, GlassLensModel.paraxial);
+
+      final topBarDark = GlassSettingsHelper.getTopBarSettings(isDark: true);
+      expect(topBarDark.rimLight, closeTo(0.30, 1e-6));
+      expect(topBarDark.rimShade, 0.0);
+
       expect(GlassSettingsHelper.unifiedPortraitTopBarHeight, 48.0);
       expect(GlassSettingsHelper.unifiedPortraitTopBarRadius, 20.0);
       expect(GlassSettingsHelper.unifiedPortraitTopBarHorizontalMargin, 16.0);
@@ -398,6 +411,106 @@ void main() {
       }
 
       expect(tester.takeException(), isNull);
+    });
+
+    test(
+        'evaluateUpdateAvailability and hasWindowsLocalDiffAgainstEntries detect same-version SHA-256 rebuilds on BOTH Android & Windows',
+        () async {
+      // Android same-version APK SHA-256 mismatch -> triggers same-version update
+      final androidDiff = AppUpdateService.evaluateUpdateAvailability(
+        remoteTag: 'v3.2.6',
+        localVersion: '3.2.6',
+        remoteApkSha256: 'aaaa1111',
+        localApkSha256: 'bbbb2222',
+        isAndroid: true,
+      );
+      expect(androidDiff.hasUpdate, isTrue);
+      expect(androidDiff.isSameVersionRebuild, isTrue);
+
+      final androidSame = AppUpdateService.evaluateUpdateAvailability(
+        remoteTag: 'v3.2.6',
+        localVersion: '3.2.6',
+        remoteApkSha256: 'aaaa1111',
+        localApkSha256: 'AAAA1111',
+        isAndroid: true,
+      );
+      expect(androidSame.hasUpdate, isFalse);
+      expect(androidSame.isSameVersionRebuild, isFalse);
+
+      // Windows same-version manifest diff -> triggers same-version incremental update
+      final winDiff = AppUpdateService.evaluateUpdateAvailability(
+        remoteTag: 'v3.2.6',
+        localVersion: '3.2.6',
+        isWindows: true,
+        windowsHasLocalFileDiff: true,
+      );
+      expect(winDiff.hasUpdate, isTrue);
+      expect(winDiff.isSameVersionRebuild, isTrue);
+
+      final winSame = AppUpdateService.evaluateUpdateAvailability(
+        remoteTag: 'v3.2.6',
+        localVersion: '3.2.6',
+        isWindows: true,
+        windowsHasLocalFileDiff: false,
+      );
+      expect(winSame.hasUpdate, isFalse);
+      expect(winSame.isSameVersionRebuild, isFalse);
+
+      // Real temp directory check via hasWindowsLocalDiffAgainstEntries
+      final tempDir = await Directory.systemTemp.createTemp('cw_win_same_ver_');
+      try {
+        final dataDir = Directory(p.join(tempDir.path, 'data'));
+        await dataDir.create(recursive: true);
+        final appSo = File(p.join(dataDir.path, 'app.so'));
+        final oldBytes = List<int>.generate(32, (i) => i);
+        await appSo.writeAsBytes(oldBytes);
+        final oldSha = sha256.convert(oldBytes).toString();
+
+        final sameEntries = [
+          WindowsReleaseFileEntry(
+            path: 'data/app.so',
+            size: oldBytes.length,
+            sha256: oldSha,
+            crc32: 0,
+            compressType: 8,
+            compressedSize: 20,
+            dataOffset: 0,
+            localHeaderOffset: 0,
+          ),
+        ];
+        expect(
+          await AppUpdateService.instance.hasWindowsLocalDiffAgainstEntries(
+            sameEntries,
+            overrideAppDir: tempDir.path,
+          ),
+          isFalse,
+        );
+
+        final newBytes = List<int>.generate(32, (i) => 255 - i);
+        final changedEntries = [
+          WindowsReleaseFileEntry(
+            path: 'data/app.so',
+            size: newBytes.length,
+            sha256: sha256.convert(newBytes).toString(),
+            crc32: 0,
+            compressType: 8,
+            compressedSize: 20,
+            dataOffset: 0,
+            localHeaderOffset: 0,
+          ),
+        ];
+        expect(
+          await AppUpdateService.instance.hasWindowsLocalDiffAgainstEntries(
+            changedEntries,
+            overrideAppDir: tempDir.path,
+          ),
+          isTrue,
+        );
+      } finally {
+        if (await tempDir.exists()) {
+          await tempDir.delete(recursive: true);
+        }
+      }
     });
   });
 

@@ -888,12 +888,6 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                         ? Colors.white.withValues(alpha: canPrev ? 0.12 : 0.04)
                         : (canPrev ? Colors.white.withValues(alpha: 0.55) : Colors.white.withValues(alpha: 0.22)),
                     borderRadius: BorderRadius.circular(18),
-                    border: Border.all(
-                      color: Colors.black.withValues(
-                        alpha: isDark ? (canPrev ? 0.24 : 0.12) : (canPrev ? 0.07 : 0.04),
-                      ),
-                      width: 0.6,
-                    ),
                     boxShadow: canPrev ? liquid.HyperOSShadows.pill(isDark) : null,
                   ),
                   child: Icon(
@@ -965,12 +959,6 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                         ? Colors.white.withValues(alpha: canNext ? 0.12 : 0.04)
                         : (canNext ? Colors.white.withValues(alpha: 0.55) : Colors.white.withValues(alpha: 0.22)),
                     borderRadius: BorderRadius.circular(18),
-                    border: Border.all(
-                      color: Colors.black.withValues(
-                        alpha: isDark ? (canNext ? 0.24 : 0.12) : (canNext ? 0.07 : 0.04),
-                      ),
-                      width: 0.6,
-                    ),
                     boxShadow: canNext ? liquid.HyperOSShadows.pill(isDark) : null,
                   ),
                   child: Icon(
@@ -1002,10 +990,6 @@ class _AndroidLiquidGlassMainState extends State<AndroidLiquidGlassMain>
                               ? Colors.white.withValues(alpha: 0.12)
                               : Colors.white.withValues(alpha: 0.55),
                           borderRadius: BorderRadius.circular(18),
-                          border: Border.all(
-                            color: Colors.black.withValues(alpha: isDark ? 0.24 : 0.07),
-                            width: 0.6,
-                          ),
                           boxShadow: liquid.HyperOSShadows.pill(isDark),
                         ),
                         child: Icon(

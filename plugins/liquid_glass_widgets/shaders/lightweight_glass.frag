@@ -400,11 +400,12 @@ void main() {
       float lobe  = lit * lit * lit + 0.85 * opp * opp * opp;
 
       // Replace the harsh n=16 vertical specular bar with a smooth perimeter rim
-      // when directional lighting or native rim light is active. When both are
-      // zeroed (pure dark-translucent rimShade edge), suppress the grey stroke.
-      float hairline = 1.0 - smoothstep(0.30, 1.10, distFromEdge);
+      // ONLY when legacy directional lighting is active (effectiveLightIntensity > 0).
+      // In FlClash / iOS 27 optical mode (effectiveLightIntensity == 0), skip this
+      // grey perimeter stroke completely and rely on nativeRimLight + whisper-soft hairline.
+      float hairline = 1.0 - smoothstep(0.25, 1.25, distFromEdge);
       float hairlineGate = 1.0 - hairline * step(0.001, uRimShade);
-      if (uRimLight > 0.001 || effectiveLightIntensity > 0.001) {
+      if (effectiveLightIntensity > 0.001) {
         float nativeRimBright = 0.28 + 0.14 * uRimLight * lobe
                               + totalSpecular * kRimSpecularMix
                               + thicknessOffset * 0.06 + densityFactor * 0.04;
@@ -430,7 +431,7 @@ void main() {
       }
       if (uRimShade > 0.001 && distFromEdge < 2.0) {
         float across   = fastPowLW(max(0.0, 1.0 - along * along), 1.75);
-        float shadeWeight = mix(0.22, 0.28, step(0.5, uBackdropLuma));
+        float shadeWeight = mix(0.14, 0.20, step(0.5, uBackdropLuma));
         nativeRimShade = clamp(
             uRimShade * shadeWeight * mix(uRimShadeEnds, 1.0, across) * hairline,
             0.0,

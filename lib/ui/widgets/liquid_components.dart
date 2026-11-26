@@ -1820,9 +1820,7 @@ class _RenderSharedBlurStencil extends RenderProxyBox {
     _shadowPaints = shadows.isEmpty
         ? const []
         : List<Paint>.unmodifiable(shadows.map((s) => s.toPaint()));
-    _sheenColor = backgroundColor.computeLuminance() < 0.5
-        ? const Color(0x2E000000)
-        : const Color(0x12000000);
+    _sheenColor = Colors.transparent;
     _sheenPaint.color = _sheenColor;
   }
 
@@ -2058,10 +2056,10 @@ class _RenderSharedBlurStencil extends RenderProxyBox {
     // 4. 绘制表面混色半透层与 0.6px 柔和内高光描边
     canvas.drawRect(rect, _bgPaint);
 
-    // 5. 绘制边框 (若有显式边框则按外部边框绘制，否则附加微光质感斜切高光)
+    // 5. 绘制边框 (仅在显式指定边框时绘制，否则遵循 FlClash CardSurface 无描边静默漫反射阴影设计)
     if (shape is OutlinedBorder && (shape as OutlinedBorder).side != BorderSide.none) {
       shape.paint(canvas, rect);
-    } else {
+    } else if (_sheenColor.a > 0.0) {
       canvas.drawRSuperellipse(rsuperellipse, _sheenPaint);
     }
 

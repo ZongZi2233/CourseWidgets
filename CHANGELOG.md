@@ -4,9 +4,9 @@
 
 ## [v3.2.6] - 2026-11-27 (Build 3260 正式版)
 
-### 1. 全局玻璃材质去灰白金属描边，升级黑半透明 iOS 27 / FlClash 柔和边缘
-- **消除低白值玻璃外圈灰边（`lightweight_glass.frag` & `GlassAppearanceService`）**：在 `lightweight_glass.frag` 中解除 `uFresnelStrength` 最小 `0.25` 强制下限并压制纯暗边模式下的灰色边缘环，同时在 `GlassAppearanceService.applyToSettings()` 与 `GlassSettingsHelper` 全组预设中统一注入 `GlassLensModel.paraxial`、零金属方向高光/环境光（`lightIntensity: 0.0`, `ambientStrength: 0.0`, `fresnelStrength: 0.0`, `rimLight: 0.0`）与微弱渐变黑半透明边缘（`rimShade` + 柔和 `edgeAbsorption`）；
-- **统一非着色器容器暗边质感（`HyperOSCard`、`WindowsDesktopTitleBar`、选择器弹窗、悬浮胶囊 Dock）**：将 `HyperOSCard` `_sheenColor` 白色描边、Windows 标题栏底边、日期/星期选择器边框与悬浮操作 Dock 圆形按钮白边全面替换为低饱和黑半透明边缘（`alpha: 0.07 ~ 0.28`）。
+### 1. 对齐 FlClash (`prism_ui`) 光学玻璃边缘质感（彻底移除灰白金属框与硬黑边）
+- **真实对照 `chen08209/prism_ui` 玻璃着色器实现（`lightweight_glass.frag` & `GlassAppearanceService`）**：FlClash 并非使用实心灰圈或生硬黑线勾边，而是依赖内缘柔和光学倒角高光（`rimLight` 顶部/底部随 `exp(-inset)` 平滑淡出）叠加极端克制的浅色半透细边（深色模式 `rimShade = 0.0` 彻底无线框，浅色模式仅 `0.24` 微弱背景压暗 + `0.18` 侧边衰减）；同步修正 `lightweight_glass.frag` 将旧版 `nativeRimBright` 灰圈严格收敛在 `effectiveLightIntensity > 0.001` 时启用；
+- **非着色器容器同步对齐 FlClash `CardSurface` 无框净面（`HyperOSCard`、`WindowsDesktopTitleBar`、选择器弹窗、悬浮胶囊 Dock）**：移除 `HyperOSCard` 描边、选择器及底部悬浮 Dock 圆形按钮边框，Windows 标题栏分隔线调柔和至 `0.04~0.05` 低透明柔线，仅以表面微明暗差与 `HyperOSShadows` 漫反射阴影构建空间层次。
 
 ### 2. 周次选择器等 SharedElement 形变弹窗升级为真液态玻璃 (`GlassContainer`)
 - **真实折射玻璃形变外壳（`showSharedElementGlassDialog`）**：将原本以渐变背景 + 白色边框实现的 SharedElement 弹窗外壳升级为原生实时折射 `GlassContainer`（支持跟随随形圆角插值 `LiquidRoundedSuperellipse(borderRadius: currentRadius)` 与最小值防护，并在 `100%` 组件白值下自动直出实体超椭圆零模糊），同步赋能周次选择弹窗（`showWeekPickerGlassDialog`）与单节时间编辑弹窗。
@@ -17,8 +17,9 @@
 ### 4. 关于软件页新增「当前版本更新内容」动态卡片 (`SettingsAboutScreen` & `AppUpdateService`)
 - **从 GitHub Releases 动态拉取并本地缓存（`fetchReleaseNotesForVersion`）**：在「关于软件」页中部（「检查新版本」与版权卡片之间）新增当前版本更新日志卡片，首次自动按当前版本号 tag 请求 GitHub Releases API 过滤展示 Markdown 更新日志（含 SHA-256 过滤），本地 MMKV 持久化缓存以秒开呈现，并支持手动刷新与断网重试。
 
-### 5. 更新弹窗增量计算期间严格锁定主确认按钮 (`AppUpdateDialog`)
-- **杜绝提前点击误触下载完整包**：在 `AppUpdateDialog` `initState` 中即刻同步进入 `_isAnalyzingDiff` 锁定态，主按钮置灰不可点按并显示加载指示器与「正在计算增量更新...」；严格等待两端增量分析完成返回有效增量方案（点亮为「增量更新并重启 / 安装」）或确认增量不可用后（点亮回退「完整更新并重启 / 下载完整包并安装」）方允许点按。
+### 5. 更新弹窗增量计算期间锁定主按钮，并打通 Android / Windows 双端同版本号增量更新检测
+- **杜绝提前点击误触下载完整包（`AppUpdateDialog`）**：在 `AppUpdateDialog` `initState` 中即刻同步进入 `_isAnalyzingDiff` 锁定态，主按钮置灰不可点按并显示加载指示器与「正在计算增量更新...」；严格等待两端增量分析完成返回有效增量方案（点亮为「增量更新并重启 / 安装」）或确认增量不可用后（点亮回退「完整更新并重启 / 下载完整包并安装」）方允许点按；
+- **Android + Windows 双端同版本号重建 SHA-256 增量检测（`AppUpdateService`）**：在同版本号发布（如 `v3.2.6` 重编译产物替换）场景下，Windows 端同步拉取 `windows-manifest.json` 并逐文件比对本地运行目录 SHA-256/CRC32 哈希（`hasWindowsLocalDiffAgainstEntries`），Android 端在 `SHA256SUMS.txt` 缺失时自动回退读取 `android-manifest.json` 摘要，实现双端同版本无感知检测与精准增量更新。
 
 ### 6. iOS 日历风格当日全高纵向竖条与主题色当前时间指示横线 (`WeeklyScheduleGrid`)
 - **当日整列主题色纵贯高光条 + 集成式日期胶囊**：在周课表网格底层绘制从当日表头直抵屏幕底部的渐变纵向高光竖条（`today_column_highlight_strip`），配合表头当日日期圆角胶囊（`today_header_date_pill`），无论页面如何滚动均清晰标识当日列；

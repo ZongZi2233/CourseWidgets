@@ -317,14 +317,15 @@ class GlassAppearanceService extends ChangeNotifier {
       glassColor: resolvedColor,
       blur: resolvedBlur,
       lensModel: GlassLensModel.paraxial,
+      lightAngle: math.pi / 2,
       lightIntensity: 0.0,
       ambientStrength: 0.0,
       ambientRim: 0.0,
       fresnelStrength: 0.0,
-      rimLight: 0.0,
-      rimShade: isDark ? 0.68 : 0.56,
-      rimShadeEnds: isDark ? 0.68 : 0.76,
-      edgeAbsorption: isDark ? 0.06 : 0.035,
+      rimLight: isDark ? 0.30 : 0.36,
+      rimShade: isDark ? 0.0 : 0.24,
+      rimShadeEnds: isDark ? 0.0 : 0.18,
+      edgeAbsorption: isDark ? 0.03 : 0.02,
     );
   }
 
